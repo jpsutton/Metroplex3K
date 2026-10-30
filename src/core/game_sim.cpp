@@ -50,6 +50,13 @@ DisasterInputs inputsFor(City& c, bool enabled, const CheatRegistry& cheats) {
   in.jdn = c.clock.jdn();
   in.year = c.clock.date().year;
   in.disastersEnabled = enabled;
+  // spec 29 section 2.6 interim sources: U = unemployment %, A = city aura.
+  in.unrest = std::max(0, std::min(100, c.pop.unemploymentPercent()));
+  in.aura = int(c.aura.cityAura);
+  in.ordCleanIndustry = c.ordinances.enacted(ord::CleanIndustry);
+  in.ordIndPollutantFee = c.ordinances.enacted(ord::IndPollutantFee);
+  in.ordWasteDisposal = c.ordinances.enacted(ord::IndWasteDisposal);
+  for (const auto& o : c.world()->occupants) if (o.agentType == 19001 && o.state == 1) in.toxicWastePlants++;
   in.cheatUfoSwarm = cheats.active("UFO Swarm"); in.cheatLocustSwarm = cheats.active("Locust Swarm");
   return in;
 }
