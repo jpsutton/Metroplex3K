@@ -279,9 +279,13 @@ static void testWaterPumpRings() {
   f.kind[11 * 32 + 11] = 1;  // distance 1 (diagonal counts)
   f.L.monthlyUpdate(env);
   CHECK(f.L.facilities()[0].output == 2000 && f.L.facilities()[0].status == WaterFacility::Good);
-  // Salt water does not feed pumps.
+  // Salt water feeds pumps too [OBSERVED: computed per-pump outputs match the shipped saves only this way].
   std::fill(f.kind.begin(), f.kind.end(), 0);
   f.kind[11 * 32 + 11] = 2;
+  f.L.monthlyUpdate(env);
+  CHECK(f.L.facilities()[0].output == 2000);
+  // No water at all => 0.
+  std::fill(f.kind.begin(), f.kind.end(), 0);
   f.L.monthlyUpdate(env);
   CHECK(f.L.facilities()[0].output == 0);
   // Unpowered => 0.

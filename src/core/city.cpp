@@ -910,7 +910,10 @@ void City::syncFacilities() {
       wf.insert(key);
       if (!waterFacAt_.count(key)) {
         us::WaterKind kind = o.agentType == kAgentPump ? us::WaterKind::Pump : o.agentType == kAgentTower ? us::WaterKind::Tower : us::WaterKind::Desalination;
-        waterFacAt_[key] = water.addFacility(kind, o.x, o.z, now);
+        // Build date (year, day of year) from the occupant's date pair when the save has one; otherwise it is new.
+        int built = now;
+        if (o.hasDate && o.dateYear > 0) built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
+        waterFacAt_[key] = water.addFacility(kind, o.x, o.z, std::min(built, now));
       }
     } else if (usHier_.isAncestorOrSelf(o.agentType, kAgentPolice) || usHier_.isAncestorOrSelf(o.agentType, kAgentFire) ||
                o.agentType == kAgentJail) {
@@ -987,6 +990,7 @@ void City::dailyFire() {
   env.averageMetric = int(flammability.averageFlammability());
   fire.tick(env, urng_);
 }
+void City::recomputeLandValue() { landValue.recomputeAll(*lvView_); }
 void City::dailyLandValue() { landValue.update(*lvView_); }
 void City::dailyZoneDev() { zones.tick(*growthView_, zoneRng_, zoneCrt_); }
 void City::dailyPollution() {
@@ -1203,36 +1207,69 @@ void City::monthlyWater() {
       for (int dz = 0; dz < o.sizeZ; dz++)
         if (inMap(o.x + dx, o.z + dz)) pipes[idx(o.x + dx, o.z + dz)] = 1;
   }
-  // Salt vs fresh water: the sea flag is not persisted (spec 11 section 5), so derive it from connectivity to the
-  // map edge. A water body (4-connected wet tiles) touching the edge is sea; inland lakes and rivers are fresh even
-  // when their surface equals the sea level (as in nearly every shipped file).
+  // Salt vs fresh water: the sea flag is not persisted (spec 11 section 5), so derive it. A water body (4-connected
+  // wet tiles) is sea when it touches the map edge and is wide: some tile of it is at least kSeaWidth tiles from land.
+  // Rivers that run off the map edge, and inland lakes, stay fresh even when their surface equals the sea level (as in
+  // nearly every shipped file; Berlin's pumps beside an edge-crossing river are saved as working).
   std::vector<uint8_t> kind(size_t(world_->W) * world_->H, 0);
   {
-    std::vector<int> stack;
+    const int Wt = world_->W, Ht = world_->H;
     // The generator treats a vertex as land only when altitude > water surface (spec 11 section 3), so a vertex whose
     // altitude equals the surface is water; no shipped building stands on such tiles.
     auto wet = [&](int x, int z) { return world_->waterAt(x, z) >= world_->altAt(x, z); };
-    for (int x = 0; x < world_->W; x++)
-      for (int z = 0; z < world_->H; z++)
+    auto deep = [&](int x, int z) { return world_->waterAt(x, z) > world_->altAt(x, z) && world_->waterAt(x, z) <= world_->seaLevel; };
+    for (int x = 0; x < Wt; x++)
+      for (int z = 0; z < Ht; z++)
         if (wet(x, z)) kind[idx(x, z)] = 1;
-    auto seed = [&](int x, int z) {
-      if (kind[idx(x, z)] == 1 && world_->waterAt(x, z) > world_->altAt(x, z) && world_->waterAt(x, z) <= world_->seaLevel) {
-        kind[idx(x, z)] = 2; stack.push_back(int(idx(x, z)));
-      }
-    };
     if (!saltOff) {
-      for (int x = 0; x < world_->W; x++) { seed(x, 0); seed(x, world_->H - 1); }
-      for (int z = 0; z < world_->H; z++) { seed(0, z); seed(world_->W - 1, z); }
-    }
-    while (!stack.empty()) {
-      int c = stack.back(); stack.pop_back();
-      int x = c / world_->H, z = c % world_->H;
+      // Distance to the nearest non-water tile (capped), by multi-source BFS.
+      constexpr int kSeaWidth = 8;
+      std::vector<uint8_t> dist(size_t(Wt) * Ht, 255);
+      std::vector<int> q;
+      for (int x = 0; x < Wt; x++)
+        for (int z = 0; z < Ht; z++)
+          if (!deep(x, z)) { dist[idx(x, z)] = 0; q.push_back(int(idx(x, z))); }
       static const int d4[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-      for (auto& d : d4) {
-        int nx = x + d[0], nz = z + d[1];
-        if (nx >= 0 && nz >= 0 && nx < world_->W && nz < world_->H) seed(nx, nz);
+      for (size_t h = 0; h < q.size(); h++) {
+        int c = q[h], x = c / Ht, z = c % Ht;
+        if (dist[size_t(c)] >= kSeaWidth) continue;
+        for (auto& d : d4) {
+          int nx = x + d[0], nz = z + d[1];
+          if (nx < 0 || nz < 0 || nx >= Wt || nz >= Ht || dist[idx(nx, nz)] != 255) continue;
+          dist[idx(nx, nz)] = uint8_t(dist[size_t(c)] + 1); q.push_back(int(idx(nx, nz)));
+        }
       }
+      std::vector<uint8_t> seen(size_t(Wt) * Ht, 0);
+      auto component = [&](int sx, int sz) {
+        std::vector<int> comp{int(idx(sx, sz))}; seen[idx(sx, sz)] = 1; bool wide = false;
+        for (size_t h = 0; h < comp.size(); h++) {
+          int c = comp[h], x = c / Ht, z = c % Ht;
+          if (dist[size_t(c)] >= kSeaWidth) wide = true;
+          for (auto& d : d4) {
+            int nx = x + d[0], nz = z + d[1];
+            if (nx < 0 || nz < 0 || nx >= Wt || nz >= Ht || seen[idx(nx, nz)] || !deep(nx, nz)) continue;
+            seen[idx(nx, nz)] = 1; comp.push_back(int(idx(nx, nz)));
+          }
+        }
+        if (wide) for (int c : comp) kind[size_t(c)] = 2;
+      };
+      auto edge = [&](int x, int z) { if (deep(x, z) && !seen[idx(x, z)]) component(x, z); };
+      for (int x = 0; x < Wt; x++) { edge(x, 0); edge(x, Ht - 1); }
+      for (int z = 0; z < Ht; z++) { edge(0, z); edge(Wt - 1, z); }
     }
+  }
+  {  // A tile is water when any of its four corners is (spec 11: "some corners under water" for shoreline tiles), so
+     // pumps beside a shore see it at distance 1. Bit 0 = fresh, bit 1 = salt (a shoreline tile can be both).
+    std::vector<uint8_t> tile(kind.size(), 0);
+    for (int x = 0; x < world_->W; x++)
+      for (int z = 0; z < world_->H; z++) {
+        uint8_t m = 0;
+        for (int dx = 0; dx <= 1; dx++)
+          for (int dz = 0; dz <= 1; dz++)
+            if (x + dx < world_->W && z + dz < world_->H) { uint8_t k = kind[idx(x + dx, z + dz)]; m |= k == 1 ? 1 : k == 2 ? 2 : 0; }
+        tile[idx(x, z)] = m;
+      }
+    kind.swap(tile);
   }
   auto consumers = simOccupants(true);
   us::WaterEnv env;

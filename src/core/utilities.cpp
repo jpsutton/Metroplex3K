@@ -383,7 +383,7 @@ static bool ringAny(int W, int H, int x0, int z0, int x1, int z1, const std::vec
     for (int z = z0; z <= z1; z++) {
       if (x != x0 && x != x1 && z != z0 && z != z1) continue;
       if (x < 0 || z < 0 || x >= W || z >= H) continue;
-      if ((*kind)[size_t(x) * H + z] == want) return true;
+      if ((*kind)[size_t(x) * H + z] & want) return true;
     }
   return false;
 }
@@ -415,8 +415,10 @@ void WaterLayer::monthlyUpdate(const WaterEnv& env) {
     int64_t out = 0;
     if (f.kind == WaterKind::Tower) { out = cap; f.status = WaterFacility::Good; }
     else if (f.kind == WaterKind::Pump) {
-      if (ringAny(W, H, f.x - 1, f.z - 1, f.x + 1, f.z + 1, env.waterKind, 1)) { out = cap; f.status = WaterFacility::Good; }
-      else if (ringAny(W, H, f.x - 2, f.z - 2, f.x + 2, f.z + 2, env.waterKind, 1)) {
+      // [OBSERVED] pumps accept any adjacent water, salt included: with this rule the computed per-pump outputs match the
+      // saved ones (spec 16 s3.3 says fresh only; that makes coastal pumps in Liverpool produce nothing).
+      if (ringAny(W, H, f.x - 1, f.z - 1, f.x + 1, f.z + 1, env.waterKind, 3)) { out = cap; f.status = WaterFacility::Good; }
+      else if (ringAny(W, H, f.x - 2, f.z - 2, f.x + 2, f.z + 2, env.waterKind, 3)) {
         out = int64_t(cap) * params_.pumpDistanceFactor / 100; f.status = WaterFacility::Far;
       } else f.status = WaterFacility::NoWater;
     } else {

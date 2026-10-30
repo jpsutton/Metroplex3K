@@ -165,7 +165,7 @@ struct WaterDeal { int tx = -1, tz = -1; bool purchase = true; int amount = 0; }
 struct WaterEnv {
   int nowAbsMonth = 0;
   const std::vector<uint8_t>* pipes = nullptr;        // x*H+z
-  const std::vector<uint8_t>* waterKind = nullptr;    // x*H+z: 0 land, 1 fresh, 2 salt
+  const std::vector<uint8_t>* waterKind = nullptr;    // x*H+z bit mask: 1 fresh, 2 salt, 0 land
   const PowerLayer* power = nullptr;                  // powered bits (null = everything powered)
   std::function<int(int, int)> waterPollutionAt;      // 0..32767 at tile; null = 0
   int maxWaterPollutionGrid = 0;                      // used when !usePollutionConstantMax
