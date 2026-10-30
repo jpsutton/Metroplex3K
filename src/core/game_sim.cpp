@@ -175,6 +175,16 @@ void Game::weeklyHook() {
   PetitionerInputs pi;
   pi.population = ai.population; pi.year = ai.year;
   petitioners_.weeklyCycle(pi, rng_);
+  {  // spec 19 section 11: low-treasury business-deal offers, raised as advisor petitions
+    City& c = city();
+    BusinessDeals::Inputs bi;
+    bi.funds = sim_.funds; bi.population = uint32_t(std::max<int64_t>(0, ai.population)); bi.currentYear = ai.year;
+    bi.cityHasBusiness = [this](uint32_t type) {
+      for (const auto& o : world_.occupants) if (o.agentType == type) return true;
+      return false;
+    };
+    if (auto offer = c.evaluateBusinessDeals(bi)) petitioners_.request(c.business.defs[*offer].messageId, 0, 48);
+  }
   presentPetitions();
 }
 
@@ -317,13 +327,28 @@ void Game::startScenarioHooks() {
 }
 
 void Game::applyPetitionEffect(const PetitionEffect& e) {
-  if (!e.accepted) return;
   City& c = city();
+  if (!e.accepted) {
+    if (e.kind == PetitionEffect::BusinessDeal) c.business.pendingOffer.reset();   // declined: offers may be raised again
+    return;
+  }
   switch (e.kind) {
     case PetitionEffect::Treasury: sim_.funds += e.treasuryDelta; break;
     case PetitionEffect::SetOrdinance:
       if (e.value) c.ordinances.enact(e.ordinance); else c.ordinances.repeal(e.ordinance);
       break;
+    case PetitionEffect::RewardAvailable:
+      if (e.buildingType) advisors_.rewards.markAvailable(e.buildingType);
+      break;
+    case PetitionEffect::BusinessDeal: {
+      BusinessDeals& b = c.business;
+      if (b.pendingOffer && b.defs[*b.pendingOffer].messageId == e.petition) {
+        int type = int(b.defs[*b.pendingOffer].buildingType);
+        if (b.accept()) advisors_.rewards.markAvailable(type);
+        else b.pendingOffer.reset();
+      }
+      break;
+    }
     default: break;
   }
   if (e.voiceSound) sound(e.voiceSound);
