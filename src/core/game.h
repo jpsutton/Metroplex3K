@@ -23,6 +23,7 @@
 #include "core/gamedata.h"
 #include "core/intro.h"
 #include "core/render.h"
+#include "core/skin.h"
 #include "core/settings.h"
 #include "core/sim.h"
 #include "core/terraform.h"
@@ -119,6 +120,7 @@ class Game {
   void drawInCity(uint32_t dtMs);
   void drawHud();
   void drawToolMenu();
+  bool drawSkinnedToolMenu();
   void drawWindows(uint32_t dtMs);
   void drawMessage();
   void drawScenarioEnd();
@@ -202,6 +204,8 @@ class Game {
   void scenarioMinuteTick();
 
   fs::path root_;
+  Skin skin_;
+  int skinH_ = 0;
   GameData data_;
   bool haveData_ = false;
   Fonts fonts_;

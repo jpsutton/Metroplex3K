@@ -395,8 +395,79 @@ void Game::drawMessage() {
 
 // ---------------------------------------------------------------- tool menu & HUD
 
+bool Game::drawSkinnedToolMenu() {
+  if (!haveData_ || !menuLoaded_) return false;
+  if (skinH_ != H_) { skin_ = Skin(); skin_.load(data_, H_, W_); skinH_ = H_; }
+  if (!skin_.loaded() || !skin_.get("rootpanel")) return false;
+  auto rootIt = menu_.menus.find(0xD1001000);
+  if (rootIt == menu_.menus.end()) return false;
+  Rect col = skin_.columnRect(W_, H_);
+  int ox = col.x, oy = col.y;
+  int hover = 0, selected = 0;
+  const auto& rb = rootIt->second.buttons;
+  for (int n = 1; n <= int(rb.size()) && n <= 9; n++) {
+    const MenuButton& b = menu_.buttons[rb[n - 1]];
+    if (openRoot_ == b.sub && b.sub) selected = n;
+    if (ui_.hover(skin_.rootButtonRect(n, ox, oy))) hover = n;
+  }
+  skin_.drawRootPanel(ui_, ox, oy, hover, selected);
+  if (ui_.hover(col)) uiHit_ = true;
+  for (int n = 1; n <= int(rb.size()) && n <= 9; n++) {
+    const MenuButton& b = menu_.buttons[rb[n - 1]];
+    if (ui_.clicked(skin_.rootButtonRect(n, ox, oy))) { openRoot_ = (openRoot_ == b.sub) ? 0 : b.sub; openFly_ = 0; }
+  }
+  if (!openRoot_) return true;
+  int sel = 0;
+  for (int n = 1; n <= int(rb.size()) && n <= 9; n++) if (menu_.buttons[rb[n - 1]].sub == openRoot_) sel = n;
+  auto sm = menu_.menus.find(openRoot_);
+  if (!sel || sm == menu_.menus.end()) return true;
+  skin_.drawSubPanel(ui_, ox, oy, sel);
+  Rect sp = skin_.subPanelRect(sel, ox, oy);
+  if (sp.w > 0 && ui_.hover(sp)) uiHit_ = true;
+  uint32_t flyOpen = 0; Rect flyAnchor;
+  for (int k = 0; k < int(sm->second.buttons.size()); k++) {
+    const MenuButton& b = menu_.buttons[sm->second.buttons[k]];
+    Rect r = skin_.subButtonRect(sel, k, ox, oy);
+    auto ii = menu_.items.find(b.item);
+    std::string tip = ii != menu_.items.end() ? str(ii->second.nameTable, ii->second.nameId) : std::string();
+    const Image* strip = skin_.toolStrip(b.id);
+    bool clicked = false;
+    if (strip && skin_.imageButtonCells(ui_, strip, 4, r, tip, openFly_ == b.sub && b.sub, true, clicked)) {
+      if (clicked) {
+        if (b.sub) openFly_ = (openFly_ == b.sub) ? 0 : b.sub;
+        else { execute(b.item); if (tool_ != ToolKind::Unavailable) openRoot_ = 0; }
+      }
+    } else if (ui_.button(r, tip.empty() ? "?" : tip.substr(0, 6))) {
+      if (b.sub) openFly_ = (openFly_ == b.sub) ? 0 : b.sub;
+      else { execute(b.item); if (tool_ != ToolKind::Unavailable) openRoot_ = 0; }
+    }
+    if (b.sub && openFly_ == b.sub) { flyOpen = b.sub; flyAnchor = r; }
+  }
+  if (flyOpen) {
+    auto fm = menu_.menus.find(flyOpen);
+    if (fm != menu_.menus.end()) {
+      Rect fr{flyAnchor.x - 194, flyAnchor.y, 190, int(fm->second.buttons.size()) * 28 + 8};
+      ui_.panel(fr);
+      if (ui_.hover(fr)) uiHit_ = true;
+      if (fm->second.colour) ui_.fill({fr.x + 2, fr.y + 2, 4, fr.h - 4}, 0xFF000000u | ((fm->second.colour & 255) << 16) | (fm->second.colour & 0xFF00) | ((fm->second.colour >> 16) & 255));
+      int fy = fr.y + 4;
+      for (uint32_t bid : fm->second.buttons) {
+        const MenuButton& b = menu_.buttons[bid];
+        auto ii = menu_.items.find(b.item);
+        std::string label = ii != menu_.items.end() ? str(ii->second.nameTable, ii->second.nameId) : "(item)";
+        bool enabled = ii == menu_.items.end() || ii->second.enabled;
+        if (flyOpen == 0xD100A100 && !disastersOn_) enabled = false;
+        if (ui_.button({fr.x + 10, fy, 176, 26}, label, enabled)) { execute(b.item); if (tool_ != ToolKind::Unavailable) { openFly_ = 0; openRoot_ = 0; } }
+        fy += 28;
+      }
+    }
+  }
+  return true;
+}
+
 void Game::drawToolMenu() {
   if (!menuLoaded_) return;
+  if (drawSkinnedToolMenu()) return;
   auto rootIt = menu_.menus.find(0xD1001000);
   if (rootIt == menu_.menus.end()) return;
   auto titleOf = [&](const MenuDesc& d) { std::string s = str(d.titleTable, d.titleId); return s.empty() ? d.fallbackTitle : s; };
@@ -493,7 +564,10 @@ void Game::drawHud() {
   const Valve* v[3] = {&sim_.valveR, &sim_.valveC, &sim_.valveI};
   uint32_t cols[3] = {rgb(0, 192, 0), rgb(0, 0, 192), rgb(192, 192, 0)};
   const char* nm[3] = {"R", "C", "I"};
-  for (int i = 0; i < 3; i++) {
+  bool skinRci = haveData_ && skin_.loaded() &&
+                 skin_.drawRciIndicator(ui_, W_ - RciGeometry::imgW - 4, H_ - bh - RciGeometry::imgH - 28,
+                                        v[0]->value * 3.0 / 2000, v[1]->value * 3.0 / 2000, v[2]->value * 3.0 / 2000);
+  for (int i = 0; i < 3 && !skinRci; i++) {
     int cx = rx + i * 34;
     int hgt = std::max(-12, std::min(12, v[i]->value * 12 / 2000));
     ui_.fill({cx, H_ - bh + 15, 14, 1}, ui_.panelDark);
