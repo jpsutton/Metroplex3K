@@ -304,6 +304,15 @@ void ValveLayer::monthlyUpdate(const ValveCityInput& in) {
       v.Dacc += truncF(float(v.Dlast) * float(e.permille) / 1000.0f, INT32_MIN, INT32_MAX);
     }
   }
+  // [OBSERVED] cap percentage of a demand valve = demand / supply of its amenity valve (3001, 5001, 8001), at most 100:
+  // Berlin R 786,233 / 1,809,500 = 43 (saved capPct 43), Madison R 20, Liverpool R 61, Berlin C 56, I 17; Craterville, whose amenity
+  // supply is only the base, has 100 for C and I. Computed from the cycle being closed.
+  auto capOf = [](const Valve& amenity) {
+    int64_t S = amenity.Sacc, D = amenity.Dacc;
+    if (S <= 0) return D > 0 ? 100 : 0;
+    return int(std::max<int64_t>(0, std::min<int64_t>(100, D * 100 / S)));
+  };
+  v3000.capPct = uint8_t(capOf(v3001)); v5000.capPct = uint8_t(capOf(v5001)); v8000.capPct = uint8_t(capOf(v8001));
   for (Valve* v : {&v3000, &v3001, &v5000, &v5001, &v8000, &v8001}) v->update();
   v7000.update();
   finishCycle();
