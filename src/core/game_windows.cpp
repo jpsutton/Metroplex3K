@@ -196,7 +196,11 @@ void Game::buildMapSource(MapSource& src) {
         }
         break;
       }
-      default: return nullptr;   // Density, Traffic: no per-tile source wired
+      case DataLayer::Density:
+        if (c.valves.effectMap.size() != size_t(W) * H) return nullptr;
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = c.valves.effectMap[size_t(x) * H + z];
+        break;
+      default: return nullptr;   // Traffic: the traffic simulator exposes no per-tile density yet
     }
     return buf.get();
   };

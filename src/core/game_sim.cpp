@@ -32,9 +32,14 @@ class CityDisasterWorld : public DisasterWorld {
   int terrainHeight(int x, int z) const override { return w_.inTiles(x, z) ? w_.altAt(x, z) : 0; }
   int zoneType(int x, int z) const override { return w_.inTiles(x, z) ? w_.zone[w_.tIdx(x, z)] : 0; }
   int flammability(int x, int z) const override {
-    // Without the flammability layer view: wood-ish default on occupied tiles.
-    return c_.occupantAt(x, z) >= 0 ? 120 : 0;
+    if (!w_.inTiles(x, z)) return 0;
+    const auto& g = c_.flammability.grid;
+    size_t i = w_.tIdx(x, z);
+    if (i < g.size() && g[i]) return g[i];
+    return c_.occupantAt(x, z) >= 0 ? 120 : 0;   // layer not run yet: wood-ish default on occupied tiles
   }
+  int fireCoverage(int x, int z) const override { return w_.inTiles(x, z) ? c_.fire.coverageAt(x, z) : 0; }
+  int policeCoverage(int x, int z) const override { return w_.inTiles(x, z) ? c_.police.coverageAt(x, z) : 0; }
  private:
   World& w_;
   City& c_;
