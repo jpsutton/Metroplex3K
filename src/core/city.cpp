@@ -901,6 +901,7 @@ std::vector<us::SimOccupant> City::simOccupants(bool operatingOnly) const {
     s.id = o.occId; s.agentType = o.agentType; s.group = o.agentType;
     s.x = o.x; s.z = o.z; s.sizeX = o.sizeX; s.sizeZ = o.sizeZ;
     s.hasState = true; s.state = o.state;
+    if (game_) if (const OccAttr* a = game_->occupant(o.occId)) if (a->powerAttr >= 0) s.powerUse = a->powerAttr;   // [OBSERVED] attribute 0xC9 is the power use (Σ over a shipped city = 96% of its saved production table)
     v.push_back(s);
   }
   return v;
