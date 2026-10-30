@@ -32,6 +32,8 @@ enum Cmd : int {
 
 const char* commandName(int id);           // shipped mapping; nullptr if unknown
 int commandIdByName(const std::string& n);  // -1 if unknown
+// Number of arguments the shipped scripts give each command (spec 23 section 4.6); -1 if unknown id.
+int commandArgc(int id);
 
 // Mapping read from SC3ScenarioLayer.ini [CommandNameToIdMapping] (name=id). Falls back to the
 // shipped mapping when the section is absent.
@@ -61,6 +63,10 @@ struct Script {
   // Emit exactly the layout the game reads (CR line ends).
   std::string serialize() const;
   bool operator==(const Script& o) const;
+  // Timeline scripts need non-decreasing delays (spec 23 section 4.3 step 3).
+  bool delaysNonDecreasing() const;
+  // True when every command has the argc of commandArgc() (identity command map assumed).
+  bool argcConforms() const;
 };
 
 // "Leading decimal integer" parse of the original: skips spaces, optional '-', digits; stops at first

@@ -184,7 +184,7 @@ CommandLine parseCommandLine(const std::vector<std::string>& toks) {
       else if (name == "intro") cl.intro = onOff(val);
       else if (name == "sound") cl.sound = onOff(val);
       else if (name == "music") cl.music = onOff(val);
-      else if (name == "restart") cl.restart = onOff(val);
+      else if (name == "restart") { cl.restartPresent = true; cl.restart = onOff(val); }
       else if (name == "updaterapp") cl.updaterApp = val;
       else cl.ignored.push_back(t);
       continue;
@@ -219,7 +219,7 @@ CommandLine parseCommandLine(const std::vector<std::string>& toks) {
       default: cl.ignored.push_back(t);
     }
   }
-  if (cl.restart) { cl.hasResolution = false; cl.width = cl.height = 0; cl.device.clear(); }
+  if (cl.restartPresent) { cl.hasResolution = false; cl.width = cl.height = 0; cl.device.clear(); }
   return cl;
 }
 
@@ -286,6 +286,11 @@ DetailLevels defaultDetail(int c) {
 }
 
 GeneralSettings::GeneralSettings() { std::memset(device, 0xFF, sizeof device); }
+GeneralSettings GeneralSettings::defaults(int cls) {
+  GeneralSettings g;
+  g.detail = defaultDetail(cls);
+  return g;
+}
 
 static void wrStr(Bytes& b, const std::string& s) {
   put32(b, uint32_t(s.size()));
@@ -402,6 +407,15 @@ Bytes Sc3Cfg::serialize() const {
   if (hasGeneral) { CfgRecordId id = cfgRecordId(1); w.add({id.type, kCfgGroup, id.instance}, general.serialize()); }
   for (const auto& kv : blocks) { CfgRecordId id = cfgRecordId(kv.first); w.add({id.type, kCfgGroup, id.instance}, kv.second); }
   return w.build();
+}
+
+std::string Sc3Cfg::block3Text() const {
+  auto it = blocks.find(3);
+  if (it == blocks.end() || it->second.size() < 12 + 128) return "";
+  const uint8_t* p = it->second.data() + 12;
+  std::string s;
+  for (size_t i = 0; i < 127 && p[i] >= 0x20; i++) s.push_back(char(p[i]));
+  return s;
 }
 
 std::vector<IdFlag> Sc3Cfg::idFlags(int rec) const {

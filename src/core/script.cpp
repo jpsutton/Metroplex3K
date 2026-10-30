@@ -36,6 +36,45 @@ int commandIdByName(const std::string& n) {
   return -1;
 }
 
+int commandArgc(int id) {
+  switch (id) {
+    case cmdAllGoalsMet: case cmdIf: case cmdIfElse: case cmdAndCondition: case cmdOrCondition:
+    case cmdBeginBlock: case cmdEndAnd: case cmdEndOr: case cmdEndBlock: return 0;
+    case cmdIncrement: case cmdDecrement: case cmdAssign: case cmdGetCrimeValue: case cmdGetLandValue:
+    case cmdGetPopulation: case cmdGetAura: case cmdGetFundsAvailable: case cmdGetTotalDebt:
+    case cmdGetTrafficDensity: case cmdGetSurplusPower: case cmdGetSurplusWater: case cmdCountUnpoweredBuildings:
+    case cmdCountUnwateredBuildings: case cmdGetMonthsElapsed: case cmdEndScenario: case cmdPlaySound:
+    case cmdStartLocusts: case cmdStartUFOAttack: case cmdEnableDisableDisasters:
+    case cmdDisableNewNeighborDeals: case cmdEnableNewNeighborDeals: case cmdOfferRewardBuilding:
+    case cmdOfferBusinessDeal: return 1;
+    case cmdSetVariable: case cmdEqual: case cmdNotEqual: case cmdGreaterThan: case cmdLessThan:
+    case cmdGetPollutionValue: case cmdCountStructures: case cmdIsOrdinanceEnacted: case cmdIsBusinessDealActive:
+    case cmdEnableDisableBusinessDeal: case cmdMarkGoalStatus: case cmdGoalStatusIs: case cmdShowNewsticker:
+    case cmdSetScenarioSpeed: case cmdSubRoutine: case cmdStartFire: case cmdStartEarthquake:
+    case cmdStartWhirlpool: case cmdStartSpaceJunk: return 2;
+    case cmdAdd: case cmdSubtract: case cmdMultiply: case cmdDivide: case cmdComputePercentage:
+    case cmdGenerateRandomNum: case cmdGetCurrentDate: case cmdGetRCItaxes: case cmdIsNeighborConnection:
+    case cmdIsNeighborDealPresent: case cmdAddGoal: case cmdAddRankInfo: case cmdMakeDialogText:
+    case cmdSetResultsDlgText: case cmdMoveCamera: case cmdRepeatRegular: case cmdStartRiot:
+    case cmdStartToxicCloud: return 3;
+    case cmdCountStructuresWithAppearanceInCity: return 4;
+    case cmdCountStructuresNearLocation: return 5;
+    case cmdPopUpMsg: return 6;
+    case cmdCountStructuresWithAppearanceNearLocation: return 7;
+    case cmdStartTornado: return 8;
+    default: return -1;
+  }
+}
+
+bool Script::delaysNonDecreasing() const {
+  for (size_t i = 1; i < cmds.size(); i++) if (cmds[i].delay < cmds[i - 1].delay) return false;
+  return true;
+}
+bool Script::argcConforms() const {
+  for (const auto& c : cmds) if (commandArgc(c.cmd) != int(c.args.size())) return false;
+  return true;
+}
+
 CommandMap::CommandMap() { for (int i = 0; i < kCmdCount; i++) idToCmd_[i] = i; }
 CommandMap::CommandMap(const IniFile& ini) {
   for (const auto& kv : ini.section("CommandNameToIdMapping")) {
@@ -273,8 +312,8 @@ int32_t ScriptInterpreter::execLeaf(const ScriptCommand& c, int id, int depth) {
     case cmdGetFundsAvailable: return stat(stats_.funds());
     case cmdGetTotalDebt: return stat(stats_.totalDebt());
     case cmdGetTrafficDensity: return stat(int32_t(uint8_t(stats_.trafficDensity())));
-    case cmdGetSurplusPower: stat(std::max(0, stats_.surplusPower())); return 1;
-    case cmdGetSurplusWater: stat(stats_.surplusWater()); return 1;
+    case cmdGetSurplusPower: if (!dest(c, v)) return 0; setVar(v, std::max(0, stats_.surplusPower())); return 1;
+    case cmdGetSurplusWater: if (!dest(c, v)) return 0; setVar(v, stats_.surplusWater()); return 1;
     case cmdCountUnpoweredBuildings: return stat(stats_.unpoweredBuildings());
     case cmdCountUnwateredBuildings: return stat(stats_.unwateredBuildings());
     case cmdGetPollutionValue: {

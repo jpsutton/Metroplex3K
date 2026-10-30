@@ -248,5 +248,119 @@ int main() {
     Bytes cut(b.begin(), b.begin() + b.size() / 2);
     CHECK(!SscProject::parse(cut, q));
   }
+
+  // ---- additions: ticker defaults, portraits, presenters, chooser, results, tokens, templates --
+  {
+    StyleTable st;
+    CHECK(StyleTable::parse("1\r-95955054 , 101 = 2 , 255 , 0 , 0 , 0 , 0 , 0 , 1 , 1\r", st));
+    TickerStyle a = st.resolve(101), d = st.resolve(999);
+    CHECK(a.cls == 2 && a.r1 == 255 && a.underline && a.repeats == 1);
+    CHECK(d.cls == 6 && d.r1 == 255 && d.g1 == 255 && d.b1 == 255 && !d.underline && d.repeats == 1);
+    auto c = advisorPortraitCandidates(2, 5, 1, false);
+    CHECK(c.size() == 4);
+    CHECK(c[0] == 0x10205 && c[1] == 0x0205 && c[2] == 0x0203 && c[3] == 0x10303);
+    auto c2 = advisorPortraitCandidates(3, 3, 0, false);
+    CHECK(c2.size() == 2 && c2[0] == 0x0303 && c2[1] == 0x10303);
+    CHECK(advisorIndex(kAdvisorUtilities) == 1 && advisorIndex(kAdvisorDemographics) == 7 && advisorIndex(1) == 0);
+    CHECK(!isScenarioRecordKey({0x2026960B, 0x1234, 1}) && isScenarioRecordKey({0x62B9DA24, 0x6504691D, 150}));
+    std::vector<int32_t> v(512, 0); v[4] = 2005;
+    ScenarioTextContext tc; tc.vars = &v; tc.paradeName = "Parade"; tc.anyNeighbor = "Elsewhere"; tc.population = 12345;
+    CHECK(expandScenarioTokens("%PARADENAME% %ANYNEIGHBOR% %POPULATION% %SCNVY 4% %SCNVM 4%", tc) == "Parade Elsewhere 12,345 2005 $2,005");
+    ScenarioTextContext none;
+    CHECK(expandScenarioTokens("%PARADENAME%", none) == "%PARADENAME%");
+  }
+  {
+    ScenarioFile f = makeScenario();
+    ResolvedPresenter a = f.resolvePresenter(0x828D04EB, 1), b = f.resolvePresenter(5, 1), cu = f.resolvePresenter(137, 0), nf = f.resolvePresenter(999, 0);
+    CHECK(a.advisor && a.advisorIdx == 4 && b.advisorId == kAdvisorUtilities && b.advisorIdx == 1);
+    CHECK(!cu.advisor && cu.picture == presenterPictureKey(137) && cu.nameString.instance == 0x80 && cu.titleString.instance == 0x81 && cu.nameString.group == f.header.stringTable);
+    CHECK(!nf.found && f.defaultPresenter().advisorIdx == 4);
+    ScenarioChooserInfo ci = f.chooserInfo();
+    CHECK(ci.stringTable == 0xFA47D792u && ci.string1.instance == 1 && ci.string0.instance == 0 && ci.scenarioType == 7 && ci.difficulty == 5 && ci.author == "Jane");
+    CHECK(f.entryScriptPresent());
+  }
+  // win / lose hooks, snapshot and resume at the timeline cursor
+  {
+    ScenarioFile f = makeScenario();
+    f.scripts[1].cmds.push_back(C(cmdMakeDialogText, {L(1), L(2), L(1)}, 2880));
+    f.scripts[1].cmds.push_back(C(cmdSetVariable, {L(6), L(66)}, 5000));
+    f.scripts[3].cmds = {C(cmdAddGoal, {L(1), L(7), L(8)}), C(cmdMarkGoalStatus, {L(1), L(1)})};
+    Stats st; Host host;
+    ScenarioRuntime rt(f, st, host, 1);
+    rt.start();
+    ScenarioResult r0 = rt.result();
+    CHECK(!r0.ended && r0.rank == -1 && r0.allGoalsMet && r0.goalsTotal == 0);
+    st.dt = {2, 1, 2000};
+    rt.dayTick();  // clock 1440: var 5 set
+    ScenarioState snap = rt.snapshot();
+    CHECK(snap.hasTimeline && snap.cursor == 3 && snap.vars[5] == 42);
+    Bytes rec = serializeScenarioState(snap);
+    ScenarioState back;
+    CHECK(parseScenarioState(rec, back) && back.cursor == 3 && back.timelineScript.instance == 1);
+    ScenarioFile saved = f; saved.hasState = true; saved.state = back;
+    Stats st2; st2.dt = {2, 1, 2000}; Host host2;
+    ScenarioRuntime rt2(saved, st2, host2, 1);
+    rt2.start();
+    CHECK(rt2.state().vars[5] == 42 && rt2.state().cursor == 3 && rt2.active());
+    st2.dt = {1, 2, 2000};  // month change: monthly script marks goal; clock 2880: end fires
+    rt2.dayTick();
+    ScenarioResult r = rt2.result();
+    CHECK(r.ended && r.rank == 1 && r.rankTitle.id == 8 && host2.ends == 1);
+    CHECK(r.goalsTotal == 1 && r.goalsMet == 1 && r.allGoalsMet);
+    CHECK(rt2.state().vars[6] == 0);  // later timeline command no longer runs after the end
+    CHECK(int(ResultsChoice::Reload) == 0 && int(ResultsChoice::OpenLoad) == 1 && int(ResultsChoice::LeaveAndKeepPlaying) == 2);
+    ScenarioState fin = rt2.snapshot();
+    ScenarioState fo;
+    CHECK(parseScenarioState(serializeScenarioState(fin), fo) && fo.resultRank == 1 && fo.goals.at(1).met);
+  }
+  // corrupt state record fails the whole scenario load (spec 8)
+  {
+    ScenarioFile f = makeScenario();
+    f.hasState = true;
+    Bytes img = f.buildStandalone();
+    IxfFile ix; CHECK(ix.openMemory(img));
+    IxfWriter w;
+    for (const auto& e : ix.entries()) {
+      Bytes b; ix.getBytes(e.key, b);
+      if (e.key == kSnrStateKey) b[4] ^= 0xFF;
+      w.add(e.key, b);
+    }
+    ScenarioFile g; std::string e2;
+    CHECK(!ScenarioFile::load(w.build(), g, &e2) && !e2.empty());
+  }
+  // text record conventions: LF ignored, text after ';' ignored, signed IDs
+  {
+    ScenarioHeader h;
+    CHECK(ScenarioHeader::parse("SNR\n\rC:\\a.sc3\n\r601861727   601861772   7 ; entry\n\r-95955054 1\n\r-2104687381 1\n\r-95955054\n\r", h));
+    CHECK(h.entry.instance == 7 && h.presenter == 0x828D04EBu && h.stringTable == 0xFA47D792u);
+    PresenterTable pt;
+    CHECK(!PresenterTable::parse("1\r1 50 51 52\r", pt));
+  }
+  // template -> scenario
+  {
+    SscProject p;
+    p.name = u"Tmpl"; p.description = u"Desc"; p.picture = {'B', 'M'};
+    p.settings[2] = u"-2104687381"; p.settings[3] = u"Main"; p.settings[4] = u"C:\\x.sc3"; p.settings[5] = u"7"; p.settings[6] = u"5";
+    p.scripts = {{100, u"Other", u"Zed", u""}, {200, u"Main", u"Zed", u""}};
+    p.goals.push_back({50, u"goal text", 1, u"", u"", -1});
+    p.ranks.push_back({51, u"rank text", 1, u"", u""});
+    SscCommand a; a.position = 1; a.scriptId = 200; a.cmdId = cmdRepeatRegular; a.args = {{u"Constant", u"0"}, {u"Constant", u"100"}};
+    SscCommand b; b.position = 2; b.scriptId = 200; b.cmdId = cmdAddGoal; b.args = {{u"Constant", u"1"}, {u"Constant", u"50"}};
+    SscCommand c; c.position = 1; c.scriptId = 100; c.cmdId = cmdSubRoutine; c.args = {{u"Constant", u"200"}};
+    p.commands = {b, a, c};
+    ScenarioFile out; std::string err;
+    CHECK(p.toScenario(0xFA47D792u, out, &err));
+    CHECK(out.header.entry.instance == 2 && out.header.presenterKind == 1 && out.header.presenter == 0x828D04EBu && out.header.stringTable == 0xFA47D792u);
+    const Script* e = out.script(2);
+    CHECK(e && e->cmds.size() == 2 && e->cmds[0].args.size() == 3 && e->cmds[0].args[1].value == int32_t(601861772) && e->cmds[0].args[2].value == 1);
+    CHECK(e->cmds[1].args.size() == 3 && e->cmds[1].args[1].value == int32_t(0xFA47D792u) && e->cmds[1].args[2].value == 50 && e->argcConforms());
+    const Script* o = out.script(1);
+    CHECK(o && o->cmds[0].args.size() == 2 && o->cmds[0].args[1].value == 2);
+    CHECK(out.strings.at(50) == "goal text" && out.strings.at(1) == "Tmpl" && out.catalogue.scenarioType == 7 && out.catalogue.difficulty == 5 && out.picture.size() == 2);
+    ScenarioFile again;
+    CHECK(ScenarioFile::load(out.buildStandalone(), again) && again.scripts.size() == 2 && again.catalogue.difficulty == 5);
+    SscProject empty;
+    CHECK(!empty.toScenario(1, out, &err));
+  }
   TEST_MAIN_END();
 }

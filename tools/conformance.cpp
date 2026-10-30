@@ -16,6 +16,12 @@
 #include "core/ini.h"
 #include "core/ixf.h"
 #include "core/scenario.h"
+#include "core/script.h"
+#include "core/settings.h"
+#include "core/cheats.h"
+#include "core/refpack.h"
+#include "core/tiling_rules.h"
+#include "core/xa_codec.h"
 #include "core/world.h"
 
 using namespace m3k;
@@ -92,6 +98,32 @@ bool parseSii(const std::string& text, long& records) {
   return true;
 }
 
+// L2 deterministic checks that need no game data (spec 28 section 4): generator vectors (14 section 8.1),
+// cheat ID table (27 section 5.1a), LANGID table (05 section 2.4), command table (23 section 3.3).
+void l2Rows(Report& rep) {
+  static const uint32_t rv[10] = {0x41C6, 0x59D4967E, 0xBF022781, 0x959AC46B, 0x79D0F94B, 0x60B995FB, 0x0703D9E2, 0x584E9CFB, 0x81FCBF54, 0xBA030FF6};
+  GameRng r(1);
+  bool rngOk = true;
+  for (uint32_t v : rv) rngOk = rngOk && r.next() == v;
+  GameRng r2(1);
+  rngOk = rngOk && r2.rand(100) == 38;
+  rep.row("L2 integer generator test vectors (seed 1)", rngOk ? "match" : "differ", "match", rngOk);
+  bool cheatOk = findCheatById(0x62E8630B) && findCheatById(0xE37FB7B8) && findCheatById(0xC2FA8E82) && findCheatById(0x42FA93FE) &&
+                 findCheatById(0xC2FAA2F5) && cheatTable().size() >= 55;
+  size_t logged = 0;
+  for (const auto& c : cheatTable()) if (c.id && c.kind != CheatKind::Ticker) logged++;
+  cheatOk = cheatOk && logged == 21;
+  rep.row("L2 cheat table: phrases / loggable IDs", num(long(cheatTable().size())) + " / " + num(long(logged)), "-- / 21", cheatOk);
+  bool langOk = languageFromLangId(0x0409) == 1 && languageFromLangId(0x0809) == 2 && languageFromLangId(0x040C) == 3 &&
+                languageFromLangId(0x0407) == 4 && languageFromLangId(0x0410) == 5 && languageFromLangId(0x0C0A) == 6 &&
+                languageFromLangId(0x080A) == 41 && languageFromLangId(0x0413) == 7 && languageFromLangId(0x041D) == 9 &&
+                languageFromLangId(0x0801) == 22 && languageFromLangId(0x042A) == 43 && languageFromLangId(0x1009) == 1;
+  rep.row("L2 LANGID -> language ID table (spot checks)", langOk ? "match" : "differ", "match", langOk);
+  bool cmdOk = std::string(commandName(0)) == "cmdAdd" && std::string(commandName(74)) == "cmdIsNeighborDealPresent" &&
+               commandIdByName("cmdMoveCamera") == 60 && commandArgc(cmdStartTornado) == 8;
+  rep.row("L2 scenario command table (75 commands)", cmdOk ? "match" : "differ", "match", cmdOk);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -133,6 +165,10 @@ int main(int argc, char** argv) {
   std::map<std::string, long> spriteKinds;
   Counter scriptsParsed;
   long scenarioStateFiles = 0;
+  Counter xa, tiling, cfgRound, bldRound, batRound, snrRound, batBuildings;
+  long scrCmds = 0, scrDelay0 = 0, scrArgs = 0, scrArgK0 = 0, scrArgK1 = 0, scrUnknownCmd = 0, scrArgcMismatch = 0, scrScripts = 0,
+       scrEntryMissing = 0, scrTimelineUnordered = 0, snrCatalogues = 0, snrStyleRows = 0, snrPresenterRows = 0, snrEmbeddedStrings = 0;
+  std::map<uint32_t, long> cmdUse;
   std::map<std::string, long> spritesPerFile;
 
   std::vector<fs::path> files;
@@ -179,6 +215,22 @@ int main(int argc, char** argv) {
       }
       continue;
     }
+    if (ext == ".xa") {
+      Bytes b;
+      bool good = false;
+      if (readFile(p, b)) { PcmBuffer pcm; try { good = decodeXa(b, pcm); } catch (const std::exception&) {} }
+      xa.add(good);
+      if (!good) rep.fail("XA: " + rel);
+      continue;
+    }
+    if (ext == ".txt" && lrel.find("res/tilingrules/") != std::string::npos) {
+      Bytes b;
+      bool good = false;
+      if (readFile(p, b)) { try { tilingTokens(std::string(b.begin(), b.end())); good = true; } catch (const std::exception&) {} }
+      tiling.add(good);
+      if (!good) rep.fail("tiling rules: " + rel);
+      continue;
+    }
     if (ext == ".ssc") {
       Bytes b;
       bool good = false;
@@ -212,6 +264,13 @@ int main(int argc, char** argv) {
     bool opened = f.openMemory(data);
     if (opened) ixfOpened++; else { ixfFailed++; rep.fail("IXF will not open (expected for 5 holiday placeholders): " + rel); continue; }
 
+    if (lrel.size() >= 7 && lrel.compare(lrel.size() - 7, 7, "sc3.cfg") == 0) {
+      Sc3Cfg c = Sc3Cfg::parse(data);
+      Sc3Cfg c2 = Sc3Cfg::parse(c.serialize());
+      bool good = c.warnings.empty() && c.hasGeneral && c2.hasGeneral && c2.general.serialize() == c.general.serialize() && c2.blocks == c.blocks;
+      cfgRound.add(good);
+      if (!good) rep.fail("SC3.cfg round trip: " + rel);
+    }
     bool isSave = ext == ".sc3" || ext == ".st3" || ext == ".sct" || ext == ".snr";
     if (isSave) {
       bool good = true;
@@ -233,6 +292,32 @@ int main(int argc, char** argv) {
               if (!ok) rep.fail("script " + std::to_string(e.key.instance) + " in " + rel);
             }
           for (const auto& w : sf.warnings) rep.fail("scenario warning " + rel + ": " + w);
+          // statistics of spec 23 section 3.4 and shipped-data invariants
+          if (sf.hasCatalogue) snrCatalogues++;
+          snrStyleRows += long(sf.styles.byString.size());
+          snrPresenterRows += long(sf.presenters.rows.size());
+          snrEmbeddedStrings += long(sf.strings.size());
+          if (!sf.entryScriptPresent()) { scrEntryMissing++; rep.fail("entry script missing: " + rel); }
+          else if (!sf.script(sf.header.entry.instance)->delaysNonDecreasing()) { scrTimelineUnordered++; rep.fail("timeline delays decrease: " + rel); }
+          bool rt = true;
+          for (const auto& kv : sf.scripts) {
+            scrScripts++;
+            Script again;
+            if (!Script::parse(kv.second.serialize(), again) || !(again == kv.second)) rt = false;
+            if (!kv.second.argcConforms()) scrArgcMismatch++;
+            for (const auto& c : kv.second.cmds) {
+              scrCmds++; cmdUse[c.cmd]++;
+              if (c.delay == 0) scrDelay0++;
+              if (!commandName(c.cmd)) scrUnknownCmd++;
+              for (const auto& a : c.args) { scrArgs++; (a.kind == 0 ? scrArgK0 : scrArgK1)++; }
+            }
+          }
+          ScenarioFile re;
+          bool rt2 = ScenarioFile::load(sf.buildStandalone(), re) && re.scripts.size() == sf.scripts.size() &&
+                     re.header.serialize() == sf.header.serialize() && re.styles.serialize() == sf.styles.serialize() &&
+                     re.presenters.serialize() == sf.presenters.serialize() && re.strings == sf.strings;
+          snrRound.add(rt && rt2);
+          if (!(rt && rt2)) rep.fail("scenario record round trip: " + rel);
         }
       }
     }
@@ -241,6 +326,22 @@ int main(int argc, char** argv) {
       try { BldFile b = BldFile::parse(data); std::string err; good = b.model.validate(&err); if (!good) rep.fail(".bld invalid " + rel + ": " + err); }
       catch (const std::exception& e) { good = false; rep.fail(".bld " + rel + ": " + e.what()); }
       bld.add(good);
+      if (good) {
+        // L1: write and read back; the model, texture, info and property records must survive.
+        bool rt = false;
+        try {
+          BldFile a = BldFile::parse(data);
+          BldFile c = BldFile::parse(a.serialize());
+          rt = c.model.columnHead == a.model.columnHead && c.model.cells.size() == a.model.cells.size() && c.model.palette.size() == a.model.palette.size() &&
+               c.textures.size() == a.textures.size() && c.name == a.name && c.author == a.author && c.buildingId == a.buildingId &&
+               c.category == a.category && c.thumb == a.thumb && c.description == a.description && c.props.size() == a.props.size();
+          for (size_t i = 0; rt && i < a.model.cells.size(); i++)
+            rt = a.model.cells[i].packed == c.model.cells[i].packed && std::memcmp(a.model.cells[i].face, c.model.cells[i].face, 24) == 0;
+          for (size_t i = 0; rt && i < a.textures.size(); i++) rt = a.textures[i].bgra == c.textures[i].bgra && a.textures[i].name == c.textures[i].name;
+        } catch (const std::exception&) {}
+        bldRound.add(rt);
+        if (!rt) rep.fail(".bld round trip: " + rel);
+      }
     }
     if (lrel.size() >= 7 && lrel.compare(lrel.size() - 7, 7, "bat.dat") == 0) {
       BatDatabase db;
@@ -248,6 +349,32 @@ int main(int argc, char** argv) {
       long listed = good ? long(db.list().size()) : 0;
       batDat.ok += listed;
       if (!good) { batDat.fail++; rep.fail("BAT.DAT: " + rel); }
+      else {
+        // L1: rebuilding must keep every record byte-identical.
+        BatDatabase again;
+        again.load(db.build());
+        bool same = again.recordCount() == db.recordCount();
+        for (const auto& e : f.entries()) {
+          Bytes want;
+          const Bytes* got = again.record(e.key);
+          if (!f.getBytes(e.key, want) || !got || *got != want) same = false;
+        }
+        batRound.add(same);
+        if (!same) rep.fail("BAT.DAT rebuild differs: " + rel);
+        // Each building: directory record, composite record with 20 frames, 16 sprites with 8-byte span records.
+        for (const auto& d : db.list()) {
+          bool ok = d.appearance.type == T_CSATTRIB && d.appearance.group == kBatGroup && d.appearance.instance == d.buildingId;
+          const Bytes* cb = db.record(d.appearance);
+          CsAttrib c = cb ? parseCsAttrib(cb->data(), cb->size()) : CsAttrib();
+          ok = ok && c.valid && c.frames.size() == 20 && c.zoomCount == 5 && c.rotCount == 4;
+          for (size_t i = 0; ok && i < c.frames.size(); i++) {
+            const Bytes* span = db.record({1, kBatGroup, c.frames[i].spriteId});
+            ok = db.record({0, kBatGroup, c.frames[i].spriteId}) && span && span->size() == 8 && c.frames[i].flags == (i >= 16 ? 2 : 0);
+          }
+          batBuildings.add(ok);
+          if (!ok) rep.fail("BAT.DAT building " + std::to_string(d.buildingId));
+        }
+      }
     }
 
     bool inSprites = lrel.find("res/sprites/") != std::string::npos || lrel.find("barender/bat.dat") != std::string::npos;
@@ -314,7 +441,23 @@ int main(int argc, char** argv) {
   rep.row("Scenario Creator projects (.SSC)", num(ssc.ok) + " of " + num(ssc.total()), "14 of 14", ssc.ok == 14 && ssc.fail == 0);
   rep.row("BAT buildings: .bld files / BAT.DAT entries", num(bld.ok) + " of " + num(bld.total()) + " / " + num(batDat.ok), "17 of 17 / 15",
           bld.ok == 17 && bld.fail == 0 && batDat.ok == 15);
-  rep.row("Not covered by engine parsers: .XA, INTRO.TGQ, hotkeys, MenuItem.INI, SSimData, TilingRules", "-", "-", true, false);
+  rep.row(".XA audio files decode", num(xa.ok) + " of " + num(xa.total()), "814 of 814", xa.ok == 814 && xa.fail == 0);
+  rep.row("Res/TilingRules/*.txt tokenise", num(tiling.ok) + " of " + num(tiling.total()), "68 of 68", tiling.ok == 68 && tiling.fail == 0);
+  rep.row("Scenario scripts: commands / arguments (kind 0, kind 1)",
+          num(scrCmds) + " / " + num(scrArgs) + " (" + num(scrArgK0) + ", " + num(scrArgK1) + ")", "5,780 / 9,271 (7,836, 1,435)",
+          scrCmds == 5780 && scrArgs == 9271 && scrArgK0 == 7836 && scrArgK1 == 1435);
+  rep.row("  commands with delay 0", num(scrDelay0), "5,780", scrDelay0 == 5780);
+  rep.row("  unknown command IDs / argc mismatches / entry-script problems", num(scrUnknownCmd) + " / " + num(scrArgcMismatch) + " / " + num(scrEntryMissing + scrTimelineUnordered), "0 / 0 / 0",
+          scrUnknownCmd == 0 && scrArgcMismatch == 0 && scrEntryMissing + scrTimelineUnordered == 0);
+  rep.row("  distinct commands used", num(long(cmdUse.size())), "-", true, false);
+  rep.row("  catalogue records / style rows / presenter rows / embedded strings", num(snrCatalogues) + " / " + num(snrStyleRows) + " / " + num(snrPresenterRows) + " / " + num(snrEmbeddedStrings), "13 / - / - / -", snrCatalogues == 13);
+  rep.row("BAT.DAT buildings: directory + composite + 16 sprites", num(batBuildings.ok) + " of " + num(batBuildings.total()), "15 of 15", batBuildings.ok == 15 && batBuildings.fail == 0);
+  rep.row("L1 scenario records re-written and re-read", num(snrRound.ok) + " of " + num(snrRound.total()), "13 of 13", snrRound.ok == 13 && snrRound.fail == 0);
+  rep.row("L1 .bld write + re-read", num(bldRound.ok) + " of " + num(bldRound.total()), "17 of 17", bldRound.ok == 17 && bldRound.fail == 0);
+  rep.row("L1 BAT.DAT rebuild identical", num(batRound.ok) + " of " + num(batRound.total()), "1 of 1", batRound.ok == 1 && batRound.fail == 0);
+  rep.row("L1 SC3.cfg parse + re-write (only when present)", num(cfgRound.ok) + " of " + num(cfgRound.total()), "-", cfgRound.fail == 0, cfgRound.total() > 0);
+  l2Rows(rep);
+  rep.row("Not covered by engine parsers: INTRO.TGQ, hotkeys, MenuItem.INI, SSimData", "-", "-", true, false);
 
   size_t w0 = 0, w1 = 0, w2 = 0;
   for (const auto& r : rep.rows) { w0 = std::max(w0, r.name.size()); w1 = std::max(w1, r.found.size()); w2 = std::max(w2, r.expected.size()); }
@@ -329,7 +472,7 @@ int main(int argc, char** argv) {
   }
   if (scenarioStateFiles) std::printf("Scenario files carrying a run-time state record: %ld\n", scenarioStateFiles);
   long parseFailures = ixfFailed + strBadFiles + sprites.fail + uiImages.fail + bmps.fail + fonts.fail + occ.fail + cs.fail + pak.fail +
-                       pakEntries.fail + saves.fail + snrFiles.fail + scriptsParsed.fail + ssc.fail + bld.fail + batDat.fail + sii.fail;
+                       pakEntries.fail + saves.fail + snrFiles.fail + scriptsParsed.fail + ssc.fail + bld.fail + batDat.fail + sii.fail + xa.fail + tiling.fail + bldRound.fail + batRound.fail + snrRound.fail + cfgRound.fail + batBuildings.fail;
   if (!rep.failures.empty()) {
     std::printf("\nProblems (%zu%s):\n", rep.failures.size(), rep.failures.size() >= 200 ? "+" : "");
     size_t shown = verbose ? rep.failures.size() : std::min<size_t>(rep.failures.size(), 20);

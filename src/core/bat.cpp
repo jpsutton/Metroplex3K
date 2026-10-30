@@ -335,6 +335,37 @@ uint32_t BldFile::effectiveId() const {
   return h ? h : 1;
 }
 
+// ---- helpers --------------------------------------------------------------------------------
+bool BldPaletteEntry::split(std::string& baseName, uint32_t& id) const {
+  // >= 10 characters, containing " |" followed by 8 hex digits.
+  if (name.size() < 10) return false;
+  size_t p = name.rfind(" |");
+  if (p == std::string::npos || name.size() - (p + 2) != 8) return false;
+  uint32_t v = 0;
+  for (size_t i = p + 2; i < name.size(); i++) {
+    char c = name[i];
+    int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+    if (d < 0) return false;
+    v = v << 4 | uint32_t(d);
+  }
+  baseName = name.substr(0, p);
+  id = v;
+  return true;
+}
+bool BldPaletteEntry::solidColor(int rgb[3]) const {
+  std::string low = toLower(name);
+  return low.compare(0, 6, "color ") == 0 && std::sscanf(low.c_str() + 6, "%d , %d , %d", &rgb[0], &rgb[1], &rgb[2]) == 3;
+}
+
+const char* batCategoryName(uint32_t code) {
+  static const char* const n[16] = {"Residential", "Commercial", "Industrial", "Police Station", "Jail", "Fire Station",
+                                    "Hospital", "School", "College", "Library", "Museum", "Historic Statue",
+                                    "Mayor's House", "City Hall", "Performing Arts Center", "Other"};
+  return code >= 0x208 && code <= 0x217 ? n[code - 0x208] : nullptr;
+}
+
+bool BldFile::needsRevisionConversion() const { return revision[0] < 2; }
+
 // ---- rendering ------------------------------------------------------------------------------
 BatLights BatLights::fromIni(const IniFile& ini) {
   BatLights l;
@@ -388,15 +419,71 @@ void paintColour(const BldModel& m, uint8_t idx, uint8_t out[3]) {
   out[0] = uint8_t(110 + (h & 0x3F)); out[1] = uint8_t(110 + ((h >> 8) & 0x3F)); out[2] = uint8_t(110 + ((h >> 16) & 0x3F));
 }
 
-// Slot of a cube cell (rotation `rot`) whose polygon faces direction (dx,dy) in the model frame.
-int slotForDir(int rot, int dx, int dy) {
-  static const int base[4][2] = {{-1, 0}, {0, -1}, {1, 0}, {0, 1}};  // slots 1..4
-  for (int s = 0; s < 4; s++) {
-    int x = base[s][0], y = base[s][1];
-    for (int k = 0; k < rot; k++) { int nx = -y, ny = x; x = nx; y = ny; }
-    if (x == dx && y == dy) return s + 1;
+// ---- shape table (spec 24 section 3.2.4), rot = 0 --------------------------------------------
+// Polygon k of a shape owns face slot k. Bottom polygons are never visible from the camera side and
+// are omitted. Kinds: 0 wall, 1 45 slope, 2 top, 3 steep, 4 shallow, 5 underside, 7 floor.
+struct ShapePoly { uint8_t kind, dir, n; float v[4][3]; };
+struct Shape { int count; ShapePoly p[7]; };
+#define PW(d, ...) ShapePoly{0, d, 4, {__VA_ARGS__}}
+#define PW3(d, ...) ShapePoly{0, d, 3, {__VA_ARGS__}}
+#define PT(...) ShapePoly{2, 0, 4, {__VA_ARGS__}}
+#define PT3(...) ShapePoly{2, 0, 3, {__VA_ARGS__}}
+#define PS(k, d, ...) ShapePoly{k, d, 4, {__VA_ARGS__}}
+#define PS3(k, d, ...) ShapePoly{k, d, 3, {__VA_ARGS__}}
+const Shape kShapes[16] = {
+  /*0*/ {5, {PT({1,1,1},{1,0,1},{0,0,1},{0,1,1}), PW(3,{0,1,1},{0,0,1},{0,0,0},{0,1,0}), PW(5,{0,0,1},{1,0,1},{1,0,0},{0,0,0}),
+             PW(7,{1,0,1},{1,1,1},{1,1,0},{1,0,0}), PW(1,{1,1,1},{0,1,1},{0,1,0},{1,1,0})}},
+  /*1*/ {4, {PT3({1,1,1},{1,0,1},{0,0,1}), PW(2,{1,1,1},{0,0,1},{0,0,0},{1,1,0}), PW(5,{0,0,1},{1,0,1},{1,0,0},{0,0,0}),
+             PW(7,{1,0,1},{1,1,1},{1,1,0},{1,0,0})}},
+  /*2*/ {4, {PW3(1,{1,1,1},{0,1,0},{1,1,0}), PS(1,3,{1,1,1},{1,0,1},{0,0,0},{0,1,0}), PW3(5,{1,0,1},{1,0,0},{0,0,0}),
+             PW(7,{1,0,1},{1,1,1},{1,1,0},{1,0,0})}},
+  /*3*/ {6, {PS3(1,1,{1,0,1},{0,0,1},{0,1,0}), PS3(1,3,{1,1,1},{1,0,1},{0,1,0}), PW(5,{0,0,1},{1,0,1},{1,0,0},{0,0,0}),
+             PW(7,{1,0,1},{1,1,1},{1,1,0},{1,0,0}), PW3(1,{1,1,1},{0,1,0},{1,1,0}), PW3(3,{0,0,1},{0,0,0},{0,1,0})}},
+  /*4*/ {4, {PS3(1,1,{1,0,1},{0,1,0},{1,1,0}), PS3(1,3,{1,0,1},{0,0,0},{0,1,0}), PW3(5,{1,0,1},{1,0,0},{0,0,0}),
+             PW3(7,{1,0,1},{1,1,0},{1,0,0})}},
+  /*5*/ {5, {PT({1,1,1},{1,0,1},{0,0,1},{0,1,1}), PW3(5,{0,0,1},{1,0,1},{1,0,0}), PW(7,{1,0,1},{1,1,1},{1,1,0},{1,0,0}),
+             PW3(1,{1,1,1},{0,1,1},{1,1,0}), PS(5,0,{0,1,1},{0,0,1},{1,0,0},{1,1,0})}},
+  /*6*/ {6, {PT3({1,1,1},{1,0,1},{0,0,1}), PW3(3,{0,0,1},{0,0,0},{0,1,0}), PW(5,{0,0,1},{1,0,1},{1,0,0},{0,0,0}),
+             PW(7,{1,0,1},{1,1,1},{1,1,0},{1,0,0}), PW3(1,{1,1,1},{0,1,0},{1,1,0}), PS3(3,2,{1,1,1},{0,0,1},{0,1,0})}},
+  /*7*/ {3, {PS3(3,2,{1,0,1},{0,0,0},{1,1,0}), PW3(5,{1,0,1},{1,0,0},{0,0,0}), PW3(7,{1,0,1},{1,1,0},{1,0,0})}},
+  /*8*/ {1, {PS(7,0,{1,1,0},{1,0,0},{0,0,0},{0,1,0})}},
+  /*9*/ {5, {PW(1,{1,1,1},{0,1,.5f},{0,1,0},{1,1,0}), PS(4,3,{1,1,1},{1,0,1},{0,0,.5f},{0,1,.5f}), PW(5,{1,0,1},{1,0,0},{0,0,0},{0,0,.5f}),
+             PW(7,{1,0,1},{1,1,1},{1,1,0},{1,0,0}), PW(3,{0,1,.5f},{0,0,.5f},{0,0,0},{0,1,0})}},
+  /*10*/ {4, {PW3(1,{1,1,.5f},{0,1,0},{1,1,0}), PS(4,3,{1,1,.5f},{1,0,.5f},{0,0,0},{0,1,0}), PW3(5,{1,0,.5f},{1,0,0},{0,0,0}),
+              PW(7,{1,0,.5f},{1,1,.5f},{1,1,0},{1,0,0})}},
+  /*11*/ {6, {PS3(4,1,{1,0,1},{0,0,1},{0,1,.5f}), PS3(4,3,{1,1,1},{1,0,1},{0,1,.5f}), PW(5,{0,0,1},{1,0,1},{1,0,0},{0,0,0}),
+              PW(7,{1,0,1},{1,1,1},{1,1,0},{1,0,0}), PW(1,{1,1,1},{0,1,.5f},{0,1,0},{1,1,0}), PW(3,{0,0,1},{0,0,0},{0,1,0},{0,1,.5f})}},
+  /*12*/ {6, {PS3(4,1,{1,0,.5f},{0,0,.5f},{0,1,0}), PS3(4,3,{1,1,.5f},{1,0,.5f},{0,1,0}), PW(5,{0,0,.5f},{1,0,.5f},{1,0,0},{0,0,0}),
+              PW(7,{1,0,.5f},{1,1,.5f},{1,1,0},{1,0,0}), PW3(1,{1,1,.5f},{0,1,0},{1,1,0}), PW3(3,{0,0,.5f},{0,0,0},{0,1,0})}},
+  /*13*/ {6, {PS3(4,1,{1,0,1},{0,1,.5f},{1,1,.5f}), PS3(4,3,{1,0,1},{0,0,.5f},{0,1,.5f}), PW(5,{1,0,1},{1,0,0},{0,0,0},{0,0,.5f}),
+              PW(7,{1,0,1},{1,1,.5f},{1,1,0},{1,0,0}), PW(1,{1,1,.5f},{0,1,.5f},{0,1,0},{1,1,0}), PW(3,{0,1,.5f},{0,0,.5f},{0,0,0},{0,1,0})}},
+  /*14*/ {4, {PS3(4,1,{1,0,.5f},{0,1,0},{1,1,0}), PS3(4,3,{1,0,.5f},{0,0,0},{0,1,0}), PW3(5,{1,0,.5f},{1,0,0},{0,0,0}),
+              PW3(7,{1,0,.5f},{1,1,0},{1,0,0})}},
+  /*15*/ {0, {}},  // prop cell: never drawn as geometry
+};
+#undef PW
+#undef PW3
+#undef PT
+#undef PT3
+#undef PS
+#undef PS3
+
+// Horizontal / vertical part of the lighting normal per surface kind (spec 3.2.2).
+void kindParts(int kind, double& h, double& v) {
+  switch (kind) {
+    case 0: h = 1; v = 0; break;
+    case 1: h = 0.7071; v = 0.7071; break;
+    case 3: h = 0.866; v = 0.5; break;
+    case 4: h = 0.5; v = 0.866; break;
+    case 5: case 6: h = 0; v = -1; break;
+    default: h = 0; v = 1; break;  // top, floor
   }
-  return 1;
+}
+// Unit horizontal vector for a direction code (0 = +x+y, 1 = +y, 2 = -x+y, 3 = -x, ...), mod 8.
+void dirVec(int dir, double& x, double& y) {
+  static const double d[8][2] = {{1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1}, {1, 0}};
+  x = d[dir & 7][0]; y = d[dir & 7][1];
+  if (x != 0 && y != 0) { x *= 0.70710678; y *= 0.70710678; }
 }
 }  // namespace
 
@@ -428,35 +515,42 @@ Image renderBldView(const BldModel& model, int view, int reduce, const BatLights
   int W = 2 * s * N;
   Image raw; raw.w = W; raw.h = H; raw.px.assign(size_t(W) * H, 0);
   auto P = [&](double x, double y, double z) { return PtD{s * (y - x) + s * N, s * (x + y) / 2 - s * z - minY + pad}; };
-  auto shade = [](const uint8_t* c, const uint8_t* l) {
-    return rgba(uint8_t(std::min(255, c[0] * l[0] / 255)), uint8_t(std::min(255, c[1] * l[1] / 255)),
-                uint8_t(std::min(255, c[2] * l[2] / 255)));
-  };
-  auto origDirLight = [&](int dx, int dy) -> const uint8_t* {
-    for (int k = 0; k < (view & 3); k++) { int nx = dy, ny = -dx; dx = nx; dy = ny; }  // inverse turn
-    if (dx == 1) return L.north;
-    if (dx == -1) return L.south;
-    if (dy == 1) return L.west;
-    return L.east;
+  auto lightFor = [&](double nx, double ny, double nz, uint8_t* out) {
+    struct Ld { double x, y, z; const uint8_t* c; };
+    const Ld lights[6] = {{1, 0, 0, L.north}, {0, 1, 0, L.west}, {-1, 0, 0, L.south}, {0, -1, 0, L.east},
+                          {0, 0, 1, L.top}, {0, 0, -1, L.top}};
+    double acc[3] = {0, 0, 0};
+    for (const auto& l : lights) {
+      double d = nx * l.x + ny * l.y + nz * l.z;
+      if (d <= 0) continue;
+      for (int k = 0; k < 3; k++) acc[k] += d * l.c[k] / 255.0;
+    }
+    for (int k = 0; k < 3; k++) out[k] = uint8_t(std::min(1.0, acc[k]) * 255.0 + 0.5);
   };
   for (const auto& it : items) {
     const BldCell& ce = *it.cell;
-    double x = it.r, y = it.c, z = it.z;
-    uint8_t col[3];
-    bool floorOnly = ce.shape() == 8;
-    // top
-    paintColour(m, ce.face[0][0], col);
-    PtD top[4] = {P(x, y, z + 1), P(x + 1, y, z + 1), P(x + 1, y + 1, z + 1), P(x, y + 1, z + 1)};
-    if (floorOnly) { PtD f[4] = {P(x, y, z), P(x + 1, y, z), P(x + 1, y + 1, z), P(x, y + 1, z)}; fillPoly(raw, f, 4, shade(col, L.top)); continue; }
-    // +x wall (left on screen) then +y wall (right), then top
-    paintColour(m, ce.face[slotForDir(int(ce.rot()), 1, 0)][0], col);
-    PtD wx[4] = {P(x + 1, y, z + 1), P(x + 1, y + 1, z + 1), P(x + 1, y + 1, z), P(x + 1, y, z)};
-    fillPoly(raw, wx, 4, shade(col, origDirLight(1, 0)));
-    paintColour(m, ce.face[slotForDir(int(ce.rot()), 0, 1)][0], col);
-    PtD wy[4] = {P(x, y + 1, z + 1), P(x + 1, y + 1, z + 1), P(x + 1, y + 1, z), P(x, y + 1, z)};
-    fillPoly(raw, wy, 4, shade(col, origDirLight(0, 1)));
-    paintColour(m, ce.face[0][0], col);
-    fillPoly(raw, top, 4, shade(col, L.top));
+    const Shape& sh = kShapes[ce.shape() & 15];
+    int rot = int(ce.rot());
+    for (int k = 0; k < sh.count; k++) {
+      const ShapePoly& sp = sh.p[k];
+      // Camera-facing test on the turned normal; lights stay fixed to the unturned model.
+      double hp, vp, hx, hy;
+      kindParts(sp.kind, hp, vp);
+      dirVec(sp.dir + 2 * rot, hx, hy);
+      if (hp * (hx + hy) + vp < -1e-6) continue;
+      dirVec(sp.dir + 2 * rot - 2 * (view & 3) + 8, hx, hy);
+      uint8_t lc[3], col[3], sc[3];
+      lightFor(hp * hx, hp * hy, vp, lc);
+      paintColour(m, ce.face[k][0], col);
+      for (int q = 0; q < 3; q++) sc[q] = uint8_t(col[q] * lc[q] / 255);
+      PtD pts[4] = {};
+      for (int q = 0; q < sp.n; q++) {
+        double vx = sp.v[q][0], vy = sp.v[q][1];
+        for (int r2 = 0; r2 < rot; r2++) { double nx = 1 - vy, ny = vx; vx = nx; vy = ny; }  // quarter-turn about the cell centre
+        pts[q] = P(it.r + vx, it.c + vy, it.z + double(sp.v[q][2]));
+      }
+      fillPoly(raw, pts, sp.n, rgba(sc[0], sc[1], sc[2]));
+    }
   }
   if (red == 1) return raw;
   img.w = W / red; img.h = H / red;

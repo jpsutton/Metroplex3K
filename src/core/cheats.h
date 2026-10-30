@@ -74,6 +74,19 @@ class CheatRegistry {
   std::vector<uint32_t> log_;
 };
 
+// ---- cheat effect helpers (spec 27 section 5.3) ----------------------------------------------
+// Altitude delta of the four `Terrain one/ten up/down` phrases (+1, -1, +10, -10); 0 for others.
+int terrainCheatDelta(const CheatInfo* c);
+// New value for ground altitude, water altitude and sea level: clamp(v + delta, 2, 253).
+int shiftTerrainAltitude(int value, int delta);
+// `so sue me`: after the monthly settlement the treasury never stays below -99,999.
+int32_t soSueMeClamp(int32_t funds);
+// `traffic lights <arg>`: true when the argument is `on` or `ON`, else false.
+bool trafficLightsArgOn(const CheatMatch& m);
+// `force <advisor> to say <n>` / `force petitioners to say <n>`: message string ID (decimal, or 0x hex), -1 if absent.
+long forcedMessageId(const CheatMatch& m);
+// Phrases that set a build-menu flag etc. are queried by phrase: true while `phrase` is on this session.
+
 // Log record payloads (versioned header: version 1, flags 0x02, flags2 0, 0xDEADBEEF).
 Bytes serializeCheatLog(const std::vector<uint32_t>& ids);  // caller omits the record when empty
 bool parseCheatLog(const Bytes& payload, std::vector<uint32_t>& ids);  // cap 1024

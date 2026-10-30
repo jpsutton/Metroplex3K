@@ -1,5 +1,6 @@
 #include "core/cheats.h"
 #include <algorithm>
+#include <cstdlib>
 
 namespace m3k {
 
@@ -144,6 +145,25 @@ CheatResult CheatRegistry::submit(const std::string& entered) {
     else if (on) phraseOn_.insert(lp); else phraseOn_.erase(lp);
   }
   return r;
+}
+
+int terrainCheatDelta(const CheatInfo* c) {
+  if (!c) return 0;
+  std::string p = toLower(c->phrase);
+  if (p == "terrain one up") return 1;
+  if (p == "terrain one down") return -1;
+  if (p == "terrain ten up") return 10;
+  if (p == "terrain ten down") return -10;
+  return 0;
+}
+int shiftTerrainAltitude(int v, int d) { return std::clamp(v + d, 2, 253); }
+int32_t soSueMeClamp(int32_t funds) { return funds < -99999 ? -99999 : funds; }
+bool trafficLightsArgOn(const CheatMatch& m) { return m.arg == "on" || m.arg == "ON"; }
+long forcedMessageId(const CheatMatch& m) {
+  if (m.arg.empty()) return -1;
+  char* end = nullptr;
+  long v = std::strtol(m.arg.c_str(), &end, 0);
+  return end == m.arg.c_str() ? -1 : v;
 }
 
 // ---- records --------------------------------------------------------------------------------
