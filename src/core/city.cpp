@@ -1141,8 +1141,20 @@ void City::monthlyBudget() {
 }
 
 us::PowerEnv City::powerEnv(std::vector<uint8_t>& conductive) const {
-  conductive.assign(size_t(world_->W) * world_->H, 0);
-  for (size_t i = 0; i < conductive.size(); i++) conductive[i] = powerLine_[i] || world_->zone[i] != 0 || occ_[i] >= 0;
+  // spec 12 section 9.1: every building footprint and power-line piece conducts to anything within 2 tiles.
+  const int Wt = world_->W, Ht = world_->H;
+  std::vector<uint8_t> src(size_t(Wt) * Ht, 0);
+  for (size_t i = 0; i < src.size(); i++) src[i] = powerLine_[i] || occ_[i] >= 0;
+  std::vector<uint8_t> dx(src.size(), 0);
+  conductive.assign(src.size(), 0);
+  for (int x = 0; x < Wt; x++)
+    for (int z = 0; z < Ht; z++)
+      if (src[idx(x, z)])
+        for (int d = std::max(0, x - 2); d <= std::min(Wt - 1, x + 2); d++) dx[idx(d, z)] = 1;
+  for (int x = 0; x < Wt; x++)
+    for (int z = 0; z < Ht; z++)
+      if (dx[idx(x, z)])
+        for (int d = std::max(0, z - 2); d <= std::min(Ht - 1, z + 2); d++) conductive[idx(x, d)] = 1;
   us::PowerEnv env;
   env.conductive = &conductive;
   env.ordinances = usOrdinances();
@@ -1177,10 +1189,35 @@ void City::monthlyWater() {
       for (int dz = 0; dz < o.sizeZ; dz++)
         if (inMap(o.x + dx, o.z + dz)) pipes[idx(o.x + dx, o.z + dz)] = 1;
   }
+  // Salt vs fresh water: the sea flag is not persisted (spec 11 section 5), so derive it from connectivity to the
+  // map edge. A water body (4-connected wet tiles) touching the edge is sea; inland lakes and rivers are fresh even
+  // when their surface equals the sea level (as in nearly every shipped file).
   std::vector<uint8_t> kind(size_t(world_->W) * world_->H, 0);
-  for (int x = 0; x < world_->W; x++)
-    for (int z = 0; z < world_->H; z++)
-      if (world_->waterAt(x, z) > world_->altAt(x, z)) kind[idx(x, z)] = world_->waterAt(x, z) <= world_->seaLevel ? 2 : 1;
+  {
+    std::vector<int> stack;
+    // The generator treats a vertex as land only when altitude > water surface (spec 11 section 3), so a vertex whose
+    // altitude equals the surface is water; no shipped building stands on such tiles.
+    auto wet = [&](int x, int z) { return world_->waterAt(x, z) >= world_->altAt(x, z); };
+    for (int x = 0; x < world_->W; x++)
+      for (int z = 0; z < world_->H; z++)
+        if (wet(x, z)) kind[idx(x, z)] = 1;
+    auto seed = [&](int x, int z) {
+      if (kind[idx(x, z)] == 1 && world_->waterAt(x, z) > world_->altAt(x, z) && world_->waterAt(x, z) <= world_->seaLevel) {
+        kind[idx(x, z)] = 2; stack.push_back(int(idx(x, z)));
+      }
+    };
+    for (int x = 0; x < world_->W; x++) { seed(x, 0); seed(x, world_->H - 1); }
+    for (int z = 0; z < world_->H; z++) { seed(0, z); seed(world_->W - 1, z); }
+    while (!stack.empty()) {
+      int c = stack.back(); stack.pop_back();
+      int x = c / world_->H, z = c % world_->H;
+      static const int d4[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+      for (auto& d : d4) {
+        int nx = x + d[0], nz = z + d[1];
+        if (nx >= 0 && nz >= 0 && nx < world_->W && nz < world_->H) seed(nx, nz);
+      }
+    }
+  }
   auto consumers = simOccupants(true);
   us::WaterEnv env;
   env.nowAbsMonth = absMonthOf(clock);
