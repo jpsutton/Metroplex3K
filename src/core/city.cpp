@@ -203,7 +203,15 @@ bool CityConfig::load(GameData& g) {
   valve.parseResLayer(ini.resLayer);
   valve.parseComLayer(ini.comLayer);
   valve.parseIndLayer(ini.indLayer);
-  { std::string s; if (ini.budgetLayer.get("TuningParameters", "TaxationDemandEffect", s)) valve.parseTaxation(s); }
+  {
+    std::string s;
+    if (ini.budgetLayer.get("TuningParameters", "TaxationDemandEffect", s)) {
+      valve.parseTaxation(s);
+      // With the real taxation table the tax modifier f2 gives a new city its first demand (shipped New City: f2 = 0.067), so the
+      // synthetic bootstrap is only a fallback for data sets without that table (tests, demos).
+      valve.bootstrapResDemand = 0;
+    }
+  }
   landValue.parse(ini.landValue);
   landValue.parseHierarchy(ini.citySim);
   for (const auto& kv : ini.citySim.section("AgentTypeHierarchy")) parent[parseIdNumber(kv.first)] = parseIdNumber(kv.second);
