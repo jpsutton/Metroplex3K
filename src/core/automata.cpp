@@ -1,6 +1,7 @@
 #include "core/automata.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <set>
 #include <sstream>
@@ -8,6 +9,8 @@
 namespace m3k {
 
 using namespace automata_ids;
+
+constexpr double kPi = 3.14159265358979323846;  // M_PI is not in MSVC <cmath> by default
 
 // ================================================================ record reader (binary + text)
 namespace {
@@ -46,7 +49,7 @@ class RecReader {
   uint32_t u32() { if (bin_) { need(4); uint32_t v = rd32(&b_[pos_]); pos_ += 4; return v; } return uint32_t(tokInt()); }
   int32_t s32() { return int32_t(u32()); }
   float f32() {
-    if (bin_) { uint32_t v = u32(); float f; __builtin_memcpy(&f, &v, 4); return f; }
+    if (bin_) { uint32_t v = u32(); float f; std::memcpy(&f, &v, 4); return f; }
     if (tp_ >= toks_.size()) throw FormatError("eof");
     return float(std::atof(toks_[tp_++].c_str()));
   }
@@ -217,8 +220,8 @@ bool parsePPath(const Bytes& b, PPath& o) {
 
 int heading32(double da, double db) {
   double a = std::atan2(db, da);
-  if (a < 0) a += 2 * M_PI;
-  int v = int(std::lround(a * 32.0 / (2 * M_PI)));
+  if (a < 0) a += 2 * kPi;
+  int v = int(std::lround(a * 32.0 / (2 * kPi)));
   return v >= 32 ? 0 : v;
 }
 
@@ -1059,7 +1062,7 @@ struct StreetSim::Impl {
     double v = (a.va ? a.va->maxSpeed() : 0.0) * double(dtUs) / 256.0;
     a.nextTurnUs -= dtUs;
     if (a.nextTurnUs <= 0) {
-      double ang = rng.f01() * 2 * M_PI;
+      double ang = rng.f01() * 2 * kPi;
       a.dirX = std::cos(ang); a.dirY = std::sin(ang);
       a.nextTurnUs = 5000000 + int64_t(rng.below(10000000));
     }
@@ -1090,7 +1093,7 @@ struct StreetSim::Impl {
     a->animSeq = 20;
     if (wander) {
       a->beh = Beh::Wander;
-      double ang = rng.f01() * 2 * M_PI; a->dirX = std::cos(ang); a->dirY = std::sin(ang); a->nextTurnUs = 5000000;
+      double ang = rng.f01() * 2 * kPi; a->dirX = std::cos(ang); a->dirY = std::sin(ang); a->nextTurnUs = 5000000;
     } else { a->beh = Beh::Fly; a->wps = std::move(route); a->wp = 0; }
     soundEvent(SoundEvent::Start, a->va->motionSound, *a);
     return a;

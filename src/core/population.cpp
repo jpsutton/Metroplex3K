@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 #include "core/tune.h"
 
@@ -402,7 +403,7 @@ void Population::parseState(const uint8_t* p, size_t n) {
 
 static void putF32(Bytes& b, float f) {
   uint32_t v;
-  __builtin_memcpy(&v, &f, 4);
+  std::memcpy(&v, &f, 4);
   put32(b, v);
 }
 

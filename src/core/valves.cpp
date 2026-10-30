@@ -1,6 +1,7 @@
 #include "core/valves.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include "core/records.h"
 
@@ -58,7 +59,7 @@ void Valve::update() {
 
 void Valve::write(Bytes& b) const {
   put32(b, id); put32(b, uint32_t(Slast)); put32(b, uint32_t(Dlast)); put32(b, uint32_t(Sacc)); put32(b, uint32_t(Dacc));
-  uint32_t u; __builtin_memcpy(&u, &f1, 4); put32(b, u); __builtin_memcpy(&u, &f2, 4); put32(b, u);
+  uint32_t u; std::memcpy(&u, &f1, 4); put32(b, u); std::memcpy(&u, &f2, 4); put32(b, u);
   b.push_back(capPct); put32(b, uint32_t(V)); put32(b, uint32_t(Sbase)); put32(b, uint32_t(Dbase));
 }
 Valve Valve::read(Reader& r) {

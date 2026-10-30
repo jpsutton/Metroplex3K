@@ -1,5 +1,6 @@
 #include "core/records.h"
 #include <algorithm>
+#include <cstring>
 #include <ctime>
 #include "core/growth.h"
 #include "core/landvalue.h"
@@ -303,7 +304,7 @@ TemplateSet TemplateSet::defaults(int W, int H) {
   t.setOuter(SchemeSel, zeros(12));
   { Bytes d; writeRecHeader(d, 2); put32(d, 0); t.setOuter(ViewWindow, d); }
   { Bytes d; writeRecHeader(d, 1); float f[2] = {float(W) / 2, float(H) / 2};
-    for (float v : f) { uint32_t u; __builtin_memcpy(&u, &v, 4); put32(d, u); }
+    for (float v : f) { uint32_t u; std::memcpy(&u, &v, 4); put32(d, u); }
     put32(d, 2); put32(d, 0); t.setOuter(ViewIso, d); }
 
   // Inner records

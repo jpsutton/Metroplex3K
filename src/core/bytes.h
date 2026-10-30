@@ -2,6 +2,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -40,7 +41,7 @@ class Reader {
   uint32_t u32() { need(4); auto v = rd32(p_ + pos_); pos_ += 4; return v; }
   int16_t s16() { return int16_t(u16()); }
   int32_t s32() { return int32_t(u32()); }
-  float f32() { uint32_t v = u32(); float f; static_assert(sizeof f == 4, ""); __builtin_memcpy(&f, &v, 4); return f; }
+  float f32() { uint32_t v = u32(); float f; static_assert(sizeof f == 4, ""); std::memcpy(&f, &v, 4); return f; }
   const uint8_t* ptr() const { return p_ + pos_; }
   std::string str(size_t k) { need(k); std::string s(reinterpret_cast<const char*>(p_ + pos_), k); pos_ += k; return s; }
   Bytes bytes(size_t k) { need(k); Bytes b(p_ + pos_, p_ + pos_ + k); pos_ += k; return b; }

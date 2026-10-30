@@ -1,5 +1,6 @@
 // City-family file loader. See spec/10-save-format.md.
 #include <algorithm>
+#include <cstring>
 #include "core/records.h"
 #include "core/refpack.h"
 #include "core/world.h"
@@ -157,7 +158,7 @@ void parseOccupants(const uint8_t* cp, size_t cn, const uint8_t* ep, size_t en, 
     if (flags & (1u << 28)) r.u32();
     if (flags & (1u << 23)) { uint32_t m = r.u32(); for (uint32_t j = 0; j < m; j++) { uint32_t id = r.u32(); o.intProps.push_back({id, r.u32()}); } }
     if (flags & (1u << 24)) { uint32_t m = r.u32(); for (uint32_t j = 0; j < m; j++) { uint32_t id = r.u32(); o.strProps.push_back({id, rdString(r)}); } }
-    if (flags & (1u << 25)) { uint32_t m = r.u32(); for (uint32_t j = 0; j < m; j++) { uint32_t id = r.u32(); uint32_t u = r.u32(); float f; __builtin_memcpy(&f, &u, 4); o.floatProps.push_back({id, f}); } }
+    if (flags & (1u << 25)) { uint32_t m = r.u32(); for (uint32_t j = 0; j < m; j++) { uint32_t id = r.u32(); uint32_t u = r.u32(); float f; std::memcpy(&f, &u, 4); o.floatProps.push_back({id, f}); } }
     if (flags & (1u << 26)) throw FormatError("occupant: object properties not supported");
     w.occupants.push_back(std::move(o));
   }

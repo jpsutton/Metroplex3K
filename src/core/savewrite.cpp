@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstring>
 #include "core/refpack.h"
 #include "core/records.h"
 #include "core/world.h"
@@ -20,7 +21,7 @@ static Bytes saveGenerated(const World& w) {
   std::vector<R> recs;
 
   { Bytes d; hdr(d, 3); put32(d, 0);  // heightScale placeholder, patched below
-    float hs = w.heightScale; uint32_t hv; __builtin_memcpy(&hv, &hs, 4); wr32(&d[d.size() - 4], hv);
+    float hs = w.heightScale; uint32_t hv; std::memcpy(&hv, &hs, 4); wr32(&d[d.size() - 4], hv);
     for (int row = 0; row <= w.W; row++) for (int z = 0; z <= w.H; z++) d.push_back(w.altAt(w.W - row, z));
     d.push_back(w.seaLevel);
     for (int row = 0; row <= w.W; row++) for (int z = 0; z <= w.H; z++) d.push_back(w.waterAt(w.W - row, z));
@@ -47,7 +48,7 @@ static Bytes saveGenerated(const World& w) {
       if (!o.intProps.empty()) { put32(d, uint32_t(o.intProps.size())); for (auto& p : o.intProps) { put32(d, p.first); put32(d, p.second); } }
       if (!o.strProps.empty()) { put32(d, uint32_t(o.strProps.size())); for (auto& p : o.strProps) { put32(d, p.first); str(d, p.second); } }
       if (!o.floatProps.empty()) { put32(d, uint32_t(o.floatProps.size()));
-        for (auto& p : o.floatProps) { uint32_t u; __builtin_memcpy(&u, &p.second, 4); put32(d, p.first); put32(d, u); } }
+        for (auto& p : o.floatProps) { uint32_t u; std::memcpy(&u, &p.second, 4); put32(d, p.first); put32(d, u); } }
     }
     recs.push_back({{0xE0FAADC7, 0xA0AB89F0, 1}, std::move(d)}); }
 
@@ -98,7 +99,7 @@ static Bytes saveGenerated(const World& w) {
   { Bytes d; put32(d, uint32_t(w.info.fileKind)); ix.add({0xC359837E, 0x43598384, 0}, std::move(d)); }
   { Bytes d; put32(d, w.scheme.buildingSet); put32(d, w.scheme.floraSet); put32(d, w.scheme.landscape); ix.add({0x0525A6B9, 0x4525A6E2, 1}, std::move(d)); }
   { Bytes d; hdr(d, 1); float f[2] = {w.view.centreX, w.view.centreZ};
-    for (float v : f) { uint32_t u; __builtin_memcpy(&u, &v, 4); put32(d, u); }
+    for (float v : f) { uint32_t u; std::memcpy(&u, &v, 4); put32(d, u); }
     put32(d, uint32_t(w.view.zoom)); put32(d, uint32_t(w.view.rotation)); ix.add({0x620EDFCE, 0xA20FB3B9, 0}, std::move(d)); }
   { Bytes d; put32(d, 0x67); put32(d, 1); put32(d, 0x035F62A4); put32(d, 0x035F62A4); put32(d, 1); ix.add({0x035F62A4, 0x035F62A4, 0}, std::move(d)); }
   ix.add({0x035F62A4, 0x035F62A4, 1}, std::move(seg));
