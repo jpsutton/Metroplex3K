@@ -277,6 +277,7 @@ class PollutionLayer {
   uint8_t unk8 = 0;
   uint32_t burnCapA = 0, burnCapB = 0;
   float ratio = 0; uint32_t unk32 = 0;
+  size_t recyclingSeen_ = SIZE_MAX;   // recycling-centre count `ratio` was last matched to (SIZE_MAX = just loaded)
   uint32_t cursorX = 0, cursorZ = 0;
   int32_t rawWaterSum = 0, rawWaterLast = 0, treatedSum = 0, treatedLast = 0;
   SweepOrder order;

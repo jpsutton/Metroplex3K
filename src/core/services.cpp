@@ -736,8 +736,8 @@ void PollutionLayer::processCell(int tx, int tz, const PollutionEnv& env, int64_
     if (zt != 17 && n) {
       int64_t q = g / n;
       disp.stats[0] += q;
-      if (P.garbageScale > 0 && q > 0) {
-        double qs = double(q) * P.garbageScale;
+      if (ratio > 0 && q > 0) {
+        double qs = double(q) * double(ratio);
         if ((i == 1 || i == 3) && qs > 0.5) qs -= 0.5;
         int64_t k = std::min<int64_t>(q, int64_t(std::llround(qs)));
         q -= k; disp.stats[3] += k;
@@ -788,6 +788,19 @@ void PollutionLayer::processCell(int tx, int tz, const PollutionEnv& env, int64_
 
 void PollutionLayer::run(const PollutionEnv& env) {
   const PollutionParams& P = params_;
+  // Garbage scaling factor (spec 17 7.2.4 step 3). The saved `ratio` float is its live value: 0 in every shipped city without a
+  // recycling centre, 0.06-0.45 with them (equal to the scaled-away share of production in the saved history). A loaded city
+  // keeps it; when centres appear, disappear or change in number it follows them. [OBSERVED; the exact rule is still open]
+  {
+    const size_t n = recyclingCentres.size();
+    if (n != recyclingSeen_) {
+      if (n == 0) ratio = 0;
+      else if (recyclingSeen_ == SIZE_MAX) { if (ratio <= 0) ratio = float(std::min(0.45, 0.1 * double(n))); }
+      else if (recyclingSeen_ > 0 && ratio > 0) ratio = float(std::min(0.45, double(ratio) * double(n) / double(recyclingSeen_)));
+      else ratio = float(std::min(0.45, 0.1 * double(n)));
+      recyclingSeen_ = n;
+    }
+  }
   int64_t wteN = int64_t(wtePlants.size()), incN = int64_t(incinerators.size()), trN = int64_t(treatmentPlants.size());
   // [OBSERVED] OptimalGarbageCap is a per-run (daily) figure: with it the monthly burn of shipped cities is 30x the INI value
   // (WTE 1,750 -> 52,500 per plant, incinerator 1,500 -> 45,000), which is what the saved garbage histories show (Madison
