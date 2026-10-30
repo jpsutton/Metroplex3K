@@ -38,6 +38,7 @@ WinEnv Game::env() {
   const auto& nb = sim_.city().neighbours.neighbours[0];
   if (!nb.cityName.empty()) E.tc.neighbour = nb.cityName;
   E.currency = "$";
+  E.spots = spotSink_;
   return E;
 }
 

@@ -96,6 +96,12 @@ class Game {
   std::function<void(const std::string& name, int w, int h, const std::vector<uint32_t>& rgba)> onSnapshot;
   const std::vector<std::string>& snapshots() const { return snapshotNames_; }
   const RenderScene& scene() const { return scene_; }
+  // Screen position (inside the last rendered frame) of the middle of a tile; false if off-screen / not pickable. For tools & tests.
+  bool tileScreenPos(int tx, int tz, int& sx, int& sy);
+  const World& world() const { return world_; }
+  bool windowOpen(const std::string& name) const;
+  // Test hook: every window control drawn registers (name, rect) here (cleared by the caller).
+  void setSpotSink(std::vector<Spot>* s) { spotSink_ = s; }
 
  private:
   // screens
@@ -291,6 +297,7 @@ class Game {
   int snapSizeIdx_ = 1;
   bool panning_ = false; int panLastX_ = 0, panLastY_ = 0;
   std::vector<RenderScene> unusedScenes_;
+  std::vector<Spot>* spotSink_ = nullptr;
   int streetAcc_ = 0;
   int shake_ = 0;
   int sweepMinute_ = 0;

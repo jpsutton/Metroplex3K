@@ -198,6 +198,39 @@ void Game::setView(int tx, int tz, int zoom) {
   centreOn(tx, tz);
 }
 
+bool Game::tileScreenPos(int tx, int tz, int& sx, int& sy) {
+  if (!world_.W || !world_.inTiles(tx, tz) || renderer_.width() <= 0) return false;
+  int a = (world_.altAt(tx, tz) + world_.altAt(tx + 1, tz) + world_.altAt(tx, tz + 1) + world_.altAt(tx + 1, tz + 1)) / 4;
+  int px, py;
+  renderer_.projectSub(cam_, tx * 256 + 128, tz * 256 + 128, a * 256, px, py);
+  for (int r = 0; r <= 12; r++)
+    for (int dy = -r; dy <= r; dy++)
+      for (int dx = -r; dx <= r; dx++) {
+        if (std::max(std::abs(dx), std::abs(dy)) != r) continue;
+        int x = px + dx, y = py + dy, gx, gz;
+        if (x < 0 || y < 0 || x >= renderer_.width() || y >= renderer_.height()) continue;
+        if (renderer_.pickGround(cam_, x, y, gx, gz) && gx == tx && gz == tz) { sx = x; sy = y; return true; }
+      }
+  return false;
+}
+
+bool Game::windowOpen(const std::string& n) const {
+  if (n == "budget") return showBudget_;
+  if (n == "ordinances") return showOrd_;
+  if (n == "neighbours") return showNeigh_;
+  if (n == "deals") return showDeals_;
+  if (n == "advisors") return showAdv_;
+  if (n == "prefs") return showPrefs_;
+  if (n == "props") return showProps_;
+  if (n == "goals") return showGoals_;
+  if (n == "map") return showMap_;
+  if (n == "graphs") return showGraphs_;
+  if (n == "charts") return showCharts_;
+  if (n == "picker") return showPicker_;
+  if (n == "query") return showQuery_;
+  return false;
+}
+
 void Game::initAudio() {
   audio_.reset();
   if (!haveData_) return;
