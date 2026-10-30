@@ -789,8 +789,11 @@ void PollutionLayer::processCell(int tx, int tz, const PollutionEnv& env, int64_
 void PollutionLayer::run(const PollutionEnv& env) {
   const PollutionParams& P = params_;
   int64_t wteN = int64_t(wtePlants.size()), incN = int64_t(incinerators.size()), trN = int64_t(treatmentPlants.size());
-  int64_t wteBud = wteRb_.next(wteN * P.wteCap * env.wteFunding / 100);
-  int64_t incBud = incRb_.next(incN * P.incineratorCap * env.incineratorFunding / 100);
+  // [OBSERVED] OptimalGarbageCap is a per-run (daily) figure: with it the monthly burn of shipped cities is 30x the INI value
+  // (WTE 1,750 -> 52,500 per plant, incinerator 1,500 -> 45,000), which is what the saved garbage histories show (Madison
+  // 3 WTE burn its whole 104k/month remainder; Liverpool 3 incinerators burn 135,000 = 3 x 45,000 every month).
+  int64_t wteBud = wteRb_.next(30 * wteN * P.wteCap * env.wteFunding / 100);
+  int64_t incBud = incRb_.next(30 * incN * P.incineratorCap * env.incineratorFunding / 100);
   int64_t trBud = trRb_.next(trN * P.treatmentCap * env.treatmentFunding / 100);
   burnCapA = uint32_t(incBud); burnCapB = uint32_t(wteBud);
   disp.abductionCap = P.garbageAbduction;
