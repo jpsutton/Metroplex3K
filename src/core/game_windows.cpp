@@ -275,7 +275,17 @@ void Game::drawWindows(uint32_t dtMs) {
       std::copy(u.decade, u.decade + 10, c.decade); c.max = u.max;
     };
     cv(city.pollution.chart, conv[0]); cv(city.crime.chart, conv[1]); cv(city.power.chart, conv[2]); cv(city.water.chart, conv[3]);
+    // World layer charts (spec 10 6.13): city size, commerce, industry, unemployment, national population.
+    Chart wc[5];
+    for (int k = 0; k < 5; k++) {
+      const auto& w = city.valves.world.charts[k].w;
+      for (int i = 0; i < 12; i++) wc[k].monthly[i] = w[size_t(i)];
+      for (int i = 0; i < 10; i++) { wc[k].yearly[i] = w[size_t(12 + i)]; wc[k].decade[i] = w[size_t(22 + i)]; }
+      wc[k].max = w[32];
+    }
     if (series.size() >= 14) {
+      series[0].chart = &wc[0]; series[2].chart = &wc[1]; series[3].chart = &wc[2];
+      series[7].chart = &wc[3]; series[4].chart = &wc[4];
       series[1].chart = &city.pop.popChart;
       series[6].chart = &conv[0];
       series[8].chart = &conv[1];
@@ -292,9 +302,13 @@ void Game::drawWindows(uint32_t dtMs) {
   }
   if (showNeigh_) {
     neighWin_.cityName = world_.info.cityName; neighWin_.cityPop = city.population();
-    uint64_t np = uint64_t(std::max(0, city.population()));
-    for (const auto& nb : city.neighbours.neighbours) np += nb.population;
-    neighWin_.nationalPop = np;   // [approximation] the original shows the SimNation total (issue filed)
+    // The SimNation population is the newest sample of the world layer's fifth chart (Berlin: 41,000,660 = the original's value).
+    uint64_t np = city.valves.world.charts[4].w[0];
+    if (np == 0) {
+      np = uint64_t(std::max(0, city.population()));
+      for (const auto& nb : city.neighbours.neighbours) np += nb.population;
+    }
+    neighWin_.nationalPop = np;
     neighWin_.centreMap = neighMap_.empty() ? nullptr : &neighMap_;
     finish(neighWin_.draw(ui_, E, city.neighbours), showNeigh_);
   }
