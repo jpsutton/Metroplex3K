@@ -435,6 +435,11 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   wire();
   refresh(true);
   residents_ = countResidents();   // HUD and dialogs read this before the first month end
+  // Full monthly costs are normally supplied by the owning subsystem at the first month end, and health and education
+  // have no modelled upkeep yet (issue #44). Until then reuse the loaded city's last monthly charge so the budget
+  // window's year-end estimate and the next settlement start from the saved level.
+  for (auto& d : budget.depts)
+    if (d.fullCost == 0 && d.lastCharge > 0 && d.funding > 0) d.fullCost = (d.lastCharge * 100 + d.funding - 1) / d.funding;
   // Business deals are not stored in the save: a deal is in force while its business building stands (spec 19 s11).
   for (const auto& d : business.defs)
     for (const auto& o : world_->occupants)
