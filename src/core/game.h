@@ -201,6 +201,9 @@ class Game {
   // windows (game_windows.cpp)
   void handleWindowResult(const WindowResult& r);
   void buildQueryInfo(int tx, int tz, QueryInfo& q);
+  void stopAmbience();
+  void updateAmbience(uint32_t dtMs);                  // picks the ambient FSC area from the view (game_query.cpp)
+  TileSoundContext tileSoundContext(int tx, int tz);   // audio classification of a tile (game_query.cpp)
   void buildMapSource(MapSource& src);
   void buildBudgetView(BudgetView& v);
   void buildPickerEntries(PickerCategory c);
@@ -273,6 +276,10 @@ class Game {
   RenderOptions ropt_ = [] { RenderOptions o; o.grid = true; return o; }();   // grid on by default
   CityConfig cityCfg_;
   std::unique_ptr<AudioSystem> audio_;
+  AmbientAreaSelector ambSel_;
+  bool ambCfg_ = false;
+  int64_t ambAcc_ = 0;
+  float ambLastU_ = 0, ambLastV_ = 0;
   Sim sim_;
   std::unique_ptr<Terraformer> terra_;
   Lcg floraLcg_{99};

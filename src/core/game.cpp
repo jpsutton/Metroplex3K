@@ -310,7 +310,7 @@ bool Game::windowOpen(const std::string& n) const {
 }
 
 void Game::initAudio() {
-  audio_.reset();
+  audio_.reset(); ambCfg_ = false; ambSel_.reset(-1);
   if (!haveData_) return;
   fs::path dir = resolveCI(data_.appsDir(), "Res/Sound");
   if (dir.empty()) return;
@@ -424,7 +424,7 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
   } held{*this};
   held.lock();
   W_ = w; H_ = h; frameDt_ = dtMs;
-  if (audio_) audio_->update(dtMs);
+  if (audio_) { audio_->setAudioZoom(cam_.zoom + 1); audio_->update(dtMs); }
   if (screen_.size() != size_t(w) * h) screen_.assign(size_t(w) * h, 0xFF302820u);
   // Dialogs opened from a city (Load / Save As) keep the city view and HUD behind them, frozen.
   const bool cityBackdrop = (scr_ == Screen::LoadList || scr_ == Screen::NewCity) && world_.W && simReady_;
@@ -434,8 +434,9 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
     if (scr_ == Screen::InCity) {
       tickSim(dtMs);
       streetSimFrame(dtMs);
+      updateAmbience(dtMs);
       ropt_.overlay = (showMap_ && mapWin_.showInCityView) ? mapWin_.activeOverlay() : nullptr;
-    } else ropt_.overlay = nullptr;
+    } else { ropt_.overlay = nullptr; stopAmbience(); }
     costShow_ = false;
     renderer_.setCostTextHook([this](int sx, int sy, const std::string& text, bool ok) { costText_ = text; costX_ = sx; costY_ = sy; costOk_ = ok; costShow_ = true; });
     ropt_.animTick = int(sim_.day);
@@ -444,6 +445,7 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
     held.lock();
     screen_ = renderer_.pixels();
   } else if (scr_ != Screen::Intro) {
+    stopAmbience();
     std::fill(screen_.begin(), screen_.end(), 0xFF3A2C20u);
   }
   ui_.begin(&screen_, w, h, in);
@@ -866,12 +868,13 @@ void Game::executeTool(int x0, int z0, int x1, int z1) {
       City::Quote q = quoteTool(x1, z1, x1, z1);
       if (!q.valid) { sound(30); message("Cannot build here."); break; }
       if (q.cost != 0 && q.cost > sim_.funds) { sound(32); message("Insufficient funds."); break; }
-      if (sim_.plop(toolOcc_, x1, z1, int(q.cost))) { dirty_ = true; }
+      if (sim_.plop(toolOcc_, x1, z1, int(q.cost))) { dirty_ = true; if (audio_) audio_->notifyPlaced(tileSoundContext(x1, z1)); }
       else message(sim_.city().lastFailNoMoney ? "Insufficient funds." : "Cannot build here.");
       break;
     }
     case ToolKind::Dispatch: dispatchUnit(toolArg_, x1, z1); break;
     case ToolKind::Query: {
+      if (audio_) audio_->notifyQuery(tileSoundContext(x1, z1));
       buildQueryInfo(x1, z1, queryInfo_);
       Rect r{std::min(ui_.in.mx + 10, std::max(0, W_ - 330)), std::min(ui_.in.my + 10, std::max(0, H_ - 280)), 0, 0};
       queryWin_.open(r);

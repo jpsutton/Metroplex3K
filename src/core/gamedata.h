@@ -35,6 +35,7 @@ struct OccAttr {
   int powerAttr = -1;           // attr 0xC9 (u8): candidate for the building's power consumption (spec 12 s9.1); -1 = absent
   bool filler() const { return (buildingFlags & 0x100) != 0; }
   ResKey nameKey;               // attr 0x6D
+  int sparseId = 0;             // attr 0x6F: [Sparse] sound ID (key instance), 0 = none (spec 06 s10.4)
   std::string designName;       // attr 0x64
   ResKey pedProdKey, vehProdKey;  // attr 0x6B / 0x6C: pedestrian / vehicle production keys (automata sources)
   ResKey descKey;               // attr 0x7C: description string key 2026960B:62E69238:n (instance FFFFFFFF = none)
