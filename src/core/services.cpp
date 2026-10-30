@@ -4,7 +4,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace m3k {
+namespace m3k { namespace us {
 
 void chartMonthEnd(Chart& c, uint32_t sample, int month, int year) {
   c.pushMonthly(sample);
@@ -1171,4 +1171,4 @@ uint32_t monthlyStrikeChance(bool have, bool ratingLow, int funding, int minFund
 }
 double strikeMultiplier(int e, bool fix) { return fix ? e / 100.0 : double(e); }
 
-}  // namespace m3k
+}}  // namespace m3k::us

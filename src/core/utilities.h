@@ -7,7 +7,7 @@
 #include <vector>
 #include "core/simcommon.h"
 
-namespace m3k {
+namespace m3k { namespace us {
 
 // Months since year 0: 12*year + month (spec 16 section 1.2).
 inline int absMonth(int year, int month) { return 12 * year + month; }
@@ -240,4 +240,4 @@ class GarbageDisposal {
   int64_t landfillRoom() const { return landfillBalance < 0 ? -landfillBalance : 0; }
 };
 
-}  // namespace m3k
+}}  // namespace m3k::us

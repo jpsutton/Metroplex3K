@@ -9,7 +9,7 @@
 #include "core/simcommon.h"
 #include "core/utilities.h"
 
-namespace m3k {
+namespace m3k { namespace us {
 
 // Month-end chart push shared by crime/pollution/aura: monthly sample every month; yearly in
 // January; decade sample in January of years divisible by 10 (spec 17 section 8.5).
@@ -393,4 +393,4 @@ uint32_t monthlyStrikeChance(bool haveFacility, bool ratingLow, int funding, int
 // Original defect: strike efficiency multiplies unscaled (20 means x20). fixDefect divides by 100.
 double strikeMultiplier(int efficiency, bool fixDefect = false);
 
-}  // namespace m3k
+}}  // namespace m3k::us

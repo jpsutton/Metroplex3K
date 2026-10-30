@@ -3,7 +3,7 @@
 #include "core/services.h"
 #include "testutil.h"
 
-using namespace m3k;
+using namespace m3k; using namespace m3k::us;
 
 static bool near(double a, double b, double e = 1e-6) { return std::fabs(a - b) <= e; }
 

@@ -1,7 +1,7 @@
 #include "core/utilities.h"
 #include "testutil.h"
 
-using namespace m3k;
+using namespace m3k; using namespace m3k::us;
 
 static const char* kPowerIni =
     "[PowerPlantCapacities]\n12111=100\n12117=50\n12853=30\n"

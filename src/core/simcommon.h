@@ -11,7 +11,7 @@
 #include "core/bytes.h"
 #include "core/ini.h"
 
-namespace m3k {
+namespace m3k { namespace us {
 
 // ---- Ordinance IDs (spec 19 section 9.5) ----
 namespace ord {
@@ -157,4 +157,4 @@ struct SimOccupant {
 inline int clampi(int64_t v, int lo, int hi) { return int(v < lo ? lo : (v > hi ? hi : v)); }
 inline int64_t truncDiv(int64_t a, int64_t b) { return b ? a / b : 0; }  // C++ division truncates
 
-}  // namespace m3k
+}}  // namespace m3k::us

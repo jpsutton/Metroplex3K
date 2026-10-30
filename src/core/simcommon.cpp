@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-namespace m3k {
+namespace m3k { namespace us {
 
 // ---- SimRng ----
 uint32_t SimRng::rand(uint32_t n) {
@@ -213,4 +213,4 @@ bool SweepOrder::operator==(const SweepOrder& o) const {
          stridePos == o.stridePos && stride == o.stride;
 }
 
-}  // namespace m3k
+}}  // namespace m3k::us

@@ -4,7 +4,7 @@
 #include <cmath>
 #include <deque>
 
-namespace m3k {
+namespace m3k { namespace us {
 
 // ======================= Power =======================
 const std::vector<uint32_t>& powerPlantTypes() {
@@ -602,4 +602,4 @@ int64_t GarbageDisposal::dispose(int64_t amount) {
   return rem;
 }
 
-}  // namespace m3k
+}}  // namespace m3k::us
