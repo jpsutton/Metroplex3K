@@ -507,6 +507,299 @@ void testScenarioGoals() {
   r = h.click("ok"); CHECK(r.close);
 }
 
+
+// ---------------------------------------------------------------- picker
+void testPicker() {
+  Harness h;
+  std::vector<PickerEntry> es(8);
+  for (size_t i = 0; i < es.size(); i++) { es[i].occupantId = 1000 + uint32_t(i); es[i].name = "Plant " + std::to_string(i); es[i].cost = 1000 * int64_t(i + 1); es[i].sizeX = 3; es[i].sizeZ = 4; }
+  es[1].placed = true;
+  es[2].available = false;
+  BuildingPicker w;
+  w.category = PickerCategory::PowerPlants;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, es); };
+  h.frame(); CHECK(h.inked() > 1000);
+  WindowResult r = h.click("ok");
+  CHECK(!r.has(Act::PickBuilding));               // nothing selected: OK disabled
+  h.click("row.1");                               // placed (landmark already built)
+  r = h.click("ok");
+  CHECK(!r.has(Act::PickBuilding));
+  h.click("row.2");                               // third visible = entry 3 (entry 2 is unavailable)
+  r = h.click("ok");
+  CHECK(r.has(Act::PickBuilding) && r.find(Act::PickBuilding)->id == 1003 && r.close);
+  CHECK(r.find(Act::PickBuilding)->text == "power");
+  w.sel = -1;
+  r = h.click("cancel"); CHECK(r.close && r.has(Act::Close));
+  // Empty list shows the empty message.
+  std::vector<PickerEntry> none;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, none); };
+  h.frame(); CHECK(h.inked() > 1000);
+  // Reward entries carry the building type.
+  std::vector<PickerEntry> rw(1); rw[0].buildingType = 55; rw[0].name = "Mayor's house";
+  w.category = PickerCategory::Rewards;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, rw); };
+  h.click("row.0");
+  r = h.click("ok");
+  CHECK(r.has(Act::PickBuilding) && r.find(Act::PickBuilding)->a == 55 && r.find(Act::PickBuilding)->text == "rewards");
+  // Param mapping and title ids.
+  PickerCategory pc;
+  CHECK(pickerCategoryFromParam(kPickerParam[3], pc) && pc == PickerCategory::Landmarks);
+  CHECK(!pickerCategoryFromParam(1, pc));
+  CHECK(pickerTitleId(PickerCategory::Landmarks) == 0x44 && pickerEmptyId(PickerCategory::PowerPlants) == 0x7A);
+  CHECK(PickerFilter::defaults(PickerCategory::PowerPlants).match(12111));
+  CHECK(!PickerFilter::defaults(PickerCategory::PowerPlants).match(18000));
+  CHECK(PickerFilter::defaults(PickerCategory::Landmarks).match(18045));
+}
+
+// ---------------------------------------------------------------- query
+void testQuery() {
+  Harness h;
+  CHECK(landValueBandId(0) == 0x1C0 && landValueBandId(40) == 9 && landValueBandId(255) == 0xD);
+  CHECK(crimeBandId(0) == 0x1C && crimeBandId(200) == 0x21);
+  CHECK(flammabilityBandId(0) == 0x23 && flammabilityBandId(255) == 0x28);
+  CHECK(pollutionBandId(0, 100) == 0x2A && pollutionBandId(100000, 100) == 0x2F);
+
+  QueryInfo bare; bare.elevation = 12; bare.landValue = 100;
+  auto L = buildQueryLines(h.E, bare);
+  CHECK(L.size() >= 3);
+  CHECK(L[0].label == "Elevation:" && L[0].value == "12 m");
+  bool dirt = false; for (auto& l : L) dirt |= l.value == "Dirt";
+  CHECK(dirt);
+
+  QueryInfo water; water.waterDepth = 5; water.saltWater = true;
+  L = buildQueryLines(h.E, water);
+  CHECK(L[0].label == "Water depth:" && L[0].value == "5 m");
+  bool salt = false; for (auto& l : L) salt |= l.value == "Salt water";
+  CHECK(salt);
+
+  QueryInfo police; police.name = "Police Station"; police.cls = QueryClass::Police; police.v[0] = 1234; police.v[1] = 56;
+  police.band[0] = 250; police.status = QsConstruction | QsStrike; police.showPower = true; police.powered = true; police.fundingCost = 5000;
+  L = buildQueryLines(h.E, police);
+  bool crimes = false, rating = false, status = false, pow = false, fund = false;
+  for (auto& l : L) {
+    crimes |= l.label == "Crimes per month:" && l.value == "1,234";
+    rating |= l.label == "Rating:" && l.value == "Excellent";
+    status |= l.value.find("(under construction)") != std::string::npos && l.value.find("(workers on strike)") != std::string::npos;
+    pow |= l.label == "Power:" && l.value == "Powered";
+    fund |= l.label == "Funding cost:" && l.value.find("$5,000") != std::string::npos;
+  }
+  CHECK(crimes && rating && status && pow && fund);
+
+  // Every class builds without crashing and has at least one occupant line.
+  for (int c = int(QueryClass::Zoned); c <= int(QueryClass::NeighbourConn); c++) {
+    QueryInfo q; q.name = "Thing"; q.cls = QueryClass(c); q.landValue = 150; q.crime = 80; q.flammability = 100; q.pollution = 50; q.airPollution = 100; q.waterPollution = 20; q.cleanupCost = 300;
+    CHECK(buildQueryLines(h.E, q).size() >= 4);
+  }
+  // Window: historical toggle and close.
+  QueryInfo z; z.name = "House"; z.cls = QueryClass::Zoned; z.growable = true; z.x = 7; z.z = 9; z.zoneCode = 1;
+  QueryWindow w; w.open({300, 200, 10, 10});
+  h.drawFn = [&] { return w.draw(h.ui, h.E, z); };
+  h.frame(); CHECK(h.inked() > 1000);
+  WindowResult r = h.click("historical");
+  CHECK(r.has(Act::ToggleHistorical) && r.find(Act::ToggleHistorical)->a == 7 && r.find(Act::ToggleHistorical)->b == 9);
+  z.growable = false; h.frame(); CHECK(!h.has("historical"));
+  // Popup near the bottom-right corner is clamped on screen.
+  w.open({h.W - 5, h.H - 5, 10, 10});
+  h.frame();
+  Rect cl; CHECK(h.find("close", cl) && cl.x + cl.w <= h.W && cl.y + cl.h <= h.H);
+  r = h.click("close"); CHECK(r.close);
+}
+
+// ---------------------------------------------------------------- map window / graphs / charts
+void testMapWindow() {
+  Harness h;
+  MapSource src; src.W = 64; src.H = 64;
+  std::vector<uint8_t> crime(64 * 64, 100), zones(64 * 64, 0xFF);
+  zones[10 * 64 + 10] = 1;
+  src.values = [&](DataLayer l) -> const std::vector<uint8_t>* { return l == DataLayer::Crime ? &crime : l == DataLayer::Zones ? &zones : nullptr; };
+  MapWindow w;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, src); };
+  h.frame(); CHECK(h.inked() > 1000);
+  CHECK(w.activeOverlay() == nullptr);
+  CHECK(dataMapDefs().size() == 10);
+  WindowResult r = h.click("map.2");
+  CHECK(dataMapDefs()[2].layer == DataLayer::Crime);
+  CHECK(r.has(Act::SelectDataMap) && r.find(Act::SelectDataMap)->a == int(DataLayer::Crime));
+  CHECK(w.selected == 2);
+  CHECK(w.activeOverlay() && w.activeOverlay()->row.size() == 64u * 64u);
+  h.frame(); CHECK(h.has("coverage"));
+  r = h.click("coverage"); CHECK(w.coverage && r.has(Act::DataMapOptionChanged));
+  r = h.click("showInCity"); CHECK(!w.showInCityView && w.activeOverlay() == nullptr);
+  r = h.click("showInCity"); CHECK(w.showInCityView && w.activeOverlay() != nullptr);
+  // Layer without data -> no overlay.
+  r = h.click("map.8"); CHECK(w.activeOverlay() == nullptr);
+  // Pollution selector buttons appear.
+  r = h.click("map.7"); h.frame();
+  CHECK(h.has("pollution.2"));
+  r = h.click("pollution.1"); CHECK(w.pollutionKind == 1 && r.has(Act::DataMapOptionChanged));
+  // Zones categorical.
+  h.click("map.1"); CHECK(w.activeOverlay() != nullptr);
+  h.frame(); CHECK(h.inked() > 1000);
+  // Mini-map click centres the view inside the map.
+  r = h.click("minimap");
+  CHECK(r.has(Act::CenterView));
+  { auto* e = r.find(Act::CenterView); CHECK(e->a >= 0 && e->a < 64 && e->b >= 0 && e->b < 64); }
+  // Click mid-way: roughly the map centre.
+  { auto* e = r.find(Act::CenterView); CHECK(std::abs(int(e->a) - 32) < 8 && std::abs(int(e->b) - 32) < 8); }
+  r = h.click("map.neighbours"); CHECK(r.has(Act::OpenNeighbours));
+  r = h.click("close"); CHECK(r.close);
+  // Legend colours: ramp ends differ, categorical palette.
+  CHECK(MapWindow::legendColour(DataLayer::Crime, 0, 0) != MapWindow::legendColour(DataLayer::Crime, 0, 1));
+  CHECK(MapWindow::legendColour(DataLayer::Power, 0, 0) != MapWindow::legendColour(DataLayer::Power, 1, 0));
+  // No map data at all: still draws.
+  MapSource empty;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, empty); };
+  h.frame(); CHECK(h.inked() > 1000);
+}
+
+void testGraphs() {
+  Harness h;
+  Chart c1 = Chart::make(0, 100), c2 = Chart::make(50, 100);
+  for (int i = 0; i < 12; i++) c1.pushMonthly(uint32_t(i * 10));
+  CHECK(GraphsWindow::samples(c1, 0).size() == 12 && GraphsWindow::samples(c1, 1).size() == 10 && GraphsWindow::samples(c1, 2).size() == 10);
+  auto s0 = GraphsWindow::samples(c1, 0);
+  CHECK(s0.front() < s0.back() && s0.back() == 100);   // pushes clamp at the chart scale (100)          // oldest -> newest
+  auto series = graphSeriesTemplate();
+  CHECK(series.size() == 14);
+  series[0].chart = &c1; series[1].chart = &c2;
+  GraphsWindow w;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, series); };
+  h.frame();
+  size_t on = h.inked(); CHECK(on > 1000);
+  WindowResult r = h.click("range.1"); CHECK(w.range == 1 && r.has(Act::SetTimeRange) && r.find(Act::SetTimeRange)->a == 1);
+  r = h.click("range.2"); CHECK(w.range == 2);
+  h.click("series.0"); CHECK(!(w.enabledMask & 1));
+  h.click("series.0"); CHECK(w.enabledMask & 1);
+  h.click("series.13"); CHECK(!(w.enabledMask & (1u << 13)));
+  r = h.click("close"); CHECK(r.close);
+}
+
+void testCharts() {
+  Harness h;
+  Population pop;
+  pop.newCity();
+  ChartsData d = chartsFromPopulation(pop, 50000);
+  CHECK(d.eq.size() == size_t(kAges) && d.population.size() == size_t(kAges));
+  CHECK(d.totalPopulation == 50000);
+  CHECK(d.workforcePercent >= 0 && d.workforcePercent <= 100);
+  d.electricity[0] = 500; d.electricity[3] = 200; d.garbage[0] = 70; d.garbage[3] = 30;
+  ChartsWindow w;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, d); };
+  for (int t = 0; t < 5; t++) {
+    h.click("tab." + std::to_string(t));
+    CHECK(w.tab == t);
+    h.frame(); CHECK(h.inked() > 1500);
+  }
+  WindowResult r = h.click("close"); CHECK(r.close);
+}
+
+// ---------------------------------------------------------------- ticker / message box / tip / credits
+void testTicker() {
+  Harness h;
+  TickerWidget t;
+  Rect strip{10, 10, 400, 22};
+  NewsItem a; a.number = 1; a.text = "First headline"; a.hasLoc = true; a.locX = 12; a.locZ = 34;
+  NewsItem b; b.number = 2; b.text = "Second"; 
+  t.push(a, strip.w);
+  t.push(b, strip.w);
+  CHECK(t.items.size() == 2 && t.items[0].x == strip.w);
+  int gap = t.items[1].x - (t.items[0].x + h.ui.textWidth(a.text));
+  CHECK(gap >= TickerScroll::kGapPixels - 1 && gap <= TickerScroll::kGapPixels + 80);   // estimate widths by glyph count
+  // Scrolling: 2 px per >50 ms.
+  int x0 = t.items[0].x;
+  t.update(16, strip.w, h.ui, nullptr, 0, nullptr);
+  t.update(16, strip.w, h.ui, nullptr, 0, nullptr);
+  CHECK(t.items[0].x == x0);                 // 32 ms: no step yet
+  t.update(16, strip.w, h.ui, nullptr, 0, nullptr);
+  CHECK(t.items[0].x == x0);                 // 48 ms: still no step
+  t.update(16, strip.w, h.ui, nullptr, 0, nullptr);
+  CHECK(t.items[0].x == x0 - 2);             // 64 ms > 50: one 2 px step
+  TickerScroll ts;
+  CHECK(ts.advance(50) == 0 && ts.advance(51) == 2);
+  // Move item on screen and click it.
+  t.items[0].x = 20; t.items[1].x = 300;
+  h.drawFn = [&] { return t.draw(h.ui, h.E, strip); };
+  h.frame(); CHECK(h.inked() > 200);
+  CHECK(h.has("ticker.1") && !h.has("ticker.2"));  // only items with a map location are clickable
+  WindowResult r = h.click("ticker.1");
+  CHECK(r.has(Act::TickerClick) && r.find(Act::TickerClick)->a == 12 && r.find(Act::TickerClick)->b == 34);
+  CHECK(r.has(Act::PlaySound) && r.find(Act::PlaySound)->a == 47);
+  // Item scrolled off the left edge is removed.
+  t.items.clear(); t.push(b, strip.w);
+  t.items[0].x = -h.ui.textWidth(b.text) - 5;
+  t.update(100, strip.w, h.ui, nullptr, 0, nullptr);
+  CHECK(t.items.empty());
+  // Pulls from the NewsTicker when empty.
+  NewsTicker nt; GameRng rng(3);
+  std::string text = "Mayor opens a park";
+  nt.post(0x11, 1, 100, false, 0, 0, &text);
+  t.update(10, strip.w, h.ui, &nt, 100, &rng);
+  CHECK(!t.items.empty() && t.items[0].x >= strip.w - 2);
+  CHECK(t.items[0].n.text == text);
+}
+
+void testMessageBox() {
+  Harness h;
+  MessageBox m;
+  CHECK(MessageBox::buttonsFor(0).size() == 1 && MessageBox::buttonsFor(1).size() == 2 && MessageBox::buttonsFor(4).size() == 3);
+  CHECK(MessageBox::buttonsFor(3)[0] == MsgButton::Yes && MessageBox::buttonsFor(5)[2] == MsgButton::Ignore);
+  h.drawFn = [&] { return m.draw(h.ui, h.E); };
+  h.frame(); CHECK(h.inked() == 0);           // inactive: draws nothing
+  m.open("Title", "A short message.", 3);
+  CHECK(m.active);
+  auto L = m.layout(h.ui);
+  CHECK(L.W >= 208 && L.H > 0 && L.lines.size() >= 1);
+  h.frame(); CHECK(h.inked() > 1000);
+  WindowResult r = h.click("msg.1");
+  CHECK(r.has(Act::MessageResult) && r.find(Act::MessageResult)->a == int64_t(MsgButton::No) && !m.active);
+  m.open("", "Long message. " + std::string(400, 'x') + " tail", 0);
+  auto L2 = m.layout(h.ui);
+  CHECK(2 * L2.H < L2.W + 16 * 4);            // aspect rule: widened until the text is at most half as tall as wide
+  r = h.click("msg.0"); CHECK(r.has(Act::MessageResult) && r.find(Act::MessageResult)->a == int64_t(MsgButton::OK));
+  m.open("T", "msg", 4);
+  r = h.key(K_ENTER); CHECK(r.has(Act::MessageResult) && r.find(Act::MessageResult)->a == int64_t(MsgButton::Yes));
+  m.open("T", "msg", 4);
+  r = h.key(K_ESC); CHECK(r.has(Act::MessageResult) && r.find(Act::MessageResult)->a == int64_t(MsgButton::Cancel));
+  CHECK(msgButtonCaption(h.E, MsgButton::Retry) == "Retry");
+}
+
+void testTipAndCredits() {
+  CHECK(TipWindow::next(1) == 2 && TipWindow::next(0x0F) == 0x11 && TipWindow::next(0x39) == 1);
+  CHECK(TipWindow::prev(1) == 0x39 && TipWindow::prev(0x11) == 0x0F);
+  Harness h;
+  TipWindow t;
+  h.drawFn = [&] { return t.draw(h.ui, h.E); };
+  h.frame(); CHECK(h.inked() > 1000);
+  WindowResult r = h.click("next"); CHECK(t.tip == 2 && r.has(Act::TipChanged) && r.find(Act::TipChanged)->a == 2);
+  r = h.click("prev"); CHECK(t.tip == 1);
+  r = h.click("showTips"); CHECK(!t.showAtStartup && r.has(Act::ShowTipsChanged) && r.find(Act::ShowTipsChanged)->a == 0);
+  r = h.click("done"); CHECK(r.close && r.has(Act::Done));
+  r = h.key(K_ESC); CHECK(r.close);
+  // With a text table the tip text is used.
+  h.E.textFn = [](uint32_t tb, uint32_t id) { return tb == kTblTod && id == 5 ? std::string("Tip five") : std::string(); };
+  CHECK(h.E.text(kTblTod, 5, "") == "Tip five");
+
+  CreditsWindow c;
+  h.drawFn = [&] { return c.draw(h.ui, h.E); };
+  h.E.textFn = nullptr;
+  h.frame(); CHECK(h.inked() > 500);
+  CHECK(!c.lines.empty());
+  double s0 = c.scroll; c.update(1000); CHECK(c.scroll > s0);
+  Input in; in.pressed = true; in.mx = 5; in.my = 5;
+  r = h.frame(in); CHECK(r.close);                   // any click closes
+  r = h.key(K_ESC); CHECK(r.close);
+  // Credits read from the table (ids ascending).
+  CreditsWindow c2;
+  h.E.textFn = [](uint32_t tb, uint32_t id) { return tb == kTblCredits && id <= 3 ? "Line " + std::to_string(id) : std::string(); };
+  h.drawFn = [&] { return c2.draw(h.ui, h.E); };
+  h.frame();
+  CHECK(c2.lines.size() == 3 && c2.lines[0] == "Line 1");
+}
+
+void testScenarioViewIsPlain() {
+  ScenarioGoalsView v; CHECK(v.inScenario && v.goals.empty());
+}
+
 }  // namespace
 
 int main() {
@@ -520,5 +813,14 @@ int main() {
   testPrefs();
   testCityProps();
   testScenarioGoals();
+  testPicker();
+  testQuery();
+  testMapWindow();
+  testGraphs();
+  testCharts();
+  testTicker();
+  testMessageBox();
+  testTipAndCredits();
+  testScenarioViewIsPlain();
   TEST_MAIN_END();
 }
