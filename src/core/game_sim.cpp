@@ -268,7 +268,11 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
     }
   }
   for (const auto& ev : out.events) {
-    if (ev.kind == DisasterEvent::Started) { disasterX_ = ev.x; disasterZ_ = ev.z; }
+    if (ev.kind == DisasterEvent::Started) {
+      disasterX_ = ev.x; disasterZ_ = ev.z;
+      NewsKey k = disasterStartNews(ev.type, rng_, ev.a == 1);   // ticker item per disaster type (spec 22 4.7); none for parades
+      if (k.valid()) postNews(k.table, k.id);
+    }
     if (ev.kind == DisasterEvent::AllOver) { disasterX_ = disasterZ_ = -1; }
   }
   out.clear();
