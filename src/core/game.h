@@ -92,6 +92,10 @@ class Game {
   bool scenarioActive() const;
   void gotoScreen(Screen s) { scr_ = s; }
   void setView(int tx, int tz, int zoom);
+  // Host callback: receives snapshot bytes (raw RGBA8 w,h + pixels, no PNG encoder in core) and a suggested file name.
+  std::function<void(const std::string& name, int w, int h, const std::vector<uint32_t>& rgba)> onSnapshot;
+  const std::vector<std::string>& snapshots() const { return snapshotNames_; }
+  const RenderScene& scene() const { return scene_; }
 
  private:
   // screens
@@ -139,6 +143,21 @@ class Game {
   void sound(int id) { if (audio_) audio_->request(id); }
   int64_t& fundsRef() { return scr_ == Screen::TerrainEdit ? edFunds_ : sim_.funds; }
   void closeModelessWindows();
+  void enterCity();
+  void runTarget(uint32_t target, uint32_t arg1 = 0, const std::string& name = std::string());
+  void drawTicker(Rect r);
+  void drawCheatBox();
+  void drawFrontCommon();
+  void drawQueryPopup();
+  void modalOpened();
+  void modalClosed();
+  bool anyBlockingWindow() const;
+  void applyCheat(const CheatResult& r);
+  void updateHover(int tx, int tz, bool onTile);
+  void postNews(uint32_t table, uint32_t id);
+  void sirenAndGo();
+  void startScenarioHooks();
+  void checkScenarioEnd();
   void loadHotkeys();
   // windows (game_windows.cpp)
   void handleWindowResult(const WindowResult& r);
@@ -260,6 +279,23 @@ class Game {
   uint32_t petViewId_ = 0;
   std::vector<uint32_t> petShown_;
   std::string lastBriefing_;
+  // tool preview / ticker / misc UI state
+  int hoverX_ = -1, hoverZ_ = -1;
+  bool hoverValid_ = false;
+  std::string costText_; int costX_ = 0, costY_ = 0; bool costOk_ = true, costShow_ = false;
+  bool cheatOpen_ = false;
+  bool wasPausedBeforeModal_ = false; int modalDepth_ = 0;
+  std::vector<std::string> snapshotNames_;
+  int snapSizeIdx_ = 1;
+  bool panning_ = false; int panLastX_ = 0, panLastY_ = 0;
+  std::vector<RenderScene> unusedScenes_;
+  int streetAcc_ = 0;
+  int shake_ = 0;
+  int sweepMinute_ = 0;
+  uint32_t newsClickX_ = 0;
+  bool introLoadedAudio_ = false;
+  int lastWeekDay_ = -1;
+  int autoNameCounter_ = 0;
 
   // simulation glue
   AdvisorManager advisors_;
