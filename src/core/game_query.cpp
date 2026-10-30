@@ -139,6 +139,8 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
     }
     if (q.cls == QueryClass::None) for (const auto& p : w.subway) if (p.x == x && p.z == z) q.cls = QueryClass::Subway;
     if (q.cls == QueryClass::None && c.isPowerLine(x, z)) q.cls = QueryClass::PowerLine;
+    if (q.cls == QueryClass::Road || q.cls == QueryClass::Rail || q.cls == QueryClass::Subway)
+      q.band[0] = uint8_t(c.trafficDensityAt(x, z));   // usage band of the panel from the live traffic load
     return;
   }
 
