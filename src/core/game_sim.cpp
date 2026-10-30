@@ -45,11 +45,12 @@ class CityDisasterWorld : public DisasterWorld {
   City& c_;
 };
 
-DisasterInputs inputsFor(City& c, bool enabled) {
+DisasterInputs inputsFor(City& c, bool enabled, const CheatRegistry& cheats) {
   DisasterInputs in;
   in.jdn = c.clock.jdn();
   in.year = c.clock.date().year;
   in.disastersEnabled = enabled;
+  in.cheatUfoSwarm = cheats.active("UFO Swarm"); in.cheatLocustSwarm = cheats.active("Locust Swarm");
   return in;
 }
 
@@ -219,7 +220,7 @@ void Game::startDisaster(DisasterType t) {
   if (!managersReady_) initManagers();
   CityDisasterWorld dw(world_, city());
   DisasterOutput out;
-  if (!disasters_.startRandom(t, dw, inputsFor(city(), disastersOn_), out)) message("The disaster could not start.");
+  if (!disasters_.startRandom(t, dw, inputsFor(city(), disastersOn_, cheats_), out)) message("The disaster could not start.");
   applyDisasterOutput(out);
 }
 
@@ -240,8 +241,40 @@ void Game::dispatchUnit(int kind, int tx, int tz) {
 
 void Game::typeCheat(const std::string& s) {
   CheatResult r = cheats_.submit(s);
-  (void)r;
-  if (r.match.info) message("Cheat accepted.");
+  if (!r.match.info) return;
+  applyCheat(r);
+}
+
+// Effects of spec 27 section 5.3 that the engine models. Build-menu unlocks, petitioner/advisor forcing and the
+// developer cheats are not wired yet (tracked in issue #33).
+void Game::applyCheat(const CheatResult& r) {
+  const CheatInfo& c = *r.match.info;
+  std::string phrase;
+  for (char ch : std::string(c.phrase)) phrase += char(std::tolower(static_cast<unsigned char>(ch)));
+  if (!r.tickerEcho.empty()) {
+    cal::Date d = sim_.city().clock.date();
+    std::string text = r.tickerEcho;
+    news_.post(kTickerStringTable, r.tickerMsg, tickerStamp(d.month, d.day, d.year), false, 0, 0, &text);
+  } else if (r.tickerMsg) {
+    postNews(kTickerStringTable, r.tickerMsg);
+  }
+  if (!simReady_) return;
+  City& cy = city();
+  if (phrase == "i am weak") cy.budget.freePlacement = r.stateOn;
+  else if (phrase == "so sue me") cy.budget.debtFloor = r.stateOn;
+  else if (phrase == "i love red tape") {
+    std::vector<uint32_t> announced;
+    cy.ordinances.makeAllAvailable(&announced);
+  } else if (phrase == "salt off") cy.saltOff = true;
+  else if (phrase == "salt on") cy.saltOff = false;
+  else if (int delta = terrainCheatDelta(&c)) {
+    World& w = world_;
+    for (auto& v : w.alt) v = uint8_t(shiftTerrainAltitude(v, delta));
+    for (auto& v : w.water) v = uint8_t(shiftTerrainAltitude(v, delta));
+    w.seaLevel = uint8_t(shiftTerrainAltitude(w.seaLevel, delta));
+    terrainChanged();
+    dirty_ = true;
+  }
 }
 
 bool Game::scenarioActive() const { return scen_ && scen_->active(); }
@@ -302,7 +335,7 @@ void Game::tickSim(uint32_t dtMs) {
     sim_.tickDay();
     CityDisasterWorld dw(world_, city());
     DisasterOutput out;
-    DisasterInputs in = inputsFor(city(), disastersOn_);
+    DisasterInputs in = inputsFor(city(), disastersOn_, cheats_);
     disasters_.dayTick(dw, in, out);
     int month = city().clock.date().month;
     if (month != lastMonth_) { lastMonth_ = month; disasters_.monthlyTick(dw, in, out); }

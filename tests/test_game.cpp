@@ -91,6 +91,19 @@ int main() {
   for (auto t : allDisasterTypes()) { if (t == DisasterType::Parade) continue; game.startDisaster(t); frame(5, 100); }
   game.typeCheat("fund");
   frame(2);
+  {  // issue #33: toggle cheats reach the engine
+    City& cc = game.city();
+    CHECK(!cc.budget.freePlacement && !cc.budget.debtFloor);
+    game.typeCheat("I am weak"); CHECK(cc.budget.freePlacement);
+    game.typeCheat("I am weak"); CHECK(!cc.budget.freePlacement);
+    game.typeCheat("so sue me"); CHECK(cc.budget.debtFloor);
+    game.typeCheat("Salt off"); CHECK(cc.saltOff);
+    game.typeCheat("Salt on"); CHECK(!cc.saltOff);
+    int sea = game.world().seaLevel, a0 = game.world().alt[0];
+    game.typeCheat("Terrain ten up");
+    CHECK(game.world().seaLevel == sea + 10 && game.world().alt[0] == std::min(253, std::max(2, a0 + 10)));
+    game.typeCheat("Terrain ten down");
+  }
   game.runCommand(0xE3166801);
   drag(20, 25, 44, 35);
   frame(2);

@@ -133,6 +133,7 @@ class City {
   Population pop;
   growth::ValveLayer valves;
   growth::LandValueLayer landValue;
+  bool saltOff = false;   // cheat `Salt off`: every water body counts as fresh
   growth::ZoneManager zones;
   us::PowerLayer power;
   us::WaterLayer water;

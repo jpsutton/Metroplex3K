@@ -569,6 +569,7 @@ namespace { PlacementCosts makeCosts(const Budget& b, const CityConfig& cfg); }
 
 
 int City::zoneCost(int zt) const {
+  if (budget.freePlacement) return 0;
   if (zt == 0) { int64_t c = budget.specialCost(6); return int(c > 0 ? c : 1); }
   int d = (zt >= 1 && zt <= 3) ? zt - 1 : (zt >= 5 && zt <= 7) ? zt - 5 : (zt >= 9 && zt <= 11) ? zt - 9 : 0;
   int64_t c = budget.specialCost(std::min(2, d));
@@ -631,7 +632,7 @@ City::Quote City::quoteNetwork(NetworkKind k, const std::vector<std::pair<int, i
             : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
   PlacementCosts pc = makeCosts(budget, cfg_);
   int cost = pc.cost(toolParams(tool).costKey);
-  if (cost == 0 && budget.cfg.placementCost.empty()) cost = 10;
+  if (cost == 0 && budget.cfg.placementCost.empty() && !budget.freePlacement) cost = 10;
   for (auto [x, z] : path) {
     if (!inMap(x, z)) continue;
     size_t i = idx(x, z);
@@ -727,6 +728,7 @@ PlacementCosts makeCosts(const Budget& b, const CityConfig& cfg) {
   pc.parent = cfg.parent;
   pc.demolish = int(b.cfg.specialCostFor(7));
   pc.demolishRubble = int(b.cfg.specialCostFor(12));
+  if (b.freePlacement) { pc.byType.clear(); pc.demolish = pc.demolishRubble = 0; return pc; }
   if (cfg.synthetic) {
     static const std::pair<Tool, int> defs[] = {{TOOL_ROAD, 10}, {TOOL_RAIL, 20}, {TOOL_POWER, 5}, {TOOL_PIPE, 3},
                                                 {TOOL_HIGHWAY, 50}, {TOOL_SUBWAY, 30}};
@@ -743,7 +745,7 @@ bool City::buildNetworkFallback(NetworkKind k, const std::vector<std::pair<int, 
   PlacementCosts pc = makeCosts(budget, cfg_);
   Tool tool = k == NetworkKind::Power ? TOOL_POWER : k == NetworkKind::Pipe ? TOOL_PIPE : TOOL_ROAD;
   int cost = pc.cost(toolParams(tool).costKey);
-  if (cost == 0 && budget.cfg.placementCost.empty()) cost = 10;
+  if (cost == 0 && budget.cfg.placementCost.empty() && !budget.freePlacement) cost = 10;
   std::vector<std::pair<int, int>> placed;
   for (auto [x, z] : path) {
     if (!inMap(x, z)) continue;
@@ -1210,8 +1212,10 @@ void City::monthlyWater() {
         kind[idx(x, z)] = 2; stack.push_back(int(idx(x, z)));
       }
     };
-    for (int x = 0; x < world_->W; x++) { seed(x, 0); seed(x, world_->H - 1); }
-    for (int z = 0; z < world_->H; z++) { seed(0, z); seed(world_->W - 1, z); }
+    if (!saltOff) {
+      for (int x = 0; x < world_->W; x++) { seed(x, 0); seed(x, world_->H - 1); }
+      for (int z = 0; z < world_->H; z++) { seed(0, z); seed(world_->W - 1, z); }
+    }
     while (!stack.empty()) {
       int c = stack.back(); stack.pop_back();
       int x = c / world_->H, z = c % world_->H;
