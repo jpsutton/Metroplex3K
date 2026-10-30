@@ -216,6 +216,7 @@ class Renderer {
   void drawTerrain(const Camera& cam, const RenderOptions& opt);
   void drawEdgeFaces(const Camera& cam, const RenderOptions& opt);
   void drawPreviews(const Camera& cam, const RenderScene& scene);
+  void drawFallbackBoxes(const Camera& cam);   // data-less demo: coloured boxes instead of sprites
   void buildItems(const Camera& cam, const RenderOptions& opt, const RenderScene* scene);
   void drawItems(const RenderOptions& opt);
   void drawSprite(const Item& it, const RenderOptions& opt);

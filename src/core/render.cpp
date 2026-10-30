@@ -1108,6 +1108,69 @@ void Renderer::drawPreviews(const Camera& cam, const RenderScene& scene) {
 // Frame
 // ======================================================================================
 
+void Renderer::drawFallbackBoxes(const Camera& cam) {
+  const World& w = *world_;
+  const int z = cam.zoom, Wh = 4 << z, Hh = 2 << z, A = 1 << z;
+  auto fillConvex = [&](const float* px, const float* py, int n, uint32_t col) {
+    float ymin = py[0], ymax = py[0];
+    for (int i = 1; i < n; i++) { ymin = std::min(ymin, py[i]); ymax = std::max(ymax, py[i]); }
+    for (int y = std::max(0, int(std::ceil(ymin))); y <= std::min(fbH_ - 1, int(std::floor(ymax))); y++) {
+      float xl = 1e9f, xr = -1e9f;
+      for (int i = 0; i < n; i++) {
+        int j = (i + 1) % n;
+        float y0 = py[i], y1 = py[j];
+        if ((y0 <= y && y1 >= y) || (y1 <= y && y0 >= y)) {
+          float x = (y1 == y0) ? px[i] : px[i] + (px[j] - px[i]) * (float(y) - y0) / (y1 - y0);
+          xl = std::min(xl, x); xr = std::max(xr, x);
+          if (y1 == y0) { xl = std::min(xl, px[j]); xr = std::max(xr, px[j]); }
+        }
+      }
+      for (int x = std::max(0, int(std::ceil(xl))); x <= std::min(fbW_ - 1, int(std::floor(xr))); x++) fb_[size_t(y) * fbW_ + x] = col;
+    }
+  };
+  struct Box { int u0, u1, v0, v1, y, hgt; uint32_t col; int key; };
+  std::vector<Box> boxes;
+  for (const Occupant& o : w.occupants) {
+    int us[4], vs[4];
+    int cxs[4] = {o.x, o.x + o.sizeX, o.x, o.x + o.sizeX}, czs[4] = {o.z, o.z, o.z + o.sizeZ, o.z + o.sizeZ};
+    for (int i = 0; i < 4; i++) worldToViewVertex(cam.rot, w.W, w.H, cxs[i], czs[i], us[i], vs[i]);
+    Box b;
+    b.u0 = *std::min_element(us, us + 4); b.u1 = *std::max_element(us, us + 4);
+    b.v0 = *std::min_element(vs, vs + 4); b.v1 = *std::max_element(vs, vs + 4);
+    b.y = o.y;
+    int tiles = o.sizeX;
+    uint32_t t = o.agentType;
+    uint32_t r = 170, g = 170, bl = 170;
+    int hgt = 4 * tiles;
+    if (t >= 3000 && t < 5000) { r = 90; g = 200; bl = 90; hgt = 3 * tiles + (t >= 4300 ? 8 : t >= 3700 ? 4 : 0); }
+    else if (t >= 5000 && t < 8000) { r = 90; g = 130; bl = 230; hgt = 4 * tiles + (t >= 6300 ? 10 : 2); }
+    else if (t >= 8000 && t < 10000) { r = 220; g = 200; bl = 70; hgt = 3 * tiles + 2; }
+    else if (t >= 12000 && t < 13000) { r = 200; g = 90; bl = 90; hgt = 6 * tiles; }
+    if (o.state == 4) { r /= 2; g /= 2; bl /= 2; hgt = 2; }
+    else if (o.state == 2) { r = g = bl = 120; }
+    else if (o.state == 8) { r = 110; g = 80; bl = 60; hgt = 1; }
+    else if (o.state == 16) { r = 230; g = 90; bl = 20; hgt = 2; }
+    b.hgt = hgt * A / 2;
+    b.col = rgba(uint8_t(r), uint8_t(g), uint8_t(bl));
+    b.key = b.u1 + b.v1;
+    boxes.push_back(b);
+  }
+  std::sort(boxes.begin(), boxes.end(), [](const Box& a, const Box& b) { return a.key < b.key; });
+  for (const Box& b : boxes) {
+    // Footprint diamond corners (view vertices): top (u0,v0), right (u0,v1), left (u1,v0), bottom (u1,v1).
+    auto sx = [&](int u, int v) { return float(originX_ + (v - u) * Wh); };
+    auto sy = [&](int u, int v) { return float(originY_ + (u + v) * Hh - b.y * A); };
+    float tx[4] = {sx(b.u0, b.v0), sx(b.u0, b.v1), sx(b.u1, b.v1), sx(b.u1, b.v0)};
+    float ty[4] = {sy(b.u0, b.v0), sy(b.u0, b.v1), sy(b.u1, b.v1), sy(b.u1, b.v0)};
+    auto shade = [](uint32_t c, float f) { return rgba(uint8_t((c & 255) * f), uint8_t(((c >> 8) & 255) * f), uint8_t(((c >> 16) & 255) * f)); };
+    float h = float(b.hgt);
+    // Left face (left->bottom edge), right face (bottom->right edge), then the roof.
+    { float px[4] = {tx[3], tx[2], tx[2], tx[3]}, py[4] = {ty[3], ty[2], ty[2] - h, ty[3] - h}; fillConvex(px, py, 4, shade(b.col, 0.7f)); }
+    { float px[4] = {tx[2], tx[1], tx[1], tx[2]}, py[4] = {ty[2], ty[1], ty[1] - h, ty[2] - h}; fillConvex(px, py, 4, shade(b.col, 0.5f)); }
+    { float px[4] = {tx[0], tx[1], tx[2], tx[3]}, py[4] = {ty[0] - h, ty[1] - h, ty[2] - h, ty[3] - h}; fillConvex(px, py, 4, b.col); }
+  }
+}
+
 void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderScene* scene) {
   if (fbW_ <= 0 || fbH_ <= 0) return;
   std::fill(fb_.begin(), fb_.end(), 0xFF302820u);
@@ -1121,6 +1184,7 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
   }
   buildItems(cam, opt, scene);
   drawItems(opt);
+  if (opt.objects && !(data_ || spriteFn_)) drawFallbackBoxes(cam);
   label_ = CostLabel();
   if (scene) {
     drawPreviews(cam, *scene);
