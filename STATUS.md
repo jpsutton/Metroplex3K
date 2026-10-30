@@ -22,13 +22,13 @@ synthetic fixtures (tests/fake_install.h builds a tiny install on disk). First r
 - Host: src/app/main.cpp (SDL2). Tools: conformance, render_demo, game_demo, game_play_demo, city_sim_demo, windows_demo, skin_demo
 - 37 test executables; `ctest` must stay green
 
-## Known gaps / approximations
-- Never run against real game data. Parsers follow the spec byte-for-byte but are only verified on synthetic input.
-- Skin: bottom bar art, speed/view button art and main-menu art helpers exist (skin.h) but only the tool-menu column and
-  RCI indicator are hooked into Game; the rest of the HUD uses the toolkit drawing.
-- Advisor inputs (Game::fillAdvisorInputs) fill only the main fields; many advisor rules see zeros.
-- Traffic data-map layer has no per-tile source; street sim needs real sprite data to show anything.
-- Spec [OPEN] items use the defaults from spec/29-open-issues.md; several growth layouts (housing B/C, estates, row houses,
-  seaport pier, runway sequence) fall back to the scatter rule.
-- MPEG-1 tables in tqi.cpp: see docs/LICENSING.md. License not chosen.
-- Android: design notes only (docs/ANDROID.md).
+## Open issues: GitHub is the single source of truth
+Every known gap, guess, spec `[OPEN]` item and verification task is a GitHub issue:
+https://github.com/jpsutton/Metroplex3K/issues
+
+Labels: severity `S1-save-compat`, `S2-sim-fidelity`, `S3-presentation`, `S4-peripheral` (same scale as spec/29);
+state `needs-real-data` (cannot close without a real install), `spec-open` (spec says [OPEN], we use a default),
+`blocked-on-spec` (waiting for updated spec files), `spec-gap` (specified, not implemented), `approximation`
+(deliberate guess), `bug`, `licensing`, `infra`; plus `area:*` per subsystem.
+Umbrella for spec updates: issue "Use updated spec files to close [OPEN] items". When you resolve something, close
+its issue with the spec section or commit that answers it. Do not keep gap lists in this file or in code comments only.
