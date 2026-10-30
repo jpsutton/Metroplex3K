@@ -48,7 +48,7 @@ These items are now settled `[OBSERVED]`:
 | 2.1 | Workforce fraction `w` (share of residents who work) | 20 §6 | Use the recommended formula in 20 and make it configurable. |
 | 2.2 | The quantity `W` behind the three "count/world" ordinance costs | 19 §9.4 | Configurable. Default: population / 1000. |
 | 2.3 | Who sets each valve's cap percentage, and how the 3001/5001/8001 valves feed back into growth | 15 §3 | Cap = 100 %. Amenity valves affect only the advisor display. |
-| 2.4 | City-centre location and the hill reference height in land value | 15 §6 | Centre = centroid of developed tiles. Hill reference = mean terrain altitude. Not attempted: needs a running simulation with buildings on flat and sloped land. The new-city land-value record is nearly empty (`30-new-city-template.md` §5). |
+| 2.4 | City-centre location and the hill reference height in land value | 15 §6 | Centre = centroid of developed tiles. Hill reference = mean terrain altitude. **Partly tested** `[DATA]`: an offline fit over 13 shipped cities is consistent with the map centre in 4 and inconclusive in 9 (`15-sim-growth.md` §6.3); the scroll-the-view test is still open. The hill-reference statistic is untested. |
 | 2.5 | Layouts of the non-scatter build rules (estates, row houses, housing projects B/C, seaport pier, airport runway sequence) | 15 §5.5 | Use the scatter rule with the family's lot size until these are specified. |
 | 2.6 | Riot unrest statistic U and signed statistic A | 21 §8.2 | U = unemployment %, A = city aura. |
 | 2.7 | Recycling-centre and water-treatment formulas, `DefaultLeak`, expired-plant variant | 16 | Recycling removes `Capacity` units of garbage per month; treatment subtracts its capacity from water pollution (17 §7.2). |
@@ -61,11 +61,11 @@ These items are now settled `[OBSERVED]`:
 
 | # | Issue | Owner | Recommended interim behaviour |
 |---|---|---|---|
-| 3.1 | How a data-map value is mapped to a palette row | 25 §9.2, 09 §7.2 | **Mostly closed** `[OBSERVED]`: the layer → ramp assignment is known; the band edges remain. Use row = 31 − ⌊value/8⌋. Band edges need a populated city; not attempted. |
+| 3.1 | How a data-map value is mapped to a palette row | 25 §9.2, 09 §7.2 | **Mostly closed** `[OBSERVED]`: the layer → ramp assignment is known; the band edges remain. Use row = 31 − ⌊value/8⌋. The Land Value data map of a shipped city was displayed: grey (low) to deep blue (high) in 2 × 2-tile blocks, as in `25-rendering.md` §9.2. Band edges were not measured: they need a pixel-to-tile projection that is not calibrated. |
 | 3.2 | Selection highlight, placement preview and cursor cost text | 25 §9.4 | **Closed** `[OBSERVED]`: cyan footprint, network path and zone-coloured rectangle; red tint over an occupied target; cost label below and to the right of the cursor. |
 | 3.3 | Draw-order tie-break between moving and static objects | 25 §5.2 | Static before moving, when keys are equal. |
 | 3.4 | Slider, framed-window and tab controls; bottom-bar anchors P1–P4 | 08 | Fly-out geometry, tool-column placement and the bottom-bar arrangement at 640, 800 and 1024 are now `[OBSERVED]` (08 §4.2, §7; 09 §7a). Lay out the remaining controls from the shipped images. |
-| 3.5 | Edge-scroll border sizes, the animation and view-update tick rate | 08 §8, 25 §10 | 8-px border; 60 view updates per second. **Observed:** in the windowed run, parking the pointer 0–12 px from the window edge did not scroll the view, so the edge margin could not be measured; the ticker hint says the view scrolls while the right mouse button is held. |
+| 3.5 | Edge-scroll border sizes, the animation and view-update tick rate | 08 §8, 25 §10 | 8-px border; 60 view updates per second. **Observed:** in the windowed run, parking the pointer 0–12 px from the window edge did not scroll the view, so the edge margin could not be measured; the ticker hint says the view scrolls while the right mouse button is held. **Project decision:** edge scrolling is disabled for now and will be revisited later. |
 | 3.6 | Ambient-sound area weighting by city state and zoom | 06 §5.3 | Choose the schedule of the dominant zone type under the view centre. |
 | 3.7 | Intro video codec | 07 | Decode with an existing TQI/TGQ decoder (the format is publicly documented). |
 | 3.8 | Parade automaton opcode, boat and ship spawn conditions | 26 | Skip parades. Spawn ships only at seaports. |
