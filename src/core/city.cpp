@@ -447,6 +447,9 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   wire();
   refresh(true);
   residents_ = countResidents();   // HUD and dialogs read this before the first month end
+  // A saved city carries the resident count of its last month end as the R valve's supply (Berlin: 794,278, the figure
+  // the original shows in its dialogs; counting operating buildings now gives 793,960). Prefer it until the next month end.
+  if (valves.v3000.Slast > 0 && std::abs(int64_t(valves.v3000.Slast) - residents_) * 20 < int64_t(valves.v3000.Slast)) residents_ = valves.v3000.Slast;
   // Full monthly costs are normally supplied by the owning subsystem at the first month end, and health and education
   // have no modelled upkeep yet (issue #44). Until then reuse the loaded city's last monthly charge so the budget
   // window's year-end estimate and the next settlement start from the saved level.
