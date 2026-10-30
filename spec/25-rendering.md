@@ -1,0 +1,611 @@
+# 25 — Rendering (isometric view)
+
+## 1. Overview
+
+The city is drawn as a 2:1 isometric (dimetric) projection of the tile grid, with discrete zoom
+levels and four view rotations. Every visible object is a pre-rendered sprite from the sprite DAT
+archives in `Res/Sprites/` (`02-containers.md`, `04-graphics-formats.md`). Each sprite has a span
+record (L, T, R, B) that gives its registration point; see §4. [DATA]
+
+Related documents: `11-world-terrain.md` (altitudes, water, palette semantics), `12-networks.md`
+(network piece selection), `13-buildings-occupants.md` (occupant sprite keys), `26-automata.md`
+(moving objects), `08-ui-framework.md` (input, cursors).
+
+## 2. Projection, zoom and rotation
+
+### 2.1 Zoom levels
+
+There are exactly **5 zoom levels**, numbered z = 0 (farthest) to z = 4 (closest). [STATIC] Every
+pixel metric doubles per level: [STATIC]/[DATA]
+
+| z | Tile width W (px) | Tile height H (px) | Half-width W/2 | Half-height H/2 | Altitude step A (px per altitude unit) |
+|---|---|---|---|---|---|
+| 0 | 8 | 4 | 4 | 2 | 1 |
+| 1 | 16 | 8 | 8 | 4 | 2 |
+| 2 | 32 | 16 | 16 | 8 | 4 |
+| 3 | 64 | 32 | 32 | 16 | 8 |
+| 4 | 128 | 64 | 64 | 32 | 16 |
+
+So W = 8·2^z, H = 4·2^z, A = 2^z. Screenshots of a 256-tile map at all five zooms show the same
+scale: at z = 0 the whole map spans 2048 px across, with its top corner at the horizontal screen
+centre, and the tile diamonds double in size with each zoom step `[OBSERVED]`. Some sprite sets (all BAT buildings and the add-on sets) contain
+only four native zooms (8–64 px per tile). They cover zoom 4 with 2× magnified zoom-3 images (§4.2). The tile diamond is exactly 2:1. The widths of the shipped 1×1
+building sprites at each zoom (8, 16, 32, 64, 128 px) confirm the table. [DATA]
+
+At zoom 4, the scroll origin (the screen position of the view's top-left corner, in projected
+pixels) is always rounded down to an even pixel in both axes when zoom changes. [STATIC]
+
+### 2.2 Rotations
+
+There are **4 view rotations**, r = 0..3. Rotation is applied to tile coordinates before projection.
+Let the map be `Wm` tiles along x and `Hm` tiles along z (`11-world-terrain.md`; world coordinates (x, z) per `00-README.md`, y is altitude). A world tile (x, z)
+and a view tile (u, v) are related as follows: [STATIC]
+
+| r | world x from view (u,v) | world z from view (u,v) |
+|---|---|---|
+| 0 | u | v |
+| 1 | v | Wm − 1 − u |
+| 2 | Wm − 1 − u | Hm − 1 − v |
+| 3 | Hm − 1 − v | u |
+
+The inverse mapping gives the view tile of a world tile. Successive rotations turn the map by a
+quarter turn each. The shipped maps are square, so `Wm` = `Hm`.
+
+For sub-tile positions (automata, effects, free-moving 3-D objects), world coordinates are fixed
+point with **256 units per tile** on each ground axis, so a map of `Wm` tiles spans
+0..`Wm`·256 − 1. Absolute sub-tile positions rotate like tiles, with `Wm`·256 − 1 − c in place of
+`Wm − 1 − c` (r = 1: (x, z) → (Wm·256 − 1 − z, x); r = 2: (Wm·256 − 1 − x, Hm·256 − 1 − z);
+r = 3: (z, Wm·256 − 1 − x), where (x, z) is the sub-tile world position and the result is the
+view-space pair). [INFERRED, high confidence: must agree with the tile rotation above]
+
+The original also has a fixed-constant variant that uses 0xFFFF − c regardless of map size (exact
+only for 256-tile maps). It is used only to lay out the parts of a composite 3-D object relative to
+each other: every part is rotated and projected, and the part offsets are then taken relative to the
+smallest projected (screen) x and y of the group. Because only differences are used, the constant cancels
+and the result is the same for every map size. It is **not** a defect in observable behaviour, and
+an implementation may use either constant for that purpose. The group's anchor position itself is
+kept in unrotated world coordinates. [STATIC]
+
+### 2.3 Projection formula
+
+For a view tile (u, v) whose relevant altitude is h (terrain altitude units, see
+`11-world-terrain.md`), the projected pixel position of the tile's top vertex is: [STATIC]
+
+* screen_x = (v − u) · W/2 − scroll_x
+* screen_y = (u + v) · H/2 − h · A − scroll_y
+
+Increasing u moves down-left on screen and increasing v moves down-right, so view tile (0, 0) is the
+top corner of the map. For sub-tile fixed-point coordinates (a', b', height e), in units of 1/256
+tile: [STATIC]
+
+* screen_x = (W/2) · (b' − a') / 256
+* screen_y = (H/2) · (a' + b') / 256 − A · e / 256
+
+Divisions truncate toward zero (integer arithmetic). One altitude unit of terrain therefore equals
+256 vertical fixed-point units. [STATIC]
+
+## 3. Screen-to-tile picking
+
+Picking is done per view tile, using the drawn content rather than a flat plane. [STATIC]
+
+1. Convert the mouse position to projected pixels by adding the scroll origin.
+2. Consider candidate view tiles near the inverse flat projection
+   u ≈ (2·sy/H − 2·sx/W)/2 and v ≈ (2·sy/H + 2·sx/W)/2, scanning a small neighbourhood. Tiles
+   further down the screen are tested later, and a later hit overrides an earlier one, so the
+   front-most object wins.
+3. For each candidate tile, take the object that occupies it (building, network piece or terrain).
+   * **Flat ground tiles** (no object, or an object flagged as ground-level): test whether the point
+     lies inside the tile diamond with vertices (sx, sy) offsets (0, 0), (W/2, H/2), (0, H) and
+     (−W/2, H/2), placed at the tile's projected position, raised by h·A and centred on the tile.
+   * **Objects with sprites**: compute the object's on-screen bounding box. Its x origin is the
+     footprint anchor's projected x. Its width is footprint_size · W. Its y origin is the anchor's
+     projected y minus the sprite's top extent. Its height is the sprite height. If the point is
+     inside the box, perform a per-pixel opacity test on the sprite image for the current zoom and
+     rotation. The tile is hit only if the pixel is opaque.
+4. The result is the world tile, obtained by applying the view→world mapping of §2.2. Callers
+   that need sub-tile precision also receive the fixed-point position (tile·256) and the altitude
+   (h·256).
+
+When several overlapping objects pass the pixel test, the one whose depth key
+(described in §5) is nearest the viewer wins. [STATIC]
+
+## 4. Sprite placement and the sprite-ID scheme
+
+### 4.1 Sprite archives
+
+Images live in the sprite DATs (`02-containers.md`, `04-graphics-formats.md`). Each image is
+addressed by (Category, SpriteID). In the archive, Type 0 holds the image, Type 1 holds the 8-byte
+span, Group is the category and Instance is the sprite ID. The category is the number in the DAT
+file-name prefix (5 = Roads, 6 = Vehicles, 7 = People, 0x15 = Boats, and so on). [DATA]
+
+The span is four s16 values (L, T, R, B). The image is W = L + R pixels wide and H = T + B pixels
+high, and its registration (anchor) point lies L pixels from the left edge and T pixels from the
+top. To draw a sprite with its anchor at screen point (px, py), blit the image's top-left corner at
+(px − L, py − T). L, R or B can be negative, which puts the anchor outside the image. [DATA]
+
+For buildings and network pieces, the anchor is the projected **top vertex** of the object's
+footprint at the object's base altitude. Here W = footprint_size · tile width, and L is typically 0 for
+1×1 building sprites. That is, the image's left edge is at the footprint's leftmost corner,
+and T gives how far the image extends above that corner. [DATA]/[INFERRED]
+
+### 4.2 Sprite-instance records (type 0x00006300)
+
+A sprite-instance record maps an object (occupant, network piece, automaton, flora, effect) to all
+of its images for every zoom, rotation and animation frame. Records have Type 0x00006300 and live in
+`Res/Sprites/CSATTRIB*.IXF` (Group 0x00006400), in the building-set and flora-set DATs and in BAT
+`.bld` files. The record is referenced by key from occupant attributes (`13-buildings-occupants.md`)
+and from animated-sprite attributes (`26-automata.md` §3.6). [DATA]
+
+The record starts with the line `BIN` followed by CR (0x0D). A text form also exists: the first line
+is something other than `BIN`, and the fields are written as `Name: value` lines (`Version:`,
+`SprInstCLSID:`, `ZoomCount:`, `RotCount:`, `ZoomSetCount:`, `AnimSetCount:`, `AnimFrames:`,
+`RegRects:`, `LayerFlags:`, `Frames:`, then one `Frame: idx, cat, id, b, x, y` line per frame, with
+cat and id in hex). Lines starting with `;` are comments. All shipped records are binary. [STATIC]/[DATA]
+
+Binary layout (offsets after the 4-byte `BIN\r` line):
+
+| Offset | Size | Type | Field | Meaning |
+|---|---|---|---|---|
+| 0x00 | 4 | s32 | Version | 1 in all shipped records |
+| 0x04 | 4 | u32 | SprInstCLSID | Draw-behaviour class of the instance (table below) |
+| 0x08 | 1 | u8 | ZoomCount | Number of zoom levels that have images (5, 3 or 2) |
+| 0x09 | 1 | u8 | RotCount | Number of distinct facings (4 for buildings, 32 for vehicles, 8 for people) |
+| 0x0A | 1 | u8 | ZoomSetCount | Images per zoom per animation frame (orientation slots) |
+| 0x0B | 1 | u8 | AnimSetCount | = ZoomCount × ZoomSetCount |
+| 0x0C | 1 | u8 | AnimFrames | Number of animation frames |
+| 0x0D | 1 | u8 | RegRects | Number of extra registration rectangles (0 or 1 in shipped data) |
+| 0x0E | 4 | u32 | LayerFlags | Per-record layer bitmask; meaning partly [OPEN], see §7 (per-zoom substitution) |
+| 0x12 | 2 | u16 | FrameCount | = AnimSetCount × AnimFrames |
+| 0x14 | 15·n | | Frames | FrameCount entries |
+
+Frame entry (15 bytes):
+
+| Offset | Size | Type | Field | Meaning |
+|---|---|---|---|---|
+| 0 | 2 | u16 | Index | Equals the entry's position (0..n−1) in all shipped data |
+| 2 | 4 | u32 | Category | Sprite category (DAT group) |
+| 6 | 4 | u32 | SpriteID | Sprite instance in the DAT |
+| 10 | 1 | s8 | Flags | 0 = draw the image at native size; 2 = draw the image **magnified 2×** (see below) |
+| 11 | 2 | s16 | OffsetX | 0 in all shipped data |
+| 13 | 2 | s16 | OffsetY | 0 in all shipped data |
+
+This layout parses all 1,425 shipped records
+(51,008 frames) with no bytes left over. Only 300 frames reference a span that is missing from the
+installed DATs. [DATA]
+
+**Magnified frames (Flags = 2).** 3,096 shipped frames have Flags = 2. All of them are in zoom
+slot 4, and every one names the same (Category, SpriteID) as the zoom-3 frame with the same
+animation frame and orientation. These records (BAT buildings, building sets, holiday and add-on
+sets) supply only 8/16/32/64-px-per-tile artwork, so the closest zoom reuses the 64-px image. Draw
+such a frame by scaling the image by 2 in both axes, with pixel doubling (nearest neighbour), and
+use doubled span values (2L, 2T, 2R, 2B) for the anchor. A loader must not assume that zoom-4 images
+are natively 128 px per tile. The projection itself always has 5 zoom levels (§2.1). [DATA]/[INFERRED: pixel doubling]
+
+**Frame indexing.** The frame for animation frame a, zoom slot z and orientation slot o is: [DATA]
+
+  index = a · AnimSetCount + z · ZoomSetCount + o.
+
+The shipped sprite IDs follow the convention SpriteID = (SetID << 16) | index, where SetID is the
+sprite-instance record's Instance. Implementations must still use the stored (Category, SpriteID)
+and must not derive it. [DATA]
+
+**Zoom slot to view zoom.** For ZoomCount = 5, slot z is view zoom z. Vehicles have
+ZoomCount = 3; their slot-0 images are about one-quarter of a 32-px tile, which suggests the slots
+cover view zooms 2..4. People have ZoomCount = 2, which suggests view zooms 3..4. At zooms without
+images the object is not drawn. [INFERRED, medium confidence]
+
+**Orientation slot.** For 4-facing objects (buildings, network pieces), o = (object facing + view
+rotation) mod 4 [INFERRED]. For vehicles (ZoomSetCount 48), slots 0–31 are 32 flat headings at
+11.25° steps and slots 32–47 are slope/turn variants [INFERRED from sprite extents]. For people
+(ZoomSetCount 8), the 8 slots are 8 compass headings. [INFERRED]
+
+Observed SprInstCLSID values (count of records): 0x7300 (855; static building/flora sprite), 0x0672
+(291), 0x7312 (121; buildings with an animated overlay frame), 0x7302 (75; vehicles/boats/aircraft),
+0x7310 (52; pedestrians), 0x059D–0x05A0 and 0x0674–0x0677 (4 each), and 0x7315 (1). [DATA] The
+exact behaviour behind each class is [OPEN]. A compatible engine can derive the behaviour from the
+counts above together with LayerFlags.
+
+## 5. Draw order
+
+### 5.1 Layers
+
+Each frame is composed back to front in this order: [STATIC partial, INFERRED order]
+
+1. **Off-map background.** The area outside the map is filled with a repeating tile from
+   `Res/Sprites/BACK<z>.BMP`, where `<z>` is the zoom digit 0–4. The shipped images are 128×64 for
+   zooms 0–3 and 256×128 for zoom 4. [DATA]/[STATIC]
+2. **City surface.** Terrain, water and ground-level pieces are drawn in tile order (§6). The result
+   is cached as a surface layer and is redrawn only for dirty rectangles (§10).
+3. **Objects.** Buildings, raised network pieces, flora, automata and effects are drawn in
+   depth-sorted order (§5.2).
+4. **Overlays.** Data-map tinting, selection highlights, placement previews and the cursor (§9).
+5. **UI windows** on top (`08-ui-framework.md`).
+
+### 5.2 Depth key
+
+Each object that occupies tiles is entered into a per-frame draw list. Its depth key is computed from
+the view-space anchor tile (u, v) of its footprint and its base altitude h: [STATIC]
+
+  K = 0x3FFFC000 − 0x4000·(u + v) − 0x100·⌊h / 4⌋   (unsigned 32-bit)
+
+Entries are drawn in **decreasing K**: farther diagonal rows first, and within a row lower altitude
+before higher. [INFERRED from the picking rule, which treats a smaller key as nearer]
+
+Each entry also carries a view-space fixed-point box (1/256 tile) used to order moving objects
+(automata, effects) against static objects whose footprints they overlap. For an object with
+footprint size s whose view-space anchor tile is (p, q), the box spans [(p − s + 1)·256, (p + 1)·256] on
+the first axis and [q·256, (q + s)·256] on the second. Objects with the "inset" flag have the box
+shrunk by 100 units on every side. [STATIC] A moving object is drawn after every static object whose
+box lies entirely behind it on both axes, and before any static object in front. The tie-break
+rule is [OPEN].
+
+For picking (§3) a finer key is used: 0x40000000 − 0x4000·(u + v) − 0x40·h; the smaller value is
+nearer. [STATIC]
+
+## 6. Terrain rendering
+
+* **Terrain is not sprite-based.** `00000009_Landscape.DAT` holds only flora and landscape objects
+  (29 sprite sets), and no terrain-slope sprites exist. The terrain module rasterises each tile
+  procedurally as a quadrilateral and colours it from the terrain palettes (`04-graphics-formats.md`
+  §7). [DATA]/[STATIC]
+* **Tile polygon.** The four vertices are the tile's corner altitudes from the vertex grid
+  (`11-world-terrain.md`), taken in view-rotated order. At the tile's projected position (§2.3)
+  their offsets are left (−W/2, H/2 − h_left·A), top (0, −h_top·A), right (W/2, H/2 − h_right·A) and
+  bottom (0, H − h_bottom·A). When the left and right corners have equal height but the top and
+  bottom corners do not, the quad is filled as two triangles split along the left–right diagonal.
+  Otherwise it is split along the top–bottom diagonal. [STATIC; split rule INFERRED from a
+  "fold" flag]
+* **Palette slots.** The terrain renderer works from nine palette images (slot table in
+  `04-graphics-formats.md` §7.1): 0 `palBasic`, 1–3 `data1Pal`–`data3Pal`, 4 land palette
+  (`62B9DA24:455A72B1:n`), 5 `palUnder`, 6 `palWater`, 7 `palEdgeL`, 8 `palEdgeD`. [STATIC]
+### 6.1 Palette images as tables
+
+All row numbers in this section count **from the top scan line of the image** (image y = 0 is the
+top row as displayed). This is the reverse of BMP storage order, so top-down row r is BMP file row
+(height − 1 − r). [STATIC; consistent with the shipped data, see below] Each palette image is
+converted once to display pixels and used as a lookup table T[row][column].
+
+* **palBasic expansion.** `palBasic.bmp` is 1 pixel wide. On load, each of its 53 rows (pixels
+  read in raster order) is expanded to 32 columns. Column k (0..31) is the row colour multiplied
+  per channel by cos((31 − k)·π/62), truncated to an integer. Column 31 is the colour itself and
+  column 0 is black. Only column 31 is used by the terrain renderer (§6.4). [STATIC]
+* The other slots are used at their native size: land and palUnder are 32 × 512, palWater 1 × 256,
+  palEdgeL/palEdgeD 1 × 512, data ramps 64 × 32. [DATA]
+
+### 6.2 Per-vertex terrain colour (land and palUnder)
+
+Terrain colour is computed **per vertex** and then interpolated across the tile (§6.3). For a
+vertex v with altitude alt(v), water-surface level water(v) (the per-vertex water grid of
+`11-world-terrain.md`; equal to the sea level where there is no lake or river) and shade value
+shade(v): [STATIC]
+
+* row = 256 + water(v) − alt(v), in top-down rows. A vertex exactly at the water surface uses row
+  256. A vertex d units above the water uses row 256 − d. A vertex d units below it uses row 256 + d.
+  The result is always in 0..511 because both values are bytes.
+* column = ⌊shade(v) / 2⌋, giving 0..31.
+* colour = T[row][column] in the tile's terrain palette: the land palette (slot 4) for normal
+  terrain, or `palUnder` (slot 5) in the underground view (§9.3).
+
+Check against the data: in BMP file order this is file row 255 + alt − water, so land above water
+uses file rows 256–511 (shore to snow) and submerged ground uses file rows 255 down to 0 (lighter
+near the surface, darker with depth). This matches the palette contents described in
+`04-graphics-formats.md` §7.2. [DATA]
+
+shade(v) is a per-vertex byte (0..63 in practice) held by the terrain object beside the altitude and
+water grids. It encodes slope lighting. The formula that derives it from neighbouring altitudes is
+given in §6.6 where known.
+
+Each vertex colour is cached (one 16-bit display colour per vertex of the (W+1)×(H+1) vertex grid).
+The cache is invalidated when the vertex changes. The whole cache is cleared whenever the zoom level
+changes and either the old or the new zoom is below 3, because of the far-zoom adjustment below. [STATIC]
+
+**Far-zoom colour adjustment (zoom 0, 1, 2).** At zooms below 3, every terrain, water and edge
+colour, and every palBasic tint, is adjusted per channel c (0..255) as
+c' = c + K[z][channel] − S(c)·(3 − z), where S(c) = ⌊(c + 5) / 10⌋ (c/10 rounded half up) and K is: [STATIC]
+
+| z | K for channel 1 | channel 2 | channel 3 |
+|---|---|---|---|
+| 0 | 49 | 51 | 53 |
+| 1 | 33 | 34 | 35 |
+| 2 | 16 | 17 | 18 |
+
+The result always stays within 0..255. The effect is an atmospheric haze: contrast is reduced by
+about 10 % per zoom step below 3, and the colour is lifted toward a slightly bluish light grey.
+Channels 1–3 are taken to be R, G, B. [INFERRED from the increasing bias, medium confidence]
+
+### 6.3 Tile rasterisation (Gouraud with noise)
+
+Each tile is a convex polygon of four projected vertices (see "Tile polygon" above), filled as one
+or two triangles. The polygon filler is a scan-line **Gouraud** shader: [STATIC]
+
+1. Each vertex carries an R, G, B triple (0..255 per channel).
+2. Along each polygon edge, x and R, G, B are interpolated linearly per scan line, in floating
+   point.
+3. Across each span, R, G, B are interpolated linearly from the left edge value to the right edge
+   value, with step (right − left)/(span width + 1). Values are truncated to integers per pixel.
+4. **Noise texture.** A signed 1024-entry noise table N is added to the colour. For scan line y of
+   the tile (relative to the polygon's top), the table index starts at (seed + 143·y) mod 1024 and
+   advances by 1 per pixel (mono mode: the same N value is added to R, G and B) or by 3 per pixel
+   (RGB mode: three consecutive entries are added to R, G and B). The tile seed is
+   (−169·z_tile − 327·x_tile) mod 1024, where (x_tile, z_tile) is the tile's world position.
+   The addition is done in 8 bits **without clamping**. [STATIC]
+5. **Grid lines.** When the grid display option is on, an edge delta of −16 (−8 at zooms 0–1) is
+   added, with clamping to 0..255, to the first |dx/dy| + 1 pixels of each span on the polygon's
+   left edges and to the polygon's top horizontal row. This darkens the tile's upper-left and
+   upper-right edges and forms the grid. [STATIC]
+
+The two noise tables are generated once at start-up from a pseudo-random generator seeded with the
+system time, so their exact contents vary between sessions: [STATIC]
+
+* **Land noise (RGB mode):** each of the 1024 entries is independently −8, 0 or +8 with equal
+  probability.
+* **Edge/water noise (mono mode):** alternating runs. A run of 1–8 entries (uniform) of either +8
+  or −9 (chosen 50/50 per run) is followed by a run of 1–8 zeros, repeated until 1024 entries
+  are filled.
+
+Land tiles use land noise in RGB mode. Water tiles use the edge/water noise in mono mode (with the
+seed formula's coefficients swapped: (−327·x_tile − 169·z_tile) is the same value). Map-edge earth
+faces use the edge/water noise in mono mode. Map-edge water faces use no noise. [STATIC]
+
+### 6.4 Water surface
+
+A water tile is drawn as a second polygon whose vertices are at the water-surface height of each
+corner (water(v)·A instead of alt(v)·A), on top of the land polygon. Its per-vertex colour is: [STATIC]
+
+* depth = max(0, water(v) − alt(v));
+* colour = palWater[depth] (top-down row; row 0 is the lightest, used at the shoreline where depth
+  is 0, and the colour darkens with depth);
+* then the far-zoom adjustment (§6.2), cached per vertex like land.
+
+Because colour is interpolated from vertex depths, there are no shoreline sprites. Shoreline tiles
+(tiles where some corners are above the water surface and some are not) use a dedicated
+**colour-key** variant of the land fill: [STATIC]
+
+1. Vertex colours: a corner whose altitude is above its water level gets the normal land colour
+   (§6.2, including tint). A corner at or below the water level gets the key colour
+   (160, 160, 160), after the far-zoom adjustment.
+2. The replacement colour R is palWater row 0 (the shallowest water colour), after the far-zoom
+   adjustment. It is averaged with the tile's palBasic tint, or with palBasic row 51 under the
+   condition described under "Tints" below.
+3. The tile is Gouraud-filled as usual (land noise, RGB mode, same seed as a land tile). For every
+   pixel, compute the squared RGB distance D² between the interpolated colour (before noise) and
+   the key:
+   * D² ≤ 256 (distance ≤ 16): the pixel is R plus the mono edge/water noise value at the current
+     noise index;
+   * 256 < D² < 1024: the pixel is R·(1024 − D²)/768 + P·(D² − 256)/768 per channel, plus land
+     noise, where P is the interpolated colour;
+   * D² ≥ 1024: the pixel is P plus land noise.
+
+The result is a crisp waterline that cuts across the tile where the interpolated colour reaches
+the key, with a narrow blended fringe. The grid-line delta applies as for land.
+
+**Tints.** A terrain tile may carry a palBasic tint index (0 = none). When it is non-zero, every
+vertex colour of the tile is averaged 50/50 per channel with palBasic[index] (column 31):
+c = (c + tint) / 2, truncated. On water tiles with no tint, the vertex colour is also averaged
+with palBasic row 51 when a per-tile flag queried from the city (the tile adjacent to the corner)
+is set. The meaning of that flag is [OPEN] (likely a zone or selection marker). [STATIC]
+
+**Water animation.** The terrain renderer has no time-dependent term: the noise seed depends only
+on tile position. Water is therefore static in the terrain layer. Any visible water motion (waves,
+glints) comes from sprites or effects drawn above it. [STATIC for the terrain layer; INFERRED overall]
+
+### 6.5 Map-edge faces
+
+Along the map borders that face the viewer, the renderer draws a vertical face below each border
+tile edge, so that the map looks like a slab. Each face segment spans one tile edge, between two
+border vertices c1 and c2. Which two vertices are used, and the horizontal placement (half a tile
+wide, at the left or right half of the tile's diamond), follow from the view rotation and the
+border. [STATIC] Vertical extents at each of the two vertices, in projected pixels (A = altitude
+step):
+
+| Level | Height |
+|---|---|
+| surface | water(v) if water(v) > alt(v), else alt(v) |
+| ground | alt(v) |
+| base | −4 altitude units (normal); 0 if the segment has the "no water/flush" flag |
+
+The face is drawn in two parts, each with the index-Gouraud filler (palette **index** is
+interpolated per pixel, then looked up in a 512-entry table):
+
+1. **Water part** (only when the surface is above the ground at either vertex, and the
+   segment does not have the flush flag): a quad from the surface down to the ground. Index 0 at the
+   surface vertices, and depth = water(v) − alt(v) at the ground vertices. The table rows 0–255 are
+   blue water tones. No noise.
+2. **Earth part:** a quad from the ground down to the base. Index 256 at the ground vertices
+   (260 with the flush flag), and 260 + alt(v) at the base vertices, clamped to 511. Equivalently,
+   index = 256 + depth below the ground surface. Rows 256–511 are earth tones that darken
+   downward. Mono edge noise is applied.
+
+**Light and dark faces.** Both parts use palEdgeL or palEdgeD. The two front borders alternate:
+for one border the table is palEdgeL when the rotation r is even and palEdgeD when it is odd. For
+the other border it is the reverse. Light therefore comes from a fixed world direction, and the
+faces swap shade as the view rotates. [STATIC] Which world border gets palEdgeL at r = 0 is
+[OPEN]. Test against the original.
+
+### 6.6 Vertex shade (slope lighting)
+
+The shade byte of every vertex is recomputed by the terrain object whenever altitudes change. Only
+the vertices in the changed rectangle are recomputed. It is also recomputed for the whole map on
+load and after generation. Shade does **not** depend on the view rotation. [STATIC]
+
+For the vertex at grid position (x, z), with altitude h(x, z) (x is the first index of the altitude
+grid, see `11-world-terrain.md`):
+
+1. Take the four neighbours h(x−1, z), h(x+1, z), h(x, z−1) and h(x, z+1). At the map border, a
+   missing neighbour is replaced by the mirror extrapolation clamp(2·h(x, z) − h(opposite
+   neighbour), 0, 255).
+2. Form the normal n = (s·(h(x−1, z) − h(x+1, z)) / 2, d, s·(h(x, z−1) − h(x, z+1)) / 2) and
+   normalise it. Here d = 16.0 (the horizontal spacing) and s = the terrain record's
+   `heightScale` (world units per altitude unit, 3.266 in shipped files; `11-world-terrain.md`).
+   The second component points up.
+3. There are two fixed lights: L1 = (−1, 1, 0)/√2 and L2 = (1, 1, 0)/√2. Both are 45° above
+   the horizon, one on each side along the x axis.
+4. For each light i: t_i = ⌊ acos(max(0, n·L_i)) · 62 / π ⌋, so 0..31 (31 when the light
+   grazes or is behind the surface).
+5. shade(x, z) = max(t_1, t_2). The palette column is ⌊shade / 2⌋ (§6.2), so only columns 0–15
+   are reachable.
+
+Consequences: flat ground has n·L = cos 45°, giving t = 15 and column 7. Slopes in any
+direction raise t and therefore use brighter columns (8–15). Slopes along the b axis lower both
+dot products. Slopes along the a axis lower one of them, and the maximum takes that one. [STATIC]
+Use single-precision floats and truncation as stated. Column differences of one step are visible.
+* Multi-tile buildings are **not sliced**. Every building and network sprite covers its whole
+  footprint: shipped widths are exact multiples of the tile width (footprint × 8·2^z). It is drawn
+  once, at its anchor tile's depth key, with the box from §5.2. [DATA]/[STATIC]
+
+## 7. Zoom-dependent detail and building animation
+
+* **Per-zoom substitution.** Each placed object carries a 16-bit flag word. The bit with mask
+  {0x10, 0x20, 0x40, 0x80, 0x100} for z = 0..4 says that the object's own image is drawn at that
+  zoom. If the bit is clear, a generic substitute sprite chosen by footprint size is drawn instead.
+  [STATIC] Where the flag word comes from is [OPEN]. Question for testing: is it the
+  sprite-instance `LayerFlags` field (§4.2)? Shipped `LayerFlags` values include 0x40, 0x80, 0xC0 and
+  0x1C0, which fit this mask, but all 816 records in the BAT sprite archive have 0, which under this
+  reading would draw a substitute at every zoom. Recommended default: draw the object's own image at
+  every zoom for which it has images. [DATA for the values]
+* Automata appear only at zooms for which their sprite-instance record has images (§4.2): vehicles
+  at the 3 closest zooms and people at the 2 closest zooms. [INFERRED]
+* **Animated buildings.** These have sprite-instance records with AnimFrames > 1 (SprInstCLSID
+  0x7312). Animation frame a is drawn by adding a·AnimSetCount to the frame index. The extra frame
+  is usually a small overlay image (lights, smoke, flags) whose anchor is offset through negative L
+  values in its span. [DATA]
+* `MaxAnimationsBase` in `[BuildingAnimationTunables]` of `Sys/SC3Tune.ini` (shipped value: 10)
+  is the base cap on the number of building animations running at once. [INFERRED]
+* Day/night cycle: none was found (there are no night sprites or strings). [INFERRED]
+* **Construction appearance.** There are no multi-stage construction sprites. While a lot is in
+  state 4 (under construction), the building layer draws a substitute **construction-site
+  occupant** in place of the building, chosen from `SC3BuildingLayer.ini [DefaultBuildingData]` with
+  key `4:size:agentType[:F|:G]` (`13-buildings-occupants.md` §6). The anchor tile uses the plain
+  key, the filler tiles of a multi-tile lot use `:F`, and `:G` is used for lots with accumulating
+  garbage. Shipped examples: occupants 136 (1×1), 166 (2×2), 195 (3×3) and 9000 (4×4) in group
+  1406 (0x57E), with agent-type-specific alternatives for 3000/5000/8000. The site occupant is an
+  ordinary sprite object; any animation comes from its own sprite-instance record. [DATA]
+* **Construction timing.** The appearance lasts until the growth simulation completes construction.
+  This is a per-visit random test with probability `ConstructionTimeFactor / (tiles × 100)`, and
+  it requires power and road access (`15-sim-growth.md` §4.3). There is no fixed duration and no
+  stage counter. On completion the lot switches to state 1 and the real building's sprite is drawn.
+  [STATIC via `15-sim-growth.md`] The "Construction" agent (15300) and the "Construction Vehicle"
+  (202) of `CitySim.ini` are the agent types of these site occupants and their associated
+  automata. [INFERRED]
+
+## 8. Seasonal / holiday sprite swaps
+
+* Holiday content is registered as extra data files in the `Default.ini` resource-segment list
+  (`AnSprAtt_Holidays.IXF`, `VAttrib_Holidays.IXF`, `PAttrib_Holidays.IXF`, `PplProd_Holidays.IXF`,
+  `CSAttrib_Holidays.IXF`, `OccupantAttribs_Holidays.IXF`, and the sprite DATs `54AACF44_Holiday.DAT`
+  and `54DA2E59_HolidayF.DAT`). Holiday records add new IDs; they do not overwrite base records.
+  [DATA]
+* Seasonal pedestrians come from date-ranged PPLPROD modes (`26-automata.md` §3.5). Country blocks
+  suffixed `:holidays` are used only when holiday content is enabled. The sprite-script layer in the
+  view also understands `ScriptCountries:` lists and the `:holidays` suffix. [STATIC]
+
+## 9. Overlays
+
+Cursor files are listed in `08-ui-framework.md`.
+
+### 9.1 Terrain tile kinds
+
+The terrain layer draws a list of per-tile primitives. Each primitive is created for one tile
+(x, z) and is one of the following kinds: [STATIC]
+
+| Kind | Geometry | Vertex colour | Fill |
+|---|---|---|---|
+| Land | ground corners | land/palUnder palette, §6.2 (+ optional palBasic tint) | Gouraud + land noise (RGB) |
+| Water | water-surface corners | palWater by depth, §6.4 | Gouraud + edge/water noise (mono) |
+| Shoreline | ground corners | land colour or key grey, §6.4 | colour-key Gouraud |
+| Solid colour | ground corners | palette slot S, row R, column ⌊shade/2⌋ | Gouraud, **no noise** |
+| Edge face | border segment, §6.5 | palEdgeL/palEdgeD by index | index-Gouraud |
+
+All kinds apply the far-zoom adjustment and the grid-line delta.
+
+### 9.2 Data-map overlays and solid-colour tiles
+
+A "solid colour" tile is created with (x, z, palette slot S, row R). Its vertex colour is
+T_S[R][⌊shade(v)/2⌋]: a fixed row of the chosen palette, with the column still driven by the
+vertex's slope shade, so relief stays visible. It **replaces** the terrain colour of that tile
+rather than blending with it, and no noise is added. [STATIC]
+
+* S = 1, 2 or 3 selects `data1Pal`/`data2Pal`/`data3Pal` (64 × 32). In these the row R (0..31,
+  top-down) is the data class of the tile and the column is the relief shade. Only columns
+  0–15 are reachable through the shade (§6.6). [STATIC]
+* S = 0 selects the cos-expanded palBasic (§6.1), giving 53 fixed colours with relief shading.
+* The cell resolution is **one map tile**: each overlay value colours exactly one tile polygon,
+  and colours are interpolated only within the tile, between its corners' shade values.
+  [STATIC]
+
+Which data layer uses which ramp, and how a layer value (0..255 in the simulation maps,
+`15-sim-growth.md`, `17-sim-services.md`) is quantised to a row 0..31, is decided by the view
+code that creates the tiles. That mapping is [OPEN]. A plausible default is
+row = ⌊value / 8⌋ on the ramp that matches the layer's colour scheme. data3Pal is the smooth
+gradient. [INFERRED]
+
+### 9.3 Underground view
+
+In the underground view the land tiles are drawn with palette slot 5 (`palUnder`) in place of the
+land palette, with the same row and column rules (§6.2). [STATIC] Tiles that are neither flat nor
+a gentle single-axis ramp are tinted 50/50 with palBasic row 52 (dark grey). A gentle single-axis
+ramp is a tile with two opposite pairs of equal corners whose difference is at most 2 altitude
+units. This marks ground that is too steep to build on. [STATIC; meaning INFERRED] Underground
+network pieces (pipes, subway tunnels and stations) are drawn as sprites from their own
+categories (`12-networks.md`). Above-ground objects are hidden. [INFERRED]
+
+### 9.4 Selection highlight, placement preview, cost text
+
+[OPEN] These are drawn by the view module, not the terrain module. Known facts: the terraform
+tools compute a planned cost for the tile under the cursor every time the cursor moves
+(`11-world-terrain.md`), and flag the preview as unaffordable when funds are short (see
+`09-ui-screens.md`). The tint mechanism of §6.4 (palBasic row averaged into the vertex colours)
+is the terrain-side highlight primitive.
+
+## 10. Scrolling, redraw and persisted view state
+
+* **Edge-scroll margin.** `ScrollMarginFactor` in section `Navigation` of the user preference file
+  sets the margin (stored as 5.0 divided by a display-dependent value). `ScrollRateInPixelsPerMinute`
+  in `SC3Tune.ini` applies to the credits screen, not the map.
+* **Keyboard scroll.** On every view update, while the city view has keyboard focus, the four
+  arrow keys are polled. With step s, the view scrolls by up (0, −s), down (0, +s), left (−s, 0) or
+  right (+s, 0) screen pixels. When two perpendicular keys are held, it scrolls diagonally by
+  (±s, ±s). Any other combination (three or four keys, or two opposite keys) does not scroll.
+  s is held per zoom level (a five-entry table) and is reselected on every zoom change. All five
+  entries are hard-coded to **32.0 pixels per update**, and no preference overrides them, so the
+  step is the same number of screen pixels at every zoom. [STATIC]
+* **Drag and edge scroll** use the velocity rules in `08-ui-framework.md` §8.3, applied through the
+  same per-update scroll call. [STATIC] The view update period (and so the scroll speed in pixels
+  per second) is [OPEN]. On zoom change the view passes the value 60.0 to its update scheduler,
+  which suggests a 60 Hz target. [INFERRED, low confidence]
+* **Redraw.** The city surface is cached and updated through dirty rectangles (per tile changes and
+  automata movement). Automata and animations are redrawn on an animation tick. The tick rate is
+  [OPEN].
+
+### Persisted state: view record
+
+Every saved city contains a top-level IXF record with key **620EDFCE:A20FB3B9:00000000**, 24 bytes,
+present in 15/15 shipped `.sc3` files: [DATA]/[STATIC]
+
+| Offset | Size | Type | Field | Meaning |
+|---|---|---|---|---|
+| 0x00 | 2 | u16 | Version | 1 |
+| 0x02 | 2 | u16 | Flags | 2 (bit 0 set would add begin/end marker strings; see `10-save-format.md`) |
+| 0x04 | 4 | u32 | Sentinel | 0xDEADBEEF |
+| 0x08 | 4 | f32 | CenterX | view centre, tile units (integer-valued in shipped saves) |
+| 0x0C | 4 | f32 | CenterY | view centre, tile units |
+| 0x10 | 4 | s32 | Zoom | 0–4 (shipped saves: 1–3) |
+| 0x14 | 4 | s32 | Rotation | 0–3 |
+
+On load the view is restored to that zoom, rotation and centre. [STATIC] Whether CenterX/Y are
+world or view coordinates is [INFERRED: world tile coordinates].
+
+## Open questions
+
+* Terrain: which world border gets palEdgeL at rotation 0. The meaning of the city per-tile flag
+  that tints water and shore with palBasic row 51. The quad-split (shape) table for land tiles
+  (the edge-face classifier is known).
+* Data-map overlays: the mapping from each data layer, and its 0..255 value, to a ramp (slot 1–3)
+  and row 0..31. This is decided in the view module, not traced.
+* The underground view's sprite set and the hiding of above-ground objects. The selection highlight, the
+  placement preview and the cost text at the cursor (view module, not traced).
+* The exact role of `MaxAnimationsBase`, and the animation and view update tick rates (and so the
+  keyboard scroll speed in pixels per second; the step is 32 px per update).
+* The meaning of each SprInstCLSID and of LayerFlags; whether the 2× magnification uses any filtering.
+* Edge-scroll rectangle sizes.
+* The tie-break rule for ordering moving objects against static objects.
