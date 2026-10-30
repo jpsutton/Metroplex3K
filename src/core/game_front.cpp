@@ -107,6 +107,7 @@ void Game::enterCity() {
   sim_.city().onSound = [this](int id) { sound(id); };
   sim_.city().onMessage = [this](const std::string& m) { message(m); };
   simReady_ = true; paused_ = true; dirty_ = false; simAccum_ = 0;
+  speed_ = std::max(1, std::min(4, world_.info.gameSpeed));
   showPicker_ = false;
   cheats_.resetSession();
   initManagers();
@@ -224,8 +225,10 @@ void Game::acceptTerrain() {
   if (nc_diff_ == 3) { b.newCity(0); b.issueBond(10000, 1, nc_year_); }
   else b.newCity(start);
   disastersOn_ = nc_disasters_; autoBudget_ = nc_autoBudget_;
+  world_.info.flagA = nc_disasters_ ? 1 : 0; world_.info.flagB = nc_autoBudget_ ? 1 : 0;
+  world_.info.gameSpeed = 1;
   disasters_.setDisastersEnabled(disastersOn_);
-  b.showBudgetOnlyInDebt = false;
+  b.showBudgetOnlyInDebt = true;  // spec 19 7 [OBSERVED]: no year-end budget window while funds are positive
   currentFile_.clear();
   saveSettings();
   postNews(kTblNewsTriggered, 1);
@@ -340,6 +343,9 @@ void Game::drawMainMenu() {
   if (!menuBgTried_) {
     menuBgTried_ = true;
     int best = 0;
+    // The 800x600 skyline (82B9B75C:22729921) is the original's main-menu art; the other 800x600 image (01140000) is not.
+    if (haveData_)
+      if (const Image* sky = icon(0x82B9B75C, 0x22729921)) { menuBg_ = *sky; best = sky->w * sky->h + 1; }
     if (haveData_)
       for (const auto& k : data_.db().keysOfType(T_UI_IMAGE)) if (k.group == 0x82B9B75C) {
         const Image* im = icon(k.group, k.instance);
@@ -395,7 +401,11 @@ void Game::drawNewCity() {
   y += 40;
   ui_.text(r.x + 20, y + 4, cap(0x029541F4, 0x22B, "Difficulty"));
   const char* dn[] = {"Easy", "Medium", "Hard"};
-  for (int i = 0; i < 3; i++) if (ui_.button({r.x + 150 + i * 110, y, 104, 26}, cap(0x029541F4, 0x22C + i, dn[i]), true, nc_diff_ == i + 1)) nc_diff_ = i + 1;
+  for (int i = 0; i < 3; i++) {
+    std::string lbl = cap(0x029541F4, 0x22C + i, dn[i]);  // game string holds a printf "%s" for the funds amount
+    if (size_t p = lbl.find("%s"); p != std::string::npos) lbl.replace(p, 2, "$" + groupDigits(Budget::startingFunds(i + 1)));
+    if (ui_.button({r.x + 150 + i * 110, y, 104, 26}, lbl, true, nc_diff_ == i + 1)) nc_diff_ = i + 1;
+  }
   y += 34;
   ui_.text(r.x + 20, y, "Starting funds: $" + groupDigits(Budget::startingFunds(nc_diff_)) + (nc_diff_ == 3 ? " (loan)" : ""), "main10");
   y += 26;

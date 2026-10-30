@@ -178,15 +178,15 @@ int main() {
     CHECK(r.pick(cam, sx, sy - 3, pr) && pr.object && pr.category == 1);
     CHECK(r.pick(cam, sx + 100, sy - 3, pr) && !pr.object);  // outside the sprite box: ground
 
-    // Selection preview: green tint pulls pixel towards green.
+    // Selection preview: cyan tint pulls pixel towards green.
     RenderScene s4; TilePreview tp; tp.x0 = tp.x1 = 8; tp.z0 = tp.z1 = 8; tp.valid = true; tp.alpha = 255; s4.previews.push_back(tp);
     r.render(cam, opt, &s4);
     int cx, cy; r.projectSub(cam, 8 * 256 + 128, 8 * 256 + 128, 40 * 256, cx, cy);
     uint32_t pp = r.pixels()[size_t(cy + 1) * r.width() + cx];
-    CHECK(pp == rgba(40, 220, 40));
+    CHECK(pp == rgba(0, 140, 205));
     RenderScene s5; tp.valid = false; s5.previews.push_back(tp);
     r.render(cam, opt, &s5);
-    CHECK(r.pixels()[size_t(cy + 1) * r.width() + cx] == rgba(230, 40, 40));
+    CHECK(r.pixels()[size_t(cy + 1) * r.width() + cx] == rgba(240, 20, 40));
 
     // Data overlay solid colour: flat terrain -> shade 15 -> column 7, no noise.
     TerrainPalettes tp2 = r.palettes();
@@ -202,7 +202,7 @@ int main() {
   {  // default overlay mapping
     std::vector<uint8_t> vals = {0, 7, 8, 255, 100};
     DataOverlay o = makeDataOverlay(DataLayer::Crime, vals, 5, 1);
-    CHECK(o.slot == 2 && o.row[0] == 0 && o.row[1] == 0 && o.row[2] == 1 && o.row[3] == 31 && o.row[4] == 12);
+    CHECK(o.slot == 2 && o.row[0] == 31 && o.row[1] == 31 && o.row[2] == 30 && o.row[3] == 0 && o.row[4] == 19);
     DataOverlay z = makeDataOverlay(DataLayer::Zones, {0, 1, 255}, 3, 1);
     CHECK(z.slot == 1 && z.row[1] == 4 && z.row[2] == 0xFF);
   }

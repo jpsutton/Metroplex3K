@@ -201,7 +201,8 @@ static void testMinuteMode() {
 
 static void testSpeed() {
   SpeedControl s;
-  CHECK(s.current() == 2 && s.selected() == 2 && s.factor() == 43200);
+  CHECK(s.current() == 1 && s.selected() == 1 && s.factor() == 10080);  // new city starts at Turtle [OBSERVED]
+  s.setSpeed(2);
   int announced = -1;
   s.onSpeedChanged = [&](int sel) { announced = sel; };
   CHECK(s.setSpeed(2) && announced == -1);   // no change: nothing announced

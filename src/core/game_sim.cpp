@@ -252,7 +252,7 @@ void Game::startScenarioHooks() {
   h.ticker = [this](const std::string& text, int, bool) { statusLine_ = text; };
   h.sound = [this](int id) { sound(id); };
   h.moveCamera = [this](int x, int z, int zoom) { setView(x, z, zoom); };
-  h.setSpeed = [this](int sp) { speed_ = std::max(1, std::min(3, sp)); };
+  h.setSpeed = [this](int sp) { speed_ = std::max(1, std::min(4, sp)); };
   h.startDisaster = [this](int kind, const std::vector<int32_t>&) {
     static const DisasterType map[] = {DisasterType::Fire, DisasterType::Tornado, DisasterType::Earthquake, DisasterType::Riot,
                                        DisasterType::UFO, DisasterType::ToxicCloud, DisasterType::Whirlpool, DisasterType::Locusts,
@@ -293,11 +293,11 @@ void Game::presentPetitions() {
 void Game::tickSim(uint32_t dtMs) {
   if (!simReady_ || paused_ || !world_.W) return;
   if (!managersReady_) initManagers();
-  static const double rate[] = {0.0, 1.0, 3.0, 8.0};
-  simAccum_ += dtMs / 1000.0 * rate[std::max(1, std::min(3, speed_))];
+  // Game days per real second from the clock compression factor of the speed (spec 14 4).
+  simAccum_ += dtMs / 1000.0 * double(SpeedControl::kFactor[std::max(1, std::min(4, speed_))]) / 86400.0;
   int guard = 0;
-  while (simAccum_ >= 0.25 && guard++ < 16) {
-    simAccum_ -= 0.25;
+  while (simAccum_ >= 1.0 && guard++ < 16) {
+    simAccum_ -= 1.0;
     sim_.tickDay();
     CityDisasterWorld dw(world_, city());
     DisasterOutput out;

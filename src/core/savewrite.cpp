@@ -32,12 +32,22 @@ static Bytes saveGenerated(const World& w) {
   { Bytes d; hdr(d, 2);
     for (const auto& o : w.occupants) {
       put32(d, packPlace(o.x, o.z, o.y, o.rot));
-      uint32_t fl = uint32_t(o.sizeX & 0x3F) | (uint32_t(o.sizeZ & 0x3F) << 6) | (1u << 20) | (1u << 27) | (1u << 29) | (1u << 30);
+      uint32_t fl = uint32_t(o.sizeX & 0x3F) | (uint32_t(o.sizeZ & 0x3F) << 6) | (1u << 20) | (1u << 27) |
+                    (o.boolA ? 1u << 29 : 0) | (o.boolB ? 1u << 30 : 0);
       if (!o.name.empty()) fl |= 1u << 21;
+      if (o.hasDate) fl |= 1u << 22;
+      if (!o.intProps.empty()) fl |= 1u << 23;
+      if (!o.strProps.empty()) fl |= 1u << 24;
+      if (!o.floatProps.empty()) fl |= 1u << 25;
       put32(d, fl); put32(d, o.agentType);
       put32(d, o.keyType); put32(d, 0x0000057E); put32(d, o.occId);
       if (!o.name.empty()) str(d, o.name);
+      if (o.hasDate) { put32(d, uint32_t(o.dateYear)); put32(d, uint32_t(o.dateDay)); }
       put32(d, o.state);
+      if (!o.intProps.empty()) { put32(d, uint32_t(o.intProps.size())); for (auto& p : o.intProps) { put32(d, p.first); put32(d, p.second); } }
+      if (!o.strProps.empty()) { put32(d, uint32_t(o.strProps.size())); for (auto& p : o.strProps) { put32(d, p.first); str(d, p.second); } }
+      if (!o.floatProps.empty()) { put32(d, uint32_t(o.floatProps.size()));
+        for (auto& p : o.floatProps) { uint32_t u; __builtin_memcpy(&u, &p.second, 4); put32(d, p.first); put32(d, u); } }
     }
     recs.push_back({{0xE0FAADC7, 0xA0AB89F0, 1}, std::move(d)}); }
 
@@ -79,11 +89,11 @@ static Bytes saveGenerated(const World& w) {
 
   IxfWriter ix;
   { Bytes c; hdr(c, 4);
-    put32(c, 4); put32(c, 0); put32(c, 0); put32(c, 0); put32(c, 3);  // appVersion + unknown
+    put32(c, 2); put32(c, 0); put32(c, 949); put32(c, 0); put32(c, 4);  // appVersion 2.0.949.0 + format revision 4 [OBSERVED]
     str(c, "m3k"); put32(c, w.W); put32(c, w.H); put32(c, w.W);
     str(c, w.info.cityName); str(c, w.info.mayorName);
     put32(c, w.info.dayOfYear); put32(c, w.info.year); put32(c, w.info.gameSpeed); put32(c, w.info.foundingYear);
-    c.push_back(0); c.push_back(1); c.push_back(0);
+    c.push_back(w.info.flagA); c.push_back(w.info.flagB); c.push_back(0);
     ix.add({0x00000FA1, 0x617E198D, 0}, std::move(c)); }
   { Bytes d; put32(d, uint32_t(w.info.fileKind)); ix.add({0xC359837E, 0x43598384, 0}, std::move(d)); }
   { Bytes d; put32(d, w.scheme.buildingSet); put32(d, w.scheme.floraSet); put32(d, w.scheme.landscape); ix.add({0x0525A6B9, 0x4525A6E2, 1}, std::move(d)); }
@@ -99,7 +109,9 @@ static Bytes saveGenerated(const World& w) {
 namespace {
 bool sameOcc(const Occupant& a, const Occupant& b) {
   return a.x == b.x && a.z == b.z && a.y == b.y && a.rot == b.rot && a.sizeX == b.sizeX && a.sizeZ == b.sizeZ &&
-         a.occId == b.occId && a.keyType == b.keyType && a.agentType == b.agentType && a.state == b.state && a.name == b.name;
+         a.occId == b.occId && a.keyType == b.keyType && a.agentType == b.agentType && a.state == b.state && a.name == b.name &&
+         a.hasDate == b.hasDate && a.dateYear == b.dateYear && a.dateDay == b.dateDay && a.intProps == b.intProps &&
+         a.strProps == b.strProps && a.floatProps == b.floatProps && a.boolA == b.boolA && a.boolB == b.boolB;
 }
 bool sameNet(const std::vector<NetPiece>& a, const std::vector<NetPiece>& b) {
   if (a.size() != b.size()) return false;
@@ -155,12 +167,13 @@ Bytes saveCity(const World& w) {
   }
   const CityInfo &ci = b.info, &ni = w.info;
   if (ci.cityName != ni.cityName || ci.mayorName != ni.mayorName || ci.dayOfYear != ni.dayOfYear || ci.year != ni.year ||
-      ci.gameSpeed != ni.gameSpeed || ci.foundingYear != ni.foundingYear) {
+      ci.gameSpeed != ni.gameSpeed || ci.foundingYear != ni.foundingYear || ci.flagA != ni.flagA || ci.flagB != ni.flagB) {
     OuterRecord* o = out.findOuter(keys::CityInfo);
     try {
       CityInfoRec r = CityInfoRec::parse(o->data);
       r.cityName = ni.cityName; r.mayorName = ni.mayorName; r.dayOfYear = uint32_t(ni.dayOfYear); r.year = uint32_t(ni.year);
       r.gameSpeed = uint32_t(ni.gameSpeed); r.foundingYear = uint32_t(ni.foundingYear);
+      r.flagA = ni.flagA; r.flagB = ni.flagB;
       out.setOuter(keys::CityInfo, r.write(r.hdr.markers()));
     } catch (const FormatError&) { takeOuter(keys::CityInfo); }
   }

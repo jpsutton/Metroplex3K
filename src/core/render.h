@@ -31,8 +31,8 @@ struct DataOverlay {
   int slot = 3;  // 0 = palBasic (expanded), 1..3 = data1Pal..data3Pal
   std::vector<uint8_t> row;  // W*H
 };
-// Default mapping (spec 29 item 3.1 interim): continuous layers use row = value/8 (0..31) on
-// data2Pal (Crime, Fire, Pollution, Traffic) or data3Pal (Aura, Density, LandValue);
+// Default mapping (spec 25 9.2): continuous layers use row = 31 - value/8 on data2Pal (Crime, Fire,
+// Pollution, Traffic) or data1Pal (Aura, Density, LandValue);
 // categorical layers (Zones, Power, Water) use `value` as category index, row = 4*category, on
 // data1Pal. Value 0xFF in `values` = no overlay for that tile on categorical layers.
 DataOverlay makeDataOverlay(DataLayer layer, const std::vector<uint8_t>& values, int W, int H);
@@ -65,8 +65,8 @@ struct SceneSprite {
 // Translucent tile tint over a world-tile rectangle (inclusive): selection or placement preview.
 struct TilePreview {
   int x0 = 0, z0 = 0, x1 = 0, z1 = 0;
-  bool valid = true;     // green when valid, red when not (spec 29 item 3.2)
-  uint8_t alpha = 110;   // 0..255
+  bool valid = true;     // cyan when valid, red when not (spec 25 9.4 [OBSERVED])
+  uint8_t alpha = 140;   // 0..255
   bool customColour = false;
   uint8_t r = 0, g = 0, b = 0;
 };

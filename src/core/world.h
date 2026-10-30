@@ -20,6 +20,12 @@ struct Occupant {
   uint32_t agentType = 0;
   uint32_t state = 1;       // 1 occupied, 2 abandoned, 4 construction, 8 rubble, 16 fire
   std::string name;
+  // Per-class data of a saved entry (spec 10 6.2.5), kept so loaded buildings round-trip.
+  bool hasDate = false; int32_t dateYear = 0, dateDay = 0;
+  std::vector<std::pair<uint32_t, uint32_t>> intProps;   // ascending id
+  std::vector<std::pair<uint32_t, std::string>> strProps;
+  std::vector<std::pair<uint32_t, float>> floatProps;
+  bool boolA = true, boolB = true;  // flags bits 29, 30 (meaning open)
 };
 
 struct NetPiece {
@@ -32,6 +38,9 @@ struct CityInfo {
   std::string cityName, mayorName;
   int dayOfYear = 1, year = 2000, gameSpeed = 1, foundingYear = 2000;
   int fileKind = 3;  // 3 city, 4 terrain, 5 starter town
+  // New City options Disasters / Auto Budget (spec 10 3.2): both 1 when both boxes checked, both 0 when cleared [OBSERVED].
+  // Which is which is [INFERRED]: flagA = Disasters, flagB = Auto Budget.
+  uint8_t flagA = 0, flagB = 1;
 };
 
 struct SchemeSel { uint32_t buildingSet = 0, floraSet = 0, landscape = 0; };

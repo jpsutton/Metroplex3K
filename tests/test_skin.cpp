@@ -21,7 +21,8 @@ int main() {
     auto B = toolMenuLayout(768);
     CHECK(B.heightClass == 1000 && B.root[0].y == 100 && B.root[0].dy == 97 && B.subY[0][0] == 118 && B.subY[7][0] == 225 && B.subY[7][6] == 442);
     CHECK(B.pieces.size() == 3);
-    CHECK(toolMenuLayout(1080).pieces.size() == 4 && toolMenuLayout(1080).pieces[3].tileDown);
+    CHECK(toolMenuLayout(1080).pieces.size() == 4 && toolMenuLayout(1080).pieces[2].tileDown && toolMenuLayout(1080).pieces[3].inst == 0xFFFE &&
+          toolMenuLayout(1080).pieces[3].y == 1080 - 164 - 90 && B.pieces[2].y == 97 + 417);
     CHECK(B.subIds[2].size() == 7 && B.subIds[2][2] == 0x4004 && B.subY[2][6] == 118 + 216);
     // Spacing in screen order is 36 (480).
     CHECK(L.root[1].y - L.root[0].y == 36 && L.root[8].y - L.root[4].y == 36 && L.root[5].y - L.root[8].y == 36);

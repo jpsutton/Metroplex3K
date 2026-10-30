@@ -1,5 +1,6 @@
 #include "core/records.h"
 #include <algorithm>
+#include <ctime>
 #include "core/growth.h"
 #include "core/landvalue.h"
 #include "core/refpack.h"
@@ -294,7 +295,8 @@ TemplateSet TemplateSet::defaults(int W, int H) {
   TemplateSet t;
   using namespace keys;
   { Bytes d; put32(d, 3); t.setOuter(FileKind, d); }
-  { Bytes d; put32(d, 0); put32(d, 0); put32(d, 1); put32(d, 0); put32(d, 1); put32(d, 54);  // 0,1,0,0,1,54 (spec 3.4)
+  { Bytes d; put32(d, 0); put32(d, uint32_t(std::time(nullptr))); put32(d, 1); put32(d, 54); put32(d, 1); put32(d, 54);
+    // 0, id, 1, 54, 1, 54 [OBSERVED, spec 10 3.4]; id is a creation-time stamp [INFERRED]
     t.setOuter(StateWords, d); }
   { Bytes d; writeRecHeader(d, 1); put32(d, 1); putString(d, ""); t.setOuter(Misc79FD, d); }
   t.setOuter(UserBuildingSet, zeros(16));

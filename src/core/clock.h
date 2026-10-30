@@ -155,7 +155,7 @@ class SpeedControl {
   std::function<void()> onPaused;
 
  private:
-  int current_ = 2, selected_ = 2, pauseCount_ = 0;
+  int current_ = 1, selected_ = 1, pauseCount_ = 0;
 };
 
 // ---------------------------------------------------------------- scheduling (spec 14 s3, s5, s6)

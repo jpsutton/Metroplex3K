@@ -109,8 +109,7 @@ void Game::streetSimFrame(uint32_t dtMs) {
   v.zoom = cam_.zoom; v.rotation = cam_.rot;
   street_->setView(v);
   if (!paused_ && !anyBlockingWindow()) {
-    static const double rate[] = {0.0, 1.0, 1.0, 1.0};
-    street_->update(int64_t(dtMs) * 1000 * rate[std::max(1, std::min(3, speed_))]);
+    street_->update(int64_t(dtMs) * 1000);
   }
   for (const AutomatonSprite& s : street_->sprites()) {
     SceneSprite sp;

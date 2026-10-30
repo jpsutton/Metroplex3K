@@ -137,7 +137,7 @@ int tqiQScale(int quant) { return std::max(5, (215 - 2 * quant) * 5); }
 int tqiDequantAc(int level, int i, int quant) {
   if (level == 0) return 0;
   int mag = level < 0 ? -level : level;
-  int64_t v = (int64_t(mag) * kIntra[i & 63] * tqiQScale(quant)) >> 3;
+  int64_t v = (int64_t(mag) * kIntra[i & 63] * tqiQScale(quant)) >> 6;
   v = (v - 1) | 1;
   return int(level < 0 ? -v : v);
 }

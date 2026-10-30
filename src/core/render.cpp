@@ -119,7 +119,10 @@ DataOverlay makeDataOverlay(DataLayer layer, const std::vector<uint8_t>& values,
   DataOverlay o;
   bool categorical = layer == DataLayer::Zones || layer == DataLayer::Power || layer == DataLayer::Water;
   switch (layer) {
-    case DataLayer::Zones: case DataLayer::Power: case DataLayer::Water: o.slot = 1; break;
+    // spec 25 9.2 [OBSERVED]: land value, density, power and aura use data1Pal; crime, pollution,
+    // flammability (fire) and traffic use data2Pal. (Aura's negative half on data2Pal is not split out.)
+    case DataLayer::Zones: case DataLayer::Power: case DataLayer::Water:
+    case DataLayer::LandValue: case DataLayer::Density: case DataLayer::Aura: o.slot = 1; break;
     case DataLayer::Crime: case DataLayer::Fire: case DataLayer::Pollution: case DataLayer::Traffic: o.slot = 2; break;
     default: o.slot = 3; break;
   }
@@ -127,7 +130,7 @@ DataOverlay makeDataOverlay(DataLayer layer, const std::vector<uint8_t>& values,
   for (size_t i = 0; i < o.row.size() && i < values.size(); i++) {
     int v = values[i];
     if (categorical) o.row[i] = v == 0xFF ? 0xFF : uint8_t(std::min(31, v * 4));
-    else o.row[i] = uint8_t(std::min(31, v / 8));
+    else o.row[i] = uint8_t(31 - std::min(31, v / 8));  // low values on the grey bottom row [INFERRED]
   }
   return o;
 }
@@ -679,6 +682,8 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt) {
           for (int i = 0; i < 4; i++) {
             int* c = dry[i] ? col[i] : key;
             P[i][2] = float(c[0]); P[i][3] = float(c[1]); P[i][4] = float(c[2]);
+            // Wet corners sit at the water surface so the waterline meets the neighbouring water polygons without a seabed gap.
+            if (!dry[i]) P[i][1] = qy[i] - float(wat[i]) * A;
           }
           if (split(nullptr)) { shoreTri(ctx, P[2], P[0], P[1], seed, ytop, key, rep); shoreTri(ctx, P[2], P[1], P[3], seed, ytop, key, rep); }
           else { shoreTri(ctx, P[0], P[2], P[3], seed, ytop, key, rep); shoreTri(ctx, P[0], P[3], P[1], seed, ytop, key, rep); }
@@ -1081,7 +1086,7 @@ void Renderer::drawPreviews(const Camera& cam, const RenderScene& scene) {
   for (const auto& pv : scene.previews) {
     int xa = std::max(0, std::min(pv.x0, pv.x1)), xb = std::min(w.W - 1, std::max(pv.x0, pv.x1));
     int za = std::max(0, std::min(pv.z0, pv.z1)), zb = std::min(w.H - 1, std::max(pv.z0, pv.z1));
-    int r = pv.customColour ? pv.r : pv.valid ? 40 : 230, g = pv.customColour ? pv.g : pv.valid ? 220 : 40, b = pv.customColour ? pv.b : 40;
+    int r = pv.customColour ? pv.r : pv.valid ? 0 : 240, g = pv.customColour ? pv.g : pv.valid ? 140 : 20, b = pv.customColour ? pv.b : pv.valid ? 205 : 40;
     for (int x = xa; x <= xb; x++)
       for (int zz = za; zz <= zb; zz++) {
         // View tile = min corner over the tile's four vertices.
@@ -1192,7 +1197,7 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
       label_ = scene->cost;
       int alt = world_->altAt(scene->cost.tileX, scene->cost.tileZ);
       projectSub(cam, scene->cost.tileX * 256 + 128, scene->cost.tileZ * 256 + 128, alt * 256, labelX_, labelY_);
-      labelX_ += 12; labelY_ -= 12;
+      labelX_ -= 2; labelY_ += 40;   // observed: label box top-left sits (-2, +40) from the footprint centre
       std::string text = "$" + groupDigits(scene->cost.cost);
       if (textHook_) textHook_(labelX_, labelY_, text, scene->cost.affordable);
       else if (costFont_ && costFont_->loaded())

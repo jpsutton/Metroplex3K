@@ -2,3 +2,5 @@ build/
 *.png
 .cache/
 build-release/
+shots/
+build-debug/

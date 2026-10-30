@@ -75,8 +75,13 @@ ToolMenuLayout toolMenuLayout(int screenH) {
   } else if (hc == 1) {
     L.pieces = {{UiBig, 0xFFFF, 0, false}, {UiBig, 0xFFFE, 417, false}};
   } else {
-    L.pieces = {{Ui1024, 0xFFFD, 0, false}, {UiBig, 0xFFFF, 97, false}, {Ui1024, 0xFFFE, 97 + 417, false}};
-    if (screenH > 768) L.pieces.push_back({Ui1024, 0xFFFC, 97 + 417 + 96, true});
+    // FFFE is the column's bottom cap (bevelled bottom edge): it sits against the top of the navigator panel
+    // (navTop - 90 so its bevel is hidden under the panel), and the FFFC filler tiles between FFFF and the cap
+    // [OBSERVED: no seam at any window height]. At 768 the cap is directly below FFFF.
+    const int capY = std::max(97 + 417, screenH - kNavPanelH - 90);
+    L.pieces = {{Ui1024, 0xFFFD, 0, false}, {UiBig, 0xFFFF, 97, false}};
+    if (screenH > 768) L.pieces.push_back({Ui1024, 0xFFFC, 97 + 417, true, capY});
+    L.pieces.push_back({Ui1024, 0xFFFE, capY, false});
   }
   return L;
 }
@@ -177,6 +182,13 @@ bool Skin::load(ResourceDb& db, int screenH, int screenW) {
   bind("rci", UiBig, 0x42FB77F6);
   for (uint32_t k = 0; k < 6; k++) bind("speed." + std::to_string(k), UiBig, 0x52FB06E4 + k);
   bind("help", UiBig, 0x52FB06EA);
+  // Navigator panel pieces (bottom-right): top-left, top-right, bottom (160 wide), layers strip, 4 zoom/rotate strips.
+  bind("nav.tl", UiBig, 0x22F96E32); bind("nav.tr", UiBig, 0x22F96E33); bind("nav.bot", UiBig, 0x22F96E34);
+  bind("nav.layers", UiBig, 0x22F96E35);   // 22F96E31 is the lattice (grid) strip
+  for (uint32_t k = 0; k < 4; k++) bind("nav.btn." + std::to_string(k), UiBig, 0x22F96E2D + k);
+  // Pause / run buttons (spec 09 4.2): lit, hover (yellow) and unlit (grey) faces.
+  bind("pause", UiBig, 0x52FB06E0); bind("pause.hover", UiBig, 0x52FB06E1); bind("pause.off", UiBig, 0x52FB06EB);
+  bind("run", UiBig, 0x52FB06E2); bind("run.hover", UiBig, 0x52FB06E3); bind("run.off", UiBig, 0x52FB06EC);
 
   // Generic controls.
   bind("button", Sys, 0xE2B66DB8);
@@ -192,7 +204,10 @@ bool Skin::load(ResourceDb& db, int screenH, int screenW) {
 
   // Front end: pick the 800x600 set when the window can hold it and it exists, else 640x480.
   bool big = w_ >= 800 && h_ >= 600;
-  if (big && fetch(Main, 0x01140000)) {
+  if (big && fetch(Main, 0x22729921)) {   // observed: the skyline image is the original's 800x600 menu art
+    bind("menu.bg", Main, 0x22729921);
+    for (uint32_t k = 0; k < 9; k++) bind("menu.btn." + std::to_string(k), Main, 0x22729930 + k);
+  } else if (big && fetch(Main, 0x01140000)) {
     bind("menu.bg", Main, 0x01140000);
     for (uint32_t k = 0; k < 9; k++) bind("menu.btn." + std::to_string(k), Main, 0x01140001 + k);
   }
@@ -237,7 +252,7 @@ bool Skin::drawRootPanel(Ui& ui, int ox, int oy, int hover, int selected) {
     const Image* im = get("piece." + hex(p.group, 8) + "." + hex(p.inst, 4));
     if (!im) continue;
     if (p.tileDown) {
-      for (int y = oy + p.y; y < ui.H; y += im->h) ui.blit(*im, ox, y);
+      for (int y = oy + p.y; y < (p.until ? oy + p.until : ui.H); y += im->h) ui.blit(*im, ox, y);
     } else {
       ui.blit(*im, ox, oy + p.y);
     }

@@ -37,7 +37,7 @@ static void putAc(BitW& w, int run, int level) {
 
 static void encBlock(BitW& w, const float px[64], int comp, int quant, int& lastDc) {
   float T[64]; fdct(px, T);
-  int dc = int(std::lround(T[0] / 32.0f));
+  int dc = int(std::lround(T[0] / 8.0f));
   int diff = dc - lastDc; lastDc = dc;
   int size = 0; while ((1 << size) <= std::abs(diff)) size++;
   uint16_t code; int len; tqiDcCode(comp != 0, size, code, len);
@@ -104,7 +104,7 @@ static double psnr(const std::vector<uint32_t>& a, const std::vector<uint32_t>& 
 }
 
 static void testRoundTrip() {
-  for (int q : {107, 104}) for (auto [W, H] : {std::pair{64, 48}, std::pair{50, 38}, std::pair{320, 48}}) {
+  for (int q : {100, 98}) for (auto [W, H] : {std::pair{64, 48}, std::pair{50, 38}, std::pair{320, 48}}) {
     auto img = testImage(W, H);
     Bytes f = encodeFrame(img, W, H, q);
     std::vector<uint32_t> out;
@@ -113,24 +113,24 @@ static void testRoundTrip() {
     CHECK(out.size() == size_t(W) * H);
     if (out.size() == img.size()) { double p = psnr(img, out); if (p < 27) std::fprintf(stderr, "psnr %.1f q%d %dx%d\n", p, q, W, H); CHECK(p > 27); }
   }
-  {  // smooth gradient (no sharp chroma edge): high fidelity at the finest quantiser
+  {  // smooth gradient (no sharp chroma edge): high fidelity at a fine quantiser (real INTRO.TGQ uses q ~96-100)
     int W = 64, H = 48; std::vector<uint32_t> v(size_t(W) * H);
     for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) v[size_t(y) * W + x] = 0xFF000000u | uint32_t(x * 255 / W) << 16 | uint32_t(y * 255 / H) << 8 | 128u;
-    Bytes g = encodeFrame(v, W, H, 107); std::vector<uint32_t> o;
+    Bytes g = encodeFrame(v, W, H, 100); std::vector<uint32_t> o;
     CHECK(decodeTqiFrame(g.data(), g.size(), W, H, o)); CHECK(psnr(v, o) > 35);
-    Bytes g2 = encodeFrame(v, W, H, 90); std::vector<uint32_t> o2;  // coarser -> smaller and worse
+    Bytes g2 = encodeFrame(v, W, H, 60); std::vector<uint32_t> o2;  // coarser -> smaller and worse
     CHECK(decodeTqiFrame(g2.data(), g2.size(), W, H, o2)); CHECK(g2.size() <= g.size()); CHECK(psnr(v, o2) < psnr(v, o) && psnr(v, o2) > 22);
   }
   // flat colour: near exact
   std::vector<uint32_t> flat(32 * 32, 0xFF3070B0u);
-  Bytes f = encodeFrame(flat, 32, 32, 107);
+  Bytes f = encodeFrame(flat, 32, 32, 100);
   std::vector<uint32_t> out; CHECK(decodeTqiFrame(f.data(), f.size(), 32, 32, out));
   CHECK(psnr(flat, out) > 30);
 }
 
 static void testRobust() {
   auto img = testImage(64, 48);
-  Bytes f = encodeFrame(img, 64, 48, 107);
+  Bytes f = encodeFrame(img, 64, 48, 100);
   std::vector<uint32_t> out;
   for (size_t n = 0; n < f.size(); n += 3) {  // truncation at every length
     bool ok = decodeTqiFrame(f.data(), n, 64, 48, out);
@@ -166,7 +166,7 @@ static void testPlayer() {
   std::vector<std::vector<uint32_t>> imgs;
   for (int i = 0; i < NF; i++) {
     imgs.push_back(testImage(W, H, i * 10));
-    chunk(file, "pIQT", encodeFrame(imgs.back(), W, H, 107));
+    chunk(file, "pIQT", encodeFrame(imgs.back(), W, H, 100));
     // audio chunk: 28 frames, stereo, silent codes
     Bytes a; put32(a, 28); for (int k = 0; k < 4; k++) put16(a, 0);
     a.push_back(0); a.push_back(0); for (int k = 0; k < 28; k++) a.push_back(0);

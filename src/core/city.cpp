@@ -1,4 +1,5 @@
 #include "core/city.h"
+#include "core/occ_defaults.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -685,6 +686,15 @@ bool City::plopAgent(uint32_t id, uint32_t agent, int sx, int sz, int x, int z, 
   addOccupant(o);
   zones.buildingAdded(agent, sx, sz, 1);
   syncFacilities();
+  {  // spec 10 6.2.5: observed per-class values for a new building
+    Occupant& placed = world_->occupants.back();
+    int lmax = 0, ld = 0;
+    auto pit = plantAt_.find({x, z});
+    if (pit != plantAt_.end())
+      for (const auto& p : power.plants()) if (p.id == pit->second) { lmax = p.lmax; ld = p.ld; }
+    cal::Date d = clock.date();
+    applyNewBuildingDefaults(placed, d.year, cal::dayOfYear(clock.jdn()), lmax, ld);
+  }
   return true;
 }
 

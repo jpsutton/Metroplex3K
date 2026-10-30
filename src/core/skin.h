@@ -28,10 +28,12 @@ int cell4For(bool enabled, bool pressed, bool checked, bool hover);
 // 8-cell check box / radio strip: cells 0..3 unchecked, 4..7 checked, each in 4-cell state order [OPEN].
 int cell8For(bool enabled, bool pressed, bool checked, bool hover);
 
+constexpr int kNavPanelH = 164;       // navigator panel height (bottom-right), see game_nav.cpp
+
 // Tool menu layout (spec/08 section 7), chosen by screen height.
 struct ToolMenuLayout {
   struct Root { int id = 0, x = 0, y = 0, dx = 0, dy = 0; bool hasSub = false; };
-  struct Piece { uint32_t group = 0, inst = 0; int y = 0; bool tileDown = false; };
+  struct Piece { uint32_t group = 0, inst = 0; int y = 0; bool tileDown = false; int until = 0; };  // until: last tiled y (0 = window bottom)
   bool valid = false;
   int heightClass = 480;                // 480, 600 or 1000 (">600")
   int width = 96;                       // column width

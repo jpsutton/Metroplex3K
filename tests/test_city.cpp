@@ -156,6 +156,12 @@ int main() {
   CHECK(w2.raw->findInner(keys::ResLayer) && w2.raw->findInner(keys::ZoneMgr));
   Bytes f2 = saveCity(w2);
   CHECK(f2 == f1);  // loaded city re-saves identically
+  {  // spec 10 6.2.5: the rebuilt coal plant carries observed new-building properties and they round-trip
+    const Occupant* plant = nullptr;
+    for (const auto& o : w2.occupants) if (o.agentType == 12111 && o.x == 42 && o.z == 30) plant = &o;
+    CHECK(plant && plant->hasDate && plant->intProps.size() == 4 && plant->intProps[0].first == 0x2351FAF8 &&
+          plant->intProps[0].second == 0 && plant->intProps[1].second > plant->intProps[2].second && plant->intProps[3].second == 0);
+  }
   // outer unknown record survives too
   w2.raw->setOuter(unkOuter, Bytes{9, 9, 9});
   Bytes f3 = saveCity(w2);

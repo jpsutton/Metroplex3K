@@ -154,7 +154,7 @@ void Game::hotkeyCommand(int cmd, int, int arg2) {
     case 33: case 91: case 102: quit_ = true; break;
     case 35: paused_ = !paused_; sound(paused_ ? 24 : 23); break;
     case 36: speed_ = std::max(1, speed_ - 1); break;
-    case 37: speed_ = std::min(3, speed_ + 1); break;
+    case 37: speed_ = std::min(4, speed_ + 1); break;
     case 40: cheatOpen_ = true; break;
     case 41: cam_.zoom = std::min(4, cam_.zoom + 1); sound(1); break;
     case 42: cam_.zoom = std::max(0, cam_.zoom - 1); sound(2); break;
@@ -448,6 +448,8 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
     case Screen::ScenarioEnd: drawScenarioEnd(); break;
   }
   drawMessage();
+  // Over any HUD element, window or dialog the cursor is the normal desktop arrow; tool cursors only apply on the map.
+  if ((uiHit_ && !panning_) || scr_ != Screen::InCity) cursorName_.clear();
   if (!ui_.tooltip.empty()) {
     int tw = ui_.textWidth(ui_.tooltip);
     Rect r{std::min(in.mx + 12, w - tw - 8), in.my + 18, tw + 8, 18};
@@ -617,59 +619,88 @@ void Game::drawHud() {
   std::string date = std::string(kMonths[month]) + " " + std::to_string(world_.info.year);
   std::string funds = "$" + groupDigits(sim_.funds), popText = "Pop " + groupDigits(sim_.population());
   uint32_t fundsCol = sim_.funds < 0 ? rgb(255, 0, 0) : 0;
+  // Navigator panel (mini-map, zoom, rotate, layers) is in the bottom-right corner; the RCI indicator is just left of it
+  // (spec 08 4.2 observed). Both are anchored to the window, not to the bar art.
+  const int navX = navigatorRect(bh).x;
+  auto centredField = [&](const Rect& r, const std::string& t, uint32_t col) {
+    ui_.textCentered(r, t, "main10", col);   // spec 08 4.2: text centred in its field rect
+  };
   if (skinBar) {
-    ui_.text(place.fieldA.x, place.fieldA.y, world_.info.cityName);
-    ui_.text(place.fieldB.x, place.fieldB.y, groupDigits(sim_.population()));
-    ui_.text(place.fieldC.x, place.fieldC.y, funds, "main10", fundsCol);
-    ui_.text(place.fieldD.x, place.fieldD.y, date);
+    centredField(place.fieldA, world_.info.cityName, 0);
+    centredField(place.fieldB, groupDigits(sim_.population()), 0);
+    centredField(place.fieldC, funds, fundsCol);
+    centredField(place.fieldD, date, 0);
   } else {
     ui_.text(8, H_ - bh + 8, world_.info.cityName);
     ui_.text(180, H_ - bh + 8, date);
     ui_.text(280, H_ - bh + 8, funds, "main10", fundsCol);
     ui_.text(400, H_ - bh + 8, popText);
   }
-  int bx = skinBar ? std::max(520, place.fieldD.x + place.fieldD.w + 16) : 520;
-  if (ui_.button({bx, H_ - bh + 3, 44, 24}, paused_ ? "Run" : "Pause")) { paused_ = !paused_; sound(paused_ ? 24 : 23); }
-  for (int i = 1; i <= 3; i++)
-    if (ui_.button({bx + 48 + (i - 1) * 26, H_ - bh + 3, 24, 24}, std::to_string(i), true, !paused_ && speed_ == i)) { speed_ = i; paused_ = false; sound(24 + i); }
-  int vx = bx + 140;
-  if (ui_.button({vx, H_ - bh + 3, 26, 24}, "+")) { if (cam_.zoom < 4) sound(1); cam_.zoom = std::min(4, cam_.zoom + 1); }
-  if (ui_.button({vx + 28, H_ - bh + 3, 26, 24}, "-")) { if (cam_.zoom > 0) sound(2); cam_.zoom = std::max(0, cam_.zoom - 1); }
-  auto rot = [&](int d) {
-    float Wf = float(world_.W), Hf = float(world_.H), x, z;
-    switch (cam_.rot & 3) { case 0: x = cam_.u; z = cam_.v; break; case 1: x = cam_.v; z = Wf - cam_.u; break; case 2: x = Wf - cam_.u; z = Hf - cam_.v; break; default: x = Hf - cam_.v; z = cam_.u; }
-    cam_.rot = (cam_.rot + d + 4) & 3; renderer_.centreOnWorld(cam_, x, z); sound(4);
-  };
-  if (ui_.button({vx + 56, H_ - bh + 3, 26, 24}, "<")) rot(-1);
-  if (ui_.button({vx + 84, H_ - bh + 3, 26, 24}, ">")) rot(1);
-  if (ui_.button({vx + 112, H_ - bh + 3, 40, 24}, "Grid", true, ropt_.grid)) ropt_.grid = !ropt_.grid;
-  if (ui_.button({vx + 156, H_ - bh + 3, 50, 24}, "Query", true, tool_ == ToolKind::Query)) setTool(ToolKind::Query);
-  if (ui_.button({vx + 210, H_ - bh + 3, 40, 24}, "Map")) openWindow("map");
-  // RCI bars.
-  int rx = W_ - 110;
+
+  // Pause / run / speed (spec 09 4.2). With the skin the art is anchored at P2 (pause), P1 (run) and P4 (speed lights).
+  auto tip = [&](uint32_t id, const char* fb) { std::string t = str(0x225872FE, id); return t.empty() ? std::string(fb) : t; };
+  const int fbx = 520;  // fallback (no art) button strip
+  auto setSpeedBtn = [&](int sp) { speed_ = sp; paused_ = false; sound(24 + sp); };
+  const Image* imPause = skinBar ? skin_.get("pause") : nullptr;
+  if (skinBar && imPause && skin_.get("run") && skin_.get("speed.0")) {
+    Rect pr{place.p2x, place.p2y, 22, 22}, rr{place.p1x, place.p1y, 26, 22};
+    // Lit (red / green) for the current state, grey otherwise; hover shows the yellow variant.
+    const Image* pa = ui_.hover(pr) ? skin_.get("pause.hover") : paused_ ? imPause : skin_.get("pause.off");
+    const Image* ra = ui_.hover(rr) ? skin_.get("run.hover") : !paused_ ? skin_.get("run") : skin_.get("run.off");
+    if (pa) ui_.blit(*pa, pr.x, pr.y);
+    if (ra) ui_.blit(*ra, rr.x, rr.y);
+    if (ui_.hover(pr)) ui_.tooltip = tip(0x64, "Pause");
+    if (ui_.hover(rr)) ui_.tooltip = tip(0x65, "Run");
+    if (ui_.clicked(pr) && !paused_) { paused_ = true; sound(24); }
+    if (ui_.clicked(rr) && paused_) { paused_ = false; sound(23); }
+    int sp = std::max(1, std::min(4, speed_));
+    ui_.blit(*skin_.get("speed." + std::to_string(sp - 1)), place.p4x, place.p4y);
+    static const char* spTip[4] = {"Turtle", "Llama", "Cheetah", "African Swallow"};
+    for (int i = 0; i < 4; i++) {
+      Rect cr{place.p4x + 3 + i * 11, place.p4y + 4, 10, 12};
+      if (ui_.hover(cr)) ui_.tooltip = tip(0x66 + i, spTip[i]);
+      if (ui_.clicked(cr)) setSpeedBtn(i + 1);
+    }
+    // Help ("?") button, 4-cell strip at P3.
+    // The green "?" arms the query tool (spec 09 7a.4 [OBSERVED]).
+    bool hc = false;
+    skin_.imageButtonCells(ui_, skin_.get("help"), 4, {place.p3x, place.p3y, 40, 39}, tip(0x3C, "Query"), tool_ == ToolKind::Query, true, hc);
+    if (hc) setTool(ToolKind::Query);
+  } else {
+    if (ui_.button({fbx, H_ - bh + 3, 44, 24}, paused_ ? "Run" : "Pause")) { paused_ = !paused_; sound(paused_ ? 24 : 23); }
+    for (int i = 1; i <= 4; i++)
+      if (ui_.button({fbx + 48 + (i - 1) * 26, H_ - bh + 3, 24, 24}, std::to_string(i), true, !paused_ && speed_ == i)) setSpeedBtn(i);
+  }
+
+  drawNavigator(bh);
+
+  // RCI bars: bottom-anchored, just left of the navigator.
+  int rx = navX - RciGeometry::imgW, ry = H_ - RciGeometry::imgH;
   const Valve* v[3] = {&sim_.valveR, &sim_.valveC, &sim_.valveI};
   uint32_t cols[3] = {rgb(0, 192, 0), rgb(0, 0, 192), rgb(192, 192, 0)};
   const char* nm[3] = {"R", "C", "I"};
   bool skinRci = haveData_ && skin_.loaded() &&
-                 skin_.drawRciIndicator(ui_, W_ - RciGeometry::imgW - 4, H_ - bh - RciGeometry::imgH - 28,
-                                        v[0]->value * 3.0 / 2000, v[1]->value * 3.0 / 2000, v[2]->value * 3.0 / 2000);
+                 skin_.drawRciIndicator(ui_, rx, ry, v[0]->value * 3.0 / 2000, v[1]->value * 3.0 / 2000, v[2]->value * 3.0 / 2000);
+  if (skinRci && ui_.hover({rx, ry, RciGeometry::imgW, RciGeometry::imgH})) uiHit_ = true;
   for (int i = 0; i < 3 && !skinRci; i++) {
-    int cx = rx + i * 34;
+    int cx = rx + i * 14;
     int hgt = std::max(-12, std::min(12, v[i]->value * 12 / 2000));
-    ui_.fill({cx, H_ - bh + 15, 14, 1}, ui_.panelDark);
-    if (hgt >= 0) ui_.fill({cx, H_ - bh + 15 - hgt, 14, hgt}, cols[i]); else ui_.fill({cx, H_ - bh + 16, 14, -hgt}, cols[i]);
-    ui_.text(cx + 16, H_ - bh + 8, nm[i]);
+    ui_.fill({cx, H_ - bh + 15, 10, 1}, ui_.panelDark);
+    if (hgt >= 0) ui_.fill({cx, H_ - bh + 15 - hgt, 10, hgt}, cols[i]); else ui_.fill({cx, H_ - bh + 16, 10, -hgt}, cols[i]);
+    ui_.text(cx, H_ - bh + 8, nm[i]);
   }
-  // Ticker strip above the bar.
-  drawTicker({122, H_ - bh - 24, W_ - 126, 22});
-  if (tool_ != ToolKind::None)
-    ui_.text(126, H_ - bh - 42, "Tool: " + toolName_ + "   (right click or Esc to cancel)", "main10", rgb(255, 255, 255));
-  if (!statusLine_.empty()) ui_.text(126, H_ - bh - 58, statusLine_, "main10", rgb(255, 255, 200));
+  // News ticker: the bar's text line when the skin gives one, else a strip above the bar.
+  if (skinBar) drawTicker(place.textLine);
+  else drawTicker({122, H_ - bh - 24, W_ - 126, 22});
+  const int tipY = H_ - bh - 18;
+  (void)tipY;   // the original draws no tool-name or coordinate overlay above the bar [OBSERVED]
   if (costShow_ && !costText_.empty()) {
+    // Observed (spec 25 9.4): cream box, 1 px black border, black text (red when unaffordable), 16 px tall.
     int tw = ui_.textWidth(costText_);
-    Rect cr{std::min(costX_, W_ - tw - 10), std::max(0, costY_ - 16), tw + 8, 18};
-    ui_.fillAlpha(cr, rgb(0, 0, 0), 0.7f);
-    ui_.text(cr.x + 4, cr.y + 2, costText_, "main10", costOk_ ? rgb(255, 255, 255) : rgb(255, 90, 90));
+    Rect cr{std::min(costX_, W_ - tw - 6), std::max(0, costY_), tw + 4, 16};
+    ui_.fill(cr, rgb(0, 0, 0));
+    ui_.fill({cr.x + 1, cr.y + 1, cr.w - 2, cr.h - 2}, rgb(255, 255, 231));
+    ui_.text(cr.x + 2, cr.y + 1, costText_, "main10", costOk_ ? rgb(0, 0, 0) : rgb(222, 44, 41));
   }
 }
 
@@ -860,7 +891,10 @@ void Game::handleScrolling(uint32_t dtMs) {
     for (int i = 0; i < updates; i++) scrollBy(float(vx), float(vy));
     return;
   }
-  if (uiHit_ || dragging_ || !in.mx && !in.my) return;
+  // Edge scrolling (8-px border strips, spec 25 10) is off for now: it was more distracting than helpful and the
+  // original's exact behaviour is unverified. Flip kEdgeScroll to bring it back.
+  constexpr bool kEdgeScroll = false;
+  if (!kEdgeScroll || uiHit_ || dragging_ || (!in.mx && !in.my)) return;
   // Edge scrolling: 8-px border strips of the city view.
   int ex = in.mx < 8 ? -1 : in.mx >= W_ - 8 ? 1 : 0, ey = in.my < 8 ? -1 : in.my >= H_ - 8 ? 1 : 0;
   if (ex || ey) {
@@ -883,8 +917,9 @@ void Game::handleMap() {
   }
   updateHover(tx, tz, onTile);
   if (onTile && in.pressed) {
-    if (tool_ == ToolKind::None) setTool(ToolKind::Query);
-    if (tool_ != ToolKind::Unavailable) { dragging_ = true; ax_ = tx; az_ = tz; }
+    // No tool: the "center" cursor is showing and a click scrolls that point to the screen centre (spec 08 8.2).
+    if (tool_ == ToolKind::None) centreOn(tx, tz);
+    else if (tool_ != ToolKind::Unavailable) { dragging_ = true; ax_ = tx; az_ = tz; }
   }
   // Terrain tools: press-and-hold repeats raise/lower/water/trees; level applies on release.
   if (onTile && dragging_ && in.down && tool_ == ToolKind::Terrain && toolArg_ != 4 && terra_) {

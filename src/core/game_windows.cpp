@@ -220,7 +220,8 @@ void Game::drawQueryPopup() {
   WinEnv E = env();
   WindowResult r = queryWin_.draw(ui_, E, queryInfo_);
   Rect qr = queryWin_.rect; if (qr.w <= 0) qr = {0, 0, 330, 280};
-  if (ui_.hover(qr)) uiHit_ = true;
+  uiHit_ = true;   // the query panel is modal: map clicks are ignored until it is closed (spec 09 7a.4)
+  (void)qr;
   handleWindowResult(r);
   if (r.close || r.has(Act::Close)) showQuery_ = false;
 }

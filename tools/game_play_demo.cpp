@@ -1,11 +1,11 @@
 // Headless play demo: builds a small city through Game and writes screenshots.
-//   game_play_demo [--game DIR] out_prefix
+//   game_play_demo [--game DIR] [--size WxH] out_prefix
 #include <cstdio>
 #include "core/game.h"
 #include "png.h"
 using namespace m3k;
 
-static Game* g; static Input in; static const int W = 1280, H = 800;
+static Game* g; static Input in; static int W = 1280, H = 800;
 static void frame(int n = 1, uint32_t dt = 16) { for (int i = 0; i < n; i++) { g->frame(in, W, H, dt); in.pressed = in.released = in.rightPressed = false; in.wheel = 0; in.text.clear(); for (auto& k : in.key) k = false; } }
 static bool drag(int x0, int z0, int x1, int z1) {
   int ax, ay, bx, by; if (!g->tileScreenPos(x0, z0, ax, ay) || !g->tileScreenPos(x1, z1, bx, by)) return false;
@@ -13,7 +13,7 @@ static bool drag(int x0, int z0, int x1, int z1) {
 }
 int main(int argc, char** argv) {
   std::string game, prefix = "play";
-  for (int i = 1; i < argc; i++) { std::string a = argv[i]; if (a == "--game" && i + 1 < argc) game = argv[++i]; else prefix = a; }
+  for (int i = 1; i < argc; i++) { std::string a = argv[i]; if (a == "--game" && i + 1 < argc) game = argv[++i]; else if (a == "--size" && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &W, &H); else prefix = a; }
   Game gm; g = &gm; gm.setPersistence(false);
   std::string err;
   if (!game.empty() && gm.init(game, err)) { gm.setIntroEnabled(false); } else gm.startDemo(64);

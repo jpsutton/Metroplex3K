@@ -1,0 +1,42 @@
+// Headless UI screenshot. Optionally loads a city file, then runs scripted steps in order:
+//   hud_shot --game DIR [--city FILE] --size WxH [--do STEP]... out.png
+// STEP: move:X,Y | click:X,Y | hold:X,Y (press, 90 frames, release) | frames:N | shot:FILE | cmd:HEXID | key:CODE
+#include <cstdio>
+#include <cstdlib>
+#include <string>
+#include <vector>
+#include "core/game.h"
+#include "png.h"
+using namespace m3k;
+
+int main(int argc, char** argv) {
+  std::string game, city, out = "hud.png"; int W = 1024, H = 768; std::vector<std::string> steps;
+  for (int i = 1; i < argc; i++) {
+    std::string a = argv[i];
+    if (a == "--game" && i + 1 < argc) game = argv[++i];
+    else if (a == "--city" && i + 1 < argc) city = argv[++i];
+    else if (a == "--do" && i + 1 < argc) steps.push_back(argv[++i]);
+    else if (a == "--size" && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &W, &H);
+    else out = a;
+  }
+  Game g; g.setPersistence(false); std::string err;
+  if (!g.init(game, err)) { std::fprintf(stderr, "init: %s\n", err.c_str()); return 1; }
+  g.setIntroEnabled(false);
+  Input in; in.mx = W / 2; in.my = H / 3;
+  auto frame = [&](int n) { for (int i = 0; i < n; i++) { g.frame(in, W, H, 16); in.pressed = in.released = false; in.text.clear(); for (auto& k : in.key) k = false; } };
+  frame(3);
+  if (!city.empty()) { g.requestFile(city); frame(8); }
+  for (const auto& st : steps) {
+    size_t c = st.find(':'); std::string op = st.substr(0, c), arg = c == std::string::npos ? "" : st.substr(c + 1);
+    int x = 0, y = 0; std::sscanf(arg.c_str(), "%d,%d", &x, &y);
+    if (op == "move") { in.mx = x; in.my = y; frame(2); }
+    else if (op == "click") { in.mx = x; in.my = y; frame(2); in.pressed = in.down = true; frame(1); in.released = true; in.down = false; frame(3); }
+    else if (op == "hold") { in.mx = x; in.my = y; frame(2); in.pressed = in.down = true; frame(90); in.released = true; in.down = false; frame(3); }
+    else if (op == "frames") frame(std::atoi(arg.c_str()));
+    else if (op == "cmd") { g.runCommand(uint32_t(std::strtoul(arg.c_str(), nullptr, 16))); frame(3); }
+    else if (op == "shot") writePng(arg, W, H, g.screen());
+  }
+  writePng(out, W, H, g.screen());
+  std::printf("screen %d\n", int(g.currentScreen()));
+  return 0;
+}

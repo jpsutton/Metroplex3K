@@ -28,10 +28,10 @@ extern const uint8_t kTqiZigzag[64];  // zigzag index -> raster index
 // Quantiser scale for a frame quantiser byte: (215 - 2q) * 5, clamped to >= 5.
 int tqiQScale(int quant);
 // Dequantised coefficient at raster index i (AC), in units of 2x the orthonormal 8x8 DCT, so that
-// pixel = IDCT(coef / 2). MPEG-1 style: (|l|*matrix*qscale >> 3), forced odd, sign restored.
+// pixel = IDCT(coef / 2). MPEG-1 style: (|l|*matrix*qscale >> 6), forced odd, sign restored.
 int tqiDequantAc(int level, int rasterIndex, int quant);
-// Dequantised DC from a DC level (same units): 64 per level, i.e. pixel step 4.
-inline int tqiDequantDc(int level) { return level * 64; }
+// Dequantised DC from a DC level (same units): 16 per level, i.e. pixel step 1 (DC level = block mean pixel).
+inline int tqiDequantDc(int level) { return level * 16; }
 
 // Decode one pIQT payload (starting at the width/height header) to 0xAARRGGBB pixels, size
 // width*height from the header (w/h arguments are only a hint and ignored if they disagree).

@@ -125,6 +125,10 @@ class Game {
   void drawCredits(uint32_t dtMs);
   void drawInCity(uint32_t dtMs);
   void drawHud();
+  void drawNavigator(int barH);
+  void rebuildMiniMap();
+  bool navigatorArt() const;
+  Rect navigatorRect(int barH) const;
   void drawToolMenu();
   bool drawSkinnedToolMenu();
   void drawWindows(uint32_t dtMs);
@@ -228,6 +232,8 @@ class Game {
   std::string pathInput_;
   std::string msgText_, lastMsg_;
   Image menuBg_;
+  Image miniMap_;   // navigator diamond, 128x128, view orientation
+  int miniFrame_ = 0;
   bool menuBgTried_ = false;
 
   // intro movie
@@ -249,7 +255,7 @@ class Game {
   World world_;
   Renderer renderer_;
   Camera cam_;
-  RenderOptions ropt_;
+  RenderOptions ropt_ = [] { RenderOptions o; o.grid = true; return o; }();   // grid on by default
   CityConfig cityCfg_;
   std::unique_ptr<AudioSystem> audio_;
   Sim sim_;

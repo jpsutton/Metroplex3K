@@ -79,6 +79,7 @@ void parseCityInfo(const uint8_t* p, size_t n, World& w) {
   w.info.mayorName = rdString(r);
   w.info.dayOfYear = int(r.u32()); w.info.year = int(r.u32());
   w.info.gameSpeed = int(r.u32()); w.info.foundingYear = int(r.u32());
+  if (r.remaining() >= 2) { w.info.flagA = r.u8(); w.info.flagB = r.u8(); }
   if (mw == 0 || mh == 0 || mw > 1024 || mh > 1024) throw FormatError("city info: bad map size");
   w.init(int(mw), int(mh));
 }
@@ -150,12 +151,13 @@ void parseOccupants(const uint8_t* cp, size_t cn, const uint8_t* ep, size_t en, 
     if (o.sizeZ == 0) o.sizeZ = 1;
     o.keyType = k.type; o.occId = k.instance;
     if (flags & (1u << 21)) o.name = rdString(r);
-    if (flags & (1u << 22)) r.skip(8);
+    o.boolA = (flags >> 29) & 1; o.boolB = (flags >> 30) & 1;
+    if (flags & (1u << 22)) { o.hasDate = true; o.dateYear = int32_t(r.u32()); o.dateDay = int32_t(r.u32()); }
     if (flags & (1u << 27)) o.state = r.u32();
     if (flags & (1u << 28)) r.u32();
-    if (flags & (1u << 23)) { uint32_t m = r.u32(); r.skip(size_t(m) * 8); }
-    if (flags & (1u << 24)) { uint32_t m = r.u32(); for (uint32_t j = 0; j < m; j++) { r.u32(); rdString(r); } }
-    if (flags & (1u << 25)) { uint32_t m = r.u32(); r.skip(size_t(m) * 8); }
+    if (flags & (1u << 23)) { uint32_t m = r.u32(); for (uint32_t j = 0; j < m; j++) { uint32_t id = r.u32(); o.intProps.push_back({id, r.u32()}); } }
+    if (flags & (1u << 24)) { uint32_t m = r.u32(); for (uint32_t j = 0; j < m; j++) { uint32_t id = r.u32(); o.strProps.push_back({id, rdString(r)}); } }
+    if (flags & (1u << 25)) { uint32_t m = r.u32(); for (uint32_t j = 0; j < m; j++) { uint32_t id = r.u32(); uint32_t u = r.u32(); float f; __builtin_memcpy(&f, &u, 4); o.floatProps.push_back({id, f}); } }
     if (flags & (1u << 26)) throw FormatError("occupant: object properties not supported");
     w.occupants.push_back(std::move(o));
   }
