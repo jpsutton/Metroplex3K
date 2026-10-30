@@ -118,6 +118,7 @@ class Game {
   void finishIntro();
   void startNewCity();
   void beginTerrainEdit();
+  void beginTerrainEditFrom(bool fromNewCity);
   void acceptTerrain();
   void loadFile(const fs::path& p);
   void saveCurrent(const std::string& name);
@@ -312,7 +313,7 @@ class Game {
   int disasterX_ = -1, disasterZ_ = -1;
   AutomataData automata_;
   bool automataLoaded_ = false;
-  struct StreetHost;
+  struct StreetHost {};  // placeholder until StreetSim host adapter is wired
   std::unique_ptr<StreetHost> streetHost_;
   std::unique_ptr<StreetSim> street_;
   std::unique_ptr<ScenarioController> scen_;

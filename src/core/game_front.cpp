@@ -28,7 +28,6 @@ void Game::loadSettings() {
     nc_name_ = prefs_.get("newcity.name", nc_name_);
     nc_mayor_ = prefs_.get("newcity.mayor", nc_mayor_);
     nc_size_ = int(prefs_.getInt("newcity.size", nc_size_));
-    showTips_ = false;
   }
   prefsState_ = prefsFromSettings(general_, prefs_);
   showTip_ = persist_ && prefsState_.showTips && false;
