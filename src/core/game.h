@@ -20,6 +20,7 @@
 #include "core/disasters.h"
 #include "core/flora.h"
 #include "core/font.h"
+#include "core/hotkeys.h"
 #include "core/gamedata.h"
 #include "core/intro.h"
 #include "core/render.h"
@@ -172,6 +173,8 @@ class Game {
   void startScenarioHooks();
   void checkScenarioEnd();
   void loadHotkeys();
+  void hotkeyCommand(int cmd, int arg1, int arg2);
+  void handleKeys(const Input& in);
   // windows (game_windows.cpp)
   void handleWindowResult(const WindowResult& r);
   void buildQueryInfo(int tx, int tz, QueryInfo& q);
@@ -349,6 +352,7 @@ class Game {
   std::unique_ptr<StreetSim> street_;
   std::unique_ptr<ScenarioController> scen_;
   std::map<char, uint32_t> hotkeys_;
+  HotkeyTable hotkeyTable_;
 
   // dialogs
   struct FileRow { fs::path path; std::string label; };

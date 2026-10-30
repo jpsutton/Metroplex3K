@@ -122,12 +122,68 @@ Game::Game() { menu_.buildFallback(); menuLoaded_ = true; loadHotkeys(); }
 Game::~Game() = default;
 
 void Game::loadHotkeys() {
-  hotkeys_.clear();
-  const struct { char k; uint32_t t; } hk[] = {
-      {'q', 0x42E88586}, {'w', 0x02E88915}, {'e', 0xA2E8893B}, {'a', 0x02E88949}, {'s', 0xA2E8895A}, {'d', 0x02E88968},
-      {'z', 0xC2E8898F}, {'x', 0xA2E8899D}, {'c', 0x02E889AA}, {'v', 0x82E88C9C}, {'l', 0x42C2F8BF}, {'r', 0xC2B5DE77},
-      {'t', 0x42B5DE98}, {'b', 0xE3166801}};
-  for (const auto& h : hk) hotkeys_[h.k] = h.t;
+  hotkeyTable_ = HotkeyTable();
+  if (haveData_) {
+    fs::path dir = resolveCI(data_.appsDir(), "Res/Hotkeys");
+    fs::path f = dir.empty() ? fs::path() : resolveCI(dir, data_.language + ".IXF");
+    IxfFile ix;
+    Bytes b;
+    if (!f.empty() && ix.open(f) && ix.getBytes({0xA2E3D533, 0xA2E3D56D, 1}, b) && !b.empty())
+      hotkeyTable_.parse(std::string(b.begin(), b.end()));
+  }
+  if (hotkeyTable_.size() == 0) hotkeyTable_.loadDefaults();
+}
+
+void Game::hotkeyCommand(int cmd, int, int arg2) {
+  (void)arg2;
+  uint32_t param = 0;
+  if (uint32_t cls = hotkeyToolClass(cmd, &param)) { runTarget(cls, param); return; }
+  auto scroll = [&](float dx, float dy) {
+    float Wt = 8.f * float(1 << cam_.zoom), Ht = Wt / 2;
+    float du = (dy / (Ht / 2) - dx / (Wt / 2)) / 2, dv = (dy / (Ht / 2) + dx / (Wt / 2)) / 2;
+    cam_.u = std::max(0.f, std::min(float(world_.W), cam_.u + du)); cam_.v = std::max(0.f, std::min(float(world_.H), cam_.v + dv));
+  };
+  auto rotate = [&](int d) {
+    float Wf = float(world_.W), Hf = float(world_.H), x, z;
+    switch (cam_.rot & 3) { case 0: x = cam_.u; z = cam_.v; break; case 1: x = cam_.v; z = Wf - cam_.u; break; case 2: x = Wf - cam_.u; z = Hf - cam_.v; break; default: x = Hf - cam_.v; z = cam_.u; }
+    cam_.rot = (cam_.rot + d + 4) & 3; renderer_.centreOnWorld(cam_, x, z);
+  };
+  switch (cmd) {
+    case 19: openWindow("advisors"); break;
+    case 21: openWindow("ordinances"); break;
+    case 33: case 91: case 102: quit_ = true; break;
+    case 35: paused_ = !paused_; sound(paused_ ? 24 : 23); break;
+    case 36: speed_ = std::max(1, speed_ - 1); break;
+    case 37: speed_ = std::min(3, speed_ + 1); break;
+    case 40: cheatOpen_ = true; break;
+    case 41: cam_.zoom = std::min(4, cam_.zoom + 1); sound(1); break;
+    case 42: cam_.zoom = std::max(0, cam_.zoom - 1); sound(2); break;
+    case 43: rotate(1); sound(4); break;
+    case 44: rotate(-1); sound(4); break;
+    case 45: scroll(-32, 0); break;
+    case 46: scroll(0, -32); break;
+    case 47: scroll(32, 0); break;
+    case 48: scroll(0, 32); break;
+    case 49: break;   // toggle UI panels (not modelled: panels are always visible)
+    case 50: if (hoverValid_) centreOn(hoverX_, hoverZ_); break;
+    case 63: ropt_.grid = !ropt_.grid; break;
+    case 75: case 76: cam_.zoom = 0; break;
+    case 77: case 78: cam_.zoom = 1; break;
+    case 79: case 80: cam_.zoom = 2; break;
+    case 81: case 82: cam_.zoom = 3; break;
+    case 83: case 84: cam_.zoom = 4; break;
+    case 85: setTool(ToolKind::None); break;
+    case 113: takeSnapshot(snapSizeIdx_); break;
+    case 114: takeSnapshot(std::max(1, std::min(3, arg2 ? arg2 : snapSizeIdx_))); break;
+    default: break;   // 74, 96-100, 104, 108, 112, 115 and unknown commands: no effect
+  }
+}
+
+void Game::handleKeys(const Input& in) {
+  for (const KeyEvent& k : in.keyDowns) {
+    const HotkeyBinding* b = hotkeyTable_.find(k.vk, k.mods);
+    if (b) hotkeyCommand(b->cmd, b->arg1, b->arg2);
+  }
 }
 
 bool Game::init(const fs::path& gameRoot, std::string& err) {
@@ -144,6 +200,7 @@ bool Game::init(const fs::path& gameRoot, std::string& err) {
   cityCfg_.load(data_);
   initAudio();
   loadSchemes();
+  loadHotkeys();
   IniFile mi;
   if (data_.ini().load("MenuItem.INI", mi)) {
     MenuTree t;
@@ -776,20 +833,7 @@ void Game::drawInCity(uint32_t dtMs) {
       float du = (dy / (Ht / 2) - dx / (Wt / 2)) / 2, dv = (dy / (Ht / 2) + dx / (Wt / 2)) / 2;
       cam_.u = std::max(0.f, std::min(float(world_.W), cam_.u + du)); cam_.v = std::max(0.f, std::min(float(world_.H), cam_.v + dv));
     }
-    for (char c : in.text) {
-      if (c == ' ') { paused_ = !paused_; sound(paused_ ? 24 : 23); }
-      else if (c == 'g') ropt_.grid = !ropt_.grid;
-      else if (c == '+' || c == '=') cam_.zoom = std::min(4, cam_.zoom + 1);
-      else if (c == '-') cam_.zoom = std::max(0, cam_.zoom - 1);
-      else if (c >= 'A' && c <= 'Z') {
-        // Ctrl+key equivalents are host dependent; capital letters open windows.
-        if (c == 'B') runTarget(0x025DDC4A);
-        else if (c == 'O') runTarget(0x724A82D7);
-        else if (c == 'M') runTarget(0x411164F1);
-        else if (c == 'N') runTarget(0x630288E9);
-        else if (c == 'P') runTarget(0x724A82D0);
-      } else { auto it = hotkeys_.find(c); if (it != hotkeys_.end()) runTarget(it->second); }
-    }
+    handleKeys(in);
     if (in.key[K_TAB]) cheatOpen_ = true;
     if (in.key[K_ESC]) {
       if (showQuery_) showQuery_ = false;

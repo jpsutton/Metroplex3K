@@ -16,6 +16,8 @@ struct Rect {
 
 inline uint32_t rgb(int r, int g, int b) { return rgba(uint8_t(r), uint8_t(g), uint8_t(b)); }
 
+struct KeyEvent { int vk = 0; int mods = 0; };  // Windows virtual-key code, HotkeyMod mask (no auto-repeat)
+
 struct Input {
   int mx = 0, my = 0;
   bool down = false;       // left button currently held
@@ -25,7 +27,8 @@ struct Input {
   int wheel = 0;
   std::string text;        // typed characters this frame
   bool key[16] = {};
-  bool held[4] = {};       // arrows held: left, right, up, down       // see Key enum
+  bool held[4] = {};
+  std::vector<KeyEvent> keyDowns;   // key-down events this frame       // arrows held: left, right, up, down       // see Key enum
 };
 enum Key { K_ENTER, K_ESC, K_BACKSPACE, K_UP, K_DOWN, K_PAGEUP, K_PAGEDOWN, K_TAB, K_LEFT, K_RIGHT };
 

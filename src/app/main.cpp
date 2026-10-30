@@ -12,6 +12,23 @@
 
 using namespace m3k;
 
+// SDL key -> Windows virtual-key code (spec/08 section 5.2); 0 = not a bindable key.
+static int vkFromSdl(SDL_Keycode k) {
+  if (k >= SDLK_a && k <= SDLK_z) return 'A' + int(k - SDLK_a);
+  if (k >= SDLK_0 && k <= SDLK_9) return '0' + int(k - SDLK_0);
+  if (k >= SDLK_KP_1 && k <= SDLK_KP_9) return 97 + int(k - SDLK_KP_1);
+  if (k == SDLK_KP_0) return 96;
+  if (k >= SDLK_F1 && k <= SDLK_F12) return 112 + int(k - SDLK_F1);
+  switch (k) {
+    case SDLK_KP_PLUS: return 107; case SDLK_KP_MINUS: return 109;
+    case SDLK_PAGEUP: return 33; case SDLK_PAGEDOWN: return 34;
+    case SDLK_LEFT: return 37; case SDLK_UP: return 38; case SDLK_RIGHT: return 39; case SDLK_DOWN: return 40;
+    case SDLK_ESCAPE: return 27; case SDLK_SPACE: return 32; case SDLK_RETURN: return 13;
+    case SDLK_COMMA: return 188; case SDLK_PERIOD: return 190; case SDLK_SLASH: return 191;
+    default: return 0;
+  }
+}
+
 // Audio callback: stereo S16 from AudioSystem::mixAudio. The device lock (SDL_LockAudioDevice) is held
 // around Game::frame on the main thread, so the callback never races with game logic.
 static void audioCallback(void* user, Uint8* stream, int len) {
@@ -73,6 +90,7 @@ int main(int argc, char** argv) {
   while (!game.wantQuit()) {
     in.pressed = in.released = in.rightPressed = false; in.wheel = 0; in.text.clear();
     std::memset(in.key, 0, sizeof in.key);
+    in.keyDowns.clear();
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       switch (e.type) {
@@ -90,6 +108,13 @@ int main(int argc, char** argv) {
           break;
         case SDL_TEXTINPUT: in.text += e.text.text; break;
         case SDL_KEYDOWN:
+          if (!e.key.repeat) {
+            int vk = vkFromSdl(e.key.keysym.sym);
+            if (vk) {
+              SDL_Keymod m = SDL_GetModState();
+              in.keyDowns.push_back({vk, ((m & KMOD_SHIFT) ? 1 : 0) | ((m & KMOD_CTRL) ? 2 : 0) | ((m & KMOD_ALT) ? 4 : 0)});
+            }
+          }
           switch (e.key.keysym.sym) {
             case SDLK_RETURN: case SDLK_KP_ENTER: in.key[K_ENTER] = true; break;
             case SDLK_ESCAPE: in.key[K_ESC] = true; break;
@@ -106,10 +131,10 @@ int main(int argc, char** argv) {
       }
     }
     const Uint8* ks = SDL_GetKeyboardState(nullptr);
-    in.held[0] = ks[SDL_SCANCODE_LEFT] || ks[SDL_SCANCODE_A];
-    in.held[1] = ks[SDL_SCANCODE_RIGHT] || ks[SDL_SCANCODE_D];
-    in.held[2] = ks[SDL_SCANCODE_UP] || ks[SDL_SCANCODE_W];
-    in.held[3] = ks[SDL_SCANCODE_DOWN] || ks[SDL_SCANCODE_S];
+    in.held[0] = ks[SDL_SCANCODE_LEFT];
+    in.held[1] = ks[SDL_SCANCODE_RIGHT];
+    in.held[2] = ks[SDL_SCANCODE_UP];
+    in.held[3] = ks[SDL_SCANCODE_DOWN];
     (void)panDrag;
     int w, h; SDL_GetWindowSize(win, &w, &h);
     uint32_t now = SDL_GetTicks();
