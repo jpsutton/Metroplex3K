@@ -11,6 +11,8 @@
 #include "core/terrain_gen.h"
 #include "core/gamedata.h"
 #include "core/render.h"
+#include "core/audio.h"
+#include "core/city.h"
 #include "core/sim.h"
 #include "core/ui.h"
 #include "core/world.h"
@@ -40,6 +42,11 @@ class Game {
   void dropPath(const std::string& path);
   void requestFile(const std::string& path);  // open a city file directly
   std::string windowTitle() const;
+  // Audio hook: null until game data with Res/Sound/AUDIO.INI is open (silent). The host's audio callback
+  // calls audio()->mixAudio() under its own lock (the same lock must be held around frame()).
+  AudioSystem* audio() { return audio_.get(); }
+  Sim& sim() { return sim_; }
+  City& city() { return sim_.city(); }
 
  private:
   // screens
@@ -66,6 +73,10 @@ class Game {
   void setTool(ToolKind k, int a = 0, uint32_t occ = 0);
   void tickSim(uint32_t dtMs);
   void ensureFonts();
+  void initAudio();
+  void openPicker(uint32_t category);
+  void drawPicker();
+  void sound(int id) { if (audio_) audio_->request(id); }
 
   fs::path root_;
   GameData data_;
@@ -86,7 +97,15 @@ class Game {
   Renderer renderer_;
   Camera cam_;
   RenderOptions ropt_;
-  SimData simData_;
+  CityConfig cityCfg_;
+  std::unique_ptr<AudioSystem> audio_;
+  // building picker (power plants, water structures, garbage)
+  struct PickItem { uint32_t occ; };
+  std::vector<PickItem> pickItems_;
+  std::vector<std::string> pickLabels_;
+  bool showPicker_ = false;
+  int pickSel_ = -1, pickScroll_ = 0;
+  std::string pickTitle_;
   Sim sim_;
   std::unique_ptr<Terraformer> terra_;
   Lcg floraLcg_{99};

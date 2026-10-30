@@ -12,6 +12,15 @@
 
 using namespace m3k;
 
+// Audio callback: stereo S16 from AudioSystem::mixAudio. The device lock (SDL_LockAudioDevice) is held
+// around Game::frame on the main thread, so the callback never races with game logic.
+static void audioCallback(void* user, Uint8* stream, int len) {
+  Game* g = static_cast<Game*>(user);
+  AudioSystem* a = g->audio();
+  if (!a) { std::memset(stream, 0, size_t(len)); return; }
+  a->mixAudio(reinterpret_cast<int16_t*>(stream), size_t(len) / 4);
+}
+
 int main(int argc, char** argv) {
   std::string gameArg, cityArg;
   for (int i = 1; i < argc; i++) {
@@ -26,7 +35,7 @@ int main(int argc, char** argv) {
       return 0;
     }
   }
-  if (SDL_Init(SDL_INIT_VIDEO) != 0) { std::cerr << "SDL_Init: " << SDL_GetError() << "\n"; return 1; }
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { std::cerr << "SDL_Init: " << SDL_GetError() << "\n"; return 1; }
   SDL_Window* win = SDL_CreateWindow("Metroplex3K", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 800, SDL_WINDOW_RESIZABLE);
   if (!win) { std::cerr << "window: " << SDL_GetError() << "\n"; return 1; }
   SDL_Renderer* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
@@ -39,6 +48,22 @@ int main(int argc, char** argv) {
   std::string err;
   if (!game.init(root, err) && !err.empty()) std::cerr << err << "\n";
   if (!cityArg.empty()) game.requestFile(cityArg);
+
+  // Audio: opened only when game data with AUDIO.INI is present (also after data is dropped in later);
+  // otherwise the game stays silent.
+  SDL_AudioDeviceID adev = 0;
+  bool audioTried = false;
+  auto openAudio = [&] {
+    if (adev || audioTried || !game.audio()) return;
+    audioTried = true;
+    SDL_AudioSpec want, have;
+    SDL_zero(want);
+    want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 1024;
+    want.callback = audioCallback; want.userdata = &game;
+    adev = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);   // no format changes allowed: mixer is 44.1k S16 stereo
+    if (adev) SDL_PauseAudioDevice(adev, 0); else std::cerr << "audio: " << SDL_GetError() << "\n";
+  };
+  openAudio();
 
   SDL_StartTextInput();
   SDL_Texture* tex = nullptr; int tw = 0, th = 0;
@@ -88,7 +113,10 @@ int main(int argc, char** argv) {
     (void)panDrag;
     int w, h; SDL_GetWindowSize(win, &w, &h);
     uint32_t now = SDL_GetTicks();
+    openAudio();
+    if (adev) SDL_LockAudioDevice(adev);
     game.frame(in, w, h, now - last); last = now;
+    if (adev) SDL_UnlockAudioDevice(adev);
     if (!tex || tw != w || th != h) {
       if (tex) SDL_DestroyTexture(tex);
       tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, w, h); tw = w; th = h;
@@ -99,6 +127,7 @@ int main(int argc, char** argv) {
     SDL_Delay(8);
   }
 done:
+  if (adev) SDL_CloseAudioDevice(adev);
   SDL_Quit();
   return 0;
 }
