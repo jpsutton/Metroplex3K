@@ -778,9 +778,72 @@ void Game::updateHover(int tx, int tz, bool onTile) {
   } else statusLine_.clear();
 }
 
+std::string Game::cursorForTool() const {
+  switch (tool_) {
+    case ToolKind::None: return "CENTER CURSOR";
+    case ToolKind::Query: return "QUERY CURSOR";
+    case ToolKind::Demolish: return "DEMOLISH CLEAR CURSOR";
+    case ToolKind::Snapshot: return "snapshot cursor";
+    case ToolKind::Dispatch: return toolArg_ == 0 ? "DISPATCH POLICE" : toolArg_ == 1 ? "DISPATCH FIREFIGHTERS" : "DISPATCH PLANE";
+    case ToolKind::Zone: {
+      static const char* n[] = {"de-zone cursor", "ZONE RES LOW", "ZONE RES MED", "ZONE RES HIGH", "", "ZONE COM LOW", "ZONE COM MED", "ZONE COM HIGH",
+                                "", "ZONE IND LOW", "ZONE IND MED", "ZONE IND HIGH", "", "", "ZONE AIR PORTS", "ZONE SEA PORTS", "", "ZONE LANDFILL"};
+      if (toolArg_ >= 0 && toolArg_ < 18 && n[toolArg_][0]) return n[toolArg_];
+      return "CENTER CURSOR";
+    }
+    case ToolKind::Terrain:
+      switch (toolArg_) { case 1: return "RAISE TERRAIN"; case 2: return "LOWER TERRAIN"; case 4: return "LEVEL TERRAIN"; case 32: return "PAINT WATER"; default: return "PLANT TREE"; }
+    case ToolKind::Road:
+      switch (NetworkKind(toolArg_ ? toolArg_ : 1)) {
+        case NetworkKind::Rail: return "RAIL ROAD"; case NetworkKind::Power: return "POWER LINES"; case NetworkKind::Pipe: return "WATER PIPES";
+        case NetworkKind::Subway: return "SUBWAY TUBE"; case NetworkKind::Highway: return "AVENUE"; default: return "ROAD";
+      }
+    case ToolKind::Plop: {
+      struct P { uint32_t occ; const char* c; };
+      static const P p[] = {{0xD2, "POLICE"}, {0x1F41, "JAIL"}, {0xD3, "FIRE"}, {0xD1, "HOSPITAL"}, {0x1F94, "SCHOOL"}, {0xD6, "COLLEGE"}, {0xF5, "LIBRARY"},
+                            {0xD4, "MUSEUM"}, {0x0D, "SMALL PARK"}, {0xD5, "BIG PARK"}, {0xDA, "ZOO"}, {0xD7, "BALLPARK"}, {0x234B, "PLAYGROUND"},
+                            {0x234C, "POND"}, {0x1F96, "BUS STOP"}, {0xED, "TRAIN STATION"}, {0xE9, "SUBWAY STATION"}, {0x3E8A, "SUBWAY RAIL CONNECT"}};
+      for (const auto& e : p) if (e.occ == toolOcc_) return e.c;
+      return "REWARDS CURSOR";
+    }
+    default: return "";
+  }
+}
+
+void Game::handleScrolling(uint32_t dtMs) {
+  const Input& in = ui_.in;
+  auto scrollBy = [&](float dx, float dy) {
+    float Wt = 8.f * float(1 << cam_.zoom), Ht = Wt / 2;
+    float du = (dy / (Ht / 2) - dx / (Wt / 2)) / 2, dv = (dy / (Ht / 2) + dx / (Wt / 2)) / 2;
+    cam_.u = std::max(0.f, std::min(float(world_.W), cam_.u + du)); cam_.v = std::max(0.f, std::min(float(world_.H), cam_.v + dv));
+  };
+  if (in.rightPressed && !uiHit_) { panning_ = true; panAnchorX_ = in.mx; panAnchorY_ = in.my; }
+  if (!in.rightDown) panning_ = false;
+  scrollAcc_ += dtMs * 30.0 / 1000.0;
+  int updates = int(scrollAcc_);
+  scrollAcc_ -= updates;
+  if (updates > 4) updates = 4;
+  cursorName_ = cursorForTool();
+  if (panning_) {
+    int dx = (in.mx - panAnchorX_) / 2, dy = (in.my - panAnchorY_) / 2;
+    cursorName_ = panCursorName(dx, dy);
+    int vx = dragScrollVelocity(dx), vy = dragScrollVelocity(dy);
+    for (int i = 0; i < updates; i++) scrollBy(float(vx), float(vy));
+    return;
+  }
+  if (uiHit_ || dragging_ || !in.mx && !in.my) return;
+  // Edge scrolling: 8-px border strips of the city view.
+  int ex = in.mx < 8 ? -1 : in.mx >= W_ - 8 ? 1 : 0, ey = in.my < 8 ? -1 : in.my >= H_ - 8 ? 1 : 0;
+  if (ex || ey) {
+    cursorName_ = panCursorName(ex * 12, ey * 12);
+    for (int i = 0; i < updates; i++) scrollBy(float(ex * 24), float(ey * 24));
+  }
+}
+
 void Game::handleMap() {
   const Input& in = ui_.in;
   if (!world_.W) return;
+  handleScrolling(frameDt_);
   if (in.wheel && !uiHit_) cam_.zoom = std::max(0, std::min(4, cam_.zoom + (in.wheel > 0 ? 1 : -1)));
   int tx = 0, tz = 0;
   bool onTile = !uiHit_ && renderer_.pickGround(cam_, in.mx, in.my, tx, tz);

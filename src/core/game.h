@@ -19,6 +19,7 @@
 #include "core/city.h"
 #include "core/disasters.h"
 #include "core/flora.h"
+#include "core/cursor.h"
 #include "core/font.h"
 #include "core/hotkeys.h"
 #include "core/gamedata.h"
@@ -100,6 +101,10 @@ class Game {
   std::function<void(const std::string& name, int w, int h, const std::vector<uint32_t>& rgba)> onSnapshot;
   const std::vector<std::string>& snapshots() const { return snapshotNames_; }
   const RenderScene& scene() const { return scene_; }
+  // Cursor for the next frame: file stem in Res/UI/Shared/Cursors (empty = host default arrow). The host calls
+  // cursorImage() when the name changes.
+  const std::string& cursorName() const { return cursorName_; }
+  bool cursorImage(const std::string& name, CursorImage& out) { return haveData_ && loadCursor(data_, name, out); }
   // Screen position (inside the last rendered frame) of the middle of a tile; false if off-screen / not pickable. For tools & tests.
   bool tileScreenPos(int tx, int tz, int& sx, int& sy);
   const World& world() const { return world_; }
@@ -308,6 +313,11 @@ class Game {
   std::vector<std::string> snapshotNames_;
   int snapSizeIdx_ = 1;
   bool panning_ = false; int panLastX_ = 0, panLastY_ = 0;
+  int panAnchorX_ = 0, panAnchorY_ = 0;
+  double scrollAcc_ = 0;
+  std::string cursorName_;
+  void handleScrolling(uint32_t dtMs);
+  std::string cursorForTool() const;
   std::vector<RenderScene> unusedScenes_;
   std::vector<Spot>* spotSink_ = nullptr;
   int streetAcc_ = 0;

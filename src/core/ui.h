@@ -24,6 +24,7 @@ struct Input {
   bool pressed = false;    // went down this frame
   bool released = false;   // went up this frame
   bool rightPressed = false;
+  bool rightDown = false;  // right button currently held
   int wheel = 0;
   std::string text;        // typed characters this frame
   bool key[16] = {};

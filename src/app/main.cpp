@@ -87,6 +87,8 @@ int main(int argc, char** argv) {
   Input in;
   uint32_t last = SDL_GetTicks();
   bool panDrag = false;
+  std::string curName;
+  SDL_Cursor* cursor = nullptr;
   while (!game.wantQuit()) {
     in.pressed = in.released = in.rightPressed = false; in.wheel = 0; in.text.clear();
     std::memset(in.key, 0, sizeof in.key);
@@ -101,10 +103,11 @@ int main(int argc, char** argv) {
         case SDL_MOUSEBUTTONDOWN:
           in.mx = e.button.x; in.my = e.button.y;
           if (e.button.button == SDL_BUTTON_LEFT) { in.pressed = true; in.down = true; }
-          else if (e.button.button == SDL_BUTTON_RIGHT) in.rightPressed = true;
+          else if (e.button.button == SDL_BUTTON_RIGHT) { in.rightPressed = true; in.rightDown = true; }
           break;
         case SDL_MOUSEBUTTONUP:
           if (e.button.button == SDL_BUTTON_LEFT) { in.released = true; in.down = false; }
+          else if (e.button.button == SDL_BUTTON_RIGHT) in.rightDown = false;
           break;
         case SDL_TEXTINPUT: in.text += e.text.text; break;
         case SDL_KEYDOWN:
@@ -149,6 +152,20 @@ int main(int argc, char** argv) {
     SDL_UpdateTexture(tex, nullptr, game.screen().data(), w * 4);
     SDL_RenderClear(ren); SDL_RenderCopy(ren, tex, nullptr, nullptr); SDL_RenderPresent(ren);
     SDL_SetWindowTitle(win, game.windowTitle().c_str());
+    if (game.cursorName() != curName) {
+      curName = game.cursorName();
+      if (cursor) { SDL_FreeCursor(cursor); cursor = nullptr; }
+      CursorImage ci;
+      if (!curName.empty() && game.cursorImage(curName, ci) && ci.ok()) {
+        SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormat(0, ci.image.w, ci.image.h, 32, SDL_PIXELFORMAT_ABGR8888);
+        if (surf) {
+          SDL_memcpy(surf->pixels, ci.image.px.data(), size_t(ci.image.w) * ci.image.h * 4);
+          cursor = SDL_CreateColorCursor(surf, ci.hotX, ci.hotY);
+          SDL_FreeSurface(surf);
+        }
+      }
+      SDL_SetCursor(cursor ? cursor : SDL_GetDefaultCursor());
+    }
     SDL_Delay(8);
   }
 done:
