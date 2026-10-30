@@ -97,6 +97,9 @@ class City {
   bool buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path);
   bool bulldoze(int x0, int z0, int x1, int z1);
 
+  // Reason the last player action failed (for the error sound): 0 none/invalid, 1 not enough funds.
+  bool lastFailNoMoney = false;
+
   // ---- queries ----
   bool isRoadTile(int x, int z) const { return inMap(x, z) && transport_[idx(x, z)]; }
   bool isPowerLine(int x, int z) const { return inMap(x, z) && powerLine_[idx(x, z)]; }

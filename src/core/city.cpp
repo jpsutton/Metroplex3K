@@ -533,6 +533,7 @@ int City::zoneCost(int zt) const {
 }
 
 bool City::paintZoneType(int x0, int z0, int x1, int z1, int zt) {
+  lastFailNoMoney = false;
   if (x0 > x1) std::swap(x0, x1);
   if (z0 > z1) std::swap(z0, z1);
   bool any = false;
@@ -543,7 +544,7 @@ bool City::paintZoneType(int x0, int z0, int x1, int z1, int zt) {
       size_t i = idx(x, z);
       if (world_->zone[i] == zt) continue;
       if (zt && !tileBuildable(x, z)) continue;
-      if (budget.funds < cost) return any;
+      if (budget.funds < cost) { lastFailNoMoney = true; return any; }
       budget.funds -= cost;
       world_->zone[i] = uint8_t(zt);
       any = true;
@@ -565,10 +566,11 @@ bool City::plop(uint32_t id, int x, int z, int cost) {
 }
 
 bool City::plopAgent(uint32_t id, uint32_t agent, int sx, int sz, int x, int z, int cost) {
+  lastFailNoMoney = false;
   for (int dx = 0; dx < sx; dx++)
     for (int dz = 0; dz < sz; dz++)
       if (!tileBuildable(x + dx, z + dz)) return false;
-  if (budget.funds < cost) return false;
+  if (budget.funds < cost) { lastFailNoMoney = true; return false; }
   budget.funds -= cost;
   Occupant o;
   o.x = x; o.z = z; o.y = world_->altAt(x, z); o.sizeX = sx; o.sizeZ = sz; o.occId = id;
@@ -629,14 +631,14 @@ bool City::buildNetworkFallback(NetworkKind k, const std::vector<std::pair<int, 
     if (lo < world_->waterAt(x, z) || !flatTile(x, z)) continue;
     if (k == NetworkKind::Pipe) {
       if (pipe_[i]) continue;
-      if (budget.funds < cost) break;
+      if (budget.funds < cost) { lastFailNoMoney = true; break; }
       budget.funds -= cost;
       NetPiece p; p.x = x; p.z = z; p.y = world_->altAt(x, z); p.pieceId = kFallbackPipePiece; p.pieceWord = 0x30000000u | p.pieceId;
       world_->pipes.push_back(p); pipe_[i] = 1; placed.push_back({x, z});
       continue;
     }
     if (transport_[i] || powerLine_[i]) continue;
-    if (budget.funds < cost) break;
+    if (budget.funds < cost) { lastFailNoMoney = true; break; }
     budget.funds -= cost;
     if (k == NetworkKind::Power) {
       NetPiece p; p.x = x; p.z = z; p.y = world_->altAt(x, z); p.pieceId = kFallbackPowerPiece; p.pieceWord = 0x30000000u | p.pieceId;
@@ -660,6 +662,7 @@ bool City::buildNetworkFallback(NetworkKind k, const std::vector<std::pair<int, 
 }
 
 bool City::buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path) {
+  lastFailNoMoney = false;
   if (path.empty()) return false;
   if (!cfg_.haveTiling) return buildNetworkFallback(k, path);
   Tool tool = k == NetworkKind::Road ? TOOL_ROAD : k == NetworkKind::Rail ? TOOL_RAIL : k == NetworkKind::Power ? TOOL_POWER

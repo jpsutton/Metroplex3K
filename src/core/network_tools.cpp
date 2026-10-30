@@ -641,7 +641,7 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
   }
   host.charge(dragPrice);
   res.spent = dragPrice + extraSpent;
-  host.sound(14);
+  host.sound(tool == TOOL_RAIL ? 51 : tool == TOOL_SUBWAY ? 53 : tool == TOOL_POWER ? 16 : tool == TOOL_PIPE ? 50 : 14);  // spec 09 table 5.2
   return res;
 }
 

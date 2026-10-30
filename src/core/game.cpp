@@ -74,8 +74,9 @@ bool Game::init(const fs::path& gameRoot, std::string& err) {
   haveData_ = true; root_ = data_.root();
   saveGameRoot(root_);
   ensureFonts();
-  simData_ = SimData();
-  simData_.load(data_);
+  cityCfg_ = CityConfig();
+  cityCfg_.load(data_);
+  initAudio();
   IniFile mi;
   if (data_.ini().load("MenuItem.INI", mi)) menuLoaded_ = menu_.parse(mi);
   scr_ = Screen::MainMenu;
@@ -117,8 +118,10 @@ void Game::adopt(World&& w) {
   renderer_.setWorld(&world_, haveData_ ? &data_ : nullptr);
   terra_ = std::make_unique<Terraformer>(world_);
   { IniFile bl; if (haveData_ && data_.ini().load("SC3BudgetLayer.ini", bl)) terra_->setCosts(TerraformCosts::fromIni(bl)); }
-  sim_.init(&world_, haveData_ ? &data_ : nullptr, &simData_, 12345u + uint32_t(world_.W));
-  sim_.funds = world_.info.fileKind == 3 ? sim_.funds : sim_.funds;
+  sim_.init(&world_, haveData_ ? &data_ : nullptr, haveData_ ? &cityCfg_ : nullptr, 12345u + uint32_t(world_.W));
+  sim_.city().onSound = [this](int id) { sound(id); };
+  sim_.city().onMessage = [this](const std::string& m) { message(m); };
+  showPicker_ = false;
   simReady_ = true; paused_ = true;
   cam_.zoom = world_.view.valid ? std::max(0, std::min(4, world_.view.zoom)) : 2;
   cam_.rot = world_.view.valid ? (world_.view.rotation & 3) : 0;
@@ -147,6 +150,7 @@ void Game::saveCurrent(const std::string& name) {
   fs::path dir = resolveCI(root_, "Cities");
   if (dir.empty()) { dir = root_ / "Cities"; std::error_code ec; fs::create_directories(dir, ec); }
   fs::path p = dir / (name + ".sc3");
+  if (simReady_) sim_.city().flush();
   Bytes b = saveCity(world_);
   FILE* f = std::fopen(p.string().c_str(), "wb");
   if (!f) { message("Could not write " + p.string()); return; }
@@ -195,7 +199,16 @@ void Game::dispatch(const MenuItemInfo& mi) {
     for (const auto& z : zones) if (mi.target == z.cls) { setTool(ToolKind::Zone, z.zone); toolName_ = name; return; }
     for (const auto& p : plops) if (mi.target == p.cls) { setTool(ToolKind::Plop, 0, p.occ); toolName_ = name; return; }
     switch (mi.target) {
-      case 0xC2B5DE77: case 0x42B5DE86: case 0x42B5DE98: setTool(ToolKind::Road, 0); toolName_ = name; return;
+      case 0xC2B5DE77: setTool(ToolKind::Road, int(NetworkKind::Road)); toolName_ = name; return;
+      case 0x42B5DE86: setTool(ToolKind::Road, int(NetworkKind::Highway)); toolName_ = name; return;
+      case 0x42B5DE98: setTool(ToolKind::Road, int(NetworkKind::Rail)); toolName_ = name; return;
+      case 0xC2B5DEA6: setTool(ToolKind::Road, int(NetworkKind::Subway)); toolName_ = name; return;
+      case 0x42C2F8BF: setTool(ToolKind::Road, int(NetworkKind::Power)); toolName_ = name; return;
+      case 0x22C2F8C5: setTool(ToolKind::Road, int(NetworkKind::Pipe)); toolName_ = name; return;
+      case 0xE2ED3560:
+        if (mi.arg1 == 0x62E925A2 || mi.arg1 == 0xE2E92527 || mi.arg1 == 0xC2F291A9) { pickTitle_ = name; openPicker(mi.arg1); return; }
+        break;
+      case 0x62E925A2: case 0xE2E92527: case 0xC2F291A9: pickTitle_ = name; openPicker(mi.target); return;
       case 0x825AD7F6: setTool(ToolKind::Terrain, 1); toolName_ = name; return;
       case 0xC25AD94F: setTool(ToolKind::Terrain, 2); toolName_ = name; return;
       case 0x825AD954: setTool(ToolKind::Terrain, 4); toolName_ = name; return;
@@ -230,10 +243,7 @@ void Game::tickSim(uint32_t dtMs) {
   simAccum_ += dtMs / 1000.0 * rate[std::max(1, std::min(3, speed_))];
   while (simAccum_ >= 0.25) {
     simAccum_ -= 0.25;
-    sim_.tickDay();
-    if (sim_.day % 30 == 0) sim_.tickMonth();
-    world_.info.dayOfYear++;
-    if (world_.info.dayOfYear > 365) { world_.info.dayOfYear = 1; world_.info.year++; }
+    sim_.tickDay();   // City advances world_.info date through its clock
   }
 }
 
@@ -243,6 +253,7 @@ static const char* kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
 
 void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
   W_ = w; H_ = h;
+  if (audio_) audio_->update(dtMs);
   if (screen_.size() != size_t(w) * h) screen_.assign(size_t(w) * h, 0xFF302820u);
   if (scr_ == Screen::InCity && world_.W) {
     if (renderer_.width() != w || renderer_.height() != h) renderer_.resize(w, h);
@@ -494,6 +505,55 @@ void Game::drawBudget() {
   uiHit_ = true;
 }
 
+void Game::initAudio() {
+  audio_.reset();
+  if (!haveData_) return;
+  fs::path dir = resolveCI(data_.appsDir(), "Res/Sound");
+  if (dir.empty()) return;
+  fs::path ini = resolveCI(dir, "AUDIO.INI");
+  Bytes b;
+  if (ini.empty() || !readFile(ini, b)) return;
+  auto a = std::make_unique<AudioSystem>();
+  a->init(AudioIni::parse(std::string(b.begin(), b.end())), makeDirLoader(dir));
+  audio_ = std::move(a);
+}
+
+void Game::openPicker(uint32_t category) {
+  pickItems_.clear(); pickLabels_.clear(); pickSel_ = -1; pickScroll_ = 0;
+  // Category by occupant agent type (spec 13): power plants 12111-12118 + 12853 waste-to-energy,
+  // water structures 128xx (pump 12810, treatment 1282x, desalination 12830, tower 12840), garbage 129xx.
+  auto match = [&](uint32_t at) {
+    if (category == 0x62E925A2) return (at >= 12111 && at <= 12118) || at == 12853;
+    if (category == 0xE2E92527) return at >= 12800 && at <= 12849;
+    if (category == 0xC2F291A9) return at >= 12900 && at <= 12999;
+    return false;
+  };
+  if (haveData_) {
+    for (const ResKey& k : data_.db().keysOfType(T_OCC_ATTR)) {
+      const OccAttr* a = data_.occupant(k.instance);
+      if (!a || !a->valid || !match(a->agentType)) continue;
+      pickItems_.push_back({k.instance});
+      std::string nm = str(0xA1096A4F, k.instance);
+      pickLabels_.push_back(nm.empty() ? (a->designName.empty() ? "Building " + std::to_string(k.instance) : a->designName) : nm);
+    }
+  }
+  if (pickItems_.empty()) { message("No buildings found for this category."); return; }
+  showPicker_ = true;
+}
+
+void Game::drawPicker() {
+  Rect r{W_ / 2 - 200, H_ / 2 - 220, 400, 440};
+  ui_.panel(r, pickTitle_.empty() ? "Buildings" : pickTitle_);
+  ui_.list({r.x + 16, r.y + 40, r.w - 32, 320}, pickLabels_, pickSel_, pickScroll_);
+  if (ui_.button({r.x + 60, r.y + r.h - 50, 120, 30}, "Select", pickSel_ >= 0)) {
+    setTool(ToolKind::Plop, 0, pickItems_[size_t(pickSel_)].occ);
+    toolName_ = pickLabels_[size_t(pickSel_)];
+    showPicker_ = false;
+  }
+  if (ui_.button({r.x + r.w - 180, r.y + r.h - 50, 120, 30}, "Cancel") || ui_.in.key[K_ESC]) showPicker_ = false;
+  uiHit_ = true;
+}
+
 void Game::drawQuery() {
   Rect r{W_ - 330, 10, 320, 150};
   ui_.panel(r, "Query");
@@ -505,6 +565,7 @@ void Game::drawQuery() {
 void Game::drawWindows() {
   if (showBudget_) drawBudget();
   if (showQuery_) drawQuery();
+  if (showPicker_) drawPicker();
 }
 
 void Game::handleMap() {
@@ -557,10 +618,10 @@ void Game::handleMap() {
           while (x != x1) { path.push_back({x, z}); x += x1 > x ? 1 : -1; }
           while (z != z1) { path.push_back({x, z}); z += z1 > z ? 1 : -1; }
           path.push_back({x1, z1});
-          sim_.buildRoad(path); break;
+          sim_.buildNetwork(NetworkKind(toolArg_ ? toolArg_ : 1), path); break;
         }
         case ToolKind::Demolish: sim_.bulldoze(x0, z0, x1, z1); break;
-        case ToolKind::Plop: if (!sim_.plop(toolOcc_, x1, z1, 100)) message("Cannot build here."); break;
+        case ToolKind::Plop: if (!sim_.plop(toolOcc_, x1, z1, 100)) message(sim_.city().lastFailNoMoney ? "Insufficient funds." : "Cannot build here."); break;
         case ToolKind::Query: {
           int oi = sim_.occupantAt(tx, tz);
           char b[256];
