@@ -24,7 +24,8 @@ struct Input {
   bool rightPressed = false;
   int wheel = 0;
   std::string text;        // typed characters this frame
-  bool key[16] = {};       // see Key enum
+  bool key[16] = {};
+  bool held[4] = {};       // arrows held: left, right, up, down       // see Key enum
 };
 enum Key { K_ENTER, K_ESC, K_BACKSPACE, K_UP, K_DOWN, K_PAGEUP, K_PAGEDOWN, K_TAB, K_LEFT, K_RIGHT };
 

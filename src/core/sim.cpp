@@ -213,6 +213,26 @@ bool Sim::hasAccess(int x, int z, int dist) const {
 bool Sim::paintZone(int x0, int z0, int x1, int z1, Tool t) {
   int zt = (t == Tool::Dezone) ? 0 : zoneTypeForTool(t);
   if (t != Tool::Dezone && zt == 0) return false;
+  return paintZoneType(x0, z0, x1, z1, zt);
+}
+
+bool Sim::plop(uint32_t id, int x, int z, int cost) {
+  int sx = 1, sz = 1; uint32_t agent = 0;
+  if (game_) {
+    const OccAttr* a = game_->occupant(id);
+    if (!a) return false;
+    sx = int(a->sizeX); sz = int(a->sizeZ); agent = a->agentType;
+  }
+  for (int dx = 0; dx < sx; dx++) for (int dz = 0; dz < sz; dz++) if (!tileBuildable(x + dx, z + dz)) return false;
+  if (funds < cost) return false;
+  funds -= cost;
+  Occupant o; o.x = x; o.z = z; o.y = world_->altAt(x, z); o.sizeX = sx; o.sizeZ = sz; o.occId = id;
+  o.keyType = T_OCC_ATTR; o.agentType = agent; o.state = 1;
+  addOccupant(o);
+  return true;
+}
+
+bool Sim::paintZoneType(int x0, int z0, int x1, int z1, int zt) {
   if (x0 > x1) std::swap(x0, x1);
   if (z0 > z1) std::swap(z0, z1);
   bool any = false;

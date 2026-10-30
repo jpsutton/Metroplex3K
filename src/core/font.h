@@ -14,6 +14,8 @@ class Font {
  public:
   bool load(const uint8_t* p, size_t n);
   bool loaded() const { return w_ > 0; }
+  // Build the built-in fallback font at integer scale (1 = 5x7 in a 6x8 cell).
+  void makeBuiltin(int scale);
   int height() const { return glyphH_; }
   int measure(const std::string& s) const;
   // Draw text with top-left at (x,y) into an RGBA framebuffer. Mono/AA fonts use `colour`.
@@ -45,7 +47,7 @@ class Fonts {
   const Font& ui() const { return get("main10"); }
  private:
   std::map<std::string, Font> f_;
-  Font empty_;
+  mutable Font builtin_[2];
 };
 
 }  // namespace m3k

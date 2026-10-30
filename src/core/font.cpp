@@ -1,4 +1,5 @@
 #include "core/font.h"
+#include "core/font_builtin.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -25,6 +26,19 @@ bool Font::load(const uint8_t* p, size_t n) {
   for (uint8_t v : atlas_) mx = std::max<int>(mx, v);
   multi_ = mx > 17;
   return true;
+}
+
+void Font::makeBuiltin(int s) {
+  w_ = 256 * 6 * s; h_ = 9 * s; glyphH_ = 9 * s; multi_ = false;
+  atlas_.assign(size_t(w_) * h_, 16);
+  for (int ch = 0; ch < 256; ch++) {
+    const unsigned char* col = builtinGlyphColumns(ch);
+    int x0 = ch * 6 * s;
+    for (int cx = 0; cx < 5; cx++) for (int ry = 0; ry < 8; ry++)
+      if (col[cx] & (1 << ry)) for (int dy = 0; dy < s; dy++) for (int dx = 0; dx < s; dx++)
+        atlas_[size_t(ry * s + dy) * w_ + x0 + cx * s + dx] = 1;
+    g_[ch] = {x0, 0, x0 + 5 * s, 9 * s, 6 * s};
+  }
 }
 
 int Font::measure(const std::string& s) const {
@@ -108,7 +122,9 @@ const Font& Fonts::get(const std::string& n) const {
   if (it != f_.end()) return it->second;
   it = f_.find("main10");
   if (it != f_.end()) return it->second;
-  return empty_;
+  if (!builtin_[0].loaded()) { builtin_[0].makeBuiltin(1); builtin_[1].makeBuiltin(2); }
+  bool big = n == "title12" || n == "serif17" || n == "title9";
+  return builtin_[big ? 1 : 0];
 }
 
 }  // namespace m3k

@@ -52,6 +52,10 @@ class Sim {
 
   // Player actions (return false if rejected). Costs are charged to funds.
   bool paintZone(int x0, int z0, int x1, int z1, Tool t);
+  bool paintZoneType(int x0, int z0, int x1, int z1, int zoneType);  // 0 = dezone
+  // Place a single building by occupant id (civic/landmark plop). Returns false if blocked/unaffordable.
+  bool plop(uint32_t occupantId, int x, int z, int cost);
+  int occupantSizeX(uint32_t occId) const;
   bool buildRoad(const std::vector<std::pair<int, int>>& path);
   bool bulldoze(int x0, int z0, int x1, int z1);
 
