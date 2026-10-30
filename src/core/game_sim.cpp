@@ -118,7 +118,8 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   in.year = c.clock.date().year;
   in.mapWidth = world_.W; in.mapHeight = world_.H;
   in.budget.treasury = sim_.funds;
-  for (int i = 0; i < 3; i++) in.budget.taxRate[i] = sim_.taxRate;
+  for (int i = 0; i < 3; i++) in.budget.taxRate[i] = c.budget.tax[i].rate;
+  in.aura = int(c.aura.cityAura);
   in.plan.demand[0] = sim_.valveR.value; in.plan.demand[1] = sim_.valveC.value; in.plan.demand[2] = sim_.valveI.value;
   in.plan.treasury = sim_.funds;
   in.plan.monthIndex = c.clock.date().month - 1;
@@ -160,6 +161,34 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   if (const Department* d = c.budget.dept(dept::Health)) in.demo.healthFunding = d->funding;
   if (const Department* d = c.budget.dept(dept::Education)) in.demo.eduFunding = d->funding;
   in.neighbourConnections = 0;
+  {  // neighbour connections and deals
+    const NeighbourDeals& nd = c.neighbours;
+    bool anyPower = false, anyPipe = false;
+    for (const auto& nb : nd.neighbours) {
+      if (nb.nRoad + nb.nRail + nb.nPower + nb.nPipe + nb.nHighway + nb.nSubway > 0) in.neighbourConnections++;
+      anyPower = anyPower || nb.nPower > 0; anyPipe = anyPipe || nb.nPipe > 0;
+    }
+    in.util.neighbours = in.neighbourConnections;
+    in.util.powerLineConnection = anyPower; in.util.pipeConnection = anyPipe;
+    for (const auto& d : nd.active) {
+      if (d.terminated()) continue;
+      in.budget.anyNeighbourDealActive = true;
+      switch (d.dealType) {
+        case 0: in.util.dealBuyPower = true; break;
+        case 1: in.util.dealSellPower = true; break;
+        case 2: in.util.dealBuyWater = true; break;
+        case 3: in.util.dealSellWater = true; break;
+        case 4: in.env.trashExportDealActive = in.env.anyTrashDeal = true; break;
+        case 5: in.budget.trashImportDealKind5Exists = in.env.trashImportDealExists = in.env.anyTrashDeal = true; break;
+        default: break;
+      }
+    }
+  }
+  in.util.waterUsed = c.water.stats.used; in.util.waterCap = c.water.stats.supply;
+  in.plan.landValue = c.landValue.cityAverage();
+  in.safety.curfewEnacted = c.ordinances.enacted(ord::YouthCurfew);
+  in.safety.youthSportsEnacted = c.ordinances.enacted(ord::YouthSports);
+  in.demo.healthStrike = c.pop.healthStrike; in.demo.schoolStrike = c.pop.schoolStrike; in.demo.collegeStrike = c.pop.collegeStrike;
   for (auto z : world_.zone) {
     if (z >= 1 && z <= 3) in.plan.zoned[0]++; else if (z >= 5 && z <= 7) in.plan.zoned[1]++; else if (z >= 9 && z <= 11) in.plan.zoned[2]++;
   }
