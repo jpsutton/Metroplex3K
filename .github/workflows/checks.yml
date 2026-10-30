@@ -1,0 +1,30 @@
+name: checks
+
+# Non-build checks (the test suite) run only on pull requests that target the `build` branch.
+# Nothing runs for pull requests to any other branch, or for pushes.
+on:
+  pull_request:
+    branches: [build]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDL2 (linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
+      - name: Install SDL2 (macos)
+        if: runner.os == 'macOS'
+        run: brew install sdl2
+      # The tests are compiled here because they cannot run otherwise; the desktop app is not built.
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DM3K_BUILD_APP=OFF
+      - name: Compile tests
+        run: cmake --build build --config Release -j
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
