@@ -1,6 +1,7 @@
 // INTRO.TGQ ("SCxl" EA chunk stream) container parser, movie audio decoder, playback timing.
 // spec/07-video.md. The TQI video bitstream is NOT defined by the spec (section 4.4, OPEN), so
-// frames are exposed as raw payloads; a TqiDecoder callback can be plugged in.
+// frames are exposed as raw payloads; a TqiDecoder callback can be plugged in. By default the
+// built-in decoder in tqi.h (written from the public EA TQI description) is used.
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -23,7 +24,7 @@ struct TgqVideoFrame {
   size_t offset = 0, size = 0;  // payload (after 8-byte chunk header) within the file image
   int width = 0, height = 0;    // from payload header
   uint8_t quant0 = 0, quant1 = 0;  // the "quantiser/scale byte pair"
-  size_t dataOffset = 0;        // compressed frame data start (payload + 6)
+  size_t dataOffset = 0;        // compressed frame data start (payload + 8-byte TQI header)
   uint32_t audioChunksBefore = 0;  // SCDl chunks seen before this frame (interleave position)
 };
 
@@ -48,8 +49,14 @@ class TgqMovie {
   // False if compression is not 7 or a chunk is truncated (decoded part is kept).
   bool decodeAudio(PcmBuffer& out) const;
 
+  // Decode SCDl chunk i, appending interleaved s16 to `out`. False if truncated/out of range.
+  bool decodeAudioChunk(size_t i, std::vector<int16_t>& out) const;
+
   // Decode frame i using a supplied decoder.
   bool decodeFrame(size_t i, const TqiDecoder& dec, std::vector<uint32_t>& argb) const;
+  // Decode frame i with the built-in TQI decoder. False if damaged (argb may hold a partial picture).
+  bool decodeFrame(size_t i, std::vector<uint32_t>& argb) const;
+  const uint8_t* audioPayload(const TgqAudioChunk& c) const { return data_.data() + c.offset; }
 
   // Frame to show at `ms` after playback start (15 fps, clamped to last). -1 if no frames.
   int frameAtMs(int64_t ms) const;
@@ -66,6 +73,9 @@ class TgqMovie {
 };
 
 constexpr int kTgqFps = 15;
+
+// The built-in TQI decoder as a TqiDecoder.
+TqiDecoder defaultTqiDecoder();
 
 // Whether the intro plays (spec 1): no file to open on the command line, intro option != "off"
 // (case-insensitive), and the movie exists and is openable.

@@ -16,6 +16,7 @@ fixtures only. First run against real data is untested.
 - `world.h`, `savefile.cpp` loader for .sc3/.st3/.sct/.SNR: city info, terrain, flora, zone, occupants, network pieces, view
 
 ## Also done
+- `tqi.*` EA TQI intra video decoder (MPEG-1-style VLC, own IDCT; written from public description, round-trip tested with a test-only encoder, NOT verified on a real INTRO.TGQ); `intro.*` IntroPlayer (15 fps frames, PCM pull, skip) + `composeIntroWindow` (2x stretch, centred 640x480)
 - `terrain_gen.*` exact spec generator; `render.*` software iso renderer (terrain, sprites, zone/road tint)
 - `gamedir.*` auto-detect (env M3K_GAME_DIR, saved, GOG/Wine paths), drag-drop folder or GOG installer (needs `innoextract`)
 - `savewrite.cpp` save writer (subset of records, round-trips)

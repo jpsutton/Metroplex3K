@@ -2,6 +2,7 @@
 #include <algorithm>
 #include "core/bytes.h"
 #include "core/fsutil.h"
+#include "core/tqi.h"
 
 namespace m3k {
 
@@ -55,7 +56,7 @@ bool TgqMovie::parse(std::vector<uint8_t> data) {
         f.offset = pos + 8; f.size = bn;
         f.width = rd16(body); f.height = rd16(body + 2);
         f.quant0 = body[4]; f.quant1 = body[5];
-        f.dataOffset = f.offset + 6;
+        f.dataOffset = f.offset + kTqiHeaderSize;
         f.audioChunksBefore = audioSeen;
         frames_.push_back(f);
       }
@@ -77,11 +78,23 @@ bool TgqMovie::decodeAudio(PcmBuffer& out) const {
   return ok;
 }
 
+bool TgqMovie::decodeAudioChunk(size_t i, std::vector<int16_t>& out) const {
+  if (i >= audioChunks_.size() || audio_.compression != 7) return false;
+  return decodeEaAdpcmChunk(data_.data() + audioChunks_[i].offset, audioChunks_[i].size,
+                            audio_.channels == 1 ? 1 : 2, out);
+}
+
 bool TgqMovie::decodeFrame(size_t i, const TqiDecoder& dec, std::vector<uint32_t>& argb) const {
   if (i >= frames_.size() || !dec) return false;
   const auto& f = frames_[i];
   return dec(data_.data() + f.offset, f.size, f.width, f.height, argb);
 }
+
+bool TgqMovie::decodeFrame(size_t i, std::vector<uint32_t>& argb) const {
+  return decodeFrame(i, defaultTqiDecoder(), argb);
+}
+
+TqiDecoder defaultTqiDecoder() { return decodeTqiFrame; }
 
 int TgqMovie::frameAtMs(int64_t ms) const {
   if (frames_.empty()) return -1;
