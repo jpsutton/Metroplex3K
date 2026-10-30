@@ -264,6 +264,7 @@ class Game {
   ToolKind tool_ = ToolKind::None;
   int toolArg_ = 0; uint32_t toolOcc_ = 0;
   std::string toolName_;
+  bool panelsHidden_ = false;
   bool dragging_ = false; int ax_ = 0, az_ = 0;
   bool uiHit_ = false;
   std::string statusLine_;

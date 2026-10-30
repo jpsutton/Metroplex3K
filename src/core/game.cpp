@@ -164,7 +164,7 @@ void Game::hotkeyCommand(int cmd, int, int arg2) {
     case 46: scroll(0, -32); break;
     case 47: scroll(32, 0); break;
     case 48: scroll(0, 32); break;
-    case 49: break;   // toggle UI panels (not modelled: panels are always visible)
+    case 49: panelsHidden_ = !panelsHidden_; break;   // F12: hide / show the toolbars
     case 50: if (hoverValid_) centreOn(hoverX_, hoverZ_); break;
     case 63: ropt_.grid = !ropt_.grid; break;
     case 75: case 76: cam_.zoom = 0; break;
@@ -180,9 +180,15 @@ void Game::hotkeyCommand(int cmd, int, int arg2) {
 }
 
 void Game::handleKeys(const Input& in) {
+  // Restricted table (instance 2): terrain editor / pre-city stage allows only demolish, view keys, landscaping and Esc.
+  auto restrictedOk = [](int c) {
+    return c == 18 || (c >= 41 && c <= 48) || c == 50 || c == 67 || c == 70 || c == 71 || (c >= 75 && c <= 85);
+  };
   for (const KeyEvent& k : in.keyDowns) {
     const HotkeyBinding* b = hotkeyTable_.find(k.vk, k.mods);
-    if (b) hotkeyCommand(b->cmd, b->arg1, b->arg2);
+    if (!b) continue;
+    if (scr_ == Screen::TerrainEdit && !restrictedOk(b->cmd)) continue;
+    hotkeyCommand(b->cmd, b->arg1, b->arg2);
   }
 }
 
@@ -905,8 +911,7 @@ void Game::drawInCity(uint32_t dtMs) {
       else if (!anyBlockingWindow()) { if (dirty_ && false) {} scr_ = Screen::MainMenu; }
     }
   }
-  drawToolMenu();
-  drawHud();
+  if (!panelsHidden_) { drawToolMenu(); drawHud(); }
   drawWindows(dtMs);
   drawCheatBox();
   if (!anyBlockingWindow() && msgText_.empty()) handleMap();

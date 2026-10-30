@@ -428,6 +428,7 @@ void Game::drawNewCity() {
 
 void Game::drawTerrainEdit() {
   const Input& in = ui_.in;
+  if (ui_.focusId == 0) handleKeys(in);
   ui_.text(8, 8, "Terrain editor", "title12", rgb(255, 255, 255));
   Rect bar{0, H_ - 44, W_, 44};
   ui_.panel(bar);
