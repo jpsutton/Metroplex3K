@@ -118,6 +118,15 @@ struct BldFile {
   bool needsRevisionConversion() const;  // stored ID, or a stable hash if none
 };
 
+// ---- BAT resource text files (spec 24 section 4) ------------------------------------------------
+// `.met` prop description: lines `X,Y,Z:"view0","view1","view2","view3"`.
+struct BatPropLine { int x = 0, y = 0, z = 0; std::string view[4]; };
+// Returns the lines parsed; malformed lines are skipped (counted in `bad` when non-null).
+std::vector<BatPropLine> parseBatMet(const std::string& text, size_t* bad = nullptr);
+// `.plt` detail palette layout: lines `col,row="file name"`.
+struct BatPaletteCell { int col = 0, row = 0; std::string file; };
+std::vector<BatPaletteCell> parseBatPlt(const std::string& text, size_t* bad = nullptr);
+
 // ---- rendering (approximate; spec 3 leaves rasteriser details open) -------------------------
 struct BatLights {
   uint8_t north[3] = {255, 249, 232}, west[3] = {98, 98, 133}, south[3] = {98, 98, 133}, east[3] = {255, 249, 232},

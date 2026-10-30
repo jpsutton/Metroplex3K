@@ -106,12 +106,13 @@ static BldModel parseModel(const Bytes& b) {
   Reader r(b);
   BldModel m;
   m.version = r.u8();
-  if (m.version != 8) throw FormatError("unsupported .bld model version " + std::to_string(m.version));
+  if (m.version != 7 && m.version != 8) throw FormatError("unsupported .bld model version " + std::to_string(m.version));
   m.orientation = r.u8();
   m.N = r.u8();
   m.lotSize = r.u8();
   r.u8();
   m.H = r.u16();
+  if (m.version == 7) m.H++;  // version 7 stores H - 1 (spec 1.3.8); the model is normalised to version 8
   r.u16();
   uint32_t cellCount = r.u32();
   r.u32(); r.u32(); r.u32(); r.u32();  // marker, 4, 32, marker
@@ -128,6 +129,7 @@ static BldModel parseModel(const Bytes& b) {
   r.u32();
   Bytes raw = refpackDecode(block.data() + 4, block.size() - 4);
   if (raw.size() < size_t(cellCount) * 32) throw FormatError("cell block too short");
+  m.version = 8;
   m.cells.resize(cellCount);
   for (uint32_t i = 0; i < cellCount; i++) {
     const uint8_t* p = &raw[size_t(i) * 32];
@@ -365,6 +367,65 @@ const char* batCategoryName(uint32_t code) {
 }
 
 bool BldFile::needsRevisionConversion() const { return revision[0] < 2; }
+
+// ---- text resources -------------------------------------------------------------------------
+namespace {
+std::vector<std::string> splitLines(const std::string& t) {
+  std::vector<std::string> v;
+  std::string cur;
+  for (char c : t) {
+    if (c == '\n' || c == '\r') { if (!cur.empty()) v.push_back(cur); cur.clear(); }
+    else cur.push_back(c);
+  }
+  if (!cur.empty()) v.push_back(cur);
+  return v;
+}
+// Read consecutive `"..."` tokens separated by commas starting at `p`.
+bool quotedList(const std::string& s, size_t p, std::vector<std::string>& out, size_t want) {
+  while (out.size() < want) {
+    while (p < s.size() && (s[p] == ' ' || s[p] == '\t')) p++;
+    if (p >= s.size() || s[p] != '"') return false;
+    size_t e = s.find('"', p + 1);
+    if (e == std::string::npos) return false;
+    out.push_back(s.substr(p + 1, e - p - 1));
+    p = e + 1;
+    while (p < s.size() && (s[p] == ' ' || s[p] == '\t')) p++;
+    if (out.size() < want) { if (p >= s.size() || s[p] != ',') return false; p++; }
+  }
+  return true;
+}
+}  // namespace
+
+std::vector<BatPropLine> parseBatMet(const std::string& text, size_t* bad) {
+  std::vector<BatPropLine> out;
+  size_t nb = 0;
+  for (const std::string& l : splitLines(text)) {
+    size_t colon = l.find(':');
+    BatPropLine pl;
+    std::vector<std::string> v;
+    if (colon == std::string::npos || std::sscanf(l.c_str(), " %d , %d , %d :", &pl.x, &pl.y, &pl.z) != 3 ||
+        !quotedList(l, colon + 1, v, 4)) { nb++; continue; }
+    for (int i = 0; i < 4; i++) pl.view[i] = v[size_t(i)];
+    out.push_back(pl);
+  }
+  if (bad) *bad = nb;
+  return out;
+}
+
+std::vector<BatPaletteCell> parseBatPlt(const std::string& text, size_t* bad) {
+  std::vector<BatPaletteCell> out;
+  size_t nb = 0;
+  for (const std::string& l : splitLines(text)) {
+    size_t eq = l.find('=');
+    BatPaletteCell c;
+    std::vector<std::string> v;
+    if (eq == std::string::npos || std::sscanf(l.c_str(), " %d , %d =", &c.col, &c.row) != 2 || !quotedList(l, eq + 1, v, 1)) { nb++; continue; }
+    c.file = v[0];
+    out.push_back(c);
+  }
+  if (bad) *bad = nb;
+  return out;
+}
 
 // ---- rendering ------------------------------------------------------------------------------
 BatLights BatLights::fromIni(const IniFile& ini) {
