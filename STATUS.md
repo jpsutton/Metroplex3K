@@ -28,6 +28,12 @@ fixtures only. First run against real data is untested.
 - All real-data paths untested: no game install here. Expect fixes on first run with real files
 - Saved files omit many records (original treats absent as new-city state; unverified)
 
+## City growth (synthetic, no game data)
+- `City` runs the full pipeline; `tests/test_city` covers growth of R/C/I, power coverage, funds, save/load. `City::debugStats()` dumps valves/buildings/zone results. `tools/city_sim_demo` runs a headless 10-year city + PNG.
+- New-city bootstrap: `ValveTuning::bootstrapResDemand` (400, not from INI, spec 15 3.4 [OPEN]) adds R demand while population is 0.
+- Fallback network: power lines may share a tile with a road (roads do not conduct). Power coverage recomputed at load.
+- Synthetic LV = 128 flat; synthetic plant/water capacities in city.cpp.
+
 ## Next
 1. Test on real data (other agent/system); fix parser mismatches
 2. UI: toolbar, status bar, text rendering (FBF fonts, spec 05)
