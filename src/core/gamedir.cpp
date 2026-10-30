@@ -101,13 +101,21 @@ fs::path loadSavedGameRoot() {
   return {};
 }
 
-fs::path detectGameRoot() {
+fs::path detectGameRoot(const fs::path& exeDir) {
   if (const char* e = std::getenv("M3K_GAME_DIR")) {
     fs::path r = findGameRoot(e);
     if (!r.empty()) return r;
   }
   fs::path s = loadSavedGameRoot();
   if (!s.empty()) { fs::path r = findGameRoot(s, 0); if (!r.empty()) return r; }
+  {
+    std::error_code ec;
+    std::vector<fs::path> here;
+    fs::path cwd = fs::current_path(ec);
+    if (!ec) { here.push_back(cwd); if (cwd.has_parent_path()) here.push_back(cwd.parent_path()); }
+    if (!exeDir.empty()) { here.push_back(exeDir); if (exeDir.has_parent_path()) here.push_back(exeDir.parent_path()); }
+    for (const auto& c : here) { fs::path r = findGameRoot(c, 2); if (!r.empty()) return r; }
+  }
   for (const auto& c : defaultGameLocations()) {
     fs::path r = findGameRoot(c, 3);
     if (!r.empty()) return r;

@@ -15,7 +15,9 @@ fs::path findGameRoot(const fs::path& p, int maxDepth = 3);
 std::vector<fs::path> defaultGameLocations();
 
 // Auto-detect: environment variable M3K_GAME_DIR, saved config, then defaults.
-fs::path detectGameRoot();
+// `exeDir` (optional): folder of the executable, searched too. Also searched: the working directory, its parent
+// (so a sibling 'SimCity 3000 Unlimited' folder is found) and the exe folder's parent.
+fs::path detectGameRoot(const fs::path& exeDir = {});
 
 // Per-user config directory for this application (created on demand).
 fs::path configDir();

@@ -12,6 +12,12 @@
 
 using namespace m3k;
 
+static fs::path exeDirOf(const char* argv0) {
+  std::error_code ec;
+  fs::path p = fs::absolute(argv0 ? argv0 : "", ec);
+  return ec ? fs::path() : p.parent_path();
+}
+
 // SDL key -> Windows virtual-key code (spec/08 section 5.2); 0 = not a bindable key.
 static int vkFromSdl(SDL_Keycode k) {
   if (k >= SDLK_a && k <= SDLK_z) return 'A' + int(k - SDLK_a);
@@ -61,7 +67,7 @@ int main(int argc, char** argv) {
 
   std::srand(uint32_t(SDL_GetTicks()));
   Game game;
-  fs::path root = gameArg.empty() ? detectGameRoot() : findGameRoot(gameArg);
+  fs::path root = gameArg.empty() ? detectGameRoot(exeDirOf(argv[0])) : findGameRoot(gameArg);
   std::string err;
   if (!game.init(root, err) && !err.empty()) std::cerr << err << "\n";
   if (!cityArg.empty()) game.requestFile(cityArg);
