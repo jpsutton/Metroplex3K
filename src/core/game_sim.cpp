@@ -205,6 +205,17 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
           renderer_.invalidateShade();
         }
         break;
+      case DisasterCommand::MarkRadiation: c.markRadiation(cmd.x, cmd.z); break;
+      case DisasterCommand::Crater:
+        if (cmd.pts.size() >= 2) {
+          std::set<int> hit;
+          for (int x = cmd.pts[0].first; x <= cmd.pts[1].first; x++)
+            for (int z = cmd.pts[0].second; z <= cmd.pts[1].second; z++) { int i = c.occupantAt(x, z); if (i >= 0) hit.insert(i); }
+          for (int i : hit) world_.occupants[size_t(i)].state = 8;
+          if (!hit.empty()) c.markOccupantsDirty();
+          sound(244);
+        }
+        break;
       default: break;
     }
   }

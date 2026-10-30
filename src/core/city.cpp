@@ -245,6 +245,7 @@ class GrowthAdapter : public growth::GrowthCity {
   int zoneAt(int x, int z) const override { return c_.world_->zone[c_.idx(x, z)]; }
   bool powered(int x, int z) const override { return c_.power.powered(x, z); }
   bool watered(int x, int z) const override { return c_.water.tileServiced(x, z); }
+  bool radioactive(int x, int z) const override { return c_.radioactiveAt(x, z); }
   int landValue(int x, int z) const override {
     if (c_.cfg_.synthetic) return 128;
     return std::max(1, c_.landValue.landValueAtTile(x, z));
@@ -330,6 +331,7 @@ class LandValueAdapter : public growth::LandValueCity {
   int crime(int x, int z) const override { return c_.crime.crimeAt(x, z); }
   int altitude(int x, int z) const override { return c_.world_->altAt(std::min(x, c_.world_->W), std::min(z, c_.world_->H)); }
   int seaLevel() const override { return c_.world_->seaLevel; }
+  bool radioactive(int x, int z) const override { return c_.radioactiveAt(x, z); }
   bool hasWater(int x, int z) const override {
     if (!c_.world_->inTiles(x, z)) return false;
     return c_.world_->waterAt(x, z) > c_.world_->altAt(x, z);
@@ -420,6 +422,7 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   flammability = us::FlammabilityLayer(); flammability.init(W, H, us::FlammabilityParams::fromIni(cfg_.ini.tune));
   traffic = std::make_unique<TrafficSim>(W, H, TrafficParams::fromIni(cfg_.ini.traffic), seed);
 
+  radiation_.assign(size_t(W) * H, 0);
   plantAt_.clear(); waterFacAt_.clear(); stationAt_.clear(); preserved_.clear();
   residents_ = 0; lastTaxRate_ = -1; roadUpkeep_ = transitUpkeep_ = 0; refreshSkips_ = 0;
   growthView_ = std::make_unique<GrowthAdapter>(*this);
