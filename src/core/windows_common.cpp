@@ -223,7 +223,7 @@ MessageBox::Layout MessageBox::layout(const Ui& ui) const {
     H = int(lines.size()) * lh;
   }
   L.W = W; L.H = H; L.lines = lines;
-  L.buttonY = H + 24 + (title_.empty() ? 0 : lh);
+  L.buttonY = H + 24 + (title_.empty() ? 0 : std::max(lh, ui.fonts->get("title12").height() + 2));
   L.buttonX0 = (W - L.base) / 2 + 8;
   return L;
 }
@@ -239,7 +239,7 @@ WindowResult MessageBox::draw(Ui& ui, const WinEnv& E) {
   ui.panel(box, "");
   int cx = box.x + 8, cy = box.y + titleBar;
   int ty = cy;
-  if (!title_.empty()) { ui.text(cx, ty, title_, "title12"); ty += lh; }
+  if (!title_.empty()) { ui.text(cx, ty, title_, "title12"); ty += std::max(lh, ui.fonts->get("title12").height() + 2); }
   for (auto& l : L.lines) { ui.text(cx, ty + 4, l); ty += lh; }
   auto bs = buttonsFor(style_);
   int idx = -1;

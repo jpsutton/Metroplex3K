@@ -174,8 +174,9 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
   int tx = r.x + 118, tw = r.w - 132;
   if (!impact) {
     ui.text(tx, r.y + 34, v.name, "title12");
-    ui.text(tx, r.y + 34 + lh + 4, v.heading, "main10", rgb(0x60, 0x20, 0x20));
-    paragraph(ui, {tx, r.y + 34 + 2 * lh + 10, tw, 150}, v.message);
+    int th = std::max(lh, ui.fonts->get("title12").height() + 2);
+    ui.text(tx, r.y + 34 + th + 4, v.heading, "main10", rgb(0x60, 0x20, 0x20));
+    paragraph(ui, {tx, r.y + 34 + th + lh + 10, tw, 150}, v.message);
     int by = r.y + r.h - 70;
     if (!v.button1.empty() || !v.button2.empty()) {
       if (!v.button1.empty() && button(ui, E, t + ".button1", {r.x + 14, by, 150, 26}, v.button1)) answer(true);
