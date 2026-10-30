@@ -79,6 +79,8 @@ class Game {
   // Scripted access for headless tools/tests.
   void openWindow(const std::string& name);        // budget, ordinances, neighbours, deals, advisors, prefs, props, goals, map, graphs, charts
   void runMenuItem(uint32_t menuItemId) { execute(menuItemId); }
+  // Run a MenuItem.INI command class id directly (tools, windows, ...). For tools/tests.
+  void runCommand(uint32_t target, uint32_t arg1 = 0) { runTarget(target, arg1); }
   void startDisaster(DisasterType t);
   void typeCheat(const std::string& s);
   void setPaused(bool p) { paused_ = p; }
@@ -99,6 +101,8 @@ class Game {
   // Screen position (inside the last rendered frame) of the middle of a tile; false if off-screen / not pickable. For tools & tests.
   bool tileScreenPos(int tx, int tz, int& sx, int& sy);
   const World& world() const { return world_; }
+  World& mutableWorld() { return world_; }
+  void terrainChanged() { renderer_.invalidateShade(); }  // after editing world_.alt/water directly (tests/tools)
   bool windowOpen(const std::string& name) const;
   // Test hook: every window control drawn registers (name, rect) here (cleared by the caller).
   void setSpotSink(std::vector<Spot>* s) { spotSink_ = s; }

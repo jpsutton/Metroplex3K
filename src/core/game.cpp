@@ -156,6 +156,8 @@ bool Game::init(const fs::path& gameRoot, std::string& err) {
 
 void Game::startDemo(int size) {
   haveData_ = false;
+  cityCfg_ = CityConfig();
+  cityCfg_.applyDemoData();
   ui_.fonts = &fonts_;
   TerrainGenOptions o; o.seed = 4242;
   World w; generateTerrain(w, size, size, o);

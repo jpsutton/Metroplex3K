@@ -162,6 +162,33 @@ void CityConfig::applySyntheticDefaults() {
   growth.valveEffects = &valve.agentEffects;
 }
 
+void CityConfig::applyDemoData() {
+  std::string desc = "[ZoneDeveloperDescriptions]\n", rules = "[ZoneDeveloperRules]\n";
+  for (int z : {1, 2, 3}) {
+    desc += std::to_string(z) + "=0x619BA64E,3000:3100,1,255,0;3300,1,255,100\n";
+    rules += std::to_string(z) + ",0xA22653C0=81F53D09,01F58D3D,4;81F53D09,01F58D3D,11\n";
+  }
+  for (int z : {5, 6, 7}) {
+    desc += std::to_string(z) + "=0x41A3ADC1,5000:5100,1,255,0\n";
+    rules += std::to_string(z) + ",0x422C9D52=81F53D09,01F58D3D,7\n";
+  }
+  for (int z : {9, 10, 11}) {
+    desc += std::to_string(z) + "=0xE1A53B30,8000:8100,D,1,255,0\n";
+    rules += std::to_string(z) + ",0x422C9D53=81F53D09,01F58D3D,9\n";
+  }
+  growth.parseZoneDescriptions(IniFile::fromText(desc));
+  auto binds = growth.parseRuleBindings(IniFile::fromText(rules));
+  parseFamilyText(4, "TXT! r\r\nLandUse: 3300\r\nKey: 1406,545184782,100,1\r\n");
+  parseFamilyText(11, "TXT! r\r\nLandUse: 3100\r\nKey: 1406,545184782,101,2\r\n");
+  parseFamilyText(7, "TXT! r\r\nLandUse: 5100\r\nKey: 1406,545184782,200,1\r\n");
+  parseFamilyText(9, "TXT! r\r\nLandUse: 8100\r\nKey: 1406,545184782,300,1\r\n");
+  bindFamilies(binds);
+  valve.parseAgentValveEffects(IniFile::fromText(
+      "[AgentValveEffects]\n3100=3000:10:0+7000:0:0\n3300=3000:10:0+7000:0:0\n5100=5000:5:0+7000:0:8\n8100=8000:4:0+7000:0:6\n"));
+  expandEffects();
+  applySyntheticDefaults();
+}
+
 bool CityConfig::load(GameData& g) {
   ini.load(g);
   synthetic = false;

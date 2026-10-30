@@ -67,6 +67,8 @@ struct CityConfig {
   void expandEffects();
   // Fill defaults for data that is only available with a game install.
   void applySyntheticDefaults();
+  // Minimal built-in zone/family/valve data so a city can grow without any game files (demo, headless tests).
+  void applyDemoData();
 
   struct FamilyMember { uint32_t type = 0, group = 0, instance = 0; int weight = 1; };
   struct FamilyDef { int id = 0; uint32_t landUse = 0; std::vector<FamilyMember> members; };

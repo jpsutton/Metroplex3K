@@ -103,7 +103,7 @@ void Game::enterCity() {
   // Sim.init rebuilds the City; windows referencing it are closed first.
   closeModelessWindows();
   streetHost_.reset(); street_.reset();
-  sim_.init(&world_, haveData_ ? &data_ : nullptr, haveData_ ? &cityCfg_ : nullptr, 12345u + uint32_t(world_.W));
+  sim_.init(&world_, haveData_ ? &data_ : nullptr, &cityCfg_, 12345u + uint32_t(world_.W));
   sim_.city().onSound = [this](int id) { sound(id); };
   sim_.city().onMessage = [this](const std::string& m) { message(m); };
   simReady_ = true; paused_ = true; dirty_ = false; simAccum_ = 0;
