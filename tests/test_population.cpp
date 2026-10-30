@@ -1,4 +1,5 @@
 #include <cmath>
+#include <cstring>
 #include "core/population.h"
 #include "testutil.h"
 
@@ -399,10 +400,10 @@ static void testRecords() {
   CHECK(s[0x1BF] == p.birthTrend);
   float f0;
   uint32_t raw = rd32(s.data() + 0x490);
-  __builtin_memcpy(&f0, &raw, 4);
+  std::memcpy(&f0, &raw, 4);
   CHECK(f0 == p.share[0]);
   raw = rd32(s.data() + 0x5F8);
-  __builtin_memcpy(&f0, &raw, 4);
+  std::memcpy(&f0, &raw, 4);
   CHECK(f0 == p.le[0]);
   CHECK(rd32(s.data() + 0x768) == p.doctors);
   // flags and counters

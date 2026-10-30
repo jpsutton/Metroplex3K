@@ -203,7 +203,7 @@ class ScenarioRuntime {
   const ScenarioFile& file_;
   ICityStats& stats_;
   IScenarioHost& host_;
-  GameRng rng_;
+  ScenarioRng rng_;
   ScenarioState st_;
   std::unique_ptr<ScriptInterpreter> interp_;
   GameDate seenRepeat_{0, 0, 0};

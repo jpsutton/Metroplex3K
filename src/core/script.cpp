@@ -178,7 +178,7 @@ bool Script::operator==(const Script& o) const {
 }
 
 // ---- RNG ------------------------------------------------------------------------------------
-uint32_t GameRng::rand(uint32_t n) {
+uint32_t ScenarioRng::rand(uint32_t n) {
   if (n == 0) return 0;
   if (n < 0xFFFFFF) return next() % n;
   uint32_t r;
@@ -187,7 +187,7 @@ uint32_t GameRng::rand(uint32_t n) {
 }
 
 // ---- interpreter ----------------------------------------------------------------------------
-ScriptInterpreter::ScriptInterpreter(ScenarioState& st, ICityStats& stats, IScenarioHost& host, GameRng& rng,
+ScriptInterpreter::ScriptInterpreter(ScenarioState& st, ICityStats& stats, IScenarioHost& host, ScenarioRng& rng,
                                      Lookup lookup, void* user, const CommandMap* map)
     : st_(st), stats_(stats), host_(host), rng_(rng), lookup_(lookup), user_(user), map_(map) {}
 

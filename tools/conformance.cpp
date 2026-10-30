@@ -102,10 +102,10 @@ bool parseSii(const std::string& text, long& records) {
 // cheat ID table (27 section 5.1a), LANGID table (05 section 2.4), command table (23 section 3.3).
 void l2Rows(Report& rep) {
   static const uint32_t rv[10] = {0x41C6, 0x59D4967E, 0xBF022781, 0x959AC46B, 0x79D0F94B, 0x60B995FB, 0x0703D9E2, 0x584E9CFB, 0x81FCBF54, 0xBA030FF6};
-  GameRng r(1);
+  ScenarioRng r(1);
   bool rngOk = true;
   for (uint32_t v : rv) rngOk = rngOk && r.next() == v;
-  GameRng r2(1);
+  ScenarioRng r2(1);
   rngOk = rngOk && r2.rand(100) == 38;
   rep.row("L2 integer generator test vectors (seed 1)", rngOk ? "match" : "differ", "match", rngOk);
   bool cheatOk = findCheatById(0x62E8630B) && findCheatById(0xE37FB7B8) && findCheatById(0xC2FA8E82) && findCheatById(0x42FA93FE) &&

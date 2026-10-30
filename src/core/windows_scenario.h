@@ -1,5 +1,5 @@
-// Builds ScenarioGoalsView from the scenario runtime state (spec 09 6.10, spec 23). Separate header:
-// scenario.h/script.h define GameRng, which clashes with gamerng.h pulled in by windows.h.
+// Builds ScenarioGoalsView from the scenario runtime state (spec 09 6.10, spec 23).
+// Separate header: keeps scenario.h/script.h (ScenarioRng) out of translation units using windows.h.
 #pragma once
 #include <functional>
 #include <string>

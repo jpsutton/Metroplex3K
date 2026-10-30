@@ -75,16 +75,16 @@ int main() {
     CHECK(m.toCmd(1) == cmdAdd && m.toCmd(0) == cmdSubtract && m.toCmd(9) == -1);
   }
   {
-    GameRng r(1);
+    ScenarioRng r(1);
     CHECK(r.next() == 0x41C6);
     CHECK(r.next() == 0x59D4967E);
-    GameRng r2(1);
+    ScenarioRng r2(1);
     CHECK(r2.rand(100) == 38);
   }
 
   FakeStats st;
   Host host;
-  GameRng rng(1);
+  ScenarioRng rng(1);
   ScenarioState ss;
   ss.active = true;
   ss.startMonth = 1; ss.startYear = 2000;
@@ -167,7 +167,7 @@ int main() {
     };
     FakeStats st2;
     RHost h2;
-    GameRng rg(7);
+    ScenarioRng rg(7);
     ScenarioState s2; s2.active = true;
     Script sub = mk({C(cmdSetVariable, {L(100), L(77)})});
     struct Ctx { const Script* sub; } ctx{&sub};

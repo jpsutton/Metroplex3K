@@ -160,9 +160,9 @@ struct ScenarioState {
 };
 
 // Scenario RNG: the game's integer generator (spec 14 section 8).
-struct GameRng {
+struct ScenarioRng {
   uint32_t s = 1;
-  explicit GameRng(uint32_t seed = 1) : s(seed) {}
+  explicit ScenarioRng(uint32_t seed = 1) : s(seed) {}
   uint32_t next() { uint64_t v = uint64_t(s) * 1103515245u + 12345u; s = uint32_t(v); return uint32_t(v >> 16); }
   uint32_t rand(uint32_t n);  // [0,n-1] (n==0 -> 0; n >= 0xFFFFFF: rejection, inclusive upper bound)
 };
@@ -171,7 +171,7 @@ struct GameRng {
 class ScriptInterpreter {
  public:
   using Lookup = const Script* (*)(void* user, uint32_t instance);
-  ScriptInterpreter(ScenarioState& st, ICityStats& stats, IScenarioHost& host, GameRng& rng,
+  ScriptInterpreter(ScenarioState& st, ICityStats& stats, IScenarioHost& host, ScenarioRng& rng,
                     Lookup lookup, void* user, const CommandMap* map = nullptr);
 
   // Run a whole script to completion; returns the value of the last evaluated command.
@@ -188,7 +188,7 @@ class ScriptInterpreter {
   ScenarioState& st_;
   ICityStats& stats_;
   IScenarioHost& host_;
-  GameRng& rng_;
+  ScenarioRng& rng_;
   Lookup lookup_;
   void* user_;
   const CommandMap* map_;
