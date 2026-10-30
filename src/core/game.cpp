@@ -306,7 +306,7 @@ void Game::dispatch(const MenuItemInfo& mi) {
 static const char* kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
 void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
-  W_ = w; H_ = h;
+  W_ = w; H_ = h; frameDt_ = dtMs;
   if (audio_) audio_->update(dtMs);
   if (screen_.size() != size_t(w) * h) screen_.assign(size_t(w) * h, 0xFF302820u);
   bool world3d = (scr_ == Screen::InCity || scr_ == Screen::TerrainEdit) && world_.W;
