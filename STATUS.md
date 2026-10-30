@@ -1,35 +1,27 @@
 # Metroplex3K status
 
-Clean-room SimCity 3000 Unlimited compatible engine. C++17, CMake, SDL2 (app only). Spec in `spec/`.
-Build: `mkdir -p build && cd build && cmake .. && make -j8 && ctest`.
+Clean-room SimCity 3000 Unlimited compatible engine. C++17, CMake, SDL2 (host app only). Spec in `spec/`.
+Build: `mkdir -p build && cd build && cmake .. && make -j8 && ctest`. Run: `build/metroplex3k [--game-dir DIR]`.
+Game data: user's own install (GOG). Auto-detect (`gamedir.*`), drag-drop folder / GOG installer (needs `innoextract`),
+typed path on first screen, `$M3K_GAME_DIR`.
 
-No game install on the dev machine. All parsers are written from the spec and tested on synthetic
-fixtures only. First run against real data is untested.
+IMPORTANT: no game install was available while this was written. Everything is built from the spec and tested on
+synthetic fixtures only. First run on real data will need fixes. `build/conformance <game dir>` reports parser coverage.
 
-## Done (src/core, no SDL dependency)
-- `bytes.h` LE reader/writer helpers
-- `refpack.*` RefPack decode + canonical encoder (tests pass)
-- `ixf.*` IXF container reader/writer; `resdb.*` mounted segment stack (later mount wins)
-- `ini.*` SYS.PAK reader, INI quirks, `IniStore` (PAK first)
-- `image.*` sprite (RLE/plane), UI image, BMP decoders
-- `gamedata.*` mounts `Default.ini [DBSegments]` + sprite DATs, sprite cache, TKB1 occupant attrs, CSATTRIB BIN records
-- `world.h`, `savefile.cpp` loader for .sc3/.st3/.sct/.SNR: city info, terrain, flora, zone, occupants, network pieces, view
+## Layout (src/core is platform independent; src/app is the SDL host; Android port = new host)
+- Containers/data: bytes, refpack, ixf, resdb, ini (SYS.PAK), image, gamedata, gamedir, records (raw record store)
+- Save: savefile (load), savewrite (save), world.h, records.*
+- World: terrain_gen (spec 11 sec 3), terraform (sec 4), flora
+- Render: render.* (spec 25 full), font.* (FBF + builtin fallback), ui.* (immediate mode), game.* (screens/HUD/tool menu)
+- Sim: clock, economy, population, growth/valves/landvalue (namespace growth), utilities/services (namespace us),
+  tiling_rules/tiler/network_tools, traffic, disasters, advisors/news/petitioners, scenario/script, bat, settings/cheats
+- city.* owns all subsystems; sim.* is the thin facade used by Game
+- Media: audio/xa_codec, video (+tqi/intro when landed), automata
 
-## Also done
-- `terrain_gen.*` exact spec generator; `render.*` software iso renderer (terrain, sprites, zone/road tint)
-- `gamedir.*` auto-detect (env M3K_GAME_DIR, saved, GOG/Wine paths), drag-drop folder or GOG installer (needs `innoextract`)
-- `savewrite.cpp` save writer (subset of records, round-trips)
-- `sim.*` simplified sim: zone painting, roads, RCI valves, developers, taxes
-- `src/app/main.cpp` SDL app: tools 1-9/R/B/X, space pause, F1-F3 speed
-
-## Known deviations / gaps
-- Sim: no power/water/land value (assumed present, LV=128), flat tolerance 2 not exact, bootstrap +400 residential demand, simplistic budget, no disasters/services/traffic
-- No UI chrome (menus, toolbars); keyboard/mouse only. No audio, no intro video
-- All real-data paths untested: no game install here. Expect fixes on first run with real files
-- Saved files omit many records (original treats absent as new-city state; unverified)
-
-## Next
-1. Test on real data (other agent/system); fix parser mismatches
-2. UI: toolbar, status bar, text rendering (FBF fonts, spec 05)
-3. Power/water, land value, services; network tiling rules (spec 12)
-4. Audio (spec 06), intro video, scenarios
+## Known gaps
+- Windows (budget detail pages, ordinances, advisors, petitioners, query panels, map/graphs) exist as modules; UI
+  hookup in progress (agent K produced src/core/windows.*)
+- Original UI art (MainUI.ixf skins) not used; UI is drawn with the toolkit
+- Growth: some layouts [OPEN] in spec (housing B/C, estates, row houses, seaport pier, runway) fall back
+- Many [OPEN] items use spec/29-open-issues.md recommended defaults; configurable where possible
+- Real-data verification pending (other agent closing open issues on an install)
