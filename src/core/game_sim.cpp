@@ -419,7 +419,13 @@ void Game::tickSim(uint32_t dtMs) {
     DisasterInputs in = inputsFor(city(), disastersOn_, cheats_);
     disasters_.dayTick(dw, in, out);
     int month = city().clock.date().month;
-    if (month != lastMonth_) { lastMonth_ = month; disasters_.monthlyTick(dw, in, out); }
+    if (month != lastMonth_) {
+      lastMonth_ = month; disasters_.monthlyTick(dw, in, out);
+      if (month == 1) {   // city anniversary ticker item (10, 25, 50, 100, ... years since founding)
+        NewsKey k = anniversaryNews(city().clock.date().year - world_.info.foundingYear);
+        if (k.valid()) postNews(k.table, k.id);
+      }
+    }
     applyDisasterOutput(out);
     if (scen_) scen_->dayTick();
     int wd = cal::weekday(city().clock.jdn());
