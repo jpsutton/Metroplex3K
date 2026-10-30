@@ -1,0 +1,17 @@
+// Builds ScenarioGoalsView from the scenario runtime state (spec 09 6.10, spec 23). Separate header:
+// scenario.h/script.h define GameRng, which clashes with gamerng.h pulled in by windows.h.
+#pragma once
+#include <functional>
+#include <string>
+#include "core/scenario.h"
+#include "core/win_scenario_view.h"
+
+namespace m3k {
+
+// `text(group, id)` resolves string-table entries (empty = missing -> embedded scenario strings, then
+// a literal). Strings are token-expanded with `ctx`.
+ScenarioGoalsView makeScenarioGoalsView(const std::function<std::string(uint32_t, uint32_t)>& text,
+                                        const ScenarioState& st, const ScenarioFile* file,
+                                        const ScenarioTextContext& ctx);
+
+}  // namespace m3k
