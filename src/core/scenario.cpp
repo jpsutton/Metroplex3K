@@ -274,7 +274,7 @@ std::string expandScenarioTokens(const std::string& s, const ScenarioTextContext
     else if (up == "CITYNAME" || up == "YOURCITY") rep = c.city;
     else if (up == "POPULATION") rep = groupDigits(c.population);
     else if (up == "YEAR") rep = std::to_string(c.year);
-    else if (up == "SCNNAME") rep = c.scenarioName;
+    else if (up == "SCNNAME" || up == "SCN_NAME") rep = c.scenarioName;
     else if (up.size() > 5 && up.compare(0, 4, "SCNV") == 0 && up[5] == ' ') {
       size_t p = 6;
       int64_t n;
