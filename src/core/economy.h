@@ -341,6 +341,7 @@ struct Deal {
   int32_t rate = 0;
   uint32_t sizeOrTerm = 0;     // k of spec 10.2 step 2
   uint32_t year = 0;
+  bool fromSave = false;       // loaded deal: its saved monthly amount is kept (the spec formula does not reproduce shipped saves)
   bool terminated() const { return monthCounter < 0; }
 };
 
