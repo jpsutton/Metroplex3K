@@ -180,12 +180,12 @@ int64_t taxRevenue(int rate, int32_t N, int avgLV, int minLV, float T) {
 // ================================================================ Budget
 Budget::Budget(BudgetConfig c) : cfg(std::move(c)) {
   for (int k = 0; k < kTaxGroups; k++) tax[k].zoneType = kZoneTypes[k];
-  for (uint32_t id : {dept::Police, dept::Fire, dept::Health, dept::Education, dept::Roads, dept::Transit}) {
+  for (uint32_t id : dept::kOrder) {
     Department d;
     d.id = id;
     depts.push_back(d);
   }
-  treasuryChart = Chart::make(100, 100, true);
+  treasuryChart = Chart::make(100, 200, true);   // new city: 32 samples of 100, scale 200 [OBSERVED, spec 30 s6]
   taxDemand.setEntries(cfg.taxEffects);
 }
 

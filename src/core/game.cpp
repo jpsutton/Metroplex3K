@@ -945,8 +945,9 @@ void Game::handleScrolling(uint32_t dtMs) {
     for (int i = 0; i < updates; i++) scrollBy(float(vx), float(vy));
     return;
   }
-  // Edge scrolling (8-px border strips, spec 25 10) is off for now: it was more distracting than helpful and the
-  // original's exact behaviour is unverified. Flip kEdgeScroll to bring it back.
+  // Edge scrolling (8-px border strips, spec 25 10) is off: project decision recorded in spec 29 3.5 (the original's
+  // edge margin could not be measured; parking the pointer 0-12 px from the edge did not scroll). Flip kEdgeScroll
+  // to bring it back.
   constexpr bool kEdgeScroll = false;
   if (!kEdgeScroll || uiHit_ || dragging_ || (!in.mx && !in.my)) return;
   // Edge scrolling: 8-px border strips of the city view.

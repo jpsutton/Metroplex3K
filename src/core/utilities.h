@@ -109,10 +109,11 @@ class PowerLayer {
   const std::vector<PowerDeal>& deals() const { return deals_; }
 
   // ---- record 206C6E7C:E0AFDF68:0 (668 bytes) ----
-  int32_t monthIndex = 0;
+  // New city: monthIndex 1, chart scale 100 [OBSERVED, spec 30 s4].
+  int32_t monthIndex = 1;
   int32_t production[12][10] = {};
   int32_t annualTotal[10] = {};
-  Chart chart = Chart::fresh(0, 10);
+  Chart chart = Chart::fresh(0, 100);
   uint32_t tail = 0;
   Bytes serialize() const;
   void parse(const uint8_t* p, size_t n);   // throws FormatError

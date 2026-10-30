@@ -13,12 +13,13 @@ using namespace wui;
 namespace {
 
 struct DeptRow { uint32_t id; uint32_t label; const char* fb; const char* key; uint32_t advisor; };
+// Row order of the original window [OBSERVED, spec 19 s6.1]: Education, Public Health, Fire, Roads, Police, Mass Transit.
 const DeptRow kDepts[] = {
-  {dept::Police, 0x92, "Police", "police", kAdvSafety},
-  {dept::Fire, 0x94, "Fire", "fire", kAdvSafety},
-  {dept::Health, 0x95, "Public health", "health", kAdvDemographics},
   {dept::Education, 0x96, "Education", "education", kAdvDemographics},
+  {dept::Health, 0x95, "Public health", "health", kAdvDemographics},
+  {dept::Fire, 0x94, "Fire", "fire", kAdvSafety},
   {dept::Roads, 0, "Roads", "roads", kAdvTransport},
+  {dept::Police, 0x92, "Police", "police", kAdvSafety},
   {dept::Transit, 0x97, "Transit", "transit", kAdvTransport},
 };
 const uint32_t kTaxLabel[3] = {0xA3, 0xA4, 0xA5};

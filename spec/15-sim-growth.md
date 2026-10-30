@@ -721,7 +721,14 @@ recomputation** runs. [STATIC]
       [STATIC]. [OPEN] How the centre is defined. Question for testing: does the land-value
       peak move when the player scrolls the view, or stay fixed? (The value comes from a
       city-level object that may be the view centre.) Recommended until answered: the map centre
-      `(mapW/2, mapH/2)`:
+      `(mapW/2, mapH/2)`. `[DATA]` Offline test on 13 shipped cities: fitting the centre that best
+      explains the saved land-value layer as a function of `dc` gave a centre within 8 tiles of the
+      map centre, and a fit as good as the map centre, in four cities (Craterville, Europolis,
+      Frankfurt, London). In the other nine the water, hill and agent terms dominate and the fit is
+      scattered (R² 0.15–0.46), and the fitted centre does not follow the centroid of the buildings
+      either. The result does not contradict the map-centre default and does not prove it. The
+      decisive test, scrolling the view and watching whether the peak moves after a simulation
+      run, was not done:
       `dx = |cx − tx|`, `dy = |cy − ty|`, `dc = max(dx, dy) + min(dx, dy) / 2` (integer).
    c. Base: for class K ∈ {R, C, I} with radius `rK = max(1, RpK × ((mapW + mapH)/2) / 100)`:
       `base = E_K` if `dc > rK`, else `base = C_K + round(dc × (E_K − C_K) / rK)` (float slope,
