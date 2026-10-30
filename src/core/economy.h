@@ -94,9 +94,12 @@ struct TaxGroup {
   int64_t ytd = 0;
 };
 
+// Department IDs [OBSERVED, spec 19 s6.1]: each budget slider set to a distinct value in the original,
+// saved, and the funding byte read back. Saved and shown in ascending ID order (see kOrder).
 namespace dept {
-constexpr uint32_t Police = 0x02922A5D, Fire = 0x42922A6C, Health = 0x62963928, Education = 0xA2963983,
-                   Roads = 0x8290F605, Transit = 0xC290F609;
+constexpr uint32_t Education = 0x02922A5D, Health = 0x42922A6C, Fire = 0x62963928, Roads = 0x8290F605,
+                   Police = 0xA2963983, Transit = 0xC290F609;
+constexpr uint32_t kOrder[6] = {Education, Health, Fire, Roads, Police, Transit};
 }
 
 struct Department {

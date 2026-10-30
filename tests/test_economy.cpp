@@ -280,10 +280,10 @@ static void testBudgetRecord() {
   // unknown department IDs are skipped, bonds beyond MaxBonds discarded
   Bytes t = s;
   size_t deptOff = 8 + 4 + 3 * 109 + 4;
-  wr32(t.data() + deptOff, 0x12345678);   // first department becomes unknown
+  wr32(t.data() + deptOff, 0x12345678);   // first department (Education, funded 104) becomes unknown
   Budget u;
   u.parse(t.data(), t.size());
-  CHECK(u.dept(dept::Police)->funding == 100);
+  CHECK(u.dept(dept::Education)->funding == 100);
   CHECK(u.dept(0x12345678) == nullptr && u.depts.size() == 6);
   Budget v(BudgetConfig{});
   v.cfg.maxBonds = 0;
@@ -293,6 +293,48 @@ static void testBudgetRecord() {
   bool threw = false;
   try { Budget w; w.parse(s.data(), 100); } catch (const FormatError&) { threw = true; }
   CHECK(threw);
+}
+
+// New-city budget record against the observed template (spec 30 s6, spec 19 s6.1).
+static void testNewCityBudgetRecord() {
+  for (int diff = 1; diff <= 3; diff++) {
+    Budget b;
+    if (diff == 3) { b.newCity(0); b.issueBond(10000, 1, 2000); }
+    else b.newCity(Budget::startingFunds(diff));
+    Bytes s = b.serialize();
+    const size_t bond = diff == 3 ? 25 : 0;
+    CHECK(s.size() == 1981 + bond);
+    CHECK(rd32(s.data()) == uint32_t(diff == 1 ? 50000 : diff == 2 ? 20000 : 10000));
+    CHECK(s[8] == 3 && rd16(s.data() + 12) == 3000 && s[16] == 7);
+    CHECK(rd16(s.data() + 121) == 5000 && s[125] == 7 && rd16(s.data() + 230) == 8000 && s[234] == 7);
+    CHECK(s[339] == 6);
+    // Departments in ascending ID order: Education, Public Health, Fire, Roads, Police, Mass Transit; funding 100.
+    const uint32_t ids[6] = {dept::Education, dept::Health, dept::Fire, dept::Roads, dept::Police, dept::Transit};
+    const uint32_t raw[6] = {0x02922A5D, 0x42922A6C, 0x62963928, 0x8290F605, 0xA2963983, 0xC290F609};
+    for (int i = 0; i < 6; i++) {
+      CHECK(ids[i] == raw[i]);
+      CHECK(rd32(s.data() + 343 + 117 * i) == raw[i]);
+      CHECK(s[343 + 117 * i + 4] == 100);
+    }
+    if (diff == 3) {
+      CHECK(s[1253] == 1 && s[1257] == 1);
+      CHECK(rd32(s.data() + 1262) == 10000 && rd32(s.data() + 1266) == 12000 && rd32(s.data() + 1270) == 12000);
+      CHECK(rd32(s.data() + 1274) == 0 && rd32(s.data() + 1278) == 100 && rd32(s.data() + 1338) == 10000);
+    }
+    // Treasury chart: 32 samples of 100, scale 200.
+    for (size_t o = 1425 + bond; o <= 1549 + bond; o += 4) CHECK(rd32(s.data() + o) == 100);
+    CHECK(rd32(s.data() + 1553 + bond) == 200);
+    // Nothing else is non-zero (the maturity word of the Hard bond at 1258 is excluded, see spec 19 s3).
+    std::vector<bool> known(s.size(), false);
+    auto mark = [&](size_t o, size_t n) { for (size_t i = 0; i < n; i++) known[o + i] = true; };
+    mark(0, 4); mark(8, 1); mark(12, 2); mark(16, 1); mark(121, 2); mark(125, 1); mark(230, 2); mark(234, 1); mark(339, 1);
+    for (int i = 0; i < 6; i++) mark(343 + 117 * i, 5);
+    if (diff == 3) { mark(1253, 1); mark(1257, 1); mark(1258, 4); mark(1262, 12); mark(1278, 1); mark(1338, 2); }
+    for (size_t o = 1425 + bond; o <= 1553 + bond; o += 4) mark(o, 1);
+    int stray = 0;
+    for (size_t i = 0; i < s.size(); i++) if (!known[i] && s[i] != 0) stray++;
+    CHECK(stray == 0);
+  }
 }
 
 static void testOrdinances() {
@@ -730,6 +772,7 @@ int main() {
   testYearEndPopupAndFloor();
   testBonds();
   testBudgetRecord();
+  testNewCityBudgetRecord();
   testOrdinances();
   testOrdinanceAvailability();
   testOrdinanceIniAndRecord();
