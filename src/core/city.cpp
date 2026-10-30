@@ -534,6 +534,7 @@ void City::classifyNetwork() {
 
 void City::rebuildIndex() {
   size_t N = size_t(world_->W) * world_->H;
+  for (auto& o : world_->occupants) if (!o.uid) o.uid = nextUid_++;
   occ_.assign(N, -1);
   for (size_t i = 0; i < world_->occupants.size(); i++) {
     const Occupant& o = world_->occupants[i];
@@ -569,6 +570,7 @@ bool City::tileBuildable(int x, int z) const {
 int City::addOccupant(const Occupant& o) {
   world_->occupants.push_back(o);
   int i = int(world_->occupants.size()) - 1;
+  if (!world_->occupants[size_t(i)].uid) world_->occupants[size_t(i)].uid = nextUid_++;
   for (int dx = 0; dx < o.sizeX; dx++)
     for (int dz = 0; dz < o.sizeZ; dz++)
       if (inMap(o.x + dx, o.z + dz)) occ_[idx(o.x + dx, o.z + dz)] = i;
