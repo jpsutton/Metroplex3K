@@ -7,6 +7,7 @@
 #include "core/game.h"
 #include "core/game_scenario.h"
 #include "core/gamedir.h"
+#include "core/newcity_template.h"
 #include "core/peicon.h"
 #include "core/skin.h"
 #include "core/terrain_gen.h"
@@ -282,8 +283,14 @@ void Game::acceptTerrain() {
   world_.info.fileKind = 3;
   world_.view = {cam_.u, cam_.v, cam_.zoom, cam_.rot, false};
   world_.view.valid = false;
+  // Observed new-city records (spec 30 s4, s5): the City parses the ones it models, the rest are saved verbatim.
+  // Records a loaded terrain file already carries are kept.
+  if (!world_.raw) world_.raw = std::make_shared<RawRecordStore>();
+  seedNewCityRecords(*world_.raw, world_.W, world_.H);
   attachWorld();
   enterCity();
+  // World record: only its last word differs between new cities, a fresh 32-bit value each (spec 30 s7).
+  sim_.city().valves.world.last = (uint32_t(std::rand()) << 16) ^ uint32_t(std::rand()) ^ edSeed_;
   Budget& b = sim_.city().budget;
   int64_t start = Budget::startingFunds(nc_diff_);
   if (nc_diff_ == 3) { b.newCity(0); b.issueBond(10000, 1, nc_year_); }

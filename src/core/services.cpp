@@ -122,7 +122,7 @@ void CoverageLayer::init(bool police, int W, int H, const StationParams& sp, con
   disp_.assign(size_t(cw_) * ch_, 0);
   stations_.clear(); units_.clear(); jails_.clear();
   unjailed = 0; funding_ = 100; upkeepTotal = 0;
-  phase = 0; cursorX = 4; cursorZ = 8;
+  phase = 0; cursorX = 4; cursorZ = police ? 8 : 12;   // new city: police (4, 8), fire (4, 12) [OBSERVED, spec 30 s4]
   strike = StrikeMachine();
   sweepSumD_ = sweepCount_ = sweepZeros_ = 0;
 }

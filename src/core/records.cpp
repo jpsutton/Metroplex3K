@@ -4,6 +4,7 @@
 #include <ctime>
 #include "core/growth.h"
 #include "core/landvalue.h"
+#include "core/newcity_template.h"
 #include "core/refpack.h"
 #include "core/valves.h"
 
@@ -331,6 +332,9 @@ TemplateSet TemplateSet::defaults(int W, int H) {
     t.setInner({0xE1F6ABE2, g, 0}, d);
   }
   { Bytes d; writeRecHeader(d, 505); d.resize(d.size() + 20, 0); t.setInner({0x206C6E7C, 0x21F6ABCA, 0}, d); }
+  // Records observed in new cities saved by the original (spec 30) replace the guesses above.
+  for (const auto& r : newCityConstantRecords()) t.setInner(r.key, r.data);
+  for (const auto& r : newCityLayerRecords(W, H)) t.setInner(r.key, r.data);
   return t;
 }
 
