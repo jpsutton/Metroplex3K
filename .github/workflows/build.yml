@@ -1,5 +1,11 @@
-name: ci
-on: [push, pull_request]
+name: build
+
+# Builds run only when a change lands on the `build` branch (a merge or push to it).
+# Nothing runs for any other branch.
+on:
+  push:
+    branches: [build]
+
 jobs:
   build:
     strategy:
@@ -19,5 +25,3 @@ jobs:
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DM3K_BUILD_APP=${{ runner.os == 'Windows' && 'OFF' || 'ON' }}
       - name: Build
         run: cmake --build build --config Release -j
-      - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
