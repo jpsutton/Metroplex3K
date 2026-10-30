@@ -1,6 +1,7 @@
 #include "core/ui.h"
 
 #include <algorithm>
+#include "core/skin.h"
 
 namespace m3k {
 
@@ -25,7 +26,19 @@ void Ui::frame(Rect r, bool raised) {
   fill({r.x, r.y + r.h - 1, r.w, 1}, lo); fill({r.x + r.w - 1, r.y, 1, r.h}, lo);
 }
 
+void Ui::blitRect(const Image& im, int dx, int dy, int sx, int sy, int sw, int sh) {
+  for (int j = 0; j < sh; j++) {
+    int y = dy + j; if (y < 0 || y >= H || sy + j >= im.h) continue;
+    for (int i = 0; i < sw; i++) {
+      int x = dx + i; if (x < 0 || x >= W || sx + i >= im.w) continue;
+      uint32_t p = im.px[size_t(sy + j) * im.w + sx + i];
+      if (p >> 24) (*fb)[size_t(y) * W + x] = p;
+    }
+  }
+}
+
 void Ui::panel(Rect r, const std::string& title) {
+  if (!title.empty() && skin && skin->drawDialogFrame(*this, r, title)) return;
   fill(r, panelCol);
   frame(r, true);
   if (!title.empty()) {
@@ -56,6 +69,10 @@ void Ui::blit(const Image& im, int x, int y, int sx, int sw) {
 }
 
 bool Ui::button(Rect r, const std::string& label, bool enabled, bool toggled) {
+  if (skin && skin->get("button")) {
+    bool c = false;
+    if (skin->button3(*this, skin->get("button"), r, label, enabled, toggled, c, enabled ? textCol : rgb(0x90, 0x94, 0xA0))) return c;
+  }
   bool hot = enabled && hover(r), down = hot && in.down;
   fill(r, toggled ? panelDark : hot ? rgb(0xDC, 0xE4, 0xF0) : panelCol);
   frame(r, !(down || toggled));
@@ -75,6 +92,16 @@ bool Ui::imageButton(Rect r, const Image& strip, int cells, const std::string& t
 }
 
 bool Ui::checkbox(Rect r, const std::string& label, bool& v) {
+  if (skin && skin->get("check")) {
+    const Image* cs = skin->get("check");
+    int cw = cs->w / 8, ch = cs->h;
+    Rect box{r.x, r.y + (r.h - ch) / 2, cw, ch};
+    bool hot = hover(r);
+    skin->drawCheck(*this, cs, box.x, box.y, v, true, hot, hot && in.down);
+    text(r.x + cw + 6, r.y + (r.h - fonts->ui().height()) / 2, label);
+    if (clicked(r)) { v = !v; return true; }
+    return false;
+  }
   Rect box{r.x, r.y + (r.h - 14) / 2, 14, 14};
   fill(box, rgb(255, 255, 255)); frame(box, false);
   if (v) { fill({box.x + 3, box.y + 3, 8, 8}, textCol); }

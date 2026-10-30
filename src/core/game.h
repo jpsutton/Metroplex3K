@@ -69,6 +69,9 @@ class Game {
   // Audio hook: null until game data with Res/Sound/AUDIO.INI is open (silent). The host's audio callback
   // calls audio()->mixAudio() under its own lock (the same lock must be held around frame()).
   AudioSystem* audio() { return audio_.get(); }
+  // Optional host hooks: frame() takes the audio lock itself and releases it around the software render, which
+  // can take longer than an audio buffer on complex cities (holding the lock then starves the callback: static).
+  std::function<void()> audioLock, audioUnlock;
   Sim& sim() { return sim_; }
   City& city() { return sim_.city(); }
 
@@ -218,7 +221,7 @@ class Game {
   fs::path root_;
   Skin skin_;
   std::string dataSummary_;
-  int skinH_ = 0;
+  int skinH_ = 0, skinW_ = 0;
   GameData data_;
   bool haveData_ = false;
   Fonts fonts_;

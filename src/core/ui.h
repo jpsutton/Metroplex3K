@@ -9,6 +9,8 @@
 
 namespace m3k {
 
+class Skin;
+
 struct Rect {
   int x = 0, y = 0, w = 0, h = 0;
   bool contains(int px, int py) const { return px >= x && py >= y && px < x + w && py < y + h; }
@@ -43,6 +45,7 @@ class Ui {
   uint32_t panelCol = rgb(0xC8, 0xD0, 0xDC);
   uint32_t panelDark = rgb(0x6C, 0x74, 0x90);
   uint32_t panelLight = rgb(0xF0, 0xF4, 0xFA);
+  const Skin* skin = nullptr;   // original UI art for dialogs and controls; null = flat fallback look
   std::string tooltip;
   int focusId = 0;       // text box with keyboard focus
   int activeId = 0;      // widget being dragged
@@ -58,6 +61,7 @@ class Ui {
   void textCentered(Rect r, const std::string& s, const char* font = "main10", uint32_t col = 0);
   int textWidth(const std::string& s, const char* font = "main10") const;
   void blit(const Image& im, int x, int y, int sx = 0, int sw = -1);  // optionally a horizontal slice
+  void blitRect(const Image& im, int dx, int dy, int sx, int sy, int sw, int sh);   // source sub-rectangle
   bool button(Rect r, const std::string& label, bool enabled = true, bool toggled = false);
   bool imageButton(Rect r, const Image& strip, int cells, const std::string& tip, bool toggled = false);
   bool checkbox(Rect r, const std::string& label, bool& v);

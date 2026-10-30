@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
 #include "core/windows.h"
+#include "core/skin.h"
 
 namespace m3k {
 
@@ -73,6 +74,10 @@ bool colourButton(Ui& ui, const WinEnv& E, const std::string& name, Rect r, cons
 
 bool frame(Ui& ui, const WinEnv& E, Rect r, const std::string& title) {
   ui.panel(r, title);
+  if (ui.skin && !title.empty()) {
+    Rect hit; bool clicked;
+    if (ui.skin->dialogCloseBox(ui, r, hit, clicked)) { E.spot("close", hit); return clicked; }
+  }
   Rect c{r.x + r.w - 21, r.y + 4, 16, 16};
   return button(ui, E, "close", c, "x");
 }

@@ -25,7 +25,8 @@ constexpr uint32_t Gonzo = 0x42DEC7D2, Other = 0x22DEC92D;
 // Cell index of a 4-cell strip (disabled, normal, pressed/on, highlighted); spec/08 3.2.
 enum Cell4 { CELL_DISABLED = 0, CELL_NORMAL = 1, CELL_PRESSED = 2, CELL_HOVER = 3 };
 int cell4For(bool enabled, bool pressed, bool checked, bool hover);
-// 8-cell check box / radio strip: cells 0..3 unchecked, 4..7 checked, each in 4-cell state order [OPEN].
+// 8-cell check box / radio strip, measured on the art: cell = 2*state + (checked ? 0 : 1), state 0 normal,
+// 1 hover, 2 pressed, 3 disabled.
 int cell8For(bool enabled, bool pressed, bool checked, bool hover);
 
 constexpr int kNavPanelH = 164;       // navigator panel height (bottom-right), see game_nav.cpp
@@ -67,8 +68,11 @@ struct BottomBarPlace {
 // RCI indicator geometry (spec/09 4.5). Bars are R, C, I.
 struct RciGeometry {
   static constexpr int imgW = 41, imgH = 88, zeroY = 51, clipBottom = 62, unitPx = 16;
+  // The art has two 16-px slots per bar: positive demand fills upward from the zero line inside y 35..50, negative
+  // fills downward inside y 62..77, with the R/C/I label row between (y 51..61) [measured on the art].
+  static constexpr int slotTop = 35, lowerTop = 62, lowerBottom = 78, labelTop = 51, labelH = 11;
   static constexpr int barX[3] = {5, 14, 23};
-  static constexpr int barW = 6;
+  static constexpr int barW = 5;
   // Rect relative to the indicator image for bar i (0..2) at demand value v (demand units, 1.0 = 16 px).
   // Positive grows up from the zero line, negative down; clipped to y in [0, clipBottom). h==0 -> empty.
   static Rect bar(int i, double v);
@@ -136,6 +140,14 @@ class Skin {
   // Check box / radio (8-cell strip) at (x,y); returns cell width (0 if art missing).
   int drawCheck(Ui& ui, const Image* strip, int x, int y, bool checked, bool enabled = true, bool hover = false,
                 bool pressed = false) const;
+
+  // ---- dialogs ----
+  // Original dialog frame: cloud-texture body, white top/left and black bottom/right edge lines, blue title bar with
+  // the title in it (measured on the original). Returns false when the art is missing. The close box is drawn by
+  // dialogCloseBox().
+  bool drawDialogFrame(Ui& ui, Rect r, const std::string& title) const;
+  // Close box (system-button sheet, row 0) at the title bar's right end; returns its hit rect via `hit`.
+  bool dialogCloseBox(Ui& ui, Rect dialog, Rect& hit, bool& clicked) const;
 
   // ---- front end ----
   // Main menu background chosen for the window size (800x600 set when it fits and exists, else 640x480).

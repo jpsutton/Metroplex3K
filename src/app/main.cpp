@@ -36,7 +36,7 @@ static int vkFromSdl(SDL_Keycode k) {
 }
 
 // Audio callback: stereo S16 from AudioSystem::mixAudio. The device lock (SDL_LockAudioDevice) is held
-// around Game::frame on the main thread, so the callback never races with game logic.
+// by Game::frame (via audioLock/audioUnlock) except while it renders, so the callback never races with game logic.
 static void audioCallback(void* user, Uint8* stream, int len) {
   Game* g = static_cast<Game*>(user);
   AudioSystem* a = g->audio();
@@ -84,7 +84,11 @@ int main(int argc, char** argv) {
     want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 1024;
     want.callback = audioCallback; want.userdata = &game;
     adev = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);   // no format changes allowed: mixer is 44.1k S16 stereo
-    if (adev) SDL_PauseAudioDevice(adev, 0); else std::cerr << "audio: " << SDL_GetError() << "\n";
+    if (adev) {
+      SDL_PauseAudioDevice(adev, 0);
+      game.audioLock = [adev] { SDL_LockAudioDevice(adev); };
+      game.audioUnlock = [adev] { SDL_UnlockAudioDevice(adev); };
+    } else std::cerr << "audio: " << SDL_GetError() << "\n";
   };
   openAudio();
 
@@ -148,9 +152,7 @@ int main(int argc, char** argv) {
     int w, h; SDL_GetWindowSize(win, &w, &h);
     uint32_t now = SDL_GetTicks();
     openAudio();
-    if (adev) SDL_LockAudioDevice(adev);
-    game.frame(in, w, h, now - last); last = now;
-    if (adev) SDL_UnlockAudioDevice(adev);
+    game.frame(in, w, h, now - last); last = now;   // takes the audio lock itself (see Game::audioLock)
     if (!tex || tw != w || th != h) {
       if (tex) SDL_DestroyTexture(tex);
       tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, w, h); tw = w; th = h;

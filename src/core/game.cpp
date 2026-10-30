@@ -3,6 +3,7 @@
 #include "core/game.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -415,6 +416,13 @@ void Game::dispatch(const MenuItemInfo& mi) {
 static const char* kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
 void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
+  struct Held {   // audio lock held for the frame body, dropped around rendering
+    Game& g; bool on = false;
+    void lock() { if (g.audioLock && !on) { g.audioLock(); on = true; } }
+    void unlock() { if (g.audioUnlock && on) { g.audioUnlock(); on = false; } }
+    ~Held() { unlock(); }
+  } held{*this};
+  held.lock();
   W_ = w; H_ = h; frameDt_ = dtMs;
   if (audio_) audio_->update(dtMs);
   if (screen_.size() != size_t(w) * h) screen_.assign(size_t(w) * h, 0xFF302820u);
@@ -429,12 +437,16 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
     costShow_ = false;
     renderer_.setCostTextHook([this](int sx, int sy, const std::string& text, bool ok) { costText_ = text; costX_ = sx; costY_ = sy; costOk_ = ok; costShow_ = true; });
     ropt_.animTick = int(sim_.day);
+    held.unlock();   // rendering touches no audio state
     renderer_.render(cam_, ropt_, &scene_);
+    held.lock();
     screen_ = renderer_.pixels();
   } else if (scr_ != Screen::Intro) {
     std::fill(screen_.begin(), screen_.end(), 0xFF3A2C20u);
   }
   ui_.begin(&screen_, w, h, in);
+  if (haveData_ && (skinH_ != h || skinW_ != w)) { skin_ = Skin(); skin_.load(data_, h, w); skinH_ = h; skinW_ = w; }
+  ui_.skin = (haveData_ && skin_.loaded()) ? &skin_ : nullptr;
   uiHit_ = false;
   switch (scr_) {
     case Screen::NeedData: drawNeedData(); break;
@@ -473,7 +485,6 @@ void Game::drawMessage() {
 
 bool Game::drawSkinnedToolMenu() {
   if (!haveData_ || !menuLoaded_) return false;
-  if (skinH_ != H_) { skin_ = Skin(); skin_.load(data_, H_, W_); skinH_ = H_; }
   if (!skin_.loaded() || !skin_.get("rootpanel")) return false;
   auto rootIt = menu_.menus.find(0xD1001000);
   if (rootIt == menu_.menus.end()) return false;
@@ -609,7 +620,6 @@ void Game::drawToolMenu() {
 
 void Game::drawHud() {
   BottomBarPlace place;
-  if (haveData_ && skinH_ != H_) { skin_ = Skin(); skin_.load(data_, H_, W_); skinH_ = H_; }
   bool skinBar = haveData_ && skin_.loaded() && skin_.drawBottomBar(ui_, &place);
   int bh = skinBar ? std::max(30, place.bar.h) : 30;
   Rect bar{0, H_ - bh, W_, bh};
@@ -682,6 +692,28 @@ void Game::drawHud() {
   bool skinRci = haveData_ && skin_.loaded() &&
                  skin_.drawRciIndicator(ui_, rx, ry, v[0]->value * 3.0 / 2000, v[1]->value * 3.0 / 2000, v[2]->value * 3.0 / 2000);
   if (skinRci && ui_.hover({rx, ry, RciGeometry::imgW, RciGeometry::imgH})) uiHit_ = true;
+  if (skinRci) {   // R / C / I labels in the gap between the two bar slots (225872FE:41..43)
+    // Hand-drawn 5x7 pixel glyphs: scaling the 9 px font down turns the R into an A. Other languages' letters fall
+    // back to the (scaled) text font.
+    static const char* fb[3] = {"R", "C", "I"};
+    static const char* glyph[3][7] = {
+        {"XXXX.", "X...X", "X...X", "XXXX.", "X.X..", "X..X.", "X...X"},
+        {".XXX.", "X...X", "X....", "X....", "X....", "X...X", ".XXX."},
+        {"XXXXX", "..X..", "..X..", "..X..", "..X..", "..X..", "XXXXX"}};
+    const uint32_t ink = rgb(24, 40, 140);
+    for (int i = 0; i < 3; i++) {
+      std::string t = str(0x225872FE, 0x41 + i);
+      if (t.empty() || t == fb[i]) {
+        const int gx = rx + RciGeometry::barX[i], gy = ry + RciGeometry::labelTop + (RciGeometry::labelH - 7) / 2;   // 5 px = bar width
+        for (int row = 0; row < 7; row++)
+          for (int col = 0; col < 5; col++)
+            if (glyph[i][row][col] == 'X') ui_.fill({gx + col, gy + row, 1, 1}, ink);
+      } else {
+        Rect lr{rx + RciGeometry::barX[i] - 4, ry + RciGeometry::labelTop, RciGeometry::barW + 8, RciGeometry::labelH};
+        ui_.textCentered(lr, t, "system9", ink);
+      }
+    }
+  }
   for (int i = 0; i < 3 && !skinRci; i++) {
     int cx = rx + i * 14;
     int hgt = std::max(-12, std::min(12, v[i]->value * 12 / 2000));

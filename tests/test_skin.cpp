@@ -35,18 +35,19 @@ int main() {
   }
   CHECK(cell4For(false, true, true, true) == 0 && cell4For(true, true, false, true) == 2 &&
         cell4For(true, false, true, false) == 2 && cell4For(true, false, false, true) == 3 && cell4For(true, false, false, false) == 1);
-  CHECK(cell8For(true, false, true, false) == 5 && cell8For(true, false, false, true) == 3);
+  CHECK(cell8For(true, false, true, false) == 0 && cell8For(true, false, false, false) == 1 && cell8For(true, false, false, true) == 3 &&
+        cell8For(false, false, true, false) == 6 && cell8For(true, true, true, true) == 4);
 
   // ---- RCI geometry
   {
     Rect r = RciGeometry::bar(0, 1.0);
-    CHECK(r.x == 5 && r.w == 6 && r.y == 35 && r.h == 16);
+    CHECK(r.x == 5 && r.w == 5 && r.y == 35 && r.h == 16);
     Rect c = RciGeometry::bar(1, -0.5);
-    CHECK(c.x == 14 && c.y == 51 && c.h == 8);
-    Rect i = RciGeometry::bar(2, 100);  // clipped to top
-    CHECK(i.x == 23 && i.y == 0 && i.h == 51);
-    Rect n = RciGeometry::bar(2, -100);  // clipped at 62
-    CHECK(n.y == 51 && n.h == 11);
+    CHECK(c.x == 14 && c.y == 62 && c.h == 8);   // negative fills the lower slot
+    Rect i = RciGeometry::bar(2, 100);  // clipped to the upper slot
+    CHECK(i.x == 23 && i.y == 35 && i.h == 16);
+    Rect n = RciGeometry::bar(2, -100);  // clipped to the lower slot
+    CHECK(n.y == 62 && n.h == 16);
     CHECK(RciGeometry::bar(0, 0).h == 0);
   }
 
@@ -111,8 +112,9 @@ int main() {
   CHECK(s.drawRciIndicator(ui, 300, 100, 1.0, -0.5, 0));
   CHECK(fb[size_t(100 + 40) * W + 300 + 7] == kRciColors[0]);
   CHECK(fb[size_t(100 + 34) * W + 300 + 7] != kRciColors[0]);
-  CHECK(fb[size_t(100 + 55) * W + 300 + 16] == kRciColors[1]);
-  CHECK(fb[size_t(100 + 60) * W + 300 + 16] != kRciColors[1]);
+  CHECK(fb[size_t(100 + 65) * W + 300 + 16] == kRciColors[1]);   // lower slot, 8 px
+  CHECK(fb[size_t(100 + 72) * W + 300 + 16] != kRciColors[1]);
+  CHECK(fb[size_t(100 + 55) * W + 300 + 16] != kRciColors[1]);   // label gap stays clear
 
   // image button: hover/press selects cell, click reports
   {
@@ -144,7 +146,7 @@ int main() {
     CHECK(fb[size_t(210) * W + 209] == expand16(skinfix::cellCol(1), 7));
     CHECK(!s.drawButton3(ui, b, 4, 4, {10, 200, 200, 33}));
     CHECK(s.drawCheck(ui, s.get("check"), 400, 400, true) == 13);
-    CHECK(fb[size_t(405) * W + 405] == expand16(skinfix::cellCol(5), 7));
+    CHECK(fb[size_t(405) * W + 405] == expand16(skinfix::cellCol(0), 7));
     CHECK(s.drawCheck(ui, nullptr, 0, 0, true) == 0);
   }
 

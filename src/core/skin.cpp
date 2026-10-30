@@ -17,8 +17,8 @@ int cell4For(bool enabled, bool pressed, bool checked, bool hover) {
   return CELL_NORMAL;
 }
 int cell8For(bool enabled, bool pressed, bool checked, bool hover) {
-  int s = !enabled ? CELL_DISABLED : pressed ? CELL_PRESSED : hover ? CELL_HOVER : CELL_NORMAL;
-  return (checked ? 4 : 0) + s;
+  int state = !enabled ? 3 : pressed ? 2 : hover ? 1 : 0;
+  return 2 * state + (checked ? 0 : 1);
 }
 
 Rect RciGeometry::bar(int i, double v) {
@@ -26,11 +26,11 @@ Rect RciGeometry::bar(int i, double v) {
   int h = int(std::lround(std::fabs(v) * unitPx));
   Rect r{barX[i], 0, barW, 0};
   if (v > 0) {
-    int top = std::max(0, zeroY - h);
+    int top = std::max(slotTop, zeroY - h);
     r.y = top; r.h = zeroY - top;
   } else if (v < 0) {
-    int bot = std::min(clipBottom, zeroY + h);
-    r.y = zeroY; r.h = std::max(0, bot - zeroY);
+    int bot = std::min(lowerBottom, lowerTop + h);
+    r.y = lowerTop; r.h = std::max(0, bot - lowerTop);
   } else {
     r.y = zeroY;
   }
@@ -378,6 +378,37 @@ bool Skin::button3(Ui& ui, const Image* s, Rect r, const std::string& label, boo
   bool hot = enabled && ui.hover(r), down = hot && ui.in.down;
   if (!drawButton3(ui, s, 4, cell4For(enabled, down, toggled, hot), r, label, textCol)) return false;
   clicked = enabled && ui.clicked(r);
+  return true;
+}
+
+bool Skin::drawDialogFrame(Ui& ui, Rect r, const std::string& title) const {
+  const Image* cloud = get("window");
+  if (!cloud || cloud->empty() || r.w < 16 || r.h < 40) return false;
+  // Cloud body, tiled from the dialog's top-left.
+  for (int y = 0; y < r.h; y += cloud->h)
+    for (int x = 0; x < r.w; x += cloud->w)
+      ui.blitRect(*cloud, r.x + x, r.y + y, 0, 0, std::min(cloud->w, r.w - x), std::min(cloud->h, r.h - y));
+  const uint32_t white = rgb(255, 255, 255), black = rgb(0, 0, 0);
+  ui.fill({r.x, r.y, r.w, 1}, white); ui.fill({r.x, r.y, 1, r.h}, white);
+  ui.fill({r.x, r.y + r.h - 1, r.w, 1}, black); ui.fill({r.x + r.w - 1, r.y, 1, r.h}, black);
+  // Title bar: 1 px lighter ring around a flat blue fill, inset 4 px; 31 px tall.
+  Rect bar{r.x + 4, r.y + 4, r.w - 9, 31};
+  ui.fill(bar, rgb(173, 182, 255));
+  ui.fill({bar.x + 1, bar.y + 1, bar.w - 2, bar.h - 2}, rgb(123, 146, 255));
+  ui.text(r.x + 9, r.y + 9, title, "title12", rgb(214, 215, 255));
+  return true;
+}
+
+bool Skin::dialogCloseBox(Ui& ui, Rect d, Rect& hit, bool& clicked) const {
+  const Image* sb = get("sysbtns");
+  clicked = false;
+  if (!sb || sb->w < 96 || sb->h < 100) return false;
+  const int cw = sb->w / 4, ch = sb->h / 4;   // 4 columns (states) x 4 rows (close, back, minimise, maximise)
+  hit = {d.x + d.w - 33, d.y + 6, cw, ch};
+  bool hot = ui.hover(hit), down = hot && ui.in.down;
+  int col = down ? 2 : hot ? 3 : 1;
+  ui.blitRect(*sb, hit.x, hit.y, col * cw, 0, cw, ch);
+  clicked = ui.clicked(hit);
   return true;
 }
 
