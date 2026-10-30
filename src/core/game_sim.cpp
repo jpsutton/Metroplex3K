@@ -293,8 +293,15 @@ void Game::gotoDisaster() {
 }
 
 void Game::dispatchUnit(int kind, int tx, int tz) {
-  (void)kind;
+  // Dispatch tools (spec 21 s10.3): 0 police, 1 fire, 2 plane. A police or fire unit adds a temporary coverage stamp around
+  // the clicked tile (limited to one unit more than the station count) and a street vehicle drives there.
   sound(kind == 0 ? 34 : 35);
+  if (simReady_ && world_.inTiles(tx, tz)) {
+    City& c = city();
+    if (kind == 0) c.police.dispatch(tx, tz);
+    else if (kind == 1) c.fire.dispatch(tx, tz);
+    if (street_) street_->dispatchEmergency(kind == 0 ? EmergencyType::PoliceCar : kind == 1 ? EmergencyType::FirePumper : EmergencyType::Ambulance, tx, tz);
+  }
   centreOn(tx, tz);
 }
 
