@@ -40,6 +40,18 @@ const char* mapFallback(DataLayer l) {
   }
   return "";
 }
+// End-label fallbacks (spec 09 7.2): first label sits at the left end of the ramp, second at the right.
+std::pair<const char*, const char*> endLabels(DataLayer l) {
+  switch (l) {
+    case DataLayer::Aura: return {"Good", "Bad"};
+    case DataLayer::Crime: return {"Low", "High"};
+    case DataLayer::Density: case DataLayer::LandValue: return {"High", "Low"};
+    case DataLayer::Fire: return {"Low", "High"};
+    case DataLayer::Pollution: return {"Clean", "Polluted"};
+    case DataLayer::Traffic: return {"Light", "Heavy"};
+    default: return {"Low", "High"};
+  }
+}
 bool categorical(DataLayer l) { return l == DataLayer::Zones || l == DataLayer::Power || l == DataLayer::Water; }
 
 uint32_t lerpCol(uint32_t a, uint32_t b, float t) {
@@ -127,8 +139,9 @@ WindowResult MapWindow::draw(Ui& ui, const WinEnv& E, const MapSource& src) {
     } else {
       for (int i = 0; i < 200; i++) ui.fill({mm.x + i, ly, 1, 12}, legendColour(def->layer, 0, float(i) / 199.f));
       ui.frame({mm.x, ly, 200, 12}, false);
-      ui.text(mm.x, ly + 16, E.win(def->lowId, "Low"));
-      rightText(ui, mm.x + 200, ly + 16, E.win(def->highId, "High"));
+      auto el = endLabels(def->layer);
+      ui.text(mm.x, ly + 16, E.win(def->lowId, el.first));
+      rightText(ui, mm.x + 200, ly + 16, E.win(def->highId, el.second));
     }
   } else {
     ui.text(mm.x, ly, E.win(0x269, "View city layers"));
@@ -157,8 +170,9 @@ WindowResult MapWindow::draw(Ui& ui, const WinEnv& E, const MapSource& src) {
   }
   if (def && !def->selector.empty()) {
     static const char* const sfb[3] = {"Air", "Water", "Garbage"};
+    ui.text(bx, oy + 46, E.win(0x2D8, "Show"));
     for (size_t i = 0; i < def->selector.size(); i++)
-      if (button(ui, E, "pollution." + std::to_string(i), {bx + int(i) * 70, oy + 44, 66, 22}, E.win(def->selector[i], sfb[i]), true, pollutionKind == int(i))) {
+      if (button(ui, E, "pollution." + std::to_string(i), {bx + 44 + int(i) * 66, oy + 44, 62, 22}, E.win(def->selector[i], sfb[i]), true, pollutionKind == int(i))) {
         pollutionKind = int(i);
         R.add(Act::DataMapOptionChanged, 0, int(i), 0, "pollution");
       }
