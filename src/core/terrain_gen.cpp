@@ -1,6 +1,7 @@
 #include "core/terrain_gen.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 namespace m3k {
@@ -88,6 +89,8 @@ void generateTerrain(World& world, int W, int H, const TerrainGenOptions& opt) {
   size_t N = size_t(z.R) * z.C;
   z.g.assign(N, 0); z.w.assign(N, 0); z.t.assign(N, 0); z.m.assign(N, 0);
   uint32_t seed = opt.seed;
+  if (seed == 0xFFFFFFFFu)  // spec 2/3.1: millisecond system timer
+    seed = uint32_t(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
   z.rng.seed(seed); z.s2 = seed;
   const int flags = opt.flags, R = z.R, C = z.C, M = z.M, qR = z.qR, qC = z.qC;
 
@@ -130,10 +133,11 @@ void generateTerrain(World& world, int W, int H, const TerrainGenOptions& opt) {
   uint32_t T = uint32_t((uint32_t(R) * uint32_t(C) * a * kk) / 256u) / 6u;
   if (water >= 128) T = uint32_t(R) * uint32_t(C) * 9u / 10u;
   if (T == 0) T = 1;
-  int L = 0;
+  int L = 255;
+  { int mn = 0; while (mn < 255 && hist[mn] == 0) mn++; L = mn - 1; }  // provisional: min altitude - 1
   { uint32_t cum = 0; for (int v = 0; v < 256; v++) { cum += hist[v]; if (cum >= T) { L = v; break; } } }
   z.L = L;
-  std::fill(z.w.begin(), z.w.end(), uint8_t(L));
+  std::fill(z.w.begin(), z.w.end(), uint8_t(L));  // stores wrap modulo 256
 
   // 6. Hill thresholds.
   double Dd = (flags & 0x80) ? 128.0 : 256.0;
@@ -192,7 +196,7 @@ void generateTerrain(World& world, int W, int H, const TerrainGenOptions& opt) {
     int D = int(std::sqrt(double(R)) * 0.5) * (water + 64) / 128;
     if (D >= L) D = L - 1;
     int startD = D, endD = D;
-    struct Pt { int r, c; };
+    struct Pt { int r = 0, c = 0; };
     Pt P[4];
     auto pickMid = [&]() {
       P[1].r = z.randRange(R / 8, 7 * R / 8); P[1].c = z.randRange(C / 8, 7 * C / 8);
@@ -209,7 +213,6 @@ void generateTerrain(World& world, int W, int H, const TerrainGenOptions& opt) {
       P[0].r = 0; P[0].c = z.randRange(C / 4, 3 * C / 4);
       P[3].r = R - 1; P[3].c = z.randRange(C / 4, 3 * C / 4);
       pickMid();
-      startD = endD = D;
       if (flags & 0x08) startD = std::max(D, L - z.G(P[0].r, P[0].c));
       if (flags & 0x02) endD = std::max(D, L - z.G(P[3].r, P[3].c));
     }
