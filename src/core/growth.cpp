@@ -28,11 +28,13 @@ int SimRand::rand(int64_t n) {
 // ---------------- configuration ----------------
 ZoneDescription ZoneDescription::parse(int zone, const std::string& value) {
   ZoneDescription zd; zd.zone = zone;
+  // Airport, seaport and landfill zones have no category list ("14=0xc1f81e7e,3000", "17=0x82348de5,0"): the head still
+  // names the developer class, so parse it even when there is no ':'.
   size_t colon = value.find(':');
-  if (colon == std::string::npos) return zd;
-  auto head = split(value.substr(0, colon), ',');
+  auto head = split(colon == std::string::npos ? value : value.substr(0, colon), ',');
   if (head.size() >= 1) zd.developerClass = parseIdNumber(head[0]);
   if (head.size() >= 2) zd.baseAgentType = parseIdNumber(head[1]);
+  if (colon == std::string::npos) return zd;
   for (const auto& c : split(value.substr(colon + 1), ';')) {
     if (c.empty()) continue;
     auto f = split(c, ',');
