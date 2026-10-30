@@ -152,6 +152,9 @@ class City {
   // Sound event ids (AUDIO.INI ids) raised by tools; Game maps them to AudioSystem::request.
   std::function<void(int soundId)> onSound;
 
+  // Multi-line human-readable diagnostics: valves, buildings per class/state, power, zone-manager results.
+  std::string debugStats() const;
+
   int64_t lastPowerProduced() const { return power.stats().produced; }
 
  private:
@@ -166,6 +169,7 @@ class City {
   void syncFacilities();   // plants, water facilities, police/fire stations from occupants
   std::vector<us::SimOccupant> simOccupants(bool operatingOnly) const;
   us::OrdinanceSet usOrdinances() const;
+  us::PowerEnv powerEnv(std::vector<uint8_t>& conductive) const;
   bool tileBuildable(int x, int z) const;
   bool flatTile(int x, int z) const;
   int addOccupant(const Occupant& o);
