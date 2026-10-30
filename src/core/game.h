@@ -180,6 +180,7 @@ class Game {
   // sim glue (game_sim.cpp)
   void initManagers();
   void dailyHook();
+  void weeklyHook();
   void monthlyHook(int month, int year);
   void fillAdvisorInputs(AdvisorInputs& in);
   void presentPetitions();

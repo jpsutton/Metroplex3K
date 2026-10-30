@@ -54,6 +54,80 @@ void Game::initManagers() {
   disasters_.seed(uint32_t(world_.W) * 2654435761u + 7u);
   managersReady_ = true;
   lastMonth_ = city().clock.date().month;
+  lastWeekDay_ = -1;
+  auto textFn = [this](uint32_t t, uint32_t i) { return str(t, i); };
+  tickerDb_ = TickerDb();
+  if (haveData_) {
+    IniFile nc;
+    if (data_.ini().load("SC3Newscast.INI", nc)) {
+      for (const auto& name : TickerDb::fileList(nc)) {
+        IniFile f;
+        if (data_.ini().load(name, f)) tickerDb_.addFile(f);
+      }
+    }
+    AdvisorThresholds thr;
+    for (uint32_t id : allAdvisorIds()) {
+      IniFile f;
+      if (data_.ini().load(advisorIniName(id), f)) { thr.loadAdvisorIni(id, f); if (id == kAdvPlanner) thr.loadBuildingLists(f); }
+    }
+    advisors_.thr = thr;
+    IniFile pm;
+    if (data_.ini().load("PetitionerManager.ini", pm)) {
+      petitioners_.config.loadManagerIni(pm);
+      for (const auto& name : PetitionerConfig::extraInfoFiles(pm)) {
+        IniFile f;
+        if (data_.ini().load(name, f)) petitioners_.config.addExtraInfo(f);
+      }
+    }
+    IniFile moods, gold, gfx;
+    bool haveGold = data_.ini().load("GoldAdvisorMoods.INI", gold);
+    if (data_.ini().load("AdvisorMoods.INI", moods)) advisors_.moods.load(moods, haveGold ? &gold : nullptr);
+    if (data_.ini().load("AdvisorTopicGfx.INI", gfx)) advisors_.gfx.load(gfx);
+  }
+  news_.setDb(&tickerDb_);
+  news_.setTextFn(textFn);
+  news_.clear();
+  sink_ = std::make_unique<NewsTickerSink>(news_, [this] { return int32_t(city().clock.jdn()); });
+  sink_->text = textFn;
+  advisors_.setSink(sink_.get());
+  advisors_.petitioners = &petitioners_;
+  advisors_.clear();
+  petitioners_.setSink(sink_.get());
+  petitioners_.clear();
+  petShown_.clear();
+  petView_.reset();
+}
+
+void Game::fillAdvisorInputs(AdvisorInputs& in) {
+  City& c = city();
+  in.population = c.population();
+  in.year = c.clock.date().year;
+  in.mapWidth = world_.W; in.mapHeight = world_.H;
+  in.budget.treasury = sim_.funds;
+  for (int i = 0; i < 3; i++) in.budget.taxRate[i] = sim_.taxRate;
+  in.plan.demand[0] = sim_.valveR.value; in.plan.demand[1] = sim_.valveC.value; in.plan.demand[2] = sim_.valveI.value;
+  in.plan.treasury = sim_.funds;
+  in.plan.monthIndex = c.clock.date().month - 1;
+  in.trans.nRoad = c.roadCount();
+  int64_t totalB = 0;
+  for (const auto& o : world_.occupants) { (void)o; totalB++; }
+  in.plan.totalBuildings = totalB;
+  for (auto z : world_.zone) {
+    if (z >= 1 && z <= 3) in.plan.zoned[0]++; else if (z >= 5 && z <= 7) in.plan.zoned[1]++; else if (z >= 9 && z <= 11) in.plan.zoned[2]++;
+  }
+}
+
+void Game::weeklyHook() {
+  if (!managersReady_) return;
+  AdvisorInputs ai;
+  fillAdvisorInputs(ai);
+  advisors_.calendarWeek();
+  AdvisorOutputs out;
+  advisors_.calendarDay(ai, rng_, out);
+  PetitionerInputs pi;
+  pi.population = ai.population; pi.year = ai.year;
+  petitioners_.weeklyCycle(pi, rng_);
+  presentPetitions();
 }
 
 void Game::applyDisasterOutput(DisasterOutput& out) {
@@ -201,6 +275,8 @@ void Game::tickSim(uint32_t dtMs) {
     if (month != lastMonth_) { lastMonth_ = month; disasters_.monthlyTick(dw, in, out); }
     applyDisasterOutput(out);
     if (scen_) scen_->dayTick();
+    int wd = cal::weekday(city().clock.jdn());
+    if (wd == 1 && lastWeekDay_ != int(city().clock.jdn())) { lastWeekDay_ = int(city().clock.jdn()); weeklyHook(); }
   }
   if (shake_ > 0) shake_--;
 }
