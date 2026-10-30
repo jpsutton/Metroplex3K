@@ -373,15 +373,18 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
   Rect m{r.x + 14, r.y + 34, 280, 300};
   ui.fill(m, rgb(0xB0, 0xC4, 0xA0)); ui.frame(m, false);
   struct Pos { int idx; Rect box; uint32_t id; const char* fb; };
-  Pos pos[4] = {{0, {m.x + 90, m.y + 8, 100, 40}, 0x11D, "North"}, {1, {m.x + 172, m.y + 130, 100, 40}, 0x11F, "East"},
-                {2, {m.x + 90, m.y + 252, 100, 40}, 0x120, "South"}, {3, {m.x + 8, m.y + 130, 100, 40}, 0x11E, "West"}};
+  Pos pos[4] = {{0, {m.x + 70, m.y + 8, 140, 40}, 0x11D, "North"}, {1, {m.x + 146, m.y + 130, 128, 40}, 0x11F, "East"},
+                {2, {m.x + 70, m.y + 252, 140, 40}, 0x120, "South"}, {3, {m.x + 6, m.y + 130, 128, 40}, 0x11E, "West"}};
   for (auto& p : pos) {
     const Neighbour& nb = n.neighbours[p.idx];
     std::string lbl = E.win(p.id, p.fb);
-    if (nb.exists) lbl += ": " + (nb.cityName.empty() ? "Neighbour " + std::to_string(p.idx + 1) : nb.cityName);
-    if (button(ui, E, "nb." + std::to_string(p.idx), p.box, lbl, nb.exists, selected == p.idx)) selected = p.idx;
+    std::string nm = nb.exists ? (nb.cityName.empty() ? "Neighbour " + std::to_string(p.idx + 1) : nb.cityName) : "";
+    if (button(ui, E, "nb." + std::to_string(p.idx), p.box, "", nb.exists, selected == p.idx)) selected = p.idx;
+    uint32_t tc = !nb.exists ? rgb(0x90, 0x94, 0xA0) : selected == p.idx ? rgb(255, 255, 255) : 0;
+    ui.textCentered({p.box.x, p.box.y + 4, p.box.w, lh}, lbl, "main10", tc);
+    if (!nm.empty()) ui.textCentered({p.box.x, p.box.y + 4 + lh, p.box.w, lh}, nm, "main10", tc);
   }
-  ui.textCentered({m.x + 100, m.y + 120, 80, 60}, "City");
+  ui.textCentered({m.x + 100, m.y + 70, 80, 30}, "City");
   int x0 = r.x + 310, y = r.y + 40;
   if (selected >= 0 && selected < kNeighbours) {
     const Neighbour& nb = n.neighbours[selected];

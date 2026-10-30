@@ -223,7 +223,7 @@ MessageBox::Layout MessageBox::layout(const Ui& ui) const {
     H = int(lines.size()) * lh;
   }
   L.W = W; L.H = H; L.lines = lines;
-  L.buttonY = H + 24 + (title_.empty() ? 0 : lh);
+  L.buttonY = H + 24 + (title_.empty() ? 0 : std::max(lh, ui.fonts->get("title12").height() + 2));
   L.buttonX0 = (W - L.base) / 2 + 8;
   return L;
 }
@@ -239,7 +239,7 @@ WindowResult MessageBox::draw(Ui& ui, const WinEnv& E) {
   ui.panel(box, "");
   int cx = box.x + 8, cy = box.y + titleBar;
   int ty = cy;
-  if (!title_.empty()) { ui.text(cx, ty, title_, "title12"); ty += lh; }
+  if (!title_.empty()) { ui.text(cx, ty, title_, "title12"); ty += std::max(lh, ui.fonts->get("title12").height() + 2); }
   for (auto& l : L.lines) { ui.text(cx, ty + 4, l); ty += lh; }
   auto bs = buttonsFor(style_);
   int idx = -1;
@@ -320,6 +320,16 @@ void TickerWidget::push(const NewsItem& n, int width) {
   for (auto& i : items) right = std::max(right, i.x + int(i.n.text.size()) * 6 + TickerScroll::kGapPixels);
   it.x = std::max(width, right);
   items.push_back(it);
+  if (n.cls == 1) alarm = true;
+}
+
+void TickerWidget::push(const NewsItem& n, int width, const Ui& ui) {
+  Item it; it.n = n;
+  int right = 0;
+  for (auto& i : items) right = std::max(right, i.x + ui.textWidth(i.n.text) + TickerScroll::kGapPixels);
+  it.x = std::max(width, right);
+  items.push_back(it);
+  if (n.cls == 1) alarm = true;
 }
 
 void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t, int32_t today, GameRng* rng) {
@@ -338,11 +348,13 @@ void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t,
     if (n.text.empty()) break;
     Item it; it.n = n; it.x = std::max(width, right);
     items.push_back(it);
+    if (n.cls == 1) alarm = true;
   }
 }
 
 WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
   WindowResult R;
+  if (alarm) { alarm = false; R.add(Act::PlaySound, 0, 54); }
   std::vector<uint32_t> buf(size_t(r.w) * r.h);
   for (int y = 0; y < r.h; y++)
     for (int x = 0; x < r.w; x++) buf[size_t(y) * r.w + x] = rgb(20, 24, 60);

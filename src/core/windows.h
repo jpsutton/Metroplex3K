@@ -91,7 +91,7 @@ enum class Act {
   DataMapOptionChanged,
   MessageResult,      // a = MsgButton
   TipChanged, ShowTipsChanged,
-  TickerClick,        // a = x, b = z
+  TickerClick,        // a = x, b = z (also PlaySound 47; urgent items PlaySound 54)
   ToggleHistorical,   // a = x, b = z
   SetTimeRange,       // a = 0 year / 1 decade / 2 century
   Done                // OK pressed on a form
@@ -468,10 +468,12 @@ class TickerWidget {
   struct Item { NewsItem n; int x = 0; };
   std::vector<Item> items;
   int accumMs = 0;
+  bool alarm = false;                          // an urgent (class 1) item entered: draw() emits PlaySound(54) once
   // Advance by dtMs: step 2 px each time more than 50 ms elapsed, and pull the next item from `t`
   // when the strip has room (items separated by 20 px). `width` = strip width.
   void update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t, int32_t today, GameRng* rng);
-  void push(const NewsItem& n, int width);     // append at the right edge / after the last item
+  void push(const NewsItem& n, int width);     // append at the right edge / after the last item (glyph-count width estimate)
+  void push(const NewsItem& n, int width, const Ui& ui);   // same with measured text width
   // Draws the strip inside r. Click on an item with a map location -> TickerClick (and PlaySound 47).
   WindowResult draw(Ui& ui, const WinEnv& E, Rect r);
 };
