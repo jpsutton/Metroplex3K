@@ -1,5 +1,6 @@
 // City-family file loader. See spec/10-save-format.md.
 #include <algorithm>
+#include "core/records.h"
 #include "core/refpack.h"
 #include "core/world.h"
 
@@ -181,6 +182,7 @@ World loadCity(const Bytes& file, std::vector<std::string>* warnings) {
   if (!ixf.openMemory(file) || ixf.entries().empty()) throw FormatError("not an IXF city file");
   World w;
   Bytes b;
+  try { w.raw = std::make_shared<RawRecordStore>(RawRecordStore::parse(file)); } catch (const FormatError&) { w.raw.reset(); }
   if (!ixf.getBytes({0x00000FA1, 0x617E198D, 0}, b)) throw FormatError("missing city info record");
   parseCityInfo(b.data(), b.size(), w);
 

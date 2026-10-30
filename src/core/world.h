@@ -4,6 +4,7 @@
 #pragma once
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 #include "core/bytes.h"
@@ -37,6 +38,8 @@ struct SchemeSel { uint32_t buildingSet = 0, floraSet = 0, landscape = 0; };
 
 struct ViewState { float centreX = 0, centreZ = 0; int zoom = 2, rotation = 0; bool valid = false; };
 
+class RawRecordStore;  // records.h
+
 struct World {
   int W = 0, H = 0;
   CityInfo info;
@@ -52,6 +55,9 @@ struct World {
   std::vector<uint8_t> zone;   // W*H zone type
   std::vector<Occupant> occupants;
   std::vector<NetPiece> surface, pipes, subway;
+  // Every record of the loaded file (known or not), kept so unknown records round-trip. Set by loadCity;
+  // City::flush() replaces the layer records it owns; saveCity() patches the records this struct models.
+  std::shared_ptr<RawRecordStore> raw;
 
   void init(int w, int h);
   int vIdx(int x, int z) const { return x * (H + 1) + z; }
