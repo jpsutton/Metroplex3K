@@ -297,7 +297,8 @@ int32_t ScriptInterpreter::execLeaf(const ScriptCommand& c, int id, int depth) {
       if (!dest(c, v)) return 0;
       int32_t a = argv(c, 1), b = argv(c, 2);
       int32_t lo = std::min(a, b), hi = std::max(a, b);
-      int32_t r = lo == hi ? a : int32_t(int64_t(lo) + int64_t(rng_.rand(uint32_t(int64_t(hi) - lo + 1))));
+      int64_t range = int64_t(hi) - lo + 1;  // up to 2^32 (full s32 span): any 32-bit draw is in range
+      int32_t r = lo == hi ? a : int32_t(int64_t(lo) + (range > 0xFFFFFFFFll ? int64_t(rng_.next()) : int64_t(rng_.rand(uint32_t(range)))));
       setVar(v, r);
       return r;
     }

@@ -336,6 +336,38 @@ int main() {
     PresenterTable pt;
     CHECK(!PresenterTable::parse("1\r1 50 51 52\r", pt));
   }
+  // pop-up suspension, resume without replaying lists, start hook, full-range random
+  {
+    struct H2 : Host { int started = -1; void scenarioStarted(bool r) override { started = r ? 1 : 0; } };
+    ScenarioFile w = makeScenario();
+    w.scripts[1].cmds = {C(cmdRepeatRegular, {L(0), L(601861772), L(2)})};
+    Stats st; H2 host;
+    ScenarioRuntime rt(w, st, host, 1);
+    rt.start();
+    CHECK(host.started == 0);
+    rt.setPopupOpen(true);
+    st.dt = {2, 1, 2000};
+    rt.dayTick();
+    CHECK(rt.state().clock == 1440 && rt.state().vars[10] == 0);  // clock runs, scripts suspended
+    rt.setPopupOpen(false);
+    CHECK(rt.state().vars[10] == 1);
+    // resume: lists registered in the saved state do not run at once
+    ScenarioFile h = w; h.hasState = true; h.state = rt.state();
+    Stats st2; st2.dt = {2, 1, 2000}; H2 host2;
+    ScenarioRuntime rt2(h, st2, host2, 1);
+    rt2.start();
+    CHECK(host2.started == 1 && rt2.state().vars[10] == 1);
+    st2.dt = {3, 1, 2000};
+    rt2.dayTick();
+    CHECK(rt2.state().vars[10] == 2 && rt2.state().clock == 2880);
+    // random over the whole s32 range does not collapse to the minimum
+    ScenarioFile r = makeScenario();
+    r.scripts[1].cmds = {C(cmdGenerateRandomNum, {L(20), L(INT32_MIN), L(INT32_MAX)})};
+    Stats st3; Host host3;
+    ScenarioRuntime rt3(r, st3, host3, 7);
+    rt3.start();
+    CHECK(rt3.state().vars[20] != INT32_MIN);
+  }
   // template -> scenario
   {
     SscProject p;

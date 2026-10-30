@@ -439,6 +439,8 @@ void ScenarioRuntime::start() {
   if (file_.hasState) {
     st_ = file_.state;
     st_.active = true;
+    seenRepeat_ = stats_.date();  // a restored scenario must not replay the repeat lists at once
+    seenClockDay_ = seenRepeat_.day;
   } else {
     st_ = ScenarioState();
     GameDate d = stats_.date();
@@ -454,6 +456,7 @@ void ScenarioRuntime::start() {
   }
   started_ = true;
   evaluate();
+  host_.scenarioStarted(file_.hasState);
 }
 
 ScenarioResult ScenarioRuntime::result() const {
@@ -493,8 +496,17 @@ void ScenarioRuntime::dayTick() {
   evaluate();
 }
 
+void ScenarioRuntime::setPopupOpen(bool open) {
+  popupOpen_ = open;
+  if (!open && pending_ && !evaluating_) evaluate();
+}
+
 void ScenarioRuntime::evaluate() {
   if (!started_ || !st_.active) return;
+  if (popupOpen_ || evaluating_) { pending_ = true; return; }  // suspended / re-entered from a modal pop-up
+  pending_ = false;
+  evaluating_ = true;
+  struct Done { bool& f; ~Done() { f = false; } } done{evaluating_};
   GameDate d = stats_.date();
   auto runList = [&](int l) {
     std::vector<ScriptRef> list = st_.repeat[l];  // copy: scripts may register more
@@ -521,7 +533,10 @@ void ScenarioRuntime::evaluate() {
     interp_->evalNext(*tl, pos, true);
     st_.cursor = int32_t(pos) - 1;
     if (pos >= tl->cmds.size()) st_.hasTimeline = false;
+    if (popupOpen_) { pending_ = true; break; }  // a pop-up opened mid-pass: resume when it closes
   }
+  evaluating_ = false;
+  if (pending_ && !popupOpen_ && st_.active) evaluate();  // ticks that arrived during the pass
 }
 
 // ---- .SSC -----------------------------------------------------------------------------------

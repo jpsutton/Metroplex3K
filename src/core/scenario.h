@@ -192,6 +192,10 @@ class ScenarioRuntime {
   ScenarioState& state() { return st_; }
   const ScenarioState& state() const { return st_; }
   bool active() const { return st_.active; }
+  // A pop-up raised from a clock callback is open: script execution is suspended (spec 23 4.4).
+  // Ticks arriving meanwhile still advance the clock; the evaluation pass runs when it closes.
+  void setPopupOpen(bool open);
+  bool popupOpen() const { return popupOpen_; }
   int32_t run(const Script& s) { return interp_->run(s); }
 
  private:
@@ -205,6 +209,7 @@ class ScenarioRuntime {
   GameDate seenRepeat_{0, 0, 0};
   int seenClockDay_ = 0;
   bool started_ = false;
+  bool popupOpen_ = false, evaluating_ = false, pending_ = false;
 };
 
 // ---- .SSC scenario-creator template (section 7) ---------------------------------------------

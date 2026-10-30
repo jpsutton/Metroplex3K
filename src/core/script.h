@@ -129,6 +129,9 @@ class IScenarioHost {
   virtual void offerBusinessDeal(int) {}
   virtual void setBusinessDealEnabled(int, bool) {}
   virtual void endScenario(int /*rank*/) {}
+  // Scenario became active (spec 23 4.2 step 3): tell the simulation, show the start dialog.
+  // Called after the first evaluation pass; `resumed` = restored from a saved state record.
+  virtual void scenarioStarted(bool /*resumed*/) {}
 };
 
 // ---- run-time state (spec 23 section 4.1, 8) ----------------------------------------------
