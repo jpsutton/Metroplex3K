@@ -432,6 +432,10 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   wire();
   refresh(true);
   residents_ = countResidents();   // HUD and dialogs read this before the first month end
+  // Business deals are not stored in the save: a deal is in force while its business building stands (spec 19 s11).
+  for (const auto& d : business.defs)
+    for (const auto& o : world_->occupants)
+      if (o.agentType == d.buildingType) { business.inForce.push_back(d.buildingType); break; }
   if (!power.plants().empty()) {   // loaded city: coverage must be valid before the first month end
     auto consumers = simOccupants(true);
     consumers.erase(std::remove_if(consumers.begin(), consumers.end(), [](const us::SimOccupant& o) { return us::powerCategory(o.agentType) >= 0; }), consumers.end());
