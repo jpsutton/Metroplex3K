@@ -595,17 +595,29 @@ void Game::drawToolMenu() {
 }
 
 void Game::drawHud() {
-  int bh = 30;
+  BottomBarPlace place;
+  if (haveData_ && skinH_ != H_) { skin_ = Skin(); skin_.load(data_, H_, W_); skinH_ = H_; }
+  bool skinBar = haveData_ && skin_.loaded() && skin_.drawBottomBar(ui_, &place);
+  int bh = skinBar ? std::max(30, place.bar.h) : 30;
   Rect bar{0, H_ - bh, W_, bh};
-  ui_.panel(bar);
+  if (!skinBar) ui_.panel(bar);
   if (ui_.hover(bar)) uiHit_ = true;
   int month = std::min(11, (world_.info.dayOfYear - 1) * 12 / 365);
   std::string date = std::string(kMonths[month]) + " " + std::to_string(world_.info.year);
-  ui_.text(8, H_ - bh + 8, world_.info.cityName);
-  ui_.text(180, H_ - bh + 8, date);
-  ui_.text(280, H_ - bh + 8, "$" + groupDigits(sim_.funds), "main10", sim_.funds < 0 ? rgb(255, 0, 0) : 0);
-  ui_.text(400, H_ - bh + 8, "Pop " + groupDigits(sim_.population()));
-  int bx = 520;
+  std::string funds = "$" + groupDigits(sim_.funds), popText = "Pop " + groupDigits(sim_.population());
+  uint32_t fundsCol = sim_.funds < 0 ? rgb(255, 0, 0) : 0;
+  if (skinBar) {
+    ui_.text(place.fieldA.x, place.fieldA.y, world_.info.cityName);
+    ui_.text(place.fieldB.x, place.fieldB.y, groupDigits(sim_.population()));
+    ui_.text(place.fieldC.x, place.fieldC.y, funds, "main10", fundsCol);
+    ui_.text(place.fieldD.x, place.fieldD.y, date);
+  } else {
+    ui_.text(8, H_ - bh + 8, world_.info.cityName);
+    ui_.text(180, H_ - bh + 8, date);
+    ui_.text(280, H_ - bh + 8, funds, "main10", fundsCol);
+    ui_.text(400, H_ - bh + 8, popText);
+  }
+  int bx = skinBar ? std::max(520, place.fieldD.x + place.fieldD.w + 16) : 520;
   if (ui_.button({bx, H_ - bh + 3, 44, 24}, paused_ ? "Run" : "Pause")) { paused_ = !paused_; sound(paused_ ? 24 : 23); }
   for (int i = 1; i <= 3; i++)
     if (ui_.button({bx + 48 + (i - 1) * 26, H_ - bh + 3, 24, 24}, std::to_string(i), true, !paused_ && speed_ == i)) { speed_ = i; paused_ = false; sound(24 + i); }
