@@ -45,6 +45,7 @@ class Fonts {
   void load(const fs::path& textDir);
   const Font& get(const std::string& name) const;  // "system9","main9","main10","title9","title12","serif17"
   const Font& ui() const { return get("main10"); }
+  bool has(const std::string& name) const { return f_.count(name) != 0; }
  private:
   std::map<std::string, Font> f_;
   mutable Font builtin_[2];

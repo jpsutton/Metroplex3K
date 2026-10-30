@@ -213,6 +213,7 @@ class Game {
 
   fs::path root_;
   Skin skin_;
+  std::string dataSummary_;
   int skinH_ = 0;
   GameData data_;
   bool haveData_ = false;

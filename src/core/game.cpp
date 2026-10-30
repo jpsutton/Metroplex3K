@@ -212,6 +212,17 @@ bool Game::init(const fs::path& gameRoot, std::string& err) {
     MenuTree t;
     if (t.parse(mi) && t.menus.count(0xD1001000)) { menu_ = std::move(t); menuLoaded_ = true; }
   }
+  {
+    char b[512];
+    size_t fontsOk = 0;
+    for (const char* n : {"system9", "main9", "main10", "title9", "title12", "serif17"}) if (fonts_.has(n)) fontsOk++;
+    Skin probe; bool skinOk = probe.load(data_, 800, 1280);
+    std::snprintf(b, sizeof b, "data: %zu segments, %zu strings, %zu images, %zu/6 fonts, menu %s, skin %s (%zu art)",
+                  data_.db().segmentCount(), data_.db().keysOfType(T_STRING).size(), data_.db().keysOfType(T_UI_IMAGE).size(), fontsOk,
+                  menuLoaded_ && menu_.items.size() > 20 ? "ok" : "fallback", skinOk ? "ok" : "none", probe.imageCount());
+    dataSummary_ = b;
+    std::fprintf(stderr, "metroplex3k: %s (root %s)\n", b, root_.string().c_str());
+  }
   scr_ = introEnabled_ ? Screen::Intro : Screen::MainMenu;
   introTried_ = false;
   return true;
