@@ -1,7 +1,9 @@
 #include "core/gamedata.h"
+#include "core/settings.h"
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 
 namespace m3k {
 
@@ -34,6 +36,7 @@ OccAttr parseOccAttr(const uint8_t* p, size_t n) {
         case 0x67: if (!keys.empty()) a.appearance = keys[0]; break;
         case 0x72: if (!nums.empty()) a.flags = nums[0]; break;
         case 0xCA: if (!nums.empty()) a.buildingFlags = nums[0]; break;
+        case 0xC9: if (!nums.empty()) a.powerAttr = int(nums[0]); break;
         case 0x6D: if (!keys.empty()) a.nameKey = keys[0]; break;
         case 0x64: if (!strs.empty()) a.designName = strs[0]; break;
         case 0x6B: if (!keys.empty()) a.pedProdKey = keys[0]; break;
@@ -113,6 +116,16 @@ bool GameData::open(const fs::path& root, std::string& err) {
   }
   root_ = base; apps_ = apps;
   ini_.setSources(resolveCI(apps, "Sys"));
+  {  // language selection (spec 05 section 2): explicit request, else the OS locale, else English; always an installed folder
+    LanguageInputs li;
+    li.cmdLine = languageRequest;
+    li.installed = [&](int id) { return languageInstalled(apps_, id); };
+    for (const char* var : {"LC_ALL", "LC_MESSAGES", "LANG"}) {
+      const char* v = std::getenv(var);
+      if (v && *v) { uint16_t id = langIdFromPosixLocale(v); if (id) li.registryDword = id; break; }
+    }
+    if (const char* name = languageFolder(chooseLanguage(li))) language = name;
+  }
   mountSegments();
   mountSpriteDats();
   return true;

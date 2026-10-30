@@ -19,12 +19,14 @@ class CityDisasterWorld : public DisasterWorld {
     int i = c_.occupantAt(x, z);
     if (i < 0 || i >= int(w_.occupants.size())) return o;
     const Occupant& oc = w_.occupants[i];
-    o.valid = true; o.id = uint32_t(i + 1); o.ax = oc.x; o.az = oc.z; o.w = oc.sizeX; o.h = oc.sizeZ;
+    o.valid = true; o.id = oc.uid; o.ax = oc.x; o.az = oc.z; o.w = oc.sizeX; o.h = oc.sizeZ;
     o.agentType = oc.agentType;
     o.burning = oc.state == 16;
     o.lotDamage = oc.state == 8 ? kDmgRubble : oc.state == 16 ? kDmgBurnt : oc.state == 2 ? kDmgAbandon : 0;
     return o;
   }
+  bool inGroup(const OccInfo& o, int group) const override { return c_.agentHierarchy().isAncestorOrSelf(o.agentType, uint32_t(group)); }
+  bool isA(uint32_t agentType, uint32_t ancestor) const override { return c_.agentHierarchy().isAncestorOrSelf(agentType, ancestor); }
   bool isWater(int x, int z) const override {
     if (!w_.inTiles(x, z)) return false;
     return w_.altAt(x, z) < w_.waterAt(x, z);
@@ -222,17 +224,17 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
   for (const auto& cmd : out.commands) {
     switch (cmd.kind) {
       case DisasterCommand::DestroyOccupant: {
-        int i = int(cmd.id) - 1;
+        int i = c.occupantIndexByUid(cmd.id);
         if (i >= 0 && i < int(world_.occupants.size())) { world_.occupants[i].state = cmd.b == 0 || cmd.b == 1 ? 8 : world_.occupants[i].state; c.markOccupantsDirty(); }
         break;
       }
       case DisasterCommand::IgniteOccupant: {
-        int i = int(cmd.id) - 1;
+        int i = c.occupantIndexByUid(cmd.id);
         if (i >= 0 && i < int(world_.occupants.size())) { world_.occupants[i].state = 16; c.markOccupantsDirty(); }
         break;
       }
       case DisasterCommand::ClearBurning: {
-        int i = int(cmd.id) - 1;
+        int i = c.occupantIndexByUid(cmd.id);
         if (i >= 0 && i < int(world_.occupants.size()) && world_.occupants[i].state == 16) { world_.occupants[i].state = 1; c.markOccupantsDirty(); }
         break;
       }

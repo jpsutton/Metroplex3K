@@ -22,7 +22,7 @@ struct Stats : ICityStats {
   int32_t funds() const override { return int32_t(std::max<int64_t>(-2000000000, std::min<int64_t>(2000000000, c->budget.funds))); }
   int32_t totalDebt() const override { return int32_t(c->budget.totalPrincipal); }
   int32_t taxRate(int cat) const override { return c->budget.tax[std::max(0, std::min(2, cat))].rate; }
-  int32_t trafficDensity() const override { return 0; }
+  int32_t trafficDensity() const override { return c->trafficDensityAverage(); }
   int32_t surplusPower() const override { auto s = c->power.stats(); return int32_t(s.produced - s.consumed); }
   int32_t surplusWater() const override { return 0; }
   int32_t unpoweredBuildings() const override { return c->power.stats().unpoweredConsumers; }

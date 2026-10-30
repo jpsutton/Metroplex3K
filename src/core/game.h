@@ -77,6 +77,8 @@ class Game {
   City& city() { return sim_.city(); }
 
   // Startup options.
+  const std::string& language() const { return data_.language; }
+  void setLanguage(const std::string& name) { languageRequest_ = name; }   // before init(); empty = from the OS locale
   void setPersistence(bool on) { persist_ = on; }        // settings / prefs file (default on)
   void setIntroEnabled(bool on) { introEnabled_ = on; }  // default on
   // Without game data: use the built-in menu / texts and start the generated-terrain demo (tools, tests).
@@ -240,6 +242,7 @@ class Game {
   Screen scr_ = Screen::NeedData;
   bool quit_ = false;
   bool persist_ = true;
+  std::string languageRequest_;
   bool introEnabled_ = true;
   std::string pathInput_;
   std::string msgText_, lastMsg_;

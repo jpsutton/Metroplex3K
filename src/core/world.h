@@ -17,6 +17,7 @@ struct Occupant {
   int x = 0, z = 0, y = 0, rot = 0;
   int sizeX = 1, sizeZ = 1;
   uint32_t occId = 0;       // key instance
+  uint32_t uid = 0;         // runtime only (never saved): stable instance id, 0 = not assigned yet (City::rebuildIndex)
   uint32_t keyType = 0;     // 0x207EDC0E or 0x220055E1
   uint32_t agentType = 0;
   uint32_t state = 1;       // 1 occupied, 2 abandoned, 4 construction, 8 rubble, 16 fire

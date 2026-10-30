@@ -5,7 +5,9 @@ Build: `mkdir -p build && cd build && cmake .. && make -j8 && ctest`. Run: `buil
 Game data = the user's own install (GOG). Auto-detect (`gamedir.*`), drag-drop folder or GOG installer (needs
 `innoextract`), typed path on the first screen, `$M3K_GAME_DIR`. See README.md and docs/.
 
-IMPORTANT: no game install was available while this was written. Everything is built from the spec and tested on
+NOTE: the engine was first written without a game install; it has since been run against a real GOG install. Parsers, round trips (47 of 60 saves byte-identical, the rest only differ in compression bytes), budget, pollution, crime, water and power results are checked against the shipped saves (see closed issues #5, #6, #11, #17, #74, #78). Treat the next sentence as history.
+
+IMPORTANT (history): no game install was available while this was first written. Everything is built from the spec and tested on
 synthetic fixtures (tests/fake_install.h builds a tiny install on disk). First run on real data will need fixes.
 `build/conformance <game dir>` reports parser coverage over every shipped file type.
 

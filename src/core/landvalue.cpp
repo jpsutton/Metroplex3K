@@ -177,6 +177,8 @@ void LandValueLayer::cycleStart(const LandValueCity& c, bool rollStats) {
   if (rollStats) {
     prevSum = sum;
     avgLV = count ? uint8_t(std::min<int64_t>(std::max<int64_t>(sum, 0) / int64_t(count), 255)) : 0;
+    for (size_t i = history.size() - 1; i > 0; i--) history[i] = history[i - 1];   // most recent first [INFERRED]; saved Berlin history[0] = avgLV
+    history[0] = avgLV;
     sum = 0; count = 0;
   }
   int h = c.hillReference();

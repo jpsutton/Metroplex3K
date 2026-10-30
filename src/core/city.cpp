@@ -447,6 +447,9 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   wire();
   refresh(true);
   residents_ = countResidents();   // HUD and dialogs read this before the first month end
+  // A saved city carries the resident count of its last month end as the R valve's supply (Berlin: 794,278, the figure
+  // the original shows in its dialogs; counting operating buildings now gives 793,960). Prefer it until the next month end.
+  if (valves.v3000.Slast > 0 && std::abs(int64_t(valves.v3000.Slast) - residents_) * 20 < int64_t(valves.v3000.Slast)) residents_ = valves.v3000.Slast;
   // Full monthly costs are normally supplied by the owning subsystem at the first month end, and health and education
   // have no modelled upkeep yet (issue #44). Until then reuse the loaded city's last monthly charge so the budget
   // window's year-end estimate and the next settlement start from the saved level.
@@ -531,6 +534,7 @@ void City::classifyNetwork() {
 
 void City::rebuildIndex() {
   size_t N = size_t(world_->W) * world_->H;
+  for (auto& o : world_->occupants) if (!o.uid) o.uid = nextUid_++;
   occ_.assign(N, -1);
   for (size_t i = 0; i < world_->occupants.size(); i++) {
     const Occupant& o = world_->occupants[i];
@@ -566,6 +570,7 @@ bool City::tileBuildable(int x, int z) const {
 int City::addOccupant(const Occupant& o) {
   world_->occupants.push_back(o);
   int i = int(world_->occupants.size()) - 1;
+  if (!world_->occupants[size_t(i)].uid) world_->occupants[size_t(i)].uid = nextUid_++;
   for (int dx = 0; dx < o.sizeX; dx++)
     for (int dz = 0; dz < o.sizeZ; dz++)
       if (inMap(o.x + dx, o.z + dz)) occ_[idx(o.x + dx, o.z + dz)] = i;
@@ -898,6 +903,7 @@ std::vector<us::SimOccupant> City::simOccupants(bool operatingOnly) const {
     s.id = o.occId; s.agentType = o.agentType; s.group = o.agentType;
     s.x = o.x; s.z = o.z; s.sizeX = o.sizeX; s.sizeZ = o.sizeZ;
     s.hasState = true; s.state = o.state;
+    if (game_) if (const OccAttr* a = game_->occupant(o.occId)) if (a->powerAttr >= 0) s.powerUse = a->powerAttr;   // [OBSERVED] attribute 0xC9 is the power use (Σ over a shipped city = 96% of its saved production table)
     v.push_back(s);
   }
   return v;
@@ -1001,6 +1007,16 @@ void City::dailyFire() {
   env.occupied = [this](int x, int z) { return occupantAt(x, z) >= 0; };
   env.averageMetric = int(flammability.averageFlammability());
   fire.tick(env, urng_);
+}
+int City::trafficDensityAt(int x, int z) const {
+  if (!traffic || !inMap(x, z)) return 0;
+  return std::max({int(traffic->liveSurface(x, z)), int(traffic->liveHighway(x, z)), int(traffic->liveSubway(x, z))});
+}
+int City::trafficDensityAverage() const {
+  if (!traffic || !world_) return 0;
+  int64_t sum = 0, n = 0;
+  for (int x = 0; x < world_->W; x++) for (int z = 0; z < world_->H; z++) { int d = trafficDensityAt(x, z); if (d) { sum += d; n++; } }
+  return n ? int(sum / n) : 0;
 }
 int City::jailCapacity() const {
   us::IniReader t{&cfg_.ini.tune};

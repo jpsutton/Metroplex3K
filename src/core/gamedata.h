@@ -32,6 +32,7 @@ struct OccAttr {
   ResKey appearance;            // attr 0x67
   uint32_t flags = 0;           // attr 0x72
   uint32_t buildingFlags = 0;   // attr 0xCA
+  int powerAttr = -1;           // attr 0xC9 (u8): candidate for the building's power consumption (spec 12 s9.1); -1 = absent
   bool filler() const { return (buildingFlags & 0x100) != 0; }
   ResKey nameKey;               // attr 0x6D
   std::string designName;       // attr 0x64
@@ -98,6 +99,9 @@ class GameData {
   void remountBat();
 
   std::string language = "English";
+  // Requested UI language (name as in the spec, e.g. "French"): empty = choose from $LC_ALL / $LC_MESSAGES / $LANG, falling back to
+  // English. Resolved by `open()` with spec 05 section 2 (an installed language is always chosen).
+  std::string languageRequest;
 
  private:
   void mountSegments();
