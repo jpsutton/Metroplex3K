@@ -1,5 +1,6 @@
 #include <algorithm>
 #include "core/refpack.h"
+#include "core/records.h"
 #include "core/world.h"
 
 namespace m3k {
@@ -13,7 +14,7 @@ uint32_t packPlace(int x, int z, int y, int rot) {
 
 }  // namespace
 
-Bytes saveCity(const World& w) {
+static Bytes saveGenerated(const World& w) {
   // Inner records, in directory form.
   struct R { ResKey k; Bytes d; };
   std::vector<R> recs;
@@ -92,6 +93,84 @@ Bytes saveCity(const World& w) {
   { Bytes d; put32(d, 0x67); put32(d, 1); put32(d, 0x035F62A4); put32(d, 0x035F62A4); put32(d, 1); ix.add({0x035F62A4, 0x035F62A4, 0}, std::move(d)); }
   ix.add({0x035F62A4, 0x035F62A4, 1}, std::move(seg));
   return ix.build();
+}
+
+
+namespace {
+bool sameOcc(const Occupant& a, const Occupant& b) {
+  return a.x == b.x && a.z == b.z && a.y == b.y && a.rot == b.rot && a.sizeX == b.sizeX && a.sizeZ == b.sizeZ &&
+         a.occId == b.occId && a.keyType == b.keyType && a.agentType == b.agentType && a.state == b.state && a.name == b.name;
+}
+bool sameNet(const std::vector<NetPiece>& a, const std::vector<NetPiece>& b) {
+  if (a.size() != b.size()) return false;
+  for (size_t i = 0; i < a.size(); i++)
+    if (a[i].x != b[i].x || a[i].z != b[i].z || a[i].y != b[i].y || a[i].rot != b[i].rot || a[i].pieceWord != b[i].pieceWord) return false;
+  return true;
+}
+}  // namespace
+
+// With w.raw: every record of the loaded file is kept verbatim; a record the engine models is replaced by
+// freshly generated data only when the model differs from what that record decodes to (so unknown
+// occupant fields, preview images, unknown records etc. survive). Layer records flushed by City::flush
+// already live in w.raw.
+Bytes saveCity(const World& w) {
+  Bytes legacy = saveGenerated(w);
+  if (!w.raw) return legacy;
+  RawRecordStore gen = RawRecordStore::parse(legacy);
+  const RawRecordStore& src = *w.raw;
+  RawRecordStore out;
+  std::unique_ptr<World> base;
+  if (src.findOuter(keys::CityInfo) && !src.inner.empty()) {
+    out = src;
+    try { base = std::make_unique<World>(loadCity(src.serialize())); } catch (const FormatError&) { base.reset(); }
+  }
+  if (!base) {
+    out = gen;
+    for (const auto& r : src.inner) if (!out.findInner(r.key)) out.setInner(r.key, r.data);
+    for (const auto& r : src.outer) if (!out.findOuter(r.key)) out.setOuter(r.key, r.data);
+    return out.serialize();
+  }
+  auto takeInner = [&](const ResKey& k) { if (const InnerRecord* r = gen.findInner(k)) out.setInner(k, r->data); else out.removeInner(k); };
+  auto takeOuter = [&](const ResKey& k) { if (const OuterRecord* r = gen.findOuter(k)) out.setOuter(k, r->data); };
+  const World& b = *base;
+  bool dimsOk = b.W == w.W && b.H == w.H;
+  if (!dimsOk || b.alt != w.alt || b.water != w.water || b.seaLevel != w.seaLevel || b.heightScale != w.heightScale ||
+      b.tileBits != w.tileBits || !out.findInner(keys::Terrain)) takeInner(keys::Terrain);
+  if (!dimsOk || b.flora != w.flora) takeInner(keys::Flora);
+  if (!dimsOk || !out.findInner(keys::ZoneMgr)) takeInner(keys::ZoneMgr);
+  else if (b.zone != w.zone) {
+    InnerRecord* r = out.findInner(keys::ZoneMgr);
+    size_t N = size_t(w.W) * w.H;
+    if (r && r->data.size() >= N)
+      for (int row = 0; row < w.W; row++)
+        for (int z = 0; z < w.H; z++) r->data[size_t(row) * w.H + z] = w.zone[w.tIdx(w.W - 1 - row, z)];
+    else takeInner(keys::ZoneMgr);
+  }
+  bool occSame = b.occupants.size() == w.occupants.size();
+  for (size_t i = 0; occSame && i < b.occupants.size(); i++) occSame = sameOcc(b.occupants[i], w.occupants[i]);
+  if (!occSame || !out.findInner(keys::OccEntries)) { takeInner(keys::OccCounters); takeInner(keys::OccEntries); }
+  if (!sameNet(b.surface, w.surface) || !sameNet(b.pipes, w.pipes) || !sameNet(b.subway, w.subway)) {
+    takeInner(keys::NetHeader);
+    for (uint32_t i = 1; i <= 3; i++) takeInner({0x206C6E7C, 0x2147C2DD, i});
+  }
+  const CityInfo &ci = b.info, &ni = w.info;
+  if (ci.cityName != ni.cityName || ci.mayorName != ni.mayorName || ci.dayOfYear != ni.dayOfYear || ci.year != ni.year ||
+      ci.gameSpeed != ni.gameSpeed || ci.foundingYear != ni.foundingYear) {
+    OuterRecord* o = out.findOuter(keys::CityInfo);
+    try {
+      CityInfoRec r = CityInfoRec::parse(o->data);
+      r.cityName = ni.cityName; r.mayorName = ni.mayorName; r.dayOfYear = uint32_t(ni.dayOfYear); r.year = uint32_t(ni.year);
+      r.gameSpeed = uint32_t(ni.gameSpeed); r.foundingYear = uint32_t(ni.foundingYear);
+      out.setOuter(keys::CityInfo, r.write(r.hdr.markers()));
+    } catch (const FormatError&) { takeOuter(keys::CityInfo); }
+  }
+  if (b.info.fileKind != w.info.fileKind) takeOuter(keys::FileKind);
+  if (b.scheme.buildingSet != w.scheme.buildingSet || b.scheme.floraSet != w.scheme.floraSet || b.scheme.landscape != w.scheme.landscape)
+    takeOuter(keys::SchemeSel);
+  if (b.view.valid && (b.view.centreX != w.view.centreX || b.view.centreZ != w.view.centreZ || b.view.zoom != w.view.zoom ||
+                       b.view.rotation != w.view.rotation))
+    takeOuter(keys::ViewIso);
+  return out.serialize();
 }
 
 }  // namespace m3k
