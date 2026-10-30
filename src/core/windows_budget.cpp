@@ -667,7 +667,8 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
     double ox = offs[i][0], oy = offs[i][1];
     Rect hit{int(cx + ox - 35), int(cy + oy - 35), 70, 70};
     E.spot("nb." + std::to_string(i), hit);
-    if (!nb.exists) continue;
+    // The original lists every named neighbour, including one whose `exists` byte is 0 (Hawkin's Creek in Berlin).
+    if (!nb.exists && nb.cityName.empty()) continue;
     outline(ox, oy, 47, 2, rgb(0x6B, 0x92, 0xF7));
     if (selected == i) outline(ox, oy, 45.5, 3, rgb(255, 0, 0));
     std::string nm = nb.cityName.empty() ? "Neighbour " + std::to_string(i + 1) : nb.cityName;
@@ -707,7 +708,7 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
   ui.text(r.x + 17, r.y + 308, E.win(0x29A, "City:"), "main9", lav);
   Rect cf{r.x + 18, r.y + 329, 98, 17};
   ui.fill(cf, rgb(0, 0, 0)); ui.fill({cf.x + 1, cf.y + 1, cf.w - 2, cf.h - 2}, white);
-  const bool haveSel = selected >= 0 && selected < kNeighbours && n.neighbours[selected].exists;
+  const bool haveSel = selected >= 0 && selected < kNeighbours && (n.neighbours[selected].exists || !n.neighbours[selected].cityName.empty());
   if (haveSel) ui.text(r.x + 20, r.y + 330, n.neighbours[selected].cityName, "main9", ink);
   ui.text(r.x + 239, r.y + 318, E.win(0x29C, "Discuss Deal:"), "main9", ink);
   { Rect db{r.x + 322, r.y + 310, 38, 33};
