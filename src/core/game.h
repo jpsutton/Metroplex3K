@@ -326,7 +326,21 @@ class Game {
   int disasterX_ = -1, disasterZ_ = -1;
   AutomataData automata_;
   bool automataLoaded_ = false;
-  struct StreetHost {};  // placeholder until StreetSim host adapter is wired
+  struct StreetHost : public AutomataHost {
+    World* w = nullptr; City* c = nullptr; int month = 1, day = 1;
+    std::vector<int32_t> piece;   // tile -> index into w->surface or -1
+    int mapWidth() const override { return w ? w->W : 0; }
+    int mapHeight() const override { return w ? w->H : 0; }
+    bool pieceAt(int x, int y, AutoNet k, PieceRef& out) const override;
+    bool isWater(int x, int y) const override;
+    bool pedEligible(int x, int y) const override;
+    int trafficDensity(int x, int y) const override;
+    void gameDate(int& m, int& d) const override { m = month; d = day; }
+    void rebuild();
+  };
+  std::vector<int> streetSources_;
+  size_t streetOccCount_ = 0, streetNetCount_ = 0;
+  void syncStreetSources();
   std::unique_ptr<StreetHost> streetHost_;
   std::unique_ptr<StreetSim> street_;
   std::unique_ptr<ScenarioController> scen_;

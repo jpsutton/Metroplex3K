@@ -251,13 +251,6 @@ void Game::presentPetitions() {
   }
 }
 
-void Game::setupStreetSim() {
-  // Street automata need an AutomataHost adapter over City (see automata.h); not wired yet.
-  street_.reset();
-}
-
-void Game::streetSimFrame(uint32_t) {}
-
 void Game::tickSim(uint32_t dtMs) {
   if (!simReady_ || paused_ || !world_.W) return;
   if (!managersReady_) initManagers();

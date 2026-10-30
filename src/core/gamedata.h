@@ -35,6 +35,7 @@ struct OccAttr {
   bool filler() const { return (buildingFlags & 0x100) != 0; }
   ResKey nameKey;               // attr 0x6D
   std::string designName;       // attr 0x64
+  ResKey pedProdKey, vehProdKey;  // attr 0x6B / 0x6C: pedestrian / vehicle production keys (automata sources)
 };
 
 struct CsFrame { uint32_t category = 0, spriteId = 0; int8_t flags = 0; int16_t offX = 0, offY = 0; };
