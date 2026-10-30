@@ -173,7 +173,7 @@ int main() {
   {
     World w = flat(4, 250);
     bool salt = true; IRect d;
-    CHECK(applyTerrainCheat(w, "Terrain ten up", &salt, &d) == CheatResult::Applied);
+    CHECK(applyTerrainCheat(w, "Terrain ten up", &salt, &d) == TerrainCheatResult::Applied);
     CHECK(w.altAt(0, 0) == 255 && !d.empty());
     applyTerrainCheat(w, "terrain ten down", &salt);
     CHECK(w.altAt(0, 0) == 245);
@@ -183,8 +183,8 @@ int main() {
     CHECK(w.altAt(1, 1) == 245);
     applyTerrainCheat(w, "Salt off", &salt); CHECK(!salt);
     applyTerrainCheat(w, "SALT ON", &salt); CHECK(salt);
-    CHECK(applyTerrainCheat(w, "Load terrain", &salt) == CheatResult::NeedsLoad);
-    CHECK(applyTerrainCheat(w, "nope", &salt) == CheatResult::Unknown);
+    CHECK(applyTerrainCheat(w, "Load terrain", &salt) == TerrainCheatResult::NeedsLoad);
+    CHECK(applyTerrainCheat(w, "nope", &salt) == TerrainCheatResult::Unknown);
   }
   TEST_MAIN_END();
 }

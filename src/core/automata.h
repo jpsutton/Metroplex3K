@@ -171,7 +171,7 @@ int vclProdPick(const VclProd& t, uint32_t r);
 int pplModePick(const PplMode& m, uint32_t r);
 
 // ---------------------------------------------------------------- host interface
-enum class NetKind { Road, Rail, Walk };
+enum class AutoNet { Road, Rail, Walk };
 struct PieceRef { uint32_t pieceId = 0; int rotation = 0; };
 
 class AutomataHost {
@@ -180,7 +180,7 @@ class AutomataHost {
   virtual int mapWidth() const = 0;
   virtual int mapHeight() const = 0;
   virtual int trafficDensity(int /*x*/, int /*y*/) const { return 0; }                // 0..255
-  virtual bool pieceAt(int x, int y, NetKind k, PieceRef& out) const = 0;              // drivable/walkable piece
+  virtual bool pieceAt(int x, int y, AutoNet k, PieceRef& out) const = 0;              // drivable/walkable piece
   virtual bool isWater(int /*x*/, int /*y*/) const { return false; }
   virtual bool pedEligible(int /*x*/, int /*y*/) const { return false; }              // occupant flag 0x8000
   virtual void gameDate(int& month, int& day) const { month = 1; day = 1; }
@@ -191,7 +191,7 @@ class AutomataHost {
   virtual bool hasOccupantType2AFA() const { return false; }
 };
 
-struct ViewState {
+struct AutoView {
   int x0 = 0, y0 = 0, x1 = -1, y1 = -1;  // inclusive visible tile rectangle
   int zoom = 4;                          // 0 farthest .. 4 closest
   int rotation = 0;                      // 0..3
@@ -237,7 +237,7 @@ class StreetSim {
   StreetSim(const AutomataData& data, AutomataHost& host, const Config& cfg);
   ~StreetSim();
 
-  void setView(const ViewState& v);          // activation, view-change handling (spec 5.6)
+  void setView(const AutoView& v);          // activation, view-change handling (spec 5.6)
   void update(int64_t dtMicros);             // real-time elapsed time (spec 7)
   bool active() const;
 

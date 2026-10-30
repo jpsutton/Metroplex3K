@@ -625,7 +625,7 @@ struct StreetSim::Impl {
   AutomataHost& host;
   Config cfg;
   SimRng rng;
-  ViewState view;
+  AutoView view;
   Rect rect;
   bool active = false;
   int zoomOk = 0;
@@ -809,7 +809,7 @@ struct StreetSim::Impl {
   }
 
   // ---------------------------------------------------------- vehicle lanes
-  bool placeVehicleOnTile(Auto& a, int x, int y, NetKind nk, bool randomDist) {
+  bool placeVehicleOnTile(Auto& a, int x, int y, AutoNet nk, bool randomDist) {
     PieceRef pr;
     if (!host.pieceAt(x, y, nk, pr)) return false;
     const TrBlk* b = D.trblkFor(pr.pieceId, pr.rotation);
@@ -840,7 +840,7 @@ struct StreetSim::Impl {
     a->attribInst = inst; a->va = &v; a->length = v.length > 0 ? v.length : 40;
     a->roadVehicle = counted;
     if (ait != D.ansprat.end()) { a->anim = &ait->second; auto sp = D.sprites.find(ait->second.sprite); if (sp != D.sprites.end()) a->spr = &sp->second; }
-    if (!placeVehicleOnTile(*a, x, y, NetKind::Road, randomDist) || !startScript(*a, v.script)) {
+    if (!placeVehicleOnTile(*a, x, y, AutoNet::Road, randomDist) || !startScript(*a, v.script)) {
       a->roadVehicle = false; a->alive = false;
       return nullptr;
     }
@@ -871,7 +871,7 @@ struct StreetSim::Impl {
     if (nx < 0 || ny < 0 || nx >= host.mapWidth() || ny >= host.mapHeight()) return false;
     if (a.kind != AutomatonKind::Train && !rect.contains(nx, ny)) return false;  // left the active area
     if (a.kind == AutomatonKind::Train && !rect.contains(nx, ny)) return false;
-    NetKind nk = a.kind == AutomatonKind::Train ? NetKind::Rail : NetKind::Road;
+    AutoNet nk = a.kind == AutomatonKind::Train ? AutoNet::Rail : AutoNet::Road;
     PieceRef pr;
     if (!host.pieceAt(nx, ny, nk, pr)) return false;
     const TrBlk* b = D.trblkFor(pr.pieceId, pr.rotation);
@@ -930,7 +930,7 @@ struct StreetSim::Impl {
   }
 
   bool pedPieceAt(int x, int y, PieceRef& pr) {
-    if (host.pieceAt(x, y, NetKind::Walk, pr)) return true;
+    if (host.pieceAt(x, y, AutoNet::Walk, pr)) return true;
     pr.pieceId = 0x1D; pr.rotation = 0;  // default piece
     return true;
   }
@@ -1120,7 +1120,7 @@ struct StreetSim::Impl {
       for (int y = rect.y0; y <= rect.y1; y++)
         for (int x = rect.x0; x <= rect.x1; x++) {
           PieceRef pr;
-          if (!host.pieceAt(x, y, NetKind::Road, pr)) continue;
+          if (!host.pieceAt(x, y, AutoNet::Road, pr)) continue;
           S += host.trafficDensity(x, y); C++;
         }
     if (eventMode_ == 2) limitL = int(double(S) * 0.2);
@@ -1134,7 +1134,7 @@ struct StreetSim::Impl {
 
   void fillTile(int x, int y) {
     PieceRef pr;
-    if (!host.pieceAt(x, y, NetKind::Road, pr)) return;
+    if (!host.pieceAt(x, y, AutoNet::Road, pr)) return;
     float v = float(host.trafficDensity(x, y)) * 0.008f;
     int n = int(v);
     if (rng.f01() < v - float(n)) n++;
@@ -1164,7 +1164,7 @@ struct StreetSim::Impl {
       int x = sx, y = sy;
       do {
         PieceRef pr;
-        if (host.pieceAt(x, y, NetKind::Road, pr)) {
+        if (host.pieceAt(x, y, AutoNet::Road, pr)) {
           uint32_t r = rng.below(uint32_t(std::max(avgA, 1)));
           if (int(r) <= host.trafficDensity(x, y)) {
             uint32_t m = drawModel(x, y);
@@ -1333,7 +1333,7 @@ struct StreetSim::Impl {
     const TrnProd& t = tp->second;
     sp.t.interval = t.minUs + int64_t(rng.below(uint32_t(std::max<int64_t>(1, t.maxUs - t.minUs))));
     if (t.consists.empty()) return;
-    NetKind nk = NetKind::Rail;
+    AutoNet nk = AutoNet::Rail;
     if (!sp.dirKnown) {
       static const int order[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
       for (auto& o : order) {
@@ -1370,7 +1370,7 @@ struct StreetSim::Impl {
     a->attribInst = inst; a->va = &v; a->length = v.length > 0 ? v.length : 70;
     attachAnim(*a, v.anim);
     if (!leader) {
-      if (!placeVehicleOnTile(*a, x, y, NetKind::Rail, false) || !startScript(*a, v.script)) { a->alive = false; return nullptr; }
+      if (!placeVehicleOnTile(*a, x, y, AutoNet::Rail, false) || !startScript(*a, v.script)) { a->alive = false; return nullptr; }
       a->trail.push_back({0, a->x, a->y, a->h, a->heading});
     } else {
       a->tx = x; a->ty = y; a->leader = leader->id;
@@ -1529,7 +1529,7 @@ struct StreetSim::Impl {
     sweep();
   }
 
-  void setView(const ViewState& v) {
+  void setView(const AutoView& v) {
     Rect nr{v.x0, v.y0, v.x1, v.y1};
     nr.x0 = std::max(0, nr.x0); nr.y0 = std::max(0, nr.y0);
     nr.x1 = std::min(host.mapWidth() - 1, nr.x1); nr.y1 = std::min(host.mapHeight() - 1, nr.y1);
@@ -1564,7 +1564,7 @@ struct StreetSim::Impl {
 StreetSim::StreetSim(const AutomataData& d, AutomataHost& h, const Config& c) : p_(new Impl(d, h, c)) {}
 StreetSim::~StreetSim() = default;
 
-void StreetSim::setView(const ViewState& v) { p_->setView(v); }
+void StreetSim::setView(const AutoView& v) { p_->setView(v); }
 void StreetSim::update(int64_t dt) { p_->update(dt); }
 bool StreetSim::active() const { return p_->active; }
 

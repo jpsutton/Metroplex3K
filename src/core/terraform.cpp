@@ -361,22 +361,22 @@ TerraValidator makeDisasterValidator(int px, int pz) {
   };
 }
 
-CheatResult applyTerrainCheat(World& w, const std::string& command, bool* salt, IRect* dirty) {
+TerrainCheatResult applyTerrainCheat(World& w, const std::string& command, bool* salt, IRect* dirty) {
   std::string s;
   for (char ch : command) s += char(std::tolower((unsigned char)ch));
   while (!s.empty() && s.back() == ' ') s.pop_back();
   while (!s.empty() && s.front() == ' ') s.erase(s.begin());
-  if (s == "load terrain") return CheatResult::NeedsLoad;
-  if (s == "salt on" || s == "salt off") { if (salt) *salt = (s == "salt on"); return CheatResult::Applied; }
+  if (s == "load terrain") return TerrainCheatResult::NeedsLoad;
+  if (s == "salt on" || s == "salt off") { if (salt) *salt = (s == "salt on"); return TerrainCheatResult::Applied; }
   int delta = 0;
   if (s == "terrain one up") delta = 1;
   else if (s == "terrain one down") delta = -1;
   else if (s == "terrain ten up") delta = 10;
   else if (s == "terrain ten down") delta = -10;
-  else return CheatResult::Unknown;
+  else return TerrainCheatResult::Unknown;
   for (auto& a : w.alt) a = uint8_t(std::max(0, std::min(255, int(a) + delta)));
   if (dirty) *dirty = {0, 0, w.W, w.H};
-  return CheatResult::Applied;
+  return TerrainCheatResult::Applied;
 }
 
 }  // namespace m3k

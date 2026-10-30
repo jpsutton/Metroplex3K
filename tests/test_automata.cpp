@@ -100,9 +100,9 @@ struct TestHost : AutomataHost {
   int mapWidth() const override { return W; }
   int mapHeight() const override { return H; }
   int trafficDensity(int, int y) const override { return y == 3 ? density : 0; }
-  bool pieceAt(int x, int y, NetKind k, PieceRef& o) const override {
-    if (k == NetKind::Road && y == 3) { o = {0x10, 0}; return true; }
-    if (k == NetKind::Rail && y == 5 && x >= 3) { o = {0x20, 0}; return true; }
+  bool pieceAt(int x, int y, AutoNet k, PieceRef& o) const override {
+    if (k == AutoNet::Road && y == 3) { o = {0x10, 0}; return true; }
+    if (k == AutoNet::Rail && y == 5 && x >= 3) { o = {0x20, 0}; return true; }
     return false;
   }
   bool isWater(int, int y) const override { return y >= 6; }
@@ -277,7 +277,7 @@ static void testRoadTraffic() {
   TestHost H;
   StreetSim::Config cfg;
   StreetSim sim(D, H, cfg);
-  ViewState v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
+  AutoView v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
   sim.setView(v);
   CHECK(sim.active());
   CHECK(sim.vehicleLimit() == int(8 * 255 * 0.008f));  // S = 2040
@@ -314,7 +314,7 @@ static void testRoadTraffic() {
   {
     TestHost H2; StreetSim s2(D, H2, cfg);
     H2.density = 0;  // nothing spawns on its own
-    ViewState vv = v; s2.setView(vv);
+    AutoView vv = v; s2.setView(vv);
     CHECK(s2.roadVehicleCount() == 0);
     CHECK(s2.dispatchEmergency(EmergencyType::PoliceCar, 1, 3));
     auto p0 = s2.sprites();
@@ -342,14 +342,14 @@ static void testRoadTraffic() {
   // zero density => no traffic
   {
     TestHost H3; H3.density = 0; StreetSim s3(D, H3, cfg);
-    ViewState vv = v; vv.x0 = 0; s3.setView(vv);
+    AutoView vv = v; vv.x0 = 0; s3.setView(vv);
     s3.update(5000000);
     CHECK(s3.roadVehicleCount() == 0 && s3.vehicleLimit() == 0);
   }
   // zoom threshold p=0 (Z=5): never active
   {
     TestHost H4; StreetSim::Config c4; c4.zoomThreshold = 5; StreetSim s4(D, H4, c4);
-    ViewState vv = v; vv.x0 = 0; s4.setView(vv); CHECK(!s4.active());
+    AutoView vv = v; vv.x0 = 0; s4.setView(vv); CHECK(!s4.active());
   }
 }
 
@@ -357,7 +357,7 @@ static void testScriptsAndMix() {
   AutomataData D; buildData(D);
   TestHost H; H.density = 0;
   StreetSim sim(D, H, StreetSim::Config());
-  ViewState v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
+  AutoView v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
   sim.setView(v);
   // mix tables: default VCLPROD 1 -> model 7 with total ~1e7
   auto m0 = sim.mixTable(3, 3);
@@ -384,7 +384,7 @@ static void testPeds() {
   AutomataData D; buildData(D);
   TestHost H; H.density = 0;
   StreetSim sim(D, H, StreetSim::Config());
-  ViewState v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
+  AutoView v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
   sim.setView(v);
   sim.addBuilding(4, 4, {kPplProdType, kPplProdGroup, 1}, ResKey());
   CHECK(sim.pedestrianCount() == 5);  // cap = trunc(rate)
@@ -423,7 +423,7 @@ static void testOtherAutomata() {
   D.tunables.maxMarinaToBoatDistance = 3;
   TestHost H; H.density = 0; H.ped = false;
   StreetSim sim(D, H, StreetSim::Config());
-  ViewState v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
+  AutoView v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
   sim.setView(v);
   sim.addMarina(4, 6);
   sim.addSeaport(0, 7);
@@ -458,7 +458,7 @@ static void testOtherAutomata() {
 }
 
 static void testCallAndParade() {
-  ViewState v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
+  AutoView v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
   {  // model 8 runs script 2004: a Call into 2001 (Drive)
     AutomataData D; buildData(D);
     D.addRecord({kVclProdType, kVclProdGroup, 1}, vclprod(1.0f, {{10, 8}}));

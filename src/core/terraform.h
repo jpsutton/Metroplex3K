@@ -109,10 +109,10 @@ class Terraformer {
 TerraValidator makeDisasterValidator(int px, int pz);
 
 // Cheat commands (spec 4.8). Matching is case-insensitive.
-enum class CheatResult { Unknown, Applied, NeedsLoad /*"Load terrain": caller loads*/ };
+enum class TerrainCheatResult { Unknown, Applied, NeedsLoad /*"Load terrain": caller loads*/ };
 // "Terrain one up/down", "Terrain ten up/down" shift every vertex altitude (clamped 0..255);
 // "Salt on"/"Salt off" set *salt (World has no salt field). Water surface is left untouched.
 // `dirty` (optional) gets the whole-map vertex rect when terrain changed.
-CheatResult applyTerrainCheat(World& w, const std::string& command, bool* salt, IRect* dirty = nullptr);
+TerrainCheatResult applyTerrainCheat(World& w, const std::string& command, bool* salt, IRect* dirty = nullptr);
 
 }  // namespace m3k
