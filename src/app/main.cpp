@@ -226,7 +226,7 @@ struct App {
             if (e.button.button == SDL_BUTTON_MIDDLE || e.button.button == SDL_BUTTON_RIGHT) dragging = true;
             else if (e.button.button == SDL_BUTTON_LEFT && tool != Tool::None && world.W) {
               int tx, tz;
-              if (renderer.pickTile(cam, e.button.x, e.button.y, tx, tz)) { dragX0 = tx; dragZ0 = tz; toolDown = true; }
+              if (renderer.pickGround(cam, e.button.x, e.button.y, tx, tz)) { dragX0 = tx; dragZ0 = tz; toolDown = true; }
             }
             break;
           case SDL_MOUSEBUTTONUP:
@@ -234,7 +234,7 @@ struct App {
             if (e.button.button == SDL_BUTTON_LEFT && toolDown) {
               toolDown = false;
               int tx, tz;
-              if (renderer.pickTile(cam, e.button.x, e.button.y, tx, tz)) applyTool(dragX0, dragZ0, tx, tz);
+              if (renderer.pickGround(cam, e.button.x, e.button.y, tx, tz)) applyTool(dragX0, dragZ0, tx, tz);
             }
             break;
           case SDL_MOUSEMOTION: if (dragging && world.W) scrollPixels(-float(e.motion.xrel), -float(e.motion.yrel)); break;
