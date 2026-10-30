@@ -85,6 +85,7 @@ The rules below are binding on every document in this directory:
 | `27-platform.md` | Settings, registry/config keys, command-line, display modes, modernisation notes |
 | `28-conformance.md` | How to verify an implementation against the original data; defects of the original that must be reproduced |
 | `29-open-issues.md` | Ranked list of remaining open questions, with recommended interim behaviour |
+| `30-new-city-template.md` | Observed initial state of a brand-new city: constant records, layer contents, budget by difficulty |
 
 ## Status of this edition
 
