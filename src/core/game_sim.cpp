@@ -151,6 +151,32 @@ void Game::startScenarioHooks() {
   scen_->start(city(), world_.info.mayorName, world_.info.cityName, h);
 }
 
+void Game::applyPetitionEffect(const PetitionEffect& e) {
+  if (!e.accepted) return;
+  City& c = city();
+  switch (e.kind) {
+    case PetitionEffect::Treasury: sim_.funds += e.treasuryDelta; break;
+    case PetitionEffect::SetOrdinance:
+      if (e.value) c.ordinances.enact(e.ordinance); else c.ordinances.repeal(e.ordinance);
+      break;
+    default: break;
+  }
+  if (e.voiceSound) sound(e.voiceSound);
+}
+
+void Game::presentPetitions() {
+  if (petView_ || !managersReady_) return;
+  for (const auto& p : petitioners_.list()) {
+    if (p.hidden() || !p.raised()) continue;
+    if (std::find(petShown_.begin(), petShown_.end(), p.id) != petShown_.end()) continue;
+    WinEnv E = env();
+    petView_ = std::make_unique<PetitionerView>(makePetitionerView(E, petitioners_.config, p, &E.tc));
+    petViewId_ = p.id;
+    petShown_.push_back(p.id);
+    break;
+  }
+}
+
 void Game::setupStreetSim() {
   // Street automata need an AutomataHost adapter over City (see automata.h); not wired yet.
   street_.reset();
