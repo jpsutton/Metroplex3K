@@ -51,6 +51,22 @@ struct CountryInputs {
 };
 int chooseCountry(const CountryInputs& in);
 
+// Registry-equivalent values (spec 27 section 1): the original's key
+// HKLM\\Software\\Electronic Arts\\Maxis\\SimCity 3000 Unlimited (or the WOW6432Node twin).
+struct RegistryValues {
+  std::string installedPath, scenarioCreator, ergc;
+  std::optional<uint32_t> languageDword, countryDword, sku;
+  std::optional<std::string> languageString, countryString;
+  bool found = false;  // the key was present
+  void applyTo(LanguageInputs& l, CountryInputs& c) const;
+};
+// Parse a Windows `.reg` export or a Wine system.reg/user.reg text and pick the values of that key.
+// Key-path matching is case-insensitive; `Wow6432Node` is accepted. First matching key wins.
+RegistryValues parseRegFile(const std::string& text);
+// POSIX locale name (`de_DE.UTF-8`, `en_GB`) -> Windows LANGID, 0 if unknown. For picking a default
+// from the OS locale (spec 05 section 2.4).
+uint16_t langIdFromPosixLocale(const std::string& locale);
+
 // ---- command line (spec 27 section 2) -------------------------------------------------------
 struct MachineProfile {
   int cpuMHz = 200;    // -p a, clamped 100..1000
