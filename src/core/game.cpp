@@ -200,7 +200,7 @@ bool Game::init(const fs::path& gameRoot, std::string& err) {
   if (!g.open(gameRoot, err)) { scr_ = Screen::NeedData; return false; }
   data_ = std::move(g);
   haveData_ = true; root_ = data_.root();
-  saveGameRoot(root_);
+  if (persist_) saveGameRoot(root_);
   ensureFonts();
   cityCfg_ = CityConfig();
   cityCfg_.load(data_);

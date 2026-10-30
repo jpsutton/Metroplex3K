@@ -102,12 +102,12 @@ fs::path loadSavedGameRoot() {
 }
 
 fs::path detectGameRoot(const fs::path& exeDir) {
+  // Order: explicit env var, then where the user put the program (cwd, exe folder and their parents),
+  // then the folder remembered from an earlier run, then the usual install locations.
   if (const char* e = std::getenv("M3K_GAME_DIR")) {
     fs::path r = findGameRoot(e);
     if (!r.empty()) return r;
   }
-  fs::path s = loadSavedGameRoot();
-  if (!s.empty()) { fs::path r = findGameRoot(s, 0); if (!r.empty()) return r; }
   {
     std::error_code ec;
     std::vector<fs::path> here;
@@ -116,6 +116,8 @@ fs::path detectGameRoot(const fs::path& exeDir) {
     if (!exeDir.empty()) { here.push_back(exeDir); if (exeDir.has_parent_path()) here.push_back(exeDir.parent_path()); }
     for (const auto& c : here) { fs::path r = findGameRoot(c, 2); if (!r.empty()) return r; }
   }
+  fs::path s = loadSavedGameRoot();
+  if (!s.empty()) { fs::path r = findGameRoot(s, 0); if (!r.empty()) return r; }
   for (const auto& c : defaultGameLocations()) {
     fs::path r = findGameRoot(c, 3);
     if (!r.empty()) return r;
