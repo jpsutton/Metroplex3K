@@ -169,6 +169,7 @@ class City {
   void syncFacilities();   // plants, water facilities, police/fire stations from occupants
   std::vector<us::SimOccupant> simOccupants(bool operatingOnly) const;
   us::OrdinanceSet usOrdinances() const;
+  us::PowerEnv powerEnv(std::vector<uint8_t>& conductive) const;
   bool tileBuildable(int x, int z) const;
   bool flatTile(int x, int z) const;
   int addOccupant(const Occupant& o);

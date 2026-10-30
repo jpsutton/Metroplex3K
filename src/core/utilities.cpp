@@ -282,6 +282,21 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
   return events;
 }
 
+void PowerLayer::recomputeCoverage(const PowerEnv& env) {
+  consPct_ = env.ordinances.active(ord::PowerConservation);
+  stairPct_ = env.ordinances.active(ord::StairwellLighting);
+  stats_ = PowerStats();
+  std::fill(powered_.begin(), powered_.end(), 0);
+  for (auto c : cons_) if (c) stats_.consumerTiles++;
+  std::vector<uint8_t> visited(size_t(W_) * H_, 0);
+  std::vector<int64_t> cat(10, 0);
+  for (const auto& p : plants_) {
+    if (visited[p.x * H_ + p.z]) continue;
+    distribute(p.x, p.z, env, visited, cat);
+  }
+  stats_.unpoweredConsumers = std::max(0, stats_.consumerTiles - stats_.poweredConsumerTiles);
+}
+
 Bytes PowerLayer::serialize() const {
   Bytes b;
   writeRecHeader(b, 1);

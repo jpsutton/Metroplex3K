@@ -82,11 +82,19 @@ int main() {
 
   // --- simulate 5 years ---
   const int startYear = w.info.year;
-  for (int d = 0; d < 365 * 5; d++) s.tickDay();
+  std::vector<int64_t> yearFunds;
+  for (int d = 0; d < 365 * 5; d++) { s.tickDay(); if ((d + 1) % 365 == 0) yearFunds.push_back(s.funds); }
   CHECK(w.info.year >= startYear + 4);
   CHECK(s.day == 365 * 5);
-  int bld = 0, occupied = 0;
-  for (auto& o : w.occupants) { if (o.occId == 100 || o.occId == 101 || o.occId == 200 || o.occId == 300) bld++; if (o.state == 1) occupied++; }
+  int bld = 0, occupied = 0, nR = 0, nC = 0, nI = 0, poweredBld = 0, tilesOnTop = 0;
+  for (auto& o : w.occupants) {
+    if (o.occId == 100 || o.occId == 101 || o.occId == 200 || o.occId == 300) bld++;
+    if (o.state == 1) occupied++;
+    if (o.agentType / 1000 == 3) nR++; else if (o.agentType / 1000 == 5) nC++; else if (o.agentType / 1000 == 8) nI++;
+    else continue;
+    if (c.powered(o.x, o.z)) poweredBld++;
+    if (c.isRoadTile(o.x, o.z) || c.isPowerLine(o.x, o.z)) tilesOnTop++;
+  }
   std::printf("year=%d bld=%d occupied=%d pop=%d funds=%lld R=%d C=%d I=%d\n", w.info.year, bld, occupied, s.population(),
               (long long)s.funds, s.valveR.value, s.valveC.value, s.valveI.value);
   std::printf("%s", c.debugStats().c_str());
@@ -95,6 +103,17 @@ int main() {
   CHECK(c.powered(44, 40) || c.powered(20, 42) || c.power.stats().produced > 0);
   CHECK(c.lastPowerProduced() > 0);
   CHECK(s.population() > 0);
+  // growth of every class, all on powered tiles, none on networks
+  CHECK(nR > 10 && nC > 10 && nI > 5);
+  CHECK(poweredBld == nR + nC + nI && tilesOnTop == 0);
+  CHECK(s.population() >= nR * 4);
+  CHECK(occupied >= (nR + nC + nI) * 8 / 10);
+  CHECK(c.powered(20, 42) && c.powered(55, 42) && c.powered(20, 38));
+  CHECK(!c.powered(80, 80));
+  // taxes make money once the city is populated: funds rise over the last two years, valves stay in range
+  CHECK(yearFunds.size() == 5 && yearFunds[4] > yearFunds[2]);
+  CHECK(s.valveR.value >= -2000 && s.valveR.value <= 2000);
+  CHECK(w.info.year == startYear + 5 || w.info.year == startYear + 4);
 
   // --- ordinance ---
   uint32_t ord = 0;
@@ -114,6 +133,11 @@ int main() {
   CHECK(!s.isRoadTile(15, 40) && s.isRoadTile(25, 40));
   CHECK(c.bulldoze(42, 30, 45, 33));   // plant
   CHECK(s.occupantAt(43, 31) < 0);
+  for (int d = 0; d < 40; d++) s.tickDay();
+  CHECK(!c.powered(20, 42) && c.lastPowerProduced() == 0);   // blackout without the plant
+  CHECK(c.plopAgent(900, 12111, 4, 4, 42, 30, 100));          // rebuild it
+  for (int d = 0; d < 40; d++) s.tickDay();
+  CHECK(c.powered(20, 42) && c.lastPowerProduced() > 0);
 
   // --- save / load round trip with unknown raw records ---
   const ResKey unkInner{0x12345678, 0x9ABCDEF0, 7};
@@ -146,8 +170,11 @@ int main() {
   CHECK(s2.city().ordinances.enacted(ord));
   CHECK(s2.city().budget.tax[0].rate == 12);
   CHECK(s2.city().roadCount() == s.roadCount());
+  CHECK(s2.valveR.value == s.valveR.value && s2.valveC.value == s.valveC.value && s2.valveI.value == s.valveI.value);
+  CHECK(s2.city().powered(20, 42));
   for (int d = 0; d < 400; d++) s2.tickDay();
   CHECK(s2.day == 400);
+  CHECK(s2.population() > 0 && s2.city().powered(20, 42));
   s2.city().flush();
   Bytes f4 = saveCity(w2);
   CHECK(loadCity(f4).raw->findInner(unkInner) != nullptr);

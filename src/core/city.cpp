@@ -403,6 +403,13 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   if (!haveLv) landValue.recomputeAll(*lvView_);
   wire();
   refresh(true);
+  if (!power.plants().empty()) {   // loaded city: coverage must be valid before the first month end
+    auto consumers = simOccupants(true);
+    consumers.erase(std::remove_if(consumers.begin(), consumers.end(), [](const us::SimOccupant& o) { return us::powerCategory(o.agentType) >= 0; }), consumers.end());
+    power.rebuildConsumption(consumers);
+    std::vector<uint8_t> conductive;
+    power.recomputeCoverage(powerEnv(conductive));
+  }
 }
 
 void City::wire() {
@@ -1018,17 +1025,23 @@ void City::monthlyBudget() {
   budget.monthEnd(in);
 }
 
-void City::monthlyPower() {
-  syncFacilities();
-  auto consumers = simOccupants(true);
-  consumers.erase(std::remove_if(consumers.begin(), consumers.end(), [](const us::SimOccupant& o) { return us::powerCategory(o.agentType) >= 0; }), consumers.end());
-  power.rebuildConsumption(consumers);
-  std::vector<uint8_t> conductive(size_t(world_->W) * world_->H, 0);
+us::PowerEnv City::powerEnv(std::vector<uint8_t>& conductive) const {
+  conductive.assign(size_t(world_->W) * world_->H, 0);
   for (size_t i = 0; i < conductive.size(); i++) conductive[i] = powerLine_[i] || world_->zone[i] != 0 || occ_[i] >= 0;
   us::PowerEnv env;
   env.conductive = &conductive;
   env.ordinances = usOrdinances();
   env.nowAbsMonth = absMonthOf(clock);
+  return env;
+}
+
+void City::monthlyPower() {
+  syncFacilities();
+  auto consumers = simOccupants(true);
+  consumers.erase(std::remove_if(consumers.begin(), consumers.end(), [](const us::SimOccupant& o) { return us::powerCategory(o.agentType) >= 0; }), consumers.end());
+  power.rebuildConsumption(consumers);
+  std::vector<uint8_t> conductive;
+  us::PowerEnv env = powerEnv(conductive);
   auto events = power.monthlyUpdate(env, urng_);
   for (const auto& e : events) {
     if (e.kind != us::PlantEvent::Explosion) continue;
