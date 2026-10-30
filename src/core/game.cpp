@@ -512,7 +512,7 @@ void Game::handleMap() {
   if (!world_.W) return;
   if (in.wheel && !uiHit_) cam_.zoom = std::max(0, std::min(4, cam_.zoom + (in.wheel > 0 ? 1 : -1)));
   int tx, tz;
-  bool onTile = !uiHit_ && renderer_.pickTile(cam_, in.mx, in.my, tx, tz);
+  bool onTile = !uiHit_ && renderer_.pickGround(cam_, in.mx, in.my, tx, tz);
   if (in.rightPressed && !uiHit_) { if (tool_ != ToolKind::None) setTool(ToolKind::None); panning_ = true; }
   if (!in.down && !ui_.in.rightPressed) panning_ = panning_ && false;
   if (tool_ == ToolKind::None || tool_ == ToolKind::Unavailable) { statusLine_.clear(); }
