@@ -39,6 +39,16 @@ int Game::StreetHost::trafficDensity(int x, int y) const {
   return std::min(255, n * 12);
 }
 
+int Game::StreetHost::groundHeight(int x, int y) const {
+  if (!w || !w->W || !w->H) return 0;
+  x = std::clamp(x, 0, w->W - 1); y = std::clamp(y, 0, w->H - 1);
+  if (!piece.empty()) {
+    int i = piece[w->tIdx(x, y)];
+    if (i >= 0) return w->surface[size_t(i)].y * 256;
+  }
+  return std::max(w->altAt(x, y), w->waterAt(x, y)) * 256;
+}
+
 void Game::setupStreetSim() {
   street_.reset();
   streetHost_.reset();

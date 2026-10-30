@@ -120,8 +120,30 @@ void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst) {
       int sx = src.x + (src.w == dst.w ? i : i * src.w / dst.w);
       if (sx < 0 || sx >= im.w) continue;
       uint32_t p = im.px[size_t(sy) * im.w + sx];
-      if (p >> 24) (*ui.fb)[size_t(dy) * ui.W + dx] = p;
+      uint32_t a = p >> 24;
+      if (a == 255) { (*ui.fb)[size_t(dy) * ui.W + dx] = p; continue; }
+      if (!a) continue;
+      uint32_t& d = (*ui.fb)[size_t(dy) * ui.W + dx];   // partial alpha (button shadow): blend over what is there
+      uint32_t out = 0xFF000000u;
+      for (int sh = 0; sh < 24; sh += 8) out |= (((p >> sh) & 255) * a + ((d >> sh) & 255) * (255 - a) + 127) / 255 << sh;
+      d = out;
     }
+  }
+}
+
+// GZBtn art is baked onto a solid blue plate (about 7B92FF, faint vignette) with the pill's drop shadow
+// multiplied into it. Remove the plate so the button sits on whatever the dialog draws: plate -> alpha 0,
+// shadow -> black at partial alpha, pill -> opaque. A shadow pixel is the plate colour scaled evenly on all
+// three channels; anything lighter than the plate, or scaled unevenly, belongs to the pill.
+static void keyButtonPlate(Image& im) {
+  const float plate[3] = {0x7B, 0x92, 0xFF};
+  for (uint32_t& p : im.px) {
+    if (!(p >> 24)) continue;
+    float r[3], lo = 9.f, hi = 0.f, sum = 0.f;
+    for (int c = 0; c < 3; c++) { r[c] = float((p >> (8 * c)) & 255) / plate[c]; lo = std::min(lo, r[c]); hi = std::max(hi, r[c]); sum += r[c]; }
+    if (hi > 1.02f || hi - lo > 0.1f) continue;   // pill pixel: keep
+    float a = 1.f - sum / 3.f;
+    p = a < 0.1f ? 0u : (uint32_t(std::lround(a * 255.f)) << 24);   // black + alpha; plate vignette (<10% dark) vanishes
   }
 }
 
@@ -141,6 +163,7 @@ const Image* Skin::fetch(uint32_t group, uint32_t inst) const {
   if (r) {
     try {
       Image im = decodeUiImage(r.data, r.available, true);
+      if (group == Sys && inst == 0xE2B66DB8) keyButtonPlate(im);
       if (!im.empty()) return &(cache_[k] = std::move(im));
     } catch (const FormatError&) {}
   }

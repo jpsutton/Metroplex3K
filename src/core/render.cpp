@@ -567,7 +567,11 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt) {
   const World& w = *world_;
   ensureShade();
   roadMask_.assign(size_t(w.W) * w.H, 0);
-  if (opt.zonePaint && !opt.underground) for (const auto& np : w.surface) if (w.inTiles(np.x, np.z)) roadMask_[w.tIdx(np.x, np.z)] = 1;
+  // Grey network paint is a stand-in for missing piece sprites only. With sprites, road/rail pieces cover
+  // their tile anyway, and power-line pieces leave the ground visible, so painting would show a grey strip.
+  const bool netSprites = opt.objects && (data_ || spriteFn_);
+  if (opt.zonePaint && !opt.underground && !netSprites)
+    for (const auto& np : w.surface) if (w.inTiles(np.x, np.z)) roadMask_[w.tIdx(np.x, np.z)] = 1;
   const int z = cam.zoom;
   const float A = float(1 << z);
   Ctx ctx{fb_.data(), fbW_, fbH_, z, noiseLand_, noiseEdge_};
@@ -843,7 +847,9 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
   const bool haveSprites = data_ || spriteFn_;
   if (!haveSprites) return;
 
-  std::vector<Item> statics, movers;
+  // `flat` holds ground-level network pieces (spec 25 5.1: surface, drawn before every object); `statics` the
+  // depth-sorted objects that moving sprites are merged into.
+  std::vector<Item> statics, movers, flat;
   auto cullOut = [&](int ax, int ay, int pw, int ph, int L, int T) {
     int x0 = ax - L, y0 = ay - T;
     return x0 > fbW_ || x0 + pw < 0 || y0 > fbH_ || y0 + ph < 0;
@@ -898,9 +904,34 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     it.spr = sp; it.dbl = dbl; it.groundLevel = ground;
     if (ground) { it.key += 1; it.pickKey -= 1; }
     it.cat = fr ? fr->category : 0; it.id = fr ? fr->spriteId : 0;
-    statics.push_back(it);
+    // A ground-level piece whose image stays near the tile diamond (road, rail, slope; not pylons, ramps or
+    // bridges) lies on the surface: nothing moving can be behind it, so it must never paint over a vehicle that
+    // overhangs from the tile behind. The anchor is the diamond centre: flat images reach about one tile height
+    // above it, tall pieces several.
+    const bool surface = ground && sp->T <= 3 * Hh;
+    (surface ? flat : statics).push_back(it);
+    if (!cs || !fr) return;
+    // Scripted overlay (SprInstCLSID 0x7315): the base image has a hole the script's frames fill, so draw
+    // the first frame even when animation is off. These records do not use the a * AnimSetCount layout.
+    if (!cs->scripts.empty()) {
+      int slot = z;
+      if (cs->zoomCount < 5) slot = z - (5 - cs->zoomCount);
+      int orient = (cs->zoomSetCount >= 4 && cs->rotCount == 4) ? ((rot + cam.rot) & 3) : 0;
+      const CsScript* scr = cs->script(slot, orient);
+      if (!scr) return;
+      int idx = scr->start + (opt.animTick >= 0 ? opt.animTick % scr->count : 0);
+      if (idx < 0 || idx >= int(cs->frames.size())) return;
+      const CsFrame& of = cs->frames[size_t(idx)];
+      const SpriteImage* os = getSprite(of.category, of.spriteId);
+      if (!os) return;
+      Item ov = it;
+      ov.spr = os; ov.dbl = of.flags == 2; ov.pickable = false;
+      ov.ax += scr->offX; ov.ay += scr->offY;
+      statics.push_back(ov);
+      return;
+    }
     // Animated overlay frame (spec 7): extra frame drawn over the base image.
-    if (cs && fr && cs->animFrames > 1 && opt.animTick >= 0) {
+    if (cs->animFrames > 1 && opt.animTick >= 0) {
       int a = 1 + opt.animTick % (cs->animFrames - 1);
       int orient = (cs->zoomSetCount >= 4 && cs->rotCount == 4) ? ((rot + cam.rot) & 3) : 0;
       const CsFrame* of = frameFor(cs, a, orient);
@@ -999,6 +1030,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     }
   }
 
+  std::stable_sort(flat.begin(), flat.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
   std::stable_sort(statics.begin(), statics.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
   std::stable_sort(movers.begin(), movers.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
 
@@ -1017,7 +1049,8 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     }
     pos[m] = lo <= hi ? std::max(lo, std::min(kpos, hi)) : kpos;
   }
-  items_.reserve(statics.size() + movers.size());
+  items_.reserve(flat.size() + statics.size() + movers.size());
+  items_.insert(items_.end(), flat.begin(), flat.end());
   size_t mi = 0;
   std::vector<size_t> order(movers.size());
   for (size_t i = 0; i < order.size(); i++) order[i] = i;

@@ -183,6 +183,9 @@ class AutomataHost {
   virtual bool pieceAt(int x, int y, AutoNet k, PieceRef& out) const = 0;              // drivable/walkable piece
   virtual bool isWater(int /*x*/, int /*y*/) const { return false; }
   virtual bool pedEligible(int /*x*/, int /*y*/) const { return false; }              // occupant flag 0x8000
+  // Base height (1/256 units, same scale as path h) that path and flight heights at tile (x, y) are
+  // relative to: the network piece's altitude, else the ground or water surface.
+  virtual int groundHeight(int /*x*/, int /*y*/) const { return 0; }
   virtual void gameDate(int& month, int& day) const { month = 1; day = 1; }
   // Waypoints (tile coords) a seaport's ships follow; empty = no route (spawner not ready).
   virtual std::vector<std::pair<double, double>> seaRoute(int /*portId*/) const { return {}; }

@@ -80,6 +80,19 @@ static Bytes trblkVeh(uint32_t path, uint32_t speed, bool withPed = false, uint3
   put32(b, 0); b.push_back(0); putPt(b, 0, 0, 128); put32(b, 1); putConn(b, -1, 8, path, speed);
   return b;
 }
+// Shipped road layout: lane 0 follows `path` and continues (Next=1) to lane 1, an exit node whose connection has no
+// path (Path 0, Next=-1). The vehicle must leave the piece there instead of failing.
+static Bytes trblkVehExitNode(uint32_t path, uint32_t speed) {
+  Bytes b; bin(b);
+  for (int i = 0; i < 4; i++) put32(b, 0);
+  b.push_back(1);
+  bin(b); put32(b, 0);
+  bin(b);
+  put32(b, 2);
+  put32(b, 0); b.push_back(0); putPt(b, 0, 0, 128); put32(b, 1); putConn(b, 1, 0, path, speed);
+  put32(b, 1); b.push_back(0); putPt(b, 255, 0, 128); put32(b, 1); putConn(b, -1, 16, 0, speed);
+  return b;
+}
 static Bytes scriptTxt(std::vector<std::pair<int, std::vector<std::string>>> steps) {
   std::string s = std::to_string(steps.size()) + "\r\n";
   for (auto& st : steps) {
@@ -290,13 +303,14 @@ static void testRoadTraffic() {
   for (auto& s : sp) {
     CHECK(s.kind == AutomatonKind::Vehicle && s.category == 0xAB);
     CHECK(s.tileY >= 3.49 && s.tileY <= 3.51 && s.tileX >= 0 && s.tileX <= 8);
-    // z = zoom - (5 - 3) = 2; frame = anim 0 (a=0 or 1)*144 + 2*48 + orientation(0)
-    CHECK(s.heading32 == 0 && (s.frameIndex == 96 || s.frameIndex == 144 + 96));
+    // z = zoom - (5 - 3) = 2; frame = anim 0 (a=0 or 1)*144 + 2*48 + orientation(heading 0 + 16: slot 0 faces the
+    // opposite way to heading 0)
+    CHECK(s.heading32 == 0 && (s.frameIndex == 96 + 16 || s.frameIndex == 144 + 96 + 16));
     CHECK(s.spriteId == 1000u + uint32_t(s.frameIndex));
   }
   // View rotation shifts orientation by 8 steps (90 degrees).
   v.rotation = 1; sim.setView(v);
-  for (auto& s : sim.sprites()) CHECK((s.frameIndex % 144) - 96 == 8);
+  for (auto& s : sim.sprites()) CHECK((s.frameIndex % 144) - 96 == 24);
   v.rotation = 0; sim.setView(v);
   // movement + spawning keep the limit
   int maxSeen = 0;
@@ -378,6 +392,20 @@ static void testScriptsAndMix() {
   sim.notifyEvent(); CHECK(sim.eventMode() == 1);
   sim.update(10000000); CHECK(sim.eventMode() == 1);
   sim.update(5000000); CHECK(sim.eventMode() == 2);
+}
+
+static void testExitNodeLeavesPiece() {
+  AutomataData D; buildData(D);
+  D.addRecord({kTrBlkType, kTrBlkGroup, 0x1000}, trblkVehExitNode(0x1000, 64000));
+  TestHost H; H.density = 0;
+  StreetSim sim(D, H, StreetSim::Config());
+  AutoView v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
+  sim.setView(v);
+  CHECK(sim.dispatchEmergency(EmergencyType::PoliceCar, 2, 3));
+  for (int i = 0; i < 40; i++) sim.update(100000);  // 4 s at 0.55 tiles/s: well past the end of tile 2
+  auto sp = sim.sprites();
+  CHECK(sp.size() == 1);
+  for (auto& s : sp) CHECK(s.tileX >= 3.0 && s.tileX < 8.0);
 }
 
 static void testPeds() {
@@ -482,6 +510,7 @@ int main() {
   testRoadTraffic();
   testScriptsAndMix();
   testPeds();
+  testExitNodeLeavesPiece();
   testOtherAutomata();
   testCallAndParade();
   TEST_MAIN_END();

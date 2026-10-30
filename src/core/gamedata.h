@@ -40,12 +40,22 @@ struct OccAttr {
 
 struct CsFrame { uint32_t category = 0, spriteId = 0; int8_t flags = 0; int16_t offX = 0, offY = 0; };
 
+// Scripted overlay animation trailing a composite-sprite record (seen on SprInstCLSID 0x7315, the
+// fusion plant): "Script[zoom,orient,offX,offY]:WR ..,S start count ms,G 1,END". The overlay plays
+// frames[start .. start+count-1] at (offX, offY) from the object's anchor, `ms` per frame.
+struct CsScript { int zoom = 0, orient = 0, offX = 0, offY = 0, start = 0, count = 0, ms = 0; };
+
 // Composite-sprite ("BIN") record (spec/25-rendering.md 4.2).
 struct CsAttrib {
   bool valid = false;
   uint32_t clsid = 0;
   int zoomCount = 0, rotCount = 0, zoomSetCount = 0, animSetCount = 0, animFrames = 0;
   std::vector<CsFrame> frames;
+  std::vector<CsScript> scripts;
+  const CsScript* script(int z, int o) const {
+    for (const auto& s : scripts) if (s.zoom == z && s.orient == o) return &s;
+    return nullptr;
+  }
   // Frame for animation frame a, zoom slot z, orientation slot o.
   const CsFrame* frame(int a, int z, int o) const {
     size_t idx = size_t(a) * animSetCount + size_t(z) * zoomSetCount + o;

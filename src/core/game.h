@@ -363,6 +363,7 @@ class Game {
     bool isWater(int x, int y) const override;
     bool pedEligible(int x, int y) const override;
     int trafficDensity(int x, int y) const override;
+    int groundHeight(int x, int y) const override;
     void gameDate(int& m, int& d) const override { m = month; d = day; }
     void rebuild();
   };

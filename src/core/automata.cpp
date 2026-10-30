@@ -708,7 +708,7 @@ struct StreetSim::Impl {
   void setPose(Auto& a, const Pt& p, int heading32v) {
     a.x = double(a.tx) + p.a / 256.0;
     a.y = double(a.ty) + p.b / 256.0;
-    a.h = p.h;
+    a.h = p.h + host.groundHeight(a.tx, a.ty);
     a.heading = heading32v;
   }
 
@@ -853,17 +853,23 @@ struct StreetSim::Impl {
     return a;
   }
 
-  // Leave the current piece through the edge nearest the end of the path. False = fail.
-  bool vehicleNextPath(Auto& a, double overflow) {
+  // Continue on the same piece (left = false) or leave it through the edge nearest the end of the path
+  // (left = true). False = fail. A Next lane whose connection has no path (Path 0) is an exit node, e.g. the
+  // far end of a straight road lane: the vehicle leaves the piece there.
+  bool vehicleNextPath(Auto& a, double overflow, bool& left) {
+    left = false;
     if (a.conn.next >= 0) {
       const VehLane* l = a.blk->vehLane(a.conn.next);
       if (!l || l->conns.empty()) return false;
       const Conn& c = l->conns[rng.below(uint32_t(l->conns.size()))];
-      auto pit = D.vpath.find(c.path);
-      if (pit == D.vpath.end()) return false;
-      a.conn = c; a.vpath = &pit->second; a.vpathInst = c.path; a.dist = overflow;
-      return true;
+      if (c.path != 0) {
+        auto pit = D.vpath.find(c.path);
+        if (pit == D.vpath.end()) return false;
+        a.conn = c; a.vpath = &pit->second; a.vpathInst = c.path; a.dist = overflow;
+        return true;
+      }
     }
+    left = true;
     // exit via the tile edge nearest the final point
     const Pt& last = a.vpath->pts.back();
     int dx = 0, dy = 0;
@@ -911,8 +917,8 @@ struct StreetSim::Impl {
       double len = double(a.vpath->length());
       if (a.dist < len) break;
       double over = a.dist - len;
-      bool leaving = a.conn.next < 0;
-      if (!vehicleNextPath(a, over)) return false;
+      bool leaving = false;
+      if (!vehicleNextPath(a, over, leaving)) return false;
       if (leaving) {
         a.prevDist = 0;
         if (--a.piecesLeft <= 0) { done = true; return true; }
@@ -1052,8 +1058,9 @@ struct StreetSim::Impl {
       double climb = a.climbTiles > 0 ? std::min(1.0, a.flown / a.climbTiles) : 1.0;
       a.fh = a.startAlt == a.endAlt ? a.startAlt : (a.endAlt < a.startAlt ? a.startAlt + (a.endAlt - a.startAlt) * t : a.startAlt + (a.endAlt - a.startAlt) * climb);
     }
-    a.x = a.fx; a.y = a.fy; a.h = a.fh;
+    a.x = a.fx; a.y = a.fy;
     a.tx = int(std::floor(a.fx)); a.ty = int(std::floor(a.fy));
+    a.h = a.fh + host.groundHeight(a.tx, a.ty);
     a.heading = heading32(a.dirX, a.dirY);
     if (a.wp >= a.wps.size()) done = true;
   }
@@ -1070,6 +1077,7 @@ struct StreetSim::Impl {
     if (nx >= 0 && ny >= 0 && nx < host.mapWidth() && ny < host.mapHeight() && host.isWater(int(nx), int(ny))) { a.fx = nx; a.fy = ny; }
     else a.nextTurnUs = 0;  // blocked: pick a new heading next update
     a.x = a.fx; a.y = a.fy; a.tx = int(a.fx); a.ty = int(a.fy);
+    a.h = host.groundHeight(a.tx, a.ty);
     a.heading = heading32(a.dirX, a.dirY);
   }
 
@@ -1677,7 +1685,13 @@ std::vector<AutomatonSprite> StreetSim::sprites() const {
     int z = I.view.zoom - (5 - s.zoomCount);
     if (z < 0 || z >= s.zoomCount) continue;
     int o = 0;
-    if (s.rotCount > 0) o = (((a.heading + I.view.rotation * 8) & 31) * s.rotCount) / 32;
+    // Vehicle slot 0 faces screen north-east (verified on the shipped car sprites) while heading 0 is +a, which
+    // projects to south-west; both count counter-clockwise on screen, so slot = heading + 16.
+    // People (8 slots) are unverified and keep the plain heading.
+    if (s.rotCount > 0) {
+      int quarter = a.kind == AutomatonKind::Pedestrian ? 0 : 16;
+      o = (((a.heading + I.view.rotation * 8 + quarter) & 31) * s.rotCount) / 32;
+    }
     int frameVal = 0;
     if (a.anim) {
       const AnimSeq* seq = a.anim->find(a.animSeq);

@@ -69,6 +69,25 @@ CsAttrib parseCsAttrib(const uint8_t* p, size_t n) {
       c.frames.push_back(f);
     }
     c.valid = true;
+    // Optional trailing script block: "BIN\r", s32 version, string name, u32 count, count x string.
+    // Callers must pass the record's declared size, or the next record's "BIN\r" would be read here.
+    if (r.remaining() >= 16 && r.str(4) == "BIN\r") {
+      r.s32();
+      uint32_t nl = r.u32();
+      if (nl > 64) return c;
+      r.skip(nl);
+      uint32_t cnt = r.u32();
+      for (uint32_t i = 0; i < cnt && i < 256; i++) {
+        uint32_t len = r.u32();
+        if (len > r.remaining()) break;
+        std::string s = r.str(len);
+        CsScript sc;
+        size_t at = s.find(",S ");
+        if (std::sscanf(s.c_str(), "Script[%d,%d,%d,%d]", &sc.zoom, &sc.orient, &sc.offX, &sc.offY) == 4 && at != std::string::npos &&
+            std::sscanf(s.c_str() + at, ",S %d %d %d", &sc.start, &sc.count, &sc.ms) == 3 && sc.count > 0)
+          c.scripts.push_back(sc);
+      }
+    }
   } catch (const FormatError&) {}
   return c;
 }
@@ -224,7 +243,7 @@ const CsAttrib* GameData::csattrib(const ResKey& k) {
   if (it == csCache_.end()) {
     CsAttrib c;
     ResourceRef r = db_.find(k);
-    if (r) c = parseCsAttrib(r.data, r.available);
+    if (r) c = parseCsAttrib(r.data, r.declared && r.declared < r.available ? r.declared : r.available);
     it = csCache_.emplace(h, c).first;
   }
   return it->second.valid ? &it->second : nullptr;
