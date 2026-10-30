@@ -115,8 +115,42 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   in.plan.monthIndex = c.clock.date().month - 1;
   in.trans.nRoad = c.roadCount();
   int64_t totalB = 0;
-  for (const auto& o : world_.occupants) { (void)o; totalB++; }
+  int unpowered = 0, needPower = 0;
+  for (const auto& o : world_.occupants) {
+    totalB++;
+    if (o.state != 1) continue;
+    switch (o.agentType) {
+      case 13130: in.safety.policeStations++; break;
+      case 13002: in.safety.fireStations++; break;
+      case 13881: in.safety.jails++; break;
+      case 13310: in.demo.nHospital++; break;
+      case 13010: in.demo.nSchool++; break;
+      case 13873: in.demo.nCollege++; break;
+      case 14600: in.demo.nStadium++; break;
+      case 12310: in.trans.hasAirport = true; in.trans.airportBuildings++; break;
+      case 12330: in.env.hasSeaport = true; break;
+      case 12210: in.trans.nBus++; in.trans.hasBusStations = true; break;
+      case 12230: in.trans.n12230++; in.trans.nStations++; break;
+      case 12360: in.trans.n12360++; in.trans.hasSubway = true; break;
+      case 12361: in.trans.n12361++; in.trans.hasSubway = true; break;
+      default: break;
+    }
+    if (o.agentType >= 3000 && o.agentType < 10000) { needPower++; if (!c.powered(o.x, o.z)) unpowered++; }
+    if (us::powerCategory(o.agentType) >= 0) in.util.nPlants++;
+    if (o.agentType == 12810 || o.agentType == 12840 || o.agentType == 12830) in.util.nPumps++;
+    if (o.agentType == 12852) in.util.nIncin++;
+  }
   in.plan.totalBuildings = totalB;
+  in.util.unpoweredBuildings = unpowered; in.util.buildingsNeedingPower = needPower;
+  in.util.powerUsed = c.power.stats().consumed; in.util.powerCap = c.power.stats().produced;
+  in.util.treasury = sim_.funds;
+  if (const Department* d = c.budget.dept(dept::Police)) in.safety.policeFunding = d->funding;
+  if (const Department* d = c.budget.dept(dept::Fire)) in.safety.fireFunding = d->funding;
+  if (const Department* d = c.budget.dept(dept::Roads)) in.trans.roadFunding = d->funding;
+  if (const Department* d = c.budget.dept(dept::Transit)) in.trans.transitFunding = d->funding;
+  if (const Department* d = c.budget.dept(dept::Health)) in.demo.healthFunding = d->funding;
+  if (const Department* d = c.budget.dept(dept::Education)) in.demo.eduFunding = d->funding;
+  in.neighbourConnections = 0;
   for (auto z : world_.zone) {
     if (z >= 1 && z <= 3) in.plan.zoned[0]++; else if (z >= 5 && z <= 7) in.plan.zoned[1]++; else if (z >= 9 && z <= 11) in.plan.zoned[2]++;
   }
