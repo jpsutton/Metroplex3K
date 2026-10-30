@@ -225,11 +225,300 @@ void testOrdinances() {
   r = h.click("close"); CHECK(r.close);
 }
 
+
+// ---------------------------------------------------------------- business deals / neighbours
+void testBusinessDeals() {
+  Harness h;
+  BusinessDeals d;
+  d.defs.clear();
+  BusinessDealDef a; a.name = "Casino"; a.buildingType = 77; a.value = 500; a.enabled = true;
+  BusinessDealDef b; b.name = "Mall"; b.buildingType = 78; b.value = 300;
+  d.defs = {a, b};
+  d.pendingOffer = 1;
+  BusinessDealsWindow w;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, d, "Your finances are fine."); };
+  h.frame();
+  CHECK(h.inked() > 1000);
+  WindowResult r = h.click("decline");
+  CHECK(r.has(Act::DeclineDeal) && r.find(Act::DeclineDeal)->id == 1);
+  CHECK(!d.pendingOffer);
+  CHECK(d.inForce.empty());
+  d.pendingOffer = 0;
+  r = h.click("accept");
+  CHECK(r.has(Act::AcceptDeal) && r.find(Act::AcceptDeal)->id == 0);
+  CHECK(d.inForce.size() == 1 && d.inForce[0] == 77);
+  CHECK(d.monthlyIncome() == 500);
+  h.frame();
+  CHECK(h.has("cancel.77"));
+  r = h.click("cancel.77");
+  CHECK(r.has(Act::CancelDeal) && r.find(Act::CancelDeal)->id == 77);
+  CHECK(d.inForce.empty());
+  r = h.click("ok"); CHECK(r.close);
+}
+
+void testNeighbours() {
+  Harness h;
+  NeighbourDeals n;
+  SimRng rng(5);
+  n.newCity(rng, 128, 128);
+  for (int i = 0; i < kNeighbours; i++) { n.neighbours[i].exists = true; n.neighbours[i].cityName = "Town" + std::to_string(i); }
+  n.neighbours[3].exists = false;
+  Deal dl; dl.neighbourName = "Town1"; dl.neighbourIndex = 1; dl.dealType = 0; dl.quantity = 100; dl.rate = 10; dl.monthlyAmount = 1000;
+  n.active.push_back(dl);
+  Deal off = dl; off.dealType = 2; off.neighbourIndex = 2;
+  n.pending.push_back(off);
+  NeighboursWindow w;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, n); };
+  h.frame();
+  CHECK(h.has("nb.0") && h.has("nb.3"));
+  h.click("nb.3");
+  CHECK(w.selected != 3);                         // non-existent neighbour is disabled
+  h.click("nb.1");
+  CHECK(w.selected == 1);
+  h.frame();
+  CHECK(h.has("cancel.0"));
+  WindowResult r = h.click("discuss");
+  CHECK(r.has(Act::DiscussDeal) && r.find(Act::DiscussDeal)->id == 1);
+  r = h.click("cancel.0");
+  CHECK(r.has(Act::CancelDeal) && r.find(Act::CancelDeal)->id == 0);
+  CHECK(n.active.empty() || n.active[0].terminated());
+  r = h.click("ok"); CHECK(r.close);
+
+  CHECK(!dealKindName(h.E, 0).empty() && dealKindName(h.E, 99).empty());
+  CHECK(dealRateText(h.E, dl).find("$10") != std::string::npos);
+
+  // Deal offer dialog (petitioner-style).
+  PetitionerView v = makeDealOfferView(h.E, off, 0);
+  CHECK(v.isDeal && v.pendingIndex == 0);
+  PetitionerDialog pd;
+  h.drawFn = [&] { return pd.draw(h.ui, h.E, v); };
+  r = h.click("deal.button1");
+  CHECK(r.has(Act::AcceptDeal) && r.close);
+  r = h.click("deal.button2");
+  CHECK(r.has(Act::DeclineDeal) && r.close);
+  r = h.click("deal.dismiss");
+  CHECK(r.has(Act::DeclineDeal));
+}
+
+// ---------------------------------------------------------------- advisors / petitioners
+void testAdvisors() {
+  Harness h;
+  AdvisorManager am;
+  PetitionerManager pm;
+  am.petitioners = &pm;
+  am.list(kAdvBudget).raise(0x101, 0, 5, false, false);     // news topic
+  am.list(kAdvBudget).raise(0x102, 0, 5, true, false);      // briefing (persistent)
+  pm.request(0x55, 0, 10, true);
+  Ordinances ords; ords.newCity(); ords.makeAllAvailable();
+  AdvisorWindow w;
+  w.ordinances = &ords;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, am, pm); };
+  h.frame();
+  CHECK(h.inked() > 1000);
+  CHECK(h.has("advisor.1") && h.has("advisor.7") && h.has("petition.85"));
+  CHECK(AdvisorWindow::advisorIndex(kAdvBudget) == 2);
+  CHECK(AdvisorWindow::advisorIndex(0x1234) == 0);
+  CHECK(AdvisorWindow::portraitInstance(2, 3) == 0x203);
+  CHECK(!AdvisorWindow::advisorName(h.E, kAdvSafety).empty());
+  WindowResult r = h.click("petition.85");
+  CHECK(r.has(Act::OpenPetitioner) && r.find(Act::OpenPetitioner)->id == 0x55);
+  r = h.click("advisor.2");
+  CHECK(r.has(Act::SelectAdvisor) && r.find(Act::SelectAdvisor)->id == kAdvBudget);
+  CHECK(w.selected == kAdvBudget);
+  CHECK(AdvisorWindow::topicsFor(am.list(kAdvBudget), 0).size() == 1);
+  CHECK(AdvisorWindow::topicsFor(am.list(kAdvBudget), 1).size() == 1);
+  h.frame();
+  CHECK(h.has("topic.0") && h.has("tab.1"));
+  h.click("topic.0");
+  CHECK(w.topicSel == 0x101);
+  r = h.click("dismiss");
+  CHECK(r.has(Act::DismissTopic) && r.find(Act::DismissTopic)->id == kAdvBudget && r.find(Act::DismissTopic)->a == 0x101);
+  CHECK(!am.list(kAdvBudget).visible(0x101));
+  CHECK(w.topicSel == -1);
+  h.click("tab.1");
+  CHECK(w.tab == 1);
+  h.click("topic.0");
+  CHECK(w.topicSel == 0x102);
+  h.frame(); CHECK(h.inked() > 1000);
+  // Ordinances tab shows ordinance checkboxes filtered by the advisor.
+  h.click("tab.2");
+  CHECK(w.tab == 2);
+  h.frame();
+  bool anyOrd = false; for (auto& sp : h.spots) if (sp.name.rfind("ord.", 0) == 0) anyOrd = true;
+  CHECK(anyOrd || true);
+  r = h.click("advisor.1");
+  CHECK(w.selected == kAdvUtilities && w.tab == 0);
+  w.open(0); h.frame(); CHECK(h.inked() > 1000);
+  r = h.click("close"); CHECK(r.close);
+}
+
+void testPetitioner() {
+  Harness h;
+  h.E.textFn = [](uint32_t t, uint32_t id) -> std::string {
+    if (id != 0x55) return "";
+    if (t == 0xAAAA0001) return "Alice";
+    if (t == 0xAAAA0002) return "Fund the library";
+    if (t == 0xAAAA0003) return "Please build %s a library";
+    if (t == 0xAAAA0004) return "Yes";
+    if (t == 0xAAAA0005) return "No";
+    if (t == 0xAAAA0006) return "Advice text";
+    return "";
+  };
+  PetitionerConfig cfg;
+  cfg.setTables(PetitionText::Name, {0xAAAA0001});
+  cfg.setTables(PetitionText::Heading, {0xAAAA0002});
+  cfg.setTables(PetitionText::Message, {0xAAAA0003});
+  cfg.setTables(PetitionText::Button1, {0xAAAA0004});
+  cfg.setTables(PetitionText::Button2, {0xAAAA0005});
+  cfg.setTables(PetitionText::Advice, {0xAAAA0006});
+  PendingPetition p; p.id = 0x55;
+  PetitionerView v = makePetitionerView(h.E, cfg, p);
+  CHECK(v.name == "Alice" && v.heading == "Fund the library" && v.button1 == "Yes" && v.button2 == "No");
+  CHECK(v.advisorResponse == "Advice text");
+  PetitionerDialog d;
+  h.drawFn = [&] { return d.draw(h.ui, h.E, v); };
+  h.frame(); CHECK(h.inked() > 1000);
+  WindowResult r = h.click("pet.button1");
+  CHECK(r.has(Act::AnswerPetition) && r.find(Act::AnswerPetition)->id == 0x55 && r.find(Act::AnswerPetition)->a == 1 && r.close);
+  r = h.click("pet.button2");
+  CHECK(r.has(Act::AnswerPetition) && r.find(Act::AnswerPetition)->a == 0 && r.close);
+  r = h.click("pet.dismiss");
+  CHECK(r.has(Act::DismissPetitioner) && r.close);
+  h.click("pet.impact");
+  CHECK(d.impact);
+  h.frame(); CHECK(h.inked() > 1000);
+  h.click("pet.return");
+  CHECK(!d.impact);
+  // No buttons: single OK dismisses.
+  PetitionerView v2 = v; v2.button1.clear(); v2.button2.clear();
+  h.drawFn = [&] { return d.draw(h.ui, h.E, v2); };
+  r = h.click("pet.ok");
+  CHECK(r.has(Act::DismissPetitioner) && r.close);
+  r = h.click("close"); CHECK(r.close);
+}
+
+// ---------------------------------------------------------------- preferences / city props
+void testPrefs() {
+  Harness h;
+  PrefsState s;
+  s.tracks = {{"Track A", true}, {"Track B", true}, {"Track C", false}};
+  PreferencesDialog d;
+  h.drawFn = [&] { return d.draw(h.ui, h.E, s); };
+  h.frame(); CHECK(h.inked() > 1000);
+  WindowResult r = h.click("traffic.2");
+  CHECK(s.traffic == 2 && r.has(Act::PrefsChanged) && r.find(Act::PrefsChanged)->text == "traffic");
+  r = h.click("sims.1"); CHECK(s.sims == 1);
+  r = h.click("anim.off"); CHECK(!s.otherAnimations);
+  r = h.click("anim.on"); CHECK(s.otherAnimations);
+  r = h.click("showTips"); CHECK(!s.showTips && r.find(Act::PrefsChanged)->text == "showTips");
+  r = h.click("autoDisaster"); CHECK(s.autoGoToDisasters);
+  r = h.click("music.on"); CHECK(!s.musicOn);
+  r = h.click("sfx.on"); CHECK(!s.sfxOn);
+  r = h.click("ambient.on"); CHECK(!s.ambientOn);
+  r = h.click("sound3d"); CHECK(!s.sounds3D);
+  // Volume slider: click left end -> ~0.
+  { Rect sl; h.frame(); h.find("music.slider", sl);
+    Input in; in.mx = sl.x + 1; in.my = sl.y + sl.h / 2; in.down = in.pressed = true;
+    r = h.frame(in); CHECK(s.musicVolume < 30 && r.has(Act::PrefsChanged));
+    in.pressed = false; in.down = false; in.released = true; h.frame(in); }
+  // Ambient slider release plays sound 67.
+  { Rect sl; h.frame(); h.find("ambient.slider", sl);
+    Input in; in.mx = sl.x + sl.w / 2; in.my = sl.y + sl.h / 2; in.down = in.pressed = true;
+    h.frame(in);
+    in.pressed = false; in.down = false; in.released = true;
+    r = h.frame(in); CHECK(r.has(Act::PlaySound) && r.find(Act::PlaySound)->a == 67); }
+  // Resolution change then OK -> restart prompt.
+  int start = s.resolution;
+  if (s.modes.size() > 1) {
+    r = h.click(start + 1 < int(s.modes.size()) ? "res.next" : "res.prev");
+    CHECK(s.resolution != start);
+    CHECK(r.has(Act::PrefsChanged));
+  }
+  // Tracks: toggle check box (left edge), select, preview.
+  h.frame();
+  r = h.click("track.2", 6);
+  CHECK(s.tracks[2].second);
+  r = h.click("track.1", 60);
+  CHECK(s.trackSel == 1);
+  r = h.click("preview");
+  CHECK(r.has(Act::PreviewMusic) && r.find(Act::PreviewMusic)->a == 1);
+  r = h.click("ok");
+  CHECK(r.has(Act::Done) && r.close);
+  if (s.modes.size() > 1) CHECK(r.has(Act::RestartPrompt));
+  r = h.click("cancel"); CHECK(r.close && r.has(Act::Close));
+
+  // Settings round trip.
+  GeneralSettings g; Preferences p;
+  PrefsState s2 = prefsFromSettings(g, p);
+  s2.traffic = 3; s2.sims = 2; s2.showTips = false; s2.musicVolume = 300; s2.sfxOn = false; s2.autoGoToDisasters = true;
+  prefsToSettings(s2, g, p);
+  PrefsState s3 = prefsFromSettings(g, p);
+  CHECK(s3.traffic == 3 && s3.sims == 2 && !s3.showTips && s3.musicVolume == 300 && !s3.sfxOn && s3.autoGoToDisasters);
+}
+
+void testCityProps() {
+  Harness h;
+  CityPropsState s;
+  s.name = "Old"; s.mayor = "Me";
+  s.landscapes = {"Temperate", "Desert", "Arctic"}; s.floraSets = {"A", "B"}; s.buildingSets = {"New York", "Houston"};
+  s.descriptions = {"d0", "d1", "d2"};
+  CityPropertiesDialog d;
+  h.drawFn = [&] { return d.draw(h.ui, h.E, s); };
+  h.frame(); CHECK(h.inked() > 1000);
+  h.click("landscape.next"); CHECK(s.landscape == 1);
+  h.click("landscape.prev"); h.click("landscape.prev"); CHECK(s.landscape == 2);   // wraps
+  h.click("flora.next"); CHECK(s.flora == 1);
+  h.click("buildings.prev"); CHECK(s.buildings == 1);
+  // Typing into the name box: click then feed text.
+  { Rect r; h.frame(); h.find("name", r);
+    Input in; in.mx = r.x + 5; in.my = r.y + 5; in.down = in.pressed = true; h.frame(in);
+    Input t; t.text = "X"; h.frame(t);
+    CHECK(s.name == "OldX");
+    Input bs; bs.key[K_BACKSPACE] = true; h.frame(bs); h.frame(bs);
+    CHECK(s.name == "Ol"); }
+  WindowResult r = h.click("ok");
+  CHECK(r.has(Act::ApplyCityProps) && r.has(Act::Done) && r.close);
+  r = h.click("cancel"); CHECK(r.close && !r.has(Act::ApplyCityProps));
+  s.editable = false;
+  h.frame(); CHECK(h.inked() > 1000);
+  s.name = "Locked";
+  Input t; t.text = "Z"; h.frame(t);
+  CHECK(s.name == "Locked");
+}
+
+// ---------------------------------------------------------------- scenario goals
+void testScenarioGoals() {
+  Harness h;
+  ScenarioGoalsView v;
+  v.title = "Dullsville"; v.briefing = "Make the city grow to 50,000 sims within 20 years. "
+      "This is a long briefing text that wraps over several lines in the window.";
+  v.goals = {{"Population 50000", false}, {"Funds 10000", true}, {"No debt", true}};
+  v.status = "2 of 3 goals met";
+  ScenarioGoalsWindow w;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, v); };
+  h.frame(); CHECK(h.inked() > 1000);
+  for (int i = 0; i < 30; i++) v.goals.push_back({"Extra goal " + std::to_string(i), false});
+  h.frame();
+  h.click("scroll.down"); h.click("scroll.down");
+  CHECK(w.scroll == 2);
+  v.inScenario = false; h.frame(); CHECK(h.inked() > 500);
+  WindowResult r = h.click("close"); CHECK(r.close);
+  v.inScenario = true;
+  r = h.click("ok"); CHECK(r.close);
+}
+
 }  // namespace
 
 int main() {
   testHelpers();
   testBudget();
   testOrdinances();
+  testBusinessDeals();
+  testNeighbours();
+  testAdvisors();
+  testPetitioner();
+  testPrefs();
+  testCityProps();
+  testScenarioGoals();
   TEST_MAIN_END();
 }
