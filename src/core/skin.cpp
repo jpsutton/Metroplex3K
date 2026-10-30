@@ -1,0 +1,375 @@
+#include "core/skin.h"
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+
+namespace m3k {
+
+using namespace skin_group;
+
+const uint32_t kRciColors[3] = {rgba(0, 192, 0), rgba(0, 0, 192), rgba(192, 192, 0)};
+constexpr int RciGeometry::barX[3];
+
+int cell4For(bool enabled, bool pressed, bool checked, bool hover) {
+  if (!enabled) return CELL_DISABLED;
+  if (pressed || checked) return CELL_PRESSED;
+  if (hover) return CELL_HOVER;
+  return CELL_NORMAL;
+}
+int cell8For(bool enabled, bool pressed, bool checked, bool hover) {
+  int s = !enabled ? CELL_DISABLED : pressed ? CELL_PRESSED : hover ? CELL_HOVER : CELL_NORMAL;
+  return (checked ? 4 : 0) + s;
+}
+
+Rect RciGeometry::bar(int i, double v) {
+  if (i < 0 || i > 2) return {};
+  int h = int(std::lround(std::fabs(v) * unitPx));
+  Rect r{barX[i], 0, barW, 0};
+  if (v > 0) {
+    int top = std::max(0, zeroY - h);
+    r.y = top; r.h = zeroY - top;
+  } else if (v < 0) {
+    int bot = std::min(clipBottom, zeroY + h);
+    r.y = zeroY; r.h = std::max(0, bot - zeroY);
+  } else {
+    r.y = zeroY;
+  }
+  return r;
+}
+
+// ---- tool menu layout -----------------------------------------------------------------------
+ToolMenuLayout toolMenuLayout(int screenH) {
+  ToolMenuLayout L;
+  int hc = screenH <= 480 ? 0 : screenH <= 600 ? 1 : 2;  // 480 / 600 / >600
+  L.valid = true;
+  L.heightClass = hc == 0 ? 480 : hc == 1 ? 600 : 1000;
+  L.artGroup = hc == 0 ? Ui640 : UiBig;
+  // x is always 33. rows: {y, dx, dy} per height class.
+  static const int ry[9][3] = {{3, 3, 100}, {39, 39, 136}, {75, 75, 172}, {111, 111, 208}, {147, 147, 244},
+                               {219, 291, 388}, {255, 327, 424}, {291, 363, 460}, {183, 219, 316}};
+  static const int pdy[9][3] = {{0, 0, 97}, {11, 11, 108}, {11, 11, 108}, {11, 11, 108}, {11, 11, 108},
+                                {0, 0, 97}, {45, 118, 215}, {0, 118, 215}, {83, 119, 216}};
+  for (int n = 0; n < 9; n++) {
+    auto& r = L.root[n];
+    r.id = 0x1001 + n; r.x = 33; r.y = ry[n][hc]; r.dx = 0; r.dy = pdy[n][hc];
+    r.hasSub = n != 5;
+  }
+  auto run = [&](int n, std::vector<uint32_t> ids, int base) {
+    L.subIds[n] = ids;
+    for (size_t k = 0; k < ids.size(); k++) L.subY[n].push_back(base + 36 * int(k));
+  };
+  int b = hc == 2 ? 118 : 21;
+  run(0, {0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006}, b);
+  run(1, {0x3001, 0x3002, 0x3003, 0x3004, 0x3005, 0x3006, 0x3007, 0x3008}, b);
+  run(2, {0x4001, 0x4002, 0x4004, 0x4005, 0x4007, 0x4009, 0x400A}, b);
+  run(3, {0x5001, 0x5002, 0x5003, 0x5009, 0x500A, 0x500B}, b);
+  run(4, {0x6002, 0x6003, 0x6004, 0x6006, 0x6008, 0x6009, 0x600A}, b);
+  static const int revBase[3] = {57, 129, 226}, emBase[3] = {93, 129, 226}, optBase[3] = {57, 129, 226};
+  run(6, {0x8010, 0x8011, 0x8001, 0x8005, 0x8002, 0x8003, 0x8004}, revBase[hc]);
+  run(7, {0x9001, 0x900A, 0x9002, 0x9006, 0x9003, 0x9004, 0x9005}, optBase[hc]);
+  if (hc > 0) { L.subY[7][0] -= 1; L.subY[7][1] -= 1; }  // original table: first two Options buttons 1 px high
+  run(8, {0xA001, 0xA002, 0xA003, 0xA004, 0xA006, 0xA005}, emBase[hc]);
+
+  if (hc == 0) {
+    L.pieces = {{Ui640, 0xFFFF, 0, false}};
+  } else if (hc == 1) {
+    L.pieces = {{UiBig, 0xFFFF, 0, false}, {UiBig, 0xFFFE, 417, false}};
+  } else {
+    L.pieces = {{Ui1024, 0xFFFD, 0, false}, {UiBig, 0xFFFF, 97, false}, {Ui1024, 0xFFFE, 97 + 417, false}};
+    if (screenH > 768) L.pieces.push_back({Ui1024, 0xFFFC, 97 + 417 + 96, true});
+  }
+  return L;
+}
+
+BottomBarLayout bottomBarLayout(int screenW) {
+  BottomBarLayout B;
+  auto R = [](int l, int t, int r, int b) { return Rect{l, t, r - l, b - t}; };
+  if (screenW <= 640) {
+    B.group = Ui640; B.variant = 0;
+    B.fieldA = R(8, 46, 340, 64); B.fieldB = R(8, 25, 116, 43); B.fieldC = R(120, 25, 270, 43); B.fieldD = R(264, 25, 350, 43);
+    B.textLine = R(8, 3, 340, 23);
+    B.p1x = 371; B.p1y = 14; B.p2x = 348; B.p2y = 14; B.p3x = 399; B.p3y = 14; B.p4x = 349; B.p4y = 34;
+  } else if (screenW <= 800) {
+    B.group = Ui800; B.variant = 1;
+    B.fieldA = R(8, 26, 144, 44); B.fieldB = R(146, 26, 258, 44); B.fieldC = R(260, 26, 408, 44); B.fieldD = R(396, 26, 500, 44);
+    B.textLine = R(8, 5, 481, 22);
+    B.p1x = 511; B.p1y = 9; B.p2x = 488; B.p2y = 9; B.p3x = 547; B.p3y = 11; B.p4x = 489; B.p4y = 29;
+  } else {
+    B.group = Ui1024; B.variant = 2;
+    B.fieldA = R(8, 26, 366, 44); B.fieldB = R(372, 26, 480, 44); B.fieldC = R(486, 26, 630, 44); B.fieldD = R(630, 26, 712, 44);
+    B.textLine = R(8, 6, 704, 23);
+    B.p1x = 735; B.p1y = 10; B.p2x = 712; B.p2y = 10; B.p3x = 773; B.p3y = 9; B.p4x = 713; B.p4y = 29;
+  }
+  return B;
+}
+
+// ---- blitting -------------------------------------------------------------------------------
+void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst) {
+  if (!ui.fb || im.empty() || src.w <= 0 || src.h <= 0 || dst.w <= 0 || dst.h <= 0) return;
+  for (int j = 0; j < dst.h; j++) {
+    int dy = dst.y + j; if (dy < 0 || dy >= ui.H) continue;
+    int sy = src.y + (src.h == dst.h ? j : j * src.h / dst.h);
+    if (sy < 0 || sy >= im.h) continue;
+    for (int i = 0; i < dst.w; i++) {
+      int dx = dst.x + i; if (dx < 0 || dx >= ui.W) continue;
+      int sx = src.x + (src.w == dst.w ? i : i * src.w / dst.w);
+      if (sx < 0 || sx >= im.w) continue;
+      uint32_t p = im.px[size_t(sy) * im.w + sx];
+      if (p >> 24) (*ui.fb)[size_t(dy) * ui.W + dx] = p;
+    }
+  }
+}
+
+// ---- loading --------------------------------------------------------------------------------
+static uint64_t key64(uint32_t g, uint32_t i) { return (uint64_t(g) << 32) | i; }
+static std::string hex(uint32_t v, int digits) {
+  char b[16]; std::snprintf(b, sizeof b, "%0*X", digits, v); return b;
+}
+
+const Image* Skin::fetch(uint32_t group, uint32_t inst) const {
+  if (!db_) return nullptr;
+  uint64_t k = key64(group, inst);
+  auto it = cache_.find(k);
+  if (it != cache_.end()) return &it->second;
+  if (missing_.count(k)) return nullptr;
+  ResourceRef r = db_->find({T_UI_IMAGE, group, inst});
+  if (r) {
+    try {
+      Image im = decodeUiImage(r.data, r.available, true);
+      if (!im.empty()) return &(cache_[k] = std::move(im));
+    } catch (const FormatError&) {}
+  }
+  missing_[k] = true;
+  return nullptr;
+}
+
+void Skin::bind(const std::string& name, uint32_t group, uint32_t inst) {
+  if (fetch(group, inst)) names_[name] = {group, inst};
+}
+
+const Image* Skin::get(const std::string& name) const {
+  auto it = names_.find(name);
+  return it == names_.end() ? nullptr : fetch(it->second.first, it->second.second);
+}
+
+bool Skin::load(ResourceDb& db, int screenH, int screenW) {
+  db_ = &db; h_ = screenH;
+  w_ = screenW > 0 ? screenW : screenH <= 480 ? 640 : screenH <= 600 ? 800 : 1024;
+  cache_.clear(); missing_.clear(); names_.clear();
+  layout_ = toolMenuLayout(screenH);
+  bar_ = bottomBarLayout(w_);
+
+  // Tool menu column and root/sub-menu art.
+  bind("rootpanel", layout_.artGroup, 0xFFFF);
+  for (const auto& p : layout_.pieces) bind("piece." + hex(p.group, 8) + "." + hex(p.inst, 4), p.group, p.inst);
+  for (int n = 1; n <= 9; n++) {
+    uint32_t base = 0x10000000u | (uint32_t(n) << 16);
+    bind("root." + std::to_string(n) + ".hover", UiBig, base | 1);
+    bind("root." + std::to_string(n) + ".press", UiBig, base | 5);
+    bind("sub." + std::to_string(n), layout_.artGroup, base | 3);
+  }
+  for (int n = 0; n < 9; n++)
+    for (uint32_t id : layout_.subIds[n]) bind("tool." + hex(id, 4), layout_.artGroup, id);
+
+  // Bottom bar, speed, view, RCI.
+  bind("bottombar", bar_.group, 0x82790741);
+  bind("bottombar.cap", UiBig, 0x82790742);
+  bind("rci", UiBig, 0x42FB77F6);
+  for (uint32_t k = 0; k < 6; k++) bind("speed." + std::to_string(k), UiBig, 0x52FB06E4 + k);
+  bind("help", UiBig, 0x52FB06EA);
+
+  // Generic controls.
+  bind("button", Sys, 0xE2B66DB8);
+  bind("check", Sys, 0xC2D6E93A);
+  bind("radio", Sys, 0x0000000A);
+  bind("combo", Sys, 0x62B99D31);
+  bind("field", Sys, 0x42B99D48);
+  bind("scrollbar", Sys, 0xE2B99E01);
+  bind("spinner", Sys, 0x82B99D9D);
+  bind("window", Sys, 0xE2B14588);
+  bind("sysbtns", Sys, 0x62B19CE9);
+  for (uint32_t i = 1; i <= 0x1C; i++) bind("gonzo." + hex(i, 2), Gonzo, i);
+
+  // Front end: pick the 800x600 set when the window can hold it and it exists, else 640x480.
+  bool big = w_ >= 800 && h_ >= 600;
+  if (big && fetch(Main, 0x01140000)) {
+    bind("menu.bg", Main, 0x01140000);
+    for (uint32_t k = 0; k < 9; k++) bind("menu.btn." + std::to_string(k), Main, 0x01140001 + k);
+  }
+  if (!names_.count("menu.bg")) {
+    static const uint32_t bgs[] = {0x22721000, 0x22721001, 0x22721002, 0x22721003, 0x22721004, 0x22721006, 0x22729921};
+    for (uint32_t b : bgs) if (fetch(Main, b)) { bind("menu.bg", Main, b); break; }
+    for (uint32_t k = 0; k < 9; k++) bind("menu.btn." + std::to_string(k), Main, 0x22729930 + k);
+  }
+
+  loaded_ = !names_.empty();
+  return loaded_;
+}
+
+// ---- tool menu ------------------------------------------------------------------------------
+Rect Skin::columnRect(int winW, int winH) const {
+  const Image* p = get("rootpanel");
+  int h = winH;
+  if (p && layout_.heightClass == 480) h = p->h;
+  return {winW - layout_.width, 0, layout_.width, h};
+}
+Rect Skin::rootButtonRect(int n, int ox, int oy) const {
+  if (n < 1 || n > 9) return {};
+  const auto& r = layout_.root[n - 1];
+  return {ox + r.x, oy + r.y, 56, 32};
+}
+Rect Skin::subButtonRect(int n, int k, int ox, int oy) const {
+  if (n < 1 || n > 9 || k < 0 || size_t(k) >= layout_.subY[n - 1].size()) return {};
+  return {ox, oy + layout_.subY[n - 1][k], 36, 36};
+}
+Rect Skin::subPanelRect(int n, int ox, int oy) const {
+  if (n < 1 || n > 9 || !layout_.root[n - 1].hasSub) return {};
+  const Image* im = get("sub." + std::to_string(n));
+  if (!im) return {};
+  const auto& r = layout_.root[n - 1];
+  return {ox + r.dx, oy + r.dy, im->w, im->h};
+}
+
+bool Skin::drawRootPanel(Ui& ui, int ox, int oy, int hover, int selected) {
+  const Image* bg = get("rootpanel");
+  if (!bg) return false;
+  for (const auto& p : layout_.pieces) {
+    const Image* im = get("piece." + hex(p.group, 8) + "." + hex(p.inst, 4));
+    if (!im) continue;
+    if (p.tileDown) {
+      for (int y = oy + p.y; y < ui.H; y += im->h) ui.blit(*im, ox, y);
+    } else {
+      ui.blit(*im, ox, oy + p.y);
+    }
+  }
+  for (int pass = 0; pass < 2; pass++) {
+    int n = pass == 0 ? hover : selected;
+    if (n < 1 || n > 9 || (pass == 0 && n == selected)) continue;
+    const Image* ov = get("root." + std::to_string(n) + (pass == 0 ? ".hover" : ".press"));
+    if (!ov) continue;
+    Rect r = rootButtonRect(n, ox, oy);
+    ui.blit(*ov, r.x, r.y);
+  }
+  return true;
+}
+
+bool Skin::drawSubPanel(Ui& ui, int ox, int oy, int n) {
+  Rect r = subPanelRect(n, ox, oy);
+  const Image* im = r.w ? get("sub." + std::to_string(n)) : nullptr;
+  if (!im) return false;
+  ui.blit(*im, r.x, r.y);
+  return true;
+}
+
+// ---- bottom bar -----------------------------------------------------------------------------
+bool Skin::bottomBarPlace(BottomBarPlace& o) const {
+  const Image* bg = get("bottombar");
+  if (!bg) return false;
+  int x = 0, y = h_ - bg->h;
+  o.bar = {x, y, bg->w, bg->h};
+  auto mv = [&](Rect r) { return Rect{r.x + x, r.y + y, r.w, r.h}; };
+  o.fieldA = mv(bar_.fieldA); o.fieldB = mv(bar_.fieldB); o.fieldC = mv(bar_.fieldC); o.fieldD = mv(bar_.fieldD);
+  o.textLine = mv(bar_.textLine);
+  o.p1x = x + bar_.p1x; o.p1y = y + bar_.p1y; o.p2x = x + bar_.p2x; o.p2y = y + bar_.p2y;
+  o.p3x = x + bar_.p3x; o.p3y = y + bar_.p3y; o.p4x = x + bar_.p4x; o.p4y = y + bar_.p4y;
+  o.rightEnd = w_;
+  return true;
+}
+
+bool Skin::drawBottomBar(Ui& ui, BottomBarPlace* out) {
+  BottomBarPlace pl;
+  if (!bottomBarPlace(pl)) return false;
+  pl.rightEnd = ui.W;
+  pl.bar.y = ui.H - pl.bar.h;
+  // re-anchor to the Ui's actual height
+  int dy = pl.bar.y - (h_ - pl.bar.h);
+  if (dy) {
+    for (Rect* r : {&pl.fieldA, &pl.fieldB, &pl.fieldC, &pl.fieldD, &pl.textLine}) r->y += dy;
+    pl.p1y += dy; pl.p2y += dy; pl.p3y += dy; pl.p4y += dy;
+  }
+  ui.blit(*get("bottombar"), pl.bar.x, pl.bar.y);
+  if (const Image* cap = get("bottombar.cap"))
+    for (int x = pl.bar.x + pl.bar.w; x < ui.W; x += cap->w) ui.blit(*cap, x, ui.H - cap->h);
+  if (out) *out = pl;
+  return true;
+}
+
+// ---- RCI ------------------------------------------------------------------------------------
+bool Skin::drawRciIndicator(Ui& ui, int x, int y, double r, double c, double i) {
+  const Image* bg = get("rci");
+  if (!bg) return false;
+  ui.blit(*bg, x, y);
+  double v[3] = {r, c, i};
+  for (int k = 0; k < 3; k++) {
+    Rect b = RciGeometry::bar(k, v[k]);
+    if (b.h > 0) ui.fill({x + b.x, y + b.y, b.w, b.h}, kRciColors[k]);
+  }
+  return true;
+}
+
+// ---- generic controls -----------------------------------------------------------------------
+bool Skin::sliceCell(const Image& s, int cells, int cell, Image& out) {
+  if (s.empty() || cells <= 0 || cell < 0 || cell >= cells || s.w % cells) return false;
+  int cw = s.w / cells;
+  out.w = cw; out.h = s.h; out.px.resize(size_t(cw) * s.h);
+  for (int j = 0; j < s.h; j++)
+    for (int i = 0; i < cw; i++) out.px[size_t(j) * cw + i] = s.px[size_t(j) * s.w + cell * cw + i];
+  return true;
+}
+
+bool Skin::drawCell(Ui& ui, const Image* s, int cells, int cell, int x, int y) {
+  if (!s || s->empty() || cells <= 0 || cell < 0 || cell >= cells) return false;
+  int cw = s->w / cells;
+  ui.blit(*s, x, y, cell * cw, cw);
+  return true;
+}
+
+bool Skin::imageButtonCells(Ui& ui, const Image* s, int cells, Rect r, const std::string& tip, bool toggled,
+                            bool enabled, bool& clicked) const {
+  clicked = false;
+  if (!s || s->empty() || cells <= 0) return false;
+  int cw = s->w / cells;
+  bool hot = enabled && ui.hover(r), down = hot && ui.in.down;
+  int cell = cell4For(enabled, down, toggled, hot);
+  if (cell >= cells) cell = std::min(1, cells - 1);
+  ui.blit(*s, r.x + (r.w - cw) / 2, r.y + (r.h - s->h) / 2, cell * cw, cw);
+  if (hot) ui.tooltip = tip;
+  clicked = enabled && ui.clicked(r);
+  return true;
+}
+
+bool Skin::drawButton3(Ui& ui, const Image* s, int cells, int cell, Rect r, const std::string& label,
+                       uint32_t textCol) const {
+  if (!s || s->empty() || cells <= 0 || cell < 0 || cell >= cells) return false;
+  int cw = s->w / cells, third = cw / 3;
+  if (third <= 0) return false;
+  int sx = cell * cw;
+  int lw = std::min(third, r.w / 2), rw = lw;
+  skinBlitScaled(ui, *s, {sx, 0, lw, s->h}, {r.x, r.y, lw, r.h});
+  skinBlitScaled(ui, *s, {sx + cw - rw, 0, rw, s->h}, {r.x + r.w - rw, r.y, rw, r.h});
+  if (r.w > lw + rw) skinBlitScaled(ui, *s, {sx + third, 0, cw - 2 * third, s->h}, {r.x + lw, r.y, r.w - lw - rw, r.h});
+  if (!label.empty() && ui.fonts) {
+    int off = cell == CELL_PRESSED ? 1 : 0;
+    ui.textCentered({r.x + off, r.y + off, r.w, r.h}, label, "main10",
+                    cell == CELL_DISABLED ? rgb(0x90, 0x94, 0xA0) : textCol ? textCol : ui.textCol);
+  }
+  return true;
+}
+
+bool Skin::button3(Ui& ui, const Image* s, Rect r, const std::string& label, bool enabled, bool toggled,
+                   bool& clicked, uint32_t textCol) const {
+  clicked = false;
+  if (!s || s->empty()) return false;
+  bool hot = enabled && ui.hover(r), down = hot && ui.in.down;
+  if (!drawButton3(ui, s, 4, cell4For(enabled, down, toggled, hot), r, label, textCol)) return false;
+  clicked = enabled && ui.clicked(r);
+  return true;
+}
+
+int Skin::drawCheck(Ui& ui, const Image* s, int x, int y, bool checked, bool enabled, bool hover, bool pressed) const {
+  if (!s || s->empty() || s->w % 8) return 0;
+  if (!drawCell(ui, s, 8, cell8For(enabled, pressed, checked, hover), x, y)) return 0;
+  return s->w / 8;
+}
+
+}  // namespace m3k
