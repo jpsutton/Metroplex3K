@@ -1,0 +1,945 @@
+#include "core/network_tools.h"
+#include <algorithm>
+#include <cstdlib>
+
+namespace m3k {
+
+// ======================= tool parameters / costs =======================
+static const ToolParams kTools[kNumTools] = {
+    {TOOL_ROAD, 0xC2B5DE77u, NK_ROAD, 16000, false, 3, true, true},
+    {TOOL_HIGHWAY, 0x42B5DE86u, NK_HIGHWAY, 16001, true, 3, true, true},
+    {TOOL_RAIL, 0x42B5DE98u, NK_RAIL, 17000, false, 3, true, true},
+    {TOOL_SUBWAY, 0xC2B5DEA6u, NK_SUBWAY, 17400, false, 0, true, true},
+    {TOOL_ONRAMP, 0x02B5DEBBu, NK_HIGHWAY, 16001, false, 3, false, false},
+    {TOOL_POWER, 0x42C2F8BFu, NK_POWER, 17100, false, 1, false, true},
+    {TOOL_PIPE, 0x22C2F8C5u, NK_PIPE, 17300, false, 0, true, true},
+};
+const ToolParams& toolParams(Tool t) { return kTools[t]; }
+
+int PlacementCosts::cost(uint32_t type) const {
+  for (int depth = 0; depth < 32; depth++) {
+    auto it = byType.find(type);
+    if (it != byType.end()) return it->second;
+    auto p = parent.find(type);
+    if (p == parent.end() || p->second == type) return 0;
+    type = p->second;
+  }
+  return 0;
+}
+
+uint32_t connectionCostKey(int kind) {
+  switch (kind) {
+    case NK_ROAD: return 16017;
+    case NK_RAIL: return 17006;
+    case NK_POWER: return 12102;
+    case NK_HIGHWAY: return 17207;
+    case NK_PIPE: return 17310;
+    case NK_SUBWAY: return 17410;
+  }
+  return 0;
+}
+
+// ======================= filters =======================
+bool placementAccepts(int kind, const TileOcc& o) {
+  if (!o.present) return true;
+  if (!o.removable) return false;
+  return (o.flags & OF_IGNORABLE) || flagsMatchKind(kind, o.flags);
+}
+bool crossingAccepts(int kind, const TileOcc& o) {
+  if (!o.present || !o.removable || !(o.flags & OF_NETPIECE)) return false;
+  return isCrossableId(kind, o.id);
+}
+
+// ======================= routing =======================
+namespace {
+int sgn1(int v) { return v >= 1 ? 1 : -1; }
+
+bool slopesAlong(const INetworkMap& m, int x, int z, bool alongX) {
+  int c[4];
+  m.tileCorners(x, z, c);
+  return alongX ? (c[1] != c[0] || c[2] != c[3]) : (c[3] != c[0] || c[2] != c[1]);
+}
+}  // namespace
+
+RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std::pair<int, int> E) {
+  const ToolParams& P = toolParams(tool);
+  RoutedPath rp;
+  const NetLayer layer = layerOfKind(P.kind);
+  const int W = m.width(), H = m.height();
+
+  if (tool == TOOL_ONRAMP) {  // point tool
+    RoutedTile t; t.x = E.first; t.z = E.second;
+    t.valid = m.onMap(t.x, t.z);
+    rp.tiles.push_back(t);
+    rp.validPrefix = t.valid ? 1 : 0;
+    rp.blocked = !t.valid;
+    return rp;
+  }
+
+  int cx = S.first, cz = S.second;
+  int dx = 0, dz = 0;
+  {
+    int ddx = E.first - cx, ddz = E.second - cz;
+    if (std::abs(ddz) < std::abs(ddx)) dx = sgn1(ddx); else dz = sgn1(ddz);
+  }
+  const bool initAlongX = dx != 0;
+  // width offset
+  int wx = 0, wz = 0;
+  if (P.wide) {
+    if (initAlongX) { wz = (S.second >= H - 1) ? -1 : 1; }
+    else { wx = (S.first >= W - 1) ? -1 : 1; }
+    rp.pairDx = wx; rp.pairDz = wz;
+  }
+
+  bool blocked = false;
+  int waterEntries = 0;
+  bool prevWater = false;
+  int run = 0;       // consecutive steps in the current direction (steps taken)
+  bool turned = false;
+  bool prevAlongX = initAlongX;
+  int stepsTaken = 0;
+
+  auto validate = [&](int x, int z, bool alongX, bool isPair, bool primaryWaterOk) {
+    if (!m.onMap(x, z)) return false;
+    int c[4];
+    m.tileCorners(x, z, c);
+    bool flat = c[1] == c[0] && c[2] == c[0] && c[3] == c[0];
+    if (!P.anySlope && !flat && !isValidSlope(c)) return false;
+    TileOcc o = m.occupantAt(x, z, layer);
+    bool crossing = false;
+    if (o.present) {
+      if (placementAccepts(P.kind, o)) {}
+      else if (crossingAccepts(P.kind, o)) {
+        if (!flat && !slopesAlong(m, x, z, alongX)) return false;
+        crossing = true;
+      } else return false;
+    }
+    if (crossing && P.wide && turned) return false;
+    if (crossing) rp.crossed = true;
+    if (P.minRun > 0 && m.isWaterTile(x, z)) {
+      if (isPair) return primaryWaterOk;
+    }
+    return true;
+  };
+
+  auto addTile = [&](int x, int z, bool alongX) {
+    RoutedTile t; t.x = x; t.z = z;
+    bool ok = !blocked && validate(x, z, alongX, false, true);
+    bool water = m.onMap(x, z) && m.isWaterTile(x, z);
+    if (ok && P.minRun > 0 && water) {
+      if (!prevWater) {
+        waterEntries++;
+        // straight steps made immediately before entering (excluding the entering step)
+        int prior = (stepsTaken == 0) ? 0 : run - 1;
+        if (waterEntries > 1 || prior < P.minRun) ok = false;
+      }
+    }
+    prevWater = water;
+    if (!ok) blocked = true;
+    t.valid = !blocked;
+    rp.tiles.push_back(t);
+    if (P.wide) {
+      RoutedTile u; u.x = x + wx; u.z = z + wz;
+      bool uok = !blocked && validate(u.x, u.z, alongX, true, water ? !blocked : true);
+      if (!uok) blocked = true;
+      u.carriage = 1;
+      u.valid = !blocked;
+      // blocking by the pair tile invalidates the primary too only from the pair on
+      rp.tiles.push_back(u);
+    }
+  };
+
+  addTile(cx, cz, initAlongX);
+  while (!(cx == E.first && cz == E.second)) {
+    if ((int)rp.tiles.size() >= kMaxPathTiles) { rp.truncated = true; break; }
+    int ddx = E.first - cx, ddz = E.second - cz;
+    int ndx = 0, ndz = 0;
+    bool curFlat = m.onMap(cx, cz) && m.isFlat(cx, cz);
+    bool curAlongX = dx != 0;
+    auto major = [&]() {
+      if (std::abs(ddx) > std::abs(ddz)) { ndx = sgn1(ddx); ndz = 0; } else { ndz = sgn1(ddz); ndx = 0; }
+    };
+    if (!curFlat && !blocked && stepsTaken > 0) {
+      if (curAlongX) ndx = sgn1(ddx); else ndz = sgn1(ddz);
+    } else if (!P.staircase && !blocked) {
+      bool reached = curAlongX ? ddx == 0 : ddz == 0;
+      if (!reached) { ndx = dx; ndz = dz; } else major();
+    } else if (std::abs(ddx) == std::abs(ddz)) {
+      if (prevAlongX) ndz = sgn1(ddz); else ndx = sgn1(ddx);
+    } else {
+      major();
+    }
+    int nx = cx + ndx, nz = cz + ndz;
+    if (!m.onMap(nx, nz)) break;
+    bool alongX = ndx != 0;
+    if (alongX != initAlongX) turned = true;
+    if (stepsTaken == 0 || ndx != dx || ndz != dz) run = 1; else run++;
+    dx = ndx; dz = ndz;
+    prevAlongX = alongX;
+    cx = nx; cz = nz;
+    stepsTaken++;
+    addTile(cx, cz, alongX);
+  }
+  rp.blocked = blocked;
+  rp.validPrefix = 0;
+  for (auto& t : rp.tiles) { if (!t.valid) break; rp.validPrefix++; }
+  return rp;
+}
+
+PathPrice previewPrice(RoutedPath& p, int tileCost, long funds, int buildablePrefix) {
+  PathPrice r;
+  if (buildablePrefix >= 0)
+    for (size_t i = size_t(buildablePrefix); i < p.tiles.size(); i++) p.tiles[i].valid = false;
+  int n = 0;
+  for (auto& t : p.tiles) if (t.valid) n++;
+  r.price = n * tileCost;
+  if (r.price != 0 && r.price > funds) {
+    for (auto& t : p.tiles) t.valid = false;
+    r.insufficient = true;
+  }
+  return r;
+}
+
+std::vector<PathTile> toPathTiles(const RoutedPath& p, bool onlyValid) {
+  std::vector<PathTile> v;
+  for (auto& t : p.tiles) {
+    if (onlyValid && !t.valid) continue;
+    PathTile pt; pt.x = t.x; pt.z = t.z; pt.carriage = t.carriage;
+    v.push_back(pt);
+  }
+  return v;
+}
+
+// ======================= bridges =======================
+std::vector<std::pair<int, int>> BridgePlan::coveredTiles() const {
+  std::vector<std::pair<int, int>> v;
+  if (!ok) return v;
+  for (int i = -3; i <= W + 2; i++) v.push_back({x0 + i * ax, z0 + i * az});
+  return v;
+}
+
+bool isBridgePierId(uint32_t id) {
+  static const uint32_t ids[] = {83, 87, 90, 91, 11265, 11275, 11300, 16042, 16043, 16049, 16061, 16062, 18057, 18058, 18067, 18068};
+  return std::find(std::begin(ids), std::end(ids), id) != std::end(ids);
+}
+
+BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, const std::vector<PathTile>& path,
+                      const PlacementCosts& costs, int carriagePass) {
+  BridgePlan pl;
+  pl.kind = kind;
+  if (!(kind == NK_ROAD || kind == NK_RAIL || kind == NK_POWER || kind == NK_HIGHWAY)) return pl;
+  if (path.size() < 4 || nr.bridges.empty()) return pl;
+  // 1. span
+  size_t i0 = path.size();
+  for (size_t i = 0; i < path.size(); i++)
+    if (m.onMap(path[i].x, path[i].z) && m.isWaterTile(path[i].x, path[i].z)) { i0 = i; break; }
+  if (i0 == path.size()) return pl;
+  size_t j = i0;
+  while (j < path.size() && m.isWaterTile(path[j].x, path[j].z)) j++;
+  if (j == path.size()) return pl;  // no land after the water
+  for (auto& t : path)
+    if (m.isWaterTile(t.x, t.z) && m.occupantAt(t.x, t.z, LAYER_SURFACE).present) return pl;
+  for (size_t i = i0; i < j; i++) pl.spanTiles.push_back({path[i].x, path[i].z});
+  int hw = 1 << 30;
+  int bx0 = 1 << 30, bx1 = -1, bz0 = 1 << 30, bz1 = -1;
+  for (auto& t : pl.spanTiles) {
+    hw = std::min(hw, m.cornerHeight(t.first, t.second));
+    bx0 = std::min(bx0, t.first); bx1 = std::max(bx1, t.first);
+    bz0 = std::min(bz0, t.second); bz1 = std::max(bz1, t.second);
+  }
+  pl.hw = hw;
+  bool alongZ = (bx1 - bx0 < 2) && (bz1 != bz0) &&
+                ((bz1 - bz0 > 1) || bx1 == bx0 || (pl.spanTiles.size() > 1 && pl.spanTiles[1].first != pl.spanTiles[0].first));
+  pl.axis = alongZ ? 1 : 0;
+  pl.W = (alongZ ? bz1 - bz0 : bx1 - bx0) + 1;
+  pl.ax = alongZ ? 0 : 1; pl.az = alongZ ? 1 : 0;
+  pl.px = alongZ ? 1 : 0; pl.pz = alongZ ? 0 : 1;
+  pl.x0 = bx0; pl.z0 = bz0;
+
+  // 2. design
+  const BridgeDesign* d = nullptr;
+  for (auto& b : nr.bridges) {
+    if (kind == NK_HIGHWAY) {
+      int dir = carriagePass == 0 ? (pl.axis == 0 ? 0 : 3) : (pl.axis == 0 ? 2 : 1);
+      if (b.axis == dir && b.n <= pl.W) { d = &b; break; }
+    } else if (b.axis == pl.axis && b.n <= pl.W) { d = &b; break; }
+  }
+  if (!d) return pl;
+  pl.design = *d;
+  pl.price = (kind == NK_HIGHWAY) ? (carriagePass == 0 ? pl.W * costs.cost(kBridgeCostHighway) : 0)
+                                  : pl.W * costs.cost(kBridgeCostRoadRailPower);
+
+  // 4. fitting
+  int k = int(d->seg[2].size());
+  pl.m = (k == 0 || k > pl.W) ? 0 : std::min(pl.W / k, 256);
+  int r = pl.W - pl.m * k;
+  pl.leftFill = r / 2;
+  pl.rightFill = r - r / 2;
+
+  // 5. abutment terrain
+  const int D = kind == NK_POWER ? 1 : 5, R = kind == NK_POWER ? 1 : 3;
+  auto vOn = [&](int vx, int vz) { return vx >= 0 && vz >= 0 && vx <= m.width() && vz <= m.height(); };
+  const int ex = pl.x0 + pl.W * pl.ax, ez = pl.z0 + pl.W * pl.az;  // E0
+  auto bank = [&](int bx, int bz, int sgn, int dflt) {
+    int c1x = bx + sgn * 3 * pl.ax, c1z = bz + sgn * 3 * pl.az;
+    int c2x = c1x + pl.px, c2z = c1z + pl.pz;
+    int B = dflt;
+    if (vOn(c1x, c1z) && vOn(c2x, c2z)) B = (m.cornerHeight(c1x, c1z) + m.cornerHeight(c2x, c2z)) / 2;
+    int lo = kind == NK_HIGHWAY ? hw - 2 : hw + D - 4;
+    int hi = kind == NK_HIGHWAY ? 1 << 20 : hw + D + 4;
+    return std::min(std::max(B, lo), hi);
+  };
+  auto addCorner = [&](int vx, int vz, int h) { if (vOn(vx, vz)) pl.corners.push_back({vx, vz, h}); };
+  auto side = [&](int bx, int bz, int sgn, int B) {
+    // sgn = -1: start side (W0 - n a), +1: far side (E0 + n a)
+    for (int n : {3, 4}) {
+      addCorner(bx + sgn * n * pl.ax, bz + sgn * n * pl.az, B);
+      addCorner(bx + sgn * n * pl.ax + pl.px, bz + sgn * n * pl.az + pl.pz, B);
+    }
+    addCorner(bx + sgn * pl.ax, bz + sgn * pl.az, hw + D);
+    addCorner(bx + sgn * pl.ax + pl.px, bz + sgn * pl.az + pl.pz, hw + D);
+    addCorner(bx, bz, hw + R);
+    addCorner(bx + pl.px, bz + pl.pz, hw + R);
+  };
+  int Bs = bank(pl.x0, pl.z0, -1, 20), Bf = bank(ex, ez, +1, hw + 1);
+  side(pl.x0, pl.z0, -1, Bs);
+  side(ex, ez, +1, Bf);
+  for (auto& c : pl.corners)
+    if (!m.canChangeCorner(c.vx, c.vz)) { pl.terrainBlocked = true; break; }
+
+  // 6. pieces
+  const int rampY = kind == NK_POWER ? hw + 1 : (pl.axis == 0 ? hw + 5 : hw + 7);
+  auto put = [&](int idx, uint32_t packed, int y) {
+    Piece p = unpackPiece(packed);
+    PlacedPiece pp; pp.x = pl.x0 + idx * pl.ax; pp.z = pl.z0 + idx * pl.az; pp.y = y; pp.rot = p.rot; pp.id = p.id;
+    pl.pieces.push_back(pp);
+  };
+  int idx = -1;
+  if (!d->seg[0].empty()) put(-1, d->seg[0][0], rampY);
+  idx = 0;
+  for (int i = 0; i < pl.leftFill; i++, idx++) if (!d->seg[1].empty()) put(idx, d->seg[1][0], hw);
+  for (int rep = 0; rep < pl.m; rep++)
+    for (uint32_t pk : d->seg[2]) { put(idx, pk, hw); idx++; }
+  for (int i = 0; i < pl.rightFill; i++, idx++) if (!d->seg[3].empty()) put(idx, d->seg[3][0], hw);
+  if (!d->seg[4].empty()) put(pl.W, d->seg[4][0], rampY);
+  pl.stubTiles = {{pl.x0 - 3 * pl.ax, pl.z0 - 3 * pl.az}, {pl.x0 - 2 * pl.ax, pl.z0 - 2 * pl.az},
+                  {ex + pl.ax, ez + pl.az}, {ex + 2 * pl.ax, ez + 2 * pl.az}};
+  pl.ok = true;
+  return pl;
+}
+
+bool applyBridge(INetworkMap& m, BridgePlan& pl) {
+  if (!pl.ok || pl.terrainBlocked) return false;
+  for (auto& c : pl.corners) m.setCornerHeight(c.vx, c.vz, c.h);
+  for (auto& pp : pl.pieces) {
+    if (!m.onMap(pp.x, pp.z)) continue;
+    m.placePiece(pp.x, pp.z, layerOfKind(pl.kind), pp.id, pp.rot, pp.y);
+    if (isBridgePierId(pp.id)) m.setPierFlag(pp.x, pp.z, true);
+  }
+  for (auto& t : pl.stubTiles) {
+    if (!m.onMap(t.first, t.second)) continue;
+    TileOcc o = m.occupantAt(t.first, t.second, layerOfKind(pl.kind));
+    if (o.present && !placementAccepts(pl.kind, o) && !crossingAccepts(pl.kind, o)) continue;
+    int c[4];
+    m.tileCorners(t.first, t.second, c);
+    Piece sp;
+    int p = isValidSlope(c) ? slopePatternIndex(c) : -1;
+    SlopeCtx sc;
+    if (p >= 0 && slopePiece(pl.kind, t.first, t.second, p, sc, sp)) {
+      m.placePiece(t.first, t.second, layerOfKind(pl.kind), sp.id, sp.rot, c[0]);
+    } else if (pl.kind != NK_HIGHWAY) {
+      uint32_t id = pl.kind == NK_ROAD ? 29 : pl.kind == NK_RAIL ? 44 : 92;
+      m.placePiece(t.first, t.second, layerOfKind(pl.kind), id, pl.axis, c[0]);
+    }
+  }
+  return true;
+}
+
+// ======================= tunnels =======================
+TunnelPlan planTunnel(const INetworkMap& m, int kind, const std::vector<PathTile>& path, const PlacementCosts& costs) {
+  TunnelPlan tp;
+  if (!(kind == NK_ROAD || kind == NK_RAIL) || path.size() < 2) return tp;
+  int dx = path[1].x - path[0].x, dz = path[1].z - path[0].z;
+  if (std::abs(dx) + std::abs(dz) != 1) return tp;
+  for (size_t i = 1; i < path.size(); i++)
+    if (path[i].x - path[i - 1].x != dx || path[i].z - path[i - 1].z != dz) return tp;
+  tp.dx = dx; tp.dz = dz;
+  auto nearFar = [&](int x, int z, int& n0, int& n1, int& f0, int& f1) {
+    int c[4];
+    m.tileCorners(x, z, c);
+    if (dx == 1) { n0 = c[0]; n1 = c[3]; f0 = c[1]; f1 = c[2]; }
+    else if (dx == -1) { n0 = c[1]; n1 = c[2]; f0 = c[0]; f1 = c[3]; }
+    else if (dz == 1) { n0 = c[0]; n1 = c[1]; f0 = c[3]; f1 = c[2]; }
+    else { n0 = c[3]; n1 = c[2]; f0 = c[0]; f1 = c[1]; }
+  };
+  for (size_t i = 0; i < path.size(); i++) {
+    if (!m.onMap(path[i].x, path[i].z)) return tp;
+    int n0, n1, f0, f1;
+    nearFar(path[i].x, path[i].z, n0, n1, f0, f1);
+    if (!(n0 == n1 && f0 > n0 && f1 > n0)) continue;
+    int h0 = n0, hill = 0;
+    for (size_t j = i + 1; j < path.size(); j++) {
+      int c[4];
+      m.tileCorners(path[j].x, path[j].z, c);
+      int mn = *std::min_element(c, c + 4), mx = *std::max_element(c, c + 4);
+      if (mn < h0) break;
+      if (mx == h0 && mn == h0) {
+        if (hill >= 3) {
+          tp.ok = true;
+          tp.entrance = {path[i].x, path[i].z};
+          tp.exit = {path[j].x, path[j].z};
+          tp.hillTiles = hill;
+          for (size_t q = i + 1; q < j; q++) tp.hidden.push_back({path[q].x, path[q].z});
+          tp.price = costs.cost(kTunnelCostKey);
+          return tp;
+        }
+        break;
+      }
+      hill++;
+    }
+  }
+  return tp;
+}
+
+// ======================= on-ramp =======================
+OnRampPlan planOnRamp(const INetworkMap& m, int ax, int az) {
+  OnRampPlan plan;
+  auto idAt = [&](int x, int z) -> uint32_t {
+    if (!m.onMap(x, z)) return 0;
+    TileOcc o = m.occupantAt(x, z, LAYER_SURFACE);
+    return o.present ? o.id : 0;
+  };
+  auto buildable = [&](int x, int z) {
+    if (!m.onMap(x, z)) return false;
+    TileOcc o = m.occupantAt(x, z, LAYER_SURFACE);
+    return !o.present || (o.removable && (o.flags & OF_IGNORABLE));
+  };
+  auto isRoad = [&](int x, int z) {
+    return m.onMap(x, z) && flagsMatchKind(NK_ROAD, m.occupantAt(x, z, LAYER_SURFACE).flags);
+  };
+  const int ox[5] = {0, 1, 0, -1, 0}, oz[5] = {1, 0, -1, 0, 0};
+  for (int a = 0; a < 5; a++) {
+    int cx = ax + ox[a], cz = az + oz[a];
+    for (int orient = 0; orient < 2; orient++) {
+      uint32_t hwy = orient == 0 ? 73 : 15051, under = orient == 0 ? 11258 : 15098;
+      int ex = orient == 0 ? 0 : 1, ez = orient == 0 ? 1 : 0;  // along-footprint unit
+      int fx0 = cx - ex, fz0 = cz - ez, fx1 = cx + ex, fz1 = cz + ez;
+      if (!(buildable(cx, cz) && buildable(fx0, fz0) && buildable(fx1, fz1))) continue;
+      // road beyond at least one end
+      bool road = isRoad(cx - 2 * ex, cz - 2 * ez) || isRoad(cx + 2 * ex, cz + 2 * ez);
+      if (!road) continue;
+      for (int s : {-1, 1}) {
+        int px = ez * s, pz = ex * s;  // perpendicular to footprint, towards the highway side
+        uint32_t h0 = idAt(cx - 2 * ex + px, cz - 2 * ez + pz), h1 = idAt(cx + 2 * ex + px, cz + 2 * ez + pz);
+        bool ok = (h0 == hwy && (h1 == hwy || h1 == under)) || (h1 == hwy && (h0 == hwy || h0 == under));
+        if (!ok) continue;
+        plan.ok = true; plan.anchorX = cx; plan.anchorZ = cz; plan.orientation = orient;
+        plan.footprint = {{fx0, fz0}, {cx, cz}, {fx1, fz1}};
+        return plan;
+      }
+    }
+  }
+  // diagonal ramp: curve piece at the diagonal neighbour, highway pieces two tiles beyond it [INFERRED geometry]
+  for (int qx : {-1, 1})
+    for (int qz : {-1, 1}) {
+      uint32_t c = idAt(ax + qx, az + qz);
+      if (c < 15111 || c > 15114) continue;
+      uint32_t b0 = idAt(ax + 2 * qx, az + qz), b1 = idAt(ax + qx, az + 2 * qz);
+      auto hw = [](uint32_t v) { return v == 73 || v == 15051; };
+      if (hw(b0) && hw(b1)) {
+        plan.ok = true; plan.diagonal = true; plan.anchorX = ax; plan.anchorZ = az;
+        plan.footprint = {{ax, az}};
+        return plan;
+      }
+    }
+  return plan;
+}
+
+// ======================= neighbour connections =======================
+int edgeNeighbour(int x, int z, int W, int H) {
+  if (x == 0) return (z == H - 1) ? 3 : 0;
+  if (z == 0) return 1;
+  if (x == W - 1) return 2;
+  if (z == H - 1) return 3;
+  return -1;
+}
+
+int connectionSoundEvent(int kind) {
+  switch (kind) {
+    case NK_ROAD: case NK_HIGHWAY: return 36;
+    case NK_RAIL: case NK_SUBWAY: return 37;
+    case NK_POWER: return 46;
+    case NK_PIPE: return 45;
+  }
+  return 0;
+}
+
+int offerConnections(INetworkMap& m, ToolHost& host, const PlacementCosts& costs, int kind,
+                     const std::vector<PathTile>& path, int dragPrice) {
+  if (path.empty()) return 0;
+  const int W = m.width(), H = m.height();
+  auto isEdge = [&](int x, int z) { return x == 0 || z == 0 || x == W - 1 || z == H - 1; };
+  std::vector<std::pair<int, int>> tiles;
+  int edge = -1;
+  if (kind == NK_HIGHWAY) {
+    auto scan = [&](size_t from, bool fwd) {
+      for (int i = 0; i < 4; i++) {
+        long idx = fwd ? long(from) + i : long(path.size()) - 1 - i;
+        if (idx < 0 || idx >= long(path.size())) break;
+        auto& t = path[size_t(idx)];
+        if (isEdge(t.x, t.z) && tiles.size() < 2 &&
+            std::find(tiles.begin(), tiles.end(), std::make_pair(t.x, t.z)) == tiles.end())
+          tiles.push_back({t.x, t.z});
+      }
+    };
+    scan(0, true);
+    scan(0, false);
+    if (tiles.empty()) return 0;
+    for (auto& t : tiles) if (m.hasConnection(kind, t.first, t.second)) return 0;
+    edge = edgeNeighbour(tiles[0].first, tiles[0].second, W, H);
+    if (edge < 0 || !host.neighbourExists(edge)) return 0;
+  } else {
+    // ends of the drag; only one connection per drag
+    std::vector<std::pair<int, int>> ends = {{path.front().x, path.front().z}};
+    if (path.back().x != path.front().x || path.back().z != path.front().z) ends.push_back({path.back().x, path.back().z});
+    for (auto& e : ends) {
+      if (!isEdge(e.first, e.second)) continue;
+      int ed = edgeNeighbour(e.first, e.second, W, H);
+      if (ed < 0 || !host.neighbourExists(ed)) continue;
+      if (m.hasConnection(kind, e.first, e.second)) continue;
+      tiles.push_back(e);
+      edge = ed;
+      break;  // no connection made yet by this drag
+    }
+    if (tiles.empty()) return 0;
+  }
+  int price = costs.cost(connectionCostKey(kind));
+  if (price != 0 && host.funds() < long(dragPrice) + price) {
+    host.message("insufficient funds: neighbour connection");
+    return 0;
+  }
+  if (!host.confirmConnection(kind, price)) return 0;
+  for (auto& t : tiles) m.setConnection(kind, t.first, t.second, true);
+  if (price) host.charge(price);
+  host.sound(connectionSoundEvent(kind));
+  (void)edge;
+  return int(tiles.size());
+}
+
+int removeConnectionsAt(INetworkMap& m, int x, int z) {
+  int n = 0;
+  for (int k : {NK_ROAD, NK_HIGHWAY, NK_RAIL, NK_SUBWAY, NK_PIPE, NK_POWER})
+    if (m.hasConnection(k, x, z)) { m.setConnection(k, x, z, false); n++; }
+  return n;
+}
+
+// ======================= commit =======================
+CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const PlacementCosts& costs, ToolHost& host,
+                        Tool tool, const RoutedPath& rp) {
+  CommitResult res;
+  const ToolParams& P = toolParams(tool);
+  const int tileCost = costs.cost(P.costKey);
+  int valid = 0;
+  bool anyInvalid = rp.tiles.empty();
+  for (auto& t : rp.tiles) { if (t.valid) valid++; else anyInvalid = true; }
+  if (anyInvalid) { host.sound(30); res.status = COMMIT_INVALID; return res; }
+  int dragPrice = valid * tileCost;
+  if (dragPrice > host.funds()) { host.sound(32); res.status = COMMIT_NO_MONEY; return res; }
+
+  if (tool == TOOL_ONRAMP) {
+    OnRampPlan plan = planOnRamp(m, rp.tiles[0].x, rp.tiles[0].z);
+    if (!plan.ok || !host.buildOnRamp(plan)) { host.sound(30); res.status = COMMIT_INVALID; return res; }
+    host.charge(dragPrice);
+    res.spent = dragPrice; res.rampPlaced = 1;
+    host.sound(14);
+    return res;
+  }
+
+  std::vector<PathTile> path = toPathTiles(rp, true);
+  const NetworkRules& nr = rules.nets[netKindToTable(P.kind)];
+  std::set<std::pair<int, int>> skip;
+  std::vector<std::pair<int, int>> context;
+  int extraSpent = 0;
+
+  // bridge attempt
+  std::vector<BridgePlan> bridges;
+  if (path.size() >= 4 && !nr.bridges.empty() &&
+      (P.kind == NK_ROAD || P.kind == NK_RAIL || P.kind == NK_POWER || P.kind == NK_HIGHWAY)) {
+    int passes = P.kind == NK_HIGHWAY ? 2 : 1;
+    int total = 0;
+    for (int pass = 0; pass < passes; pass++) {
+      std::vector<PathTile> sub;
+      for (auto& t : path) if (P.kind != NK_HIGHWAY || t.carriage == pass) sub.push_back(t);
+      BridgePlan bp = planBridge(m, nr, P.kind, sub, costs, pass);
+      if (!bp.ok) continue;
+      total += bp.price;
+      bridges.push_back(bp);
+    }
+    if (!bridges.empty()) {
+      if (total > host.funds()) {
+        host.message("insufficient funds: bridge");
+        res.status = COMMIT_NO_MONEY;
+        return res;
+      }
+      if (!host.confirmBridge(total, P.kind == NK_POWER)) { res.status = COMMIT_CANCELLED; return res; }
+      for (auto& b : bridges)
+        if (b.terrainBlocked) {
+          host.message("construction discontinued");
+          res.status = COMMIT_CANCELLED;
+          return res;
+        }
+      for (auto& b : bridges) {
+        applyBridge(m, b);
+        for (auto& c : b.coveredTiles()) { skip.insert(c); context.push_back(c); }
+        res.bridges++;
+      }
+      host.charge(total);
+      extraSpent += total;
+    }
+  }
+  // tunnel attempt
+  if (res.bridges == 0 && (P.kind == NK_ROAD || P.kind == NK_RAIL)) {
+    TunnelPlan tp = planTunnel(m, P.kind, path, costs);
+    if (tp.ok && tp.price <= host.funds() && host.confirmTunnel(tp.price) && host.buildTunnel(P.kind, tp)) {
+      host.charge(tp.price);
+      extraSpent += tp.price;
+      res.tunnels++;
+      skip.insert(tp.entrance);
+      skip.insert(tp.exit);
+      for (auto& t : tp.hidden) skip.insert(t);
+      for (auto& t : skip) context.push_back(t);
+    }
+  }
+  // connections
+  res.connections = offerConnections(m, host, costs, P.kind, path, dragPrice);
+
+  // tile
+  std::vector<PathTile> tilePath;
+  for (auto& t : path) if (!skip.count({t.x, t.z})) tilePath.push_back(t);
+  TilerOptions opt;
+  opt.pairDx = rp.pairDx; opt.pairDz = rp.pairDz;
+  opt.contextPath = context;
+  Tiler tiler(rules, m);
+  res.tiled = tiler.run(P.kind, tilePath, opt);
+  if (P.kind == NK_HIGHWAY) {
+    std::set<std::pair<int, int>> pathSet;
+    for (auto& t : path) pathSet.insert({t.x, t.z});
+    std::set<std::pair<int, int>> roads;
+    static const int dx[4] = {-1, 0, 1, 0}, dz[4] = {0, -1, 0, 1};
+    for (auto& t : path)
+      for (int d = 0; d < 4; d++) {
+        int nx = t.x + dx[d], nz = t.z + dz[d];
+        if (!m.onMap(nx, nz) || pathSet.count({nx, nz})) continue;
+        if (flagsMatchKind(NK_ROAD, m.occupantAt(nx, nz, LAYER_SURFACE).flags)) roads.insert({nx, nz});
+      }
+    std::vector<PathTile> rp2;
+    for (auto& r : roads) { PathTile pt; pt.x = r.first; pt.z = r.second; rp2.push_back(pt); }
+    if (!rp2.empty()) {
+      TilerResult r2 = tiler.run(NK_ROAD, rp2, TilerOptions());
+      res.tiled.changes.insert(res.tiled.changes.end(), r2.changes.begin(), r2.changes.end());
+    }
+  }
+  host.charge(dragPrice);
+  res.spent = dragPrice + extraSpent;
+  host.sound(14);
+  return res;
+}
+
+TilerResult demolish(INetworkMap& m, const TilingRuleSet& rules, int kind, const std::vector<std::pair<int, int>>& tiles) {
+  NetLayer layer = layerOfKind(kind);
+  std::set<std::pair<int, int>> removed;
+  for (auto& t : tiles) {
+    if (!m.onMap(t.first, t.second)) continue;
+    TileOcc o = m.occupantAt(t.first, t.second, layer);
+    if (!flagsMatchKind(kind, o.flags) || !o.present) continue;
+    const std::vector<uint32_t>* g = rules.collapseGroupOf(o.id);
+    std::vector<std::pair<int, int>> stack{t};
+    std::set<std::pair<int, int>> seen{t};
+    while (!stack.empty()) {
+      auto cur = stack.back(); stack.pop_back();
+      removed.insert(cur);
+      if (!g) continue;
+      for (int dx = -1; dx <= 1; dx++)
+        for (int dz = -1; dz <= 1; dz++) {
+          std::pair<int, int> n{cur.first + dx, cur.second + dz};
+          if (seen.count(n) || !m.onMap(n.first, n.second)) continue;
+          TileOcc no = m.occupantAt(n.first, n.second, layer);
+          if (no.present && std::find(g->begin(), g->end(), no.id) != g->end()) { seen.insert(n); stack.push_back(n); }
+        }
+    }
+  }
+  std::vector<PathTile> path;
+  TilerResult out;
+  for (auto& t : removed) {
+    m.removePiece(t.first, t.second, layer);
+    removeConnectionsAt(m, t.first, t.second);
+    TileChange ch; ch.x = t.first; ch.z = t.second; ch.layer = layer; ch.y = m.cornerHeight(t.first, t.second);
+    out.changes.push_back(ch);
+    PathTile pt; pt.x = t.first; pt.z = t.second;
+    path.push_back(pt);
+  }
+  if (path.empty()) return out;
+  TilerOptions opt;
+  opt.demolition = true;
+  Tiler tiler(rules, m);
+  TilerResult r = tiler.run(kind, path, opt);
+  out.changes.insert(out.changes.end(), r.changes.begin(), r.changes.end());
+  out.simplePasses = r.simplePasses; out.complexPasses = r.complexPasses;
+  return out;
+}
+
+// ======================= power / water =======================
+std::vector<uint8_t> boundedFloodFill(int W, int H, const std::vector<uint8_t>& cond, int sx, int sz, int maxIter) {
+  std::vector<uint8_t> g(size_t(W) * H, 0);
+  if (sx < 0 || sz < 0 || sx >= W || sz >= H) return g;
+  g[size_t(sx) * H + sz] = 1;
+  std::vector<uint8_t> next;
+  for (int it = 0; it < maxIter; it++) {
+    bool changed = false;
+    // horizontal: +-1 in x
+    next = g;
+    for (int x = 0; x < W; x++)
+      for (int z = 0; z < H; z++) {
+        if (!g[size_t(x) * H + z]) continue;
+        if (x > 0 && cond[size_t(x - 1) * H + z] && !next[size_t(x - 1) * H + z]) { next[size_t(x - 1) * H + z] = 1; changed = true; }
+        if (x + 1 < W && cond[size_t(x + 1) * H + z] && !next[size_t(x + 1) * H + z]) { next[size_t(x + 1) * H + z] = 1; changed = true; }
+      }
+    g.swap(next);
+    next = g;
+    for (int x = 0; x < W; x++)
+      for (int z = 0; z < H; z++) {
+        if (!g[size_t(x) * H + z]) continue;
+        if (z > 0 && cond[size_t(x) * H + z - 1] && !next[size_t(x) * H + z - 1]) { next[size_t(x) * H + z - 1] = 1; changed = true; }
+        if (z + 1 < H && cond[size_t(x) * H + z + 1] && !next[size_t(x) * H + z + 1]) { next[size_t(x) * H + z + 1] = 1; changed = true; }
+      }
+    g.swap(next);
+    if (!changed) break;
+  }
+  return g;
+}
+
+void markRect(std::vector<uint8_t>& grid, int W, int H, const Rect& r, int margin, uint8_t value) {
+  int x0 = std::max(0, r.x - margin), x1 = std::min(W - 1, r.x + r.w - 1 + margin);
+  int z0 = std::max(0, r.z - margin), z1 = std::min(H - 1, r.z + r.h - 1 + margin);
+  for (int x = x0; x <= x1; x++)
+    for (int z = z0; z <= z1; z++) grid[size_t(x) * H + z] = value;
+}
+
+PowerResult computePower(int W, int H, const std::vector<uint8_t>& cond, const std::vector<uint8_t>& demand,
+                         const std::vector<PowerSource>& plants, const std::vector<PowerSource>& feeds) {
+  PowerResult res;
+  res.powered.assign(size_t(W) * H, 0);
+  std::vector<uint8_t> visited(plants.size(), 0);
+  for (size_t i = 0; i < plants.size(); i++) {
+    if (visited[i]) continue;
+    auto reached = boundedFloodFill(W, H, cond, plants[i].x, plants[i].z, kPowerFloodIterations);
+    long supply = 0;
+    for (size_t j = 0; j < plants.size(); j++) {
+      if (visited[j]) continue;
+      if (plants[j].x >= 0 && plants[j].z >= 0 && plants[j].x < W && plants[j].z < H &&
+          reached[size_t(plants[j].x) * H + plants[j].z]) {
+        visited[j] = 1;
+        supply += plants[j].supply;
+      }
+    }
+    for (auto& f : feeds)
+      if (f.x >= 0 && f.z >= 0 && f.x < W && f.z < H && reached[size_t(f.x) * H + f.z]) supply += f.supply;
+    res.networkSupply.push_back(int(supply));
+    long remaining = supply;
+    bool exhausted = false;
+    for (int z = 0; z < H; z++)
+      for (int x = 0; x < W; x++) {
+        size_t k = size_t(x) * H + z;
+        if (!reached[k]) continue;
+        if (exhausted) continue;
+        int d = demand.empty() ? 0 : demand[k];
+        res.powered[k] = 1;
+        if (d == 0) continue;
+        if (d <= remaining) remaining -= d;
+        else { remaining = 0; exhausted = true; }
+      }
+  }
+  return res;
+}
+
+std::vector<uint8_t> dilate(int W, int H, const std::vector<uint8_t>& g, int steps) {
+  std::vector<uint8_t> cur = g, nx;
+  for (int s = 0; s < steps; s++) {
+    nx = cur;
+    for (int x = 0; x < W; x++)
+      for (int z = 0; z < H; z++)
+        if (cur[size_t(x) * H + z]) {
+          if (x > 0) nx[size_t(x - 1) * H + z] = 1;
+          if (x + 1 < W) nx[size_t(x + 1) * H + z] = 1;
+        }
+    cur = nx;
+    for (int x = 0; x < W; x++)
+      for (int z = 0; z < H; z++)
+        if (cur[size_t(x) * H + z]) {
+          if (z > 0) nx[size_t(x) * H + z - 1] = 1;
+          if (z + 1 < H) nx[size_t(x) * H + z + 1] = 1;
+        }
+    cur = nx;
+  }
+  return cur;
+}
+
+std::vector<WaterNet> computeWater(int W, int H, const std::vector<uint8_t>& cond, const std::vector<PowerSource>& src,
+                                   int waterFromPipe) {
+  std::vector<WaterNet> nets;
+  std::vector<uint8_t> visited(src.size(), 0);
+  for (size_t i = 0; i < src.size(); i++) {
+    if (visited[i] || src[i].supply <= 0) continue;
+    WaterNet n;
+    n.reached = boundedFloodFill(W, H, cond, src[i].x, src[i].z, kWaterFloodIterations);
+    for (size_t j = 0; j < src.size(); j++) {
+      if (visited[j] || src[j].supply <= 0) continue;
+      if (src[j].x >= 0 && src[j].z >= 0 && src[j].x < W && src[j].z < H && n.reached[size_t(src[j].x) * H + src[j].z]) {
+        visited[j] = 1;
+        n.output += src[j].supply;
+        n.sources.push_back(int(j));
+      }
+    }
+    // coverage: dilate the reached *pipe* tiles
+    std::vector<uint8_t> pipes(n.reached.size(), 0);
+    for (size_t k = 0; k < pipes.size(); k++) pipes[k] = n.reached[k] && cond[k];
+    n.coverage = dilate(W, H, pipes, effectiveWaterFromPipe(waterFromPipe));
+    nets.push_back(std::move(n));
+  }
+  return nets;
+}
+
+// ======================= road condition =======================
+namespace {
+bool inList(const std::vector<uint32_t>& l, uint32_t id) { return std::find(l.begin(), l.end(), id) != l.end(); }
+bool isDamagedId(const PotholeConfig& c, uint32_t id) { return inList(c.damagedOrdinary, id) || id == c.damagedSecond; }
+}  // namespace
+
+double roadCondition(const INetworkMap& m, const PotholeConfig& cfg) {
+  int n = 0, d = 0;
+  for (auto& p : m.pieces(LAYER_SURFACE)) {
+    TileOcc o = m.occupantAt(p.x, p.z, LAYER_SURFACE);
+    bool dmg = isDamagedId(cfg, p.id);
+    if (flagsMatchKind(NK_ROAD, o.flags) || dmg) { n++; if (dmg) d++; }
+  }
+  return n ? double(d) / n : 0.0;
+}
+
+int setRoadCondition(INetworkMap& m, double v, const std::function<int(int)>& rnd, const PotholeConfig& cfg) {
+  auto pcs = m.pieces(LAYER_SURFACE);
+  int N = 0, D = 0;
+  for (auto& p : pcs) {
+    TileOcc o = m.occupantAt(p.x, p.z, LAYER_SURFACE);
+    bool dmg = isDamagedId(cfg, p.id);
+    if (flagsMatchKind(NK_ROAD, o.flags) || dmg) { N++; if (dmg) D++; }
+  }
+  int T = int(v * N);
+  if (T == D) return 0;
+  bool damage = T > D;
+  int k = damage ? T - D : D - T;
+  int s = N / k - 1;
+  auto gap = [&]() { return s >= 1 ? rnd(s) : 0; };
+  int skip = gap(), changed = 0;
+  for (auto& p : pcs) {
+    bool dmg = isDamagedId(cfg, p.id);
+    bool elig = damage ? (!dmg && (inList(cfg.ordinary, p.id) || inList(cfg.second, p.id))) : dmg;
+    if (!elig) continue;
+    if (skip > 0) { skip--; continue; }
+    uint32_t nid;
+    if (damage) nid = inList(cfg.second, p.id) ? cfg.damagedSecond : cfg.damagedOrdinary[size_t(rnd(int(cfg.damagedOrdinary.size())))];
+    else nid = (p.id == cfg.damagedSecond && cfg.repairedSecond) ? cfg.repairedSecond : cfg.repairedOrdinary;
+    m.placePiece(p.x, p.z, LAYER_SURFACE, nid, p.rot, p.y);
+    changed++;
+    if (--k == 0) break;
+    skip = gap();
+  }
+  return changed;
+}
+
+// ======================= persisted records =======================
+uint32_t packPlace(int x, int z, int y, int rot) {
+  return uint32_t(x & 0x7FF) | (uint32_t(z & 0x7FF) << 11) | (uint32_t(y & 0xFF) << 22) | (uint32_t(rot & 3) << 30);
+}
+uint32_t makePieceWord(uint32_t id) { return (id & 0xFFFF) | 0x30000000u; }
+
+namespace {
+// Returns header end; sets version.
+size_t readNetHdr(Reader& r, uint16_t& version) {
+  version = r.u16();
+  uint8_t flags = r.u8();
+  if (flags & 2) r.u8();
+  uint32_t s = r.u32();
+  if (s != 0xDEADBEEF) throw FormatError("network record: bad sentinel");
+  if (flags & 1) { uint32_t l = r.u32(); r.skip(l); }
+  return r.pos();
+}
+void netHdr(Bytes& b) {
+  put16(b, 4); b.push_back(2); b.push_back(0);
+  put32(b, 0xDEADBEEF);
+}
+}  // namespace
+
+bool parseNetworkHeader(const uint8_t* p, size_t n, uint32_t counts[3]) {
+  Reader r(p, n);
+  uint16_t v;
+  readNetHdr(r, v);
+  if (v != 4) throw FormatError("network header: unsupported version");
+  counts[0] = r.u32(); counts[1] = r.u32(); counts[2] = r.u32();
+  return r.u32() == 1;
+}
+
+std::vector<NetPiece> parseNetworkList(const uint8_t* p, size_t n, uint32_t count) {
+  Reader r(p, n);
+  uint16_t v;
+  readNetHdr(r, v);
+  if (v != 4) throw FormatError("network list: unsupported version");
+  if (count > r.remaining() / 8) throw FormatError("network list: truncated");
+  std::vector<NetPiece> out;
+  out.reserve(count);
+  for (uint32_t i = 0; i < count; i++) {
+    NetPiece np;
+    uint32_t place = r.u32();
+    np.pieceWord = r.u32();
+    np.x = int(place & 0x7FF); np.z = int((place >> 11) & 0x7FF);
+    np.y = int((place >> 22) & 0xFF); np.rot = int(place >> 30);
+    np.pieceId = np.pieceWord & 0xFFFF;
+    out.push_back(np);
+  }
+  return out;
+}
+
+NetworkRecords parseNetworkRecords(const InnerDb& db) {
+  NetworkRecords nr;
+  const uint8_t* p; size_t n;
+  if (!db.find({kNetRecType, kNetRecGroup, 0}, p, n)) return nr;
+  uint32_t counts[3];
+  if (!parseNetworkHeader(p, n, counts)) return nr;
+  for (int i = 0; i < 3; i++) {
+    if (!counts[i]) continue;
+    if (!db.find({kNetRecType, kNetRecGroup, uint32_t(i + 1)}, p, n)) continue;
+    nr.layer[i] = parseNetworkList(p, n, counts[i]);
+  }
+  return nr;
+}
+
+std::vector<std::pair<ResKey, Bytes>> serializeNetworkRecords(const NetworkRecords& r) {
+  std::vector<std::pair<ResKey, Bytes>> out;
+  Bytes h;
+  netHdr(h);
+  for (int i = 0; i < 3; i++) put32(h, uint32_t(r.layer[i].size()));
+  put32(h, 1);
+  out.push_back({ResKey{kNetRecType, kNetRecGroup, 0}, h});
+  for (int i = 0; i < 3; i++) {
+    if (r.layer[i].empty()) continue;
+    Bytes b;
+    netHdr(b);
+    for (auto& p : r.layer[i]) {
+      put32(b, packPlace(p.x, p.z, p.y, p.rot));
+      put32(b, p.pieceWord ? p.pieceWord : makePieceWord(p.pieceId));
+    }
+    out.push_back({ResKey{kNetRecType, kNetRecGroup, uint32_t(i + 1)}, b});
+  }
+  return out;
+}
+
+}  // namespace m3k
