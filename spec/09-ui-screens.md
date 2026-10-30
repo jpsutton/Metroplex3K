@@ -194,6 +194,14 @@ m ≥ 45; else Small if k ≥ 2 and m ≥ 30; else Miniature. [STATIC; the exact
 are OPEN — a modern implementation may simply default to Large.] If the previously chosen size
 is outside the four choices, Small is selected.
 
+`[OBSERVED]` Defaults on first opening at 1024 × 768:
+* City name `New City`, mayor `Defacto`;
+* Easy, 1900, Large;
+* Disasters and Auto Budget both checked;
+* the first landscape, the first tree set (palms) and the first building set.
+
+The dialog shows these controls exactly as tabled above.
+
 On OK: if the selected size differs from the current terrain, a new terrain of size×size is
 generated with default generator parameters (seed "random", three feature sliders at 64 and a
 fourth parameter 36; see `11-world-terrain.md`), then the terrain editor (§3.4) opens.
@@ -227,6 +235,21 @@ Scenario end screens (`23-scenarios.md`): status `041F2625:4`/`5`, greeting `3`,
 results `25`, buttons replay `8`, another scenario `9`, main menu `A`.
 
 ### 3.4 Terrain editor [STATIC]
+
+`[OBSERVED]` The editor panel appears in two places:
+* automatically, after the New City dialog is confirmed and before the city starts;
+* as the Real City Terrain editing step.
+
+It is a vertical panel at the right edge with these parts, top to bottom:
+* the **Pick Features** diagram (described in `11-world-terrain.md` §3.1), with compass, zoom and
+  rotate buttons around it;
+* three **Adjust Parameters** sliders (hills, water, trees);
+* **Re-Generate Terrain**;
+* a 2 × 3 block of tool buttons: lower, raise, level, trees, water, bulldoze;
+* **Accept this Terrain**.
+
+The zoom and rotate buttons act on the main view, and rotation also turns the diagram (its compass
+letter changes). The simulation does not run until Accept is pressed.
 
 Title `029541F4:2CA`. Buttons: accept (`2CD`), regenerate (`254`); tool buttons with tooltips
 `225872FE:A` zoom in, `B` zoom out, `92` rotate CW, `93` rotate CCW, `18` lower, `19` raise, `1A`
@@ -530,6 +553,26 @@ building-picker window (§6.11); choosing a building there arms a plop tool for 
 
 ### 6.1 Budget window [STATIC]
 
+`[OBSERVED]` (shipped city, February 2067, 1024 × 768).
+
+* **Layout.** A modal panel about 500 × 480 px with two tabs, **Expenditures** and **Income**.
+  Top-left is a caption box (`<year> Budget` / `<Month> <year>`). The columns are Adjust,
+  Yr. To Date Expense, Year End Estimate and Meet Advisor.
+* **Expenditure rows, top to bottom:**
+  * Ordinances, Neighbor Deals and Loans, each with an icon button that opens its own window;
+  * a blank row;
+  * Education, Public Health, Fire, Roads, Police and Mass Transit, each with a horizontal
+    funding slider and a "?" advisor button.
+* **Number style.** Negative amounts are red, with the minus sign before `§`.
+* **Summary block**, two columns: Year to Date Income, Estimated Income, Year to Date Expense
+  (red), Estimated Expense (red), Year to Date Cash Flow, Estimated Cash Flow, Current Funds and
+  End of Year Funds. A Meet Financial Advisor "?" button sits beside it, and the OK button is at
+  the bottom right.
+* **Estimates.** In February, the Ordinances estimate was exactly 12 × its year-to-date figure.
+  The department estimates were not exact multiples, which suggests they are projected from the
+  current funding level. The rule is [OPEN].
+* These six slider rows are the six funded departments of `19-sim-economy.md` §6.1.
+
 Opened by Review ▸ Budget (command `025DDC4A`). It is a modal, paged window owned by the
 economy subsystem; all values are read from and written to the budget model of
 `19-sim-economy.md`. Strings are in table `029541F4`.
@@ -690,6 +733,18 @@ and rewards already placed are greyed and marked `70`. Empty-list messages: land
 
 ### 6.12 Query tool and query popups [STATIC]
 
+`[OBSERVED]` The query tool is the green "?" button in the bottom bar. A click on the map opens
+a modal **Query** panel.
+* **Flora:** the name (e.g. a pine species) and a small picture, then Elevation (in metres, e.g.
+  "26 Meters"), Land Value (word band), Zone Type, Powered (Yes/No), Watered (Yes/No),
+  Flammability (word band), Air Pollution (word band) and Water Pollution (word band).
+* **Power plant:** a large picture and the name, then:
+  * Age (Max) as "N yrs. (M yrs.)": current age and maximum life in whole years;
+  * Elevation;
+  * Pollution Generated, a word band shown in red when "Hazardous";
+  * Maximum Power Capacity, Current Power Capacity and Usage, all in MW-h/Month;
+  * a **Replace** button next to OK.
+
 The query tool is the default pointer action (and the bottom-bar "Query" button,
 `225872FE:3C`). Clicking a tile opens a popup titled `82E0074C:1`. The popup is a list of
 (label, value) lines. Every simulation subsystem that owns something at the tile contributes
@@ -817,6 +872,19 @@ Clicking a point on the mini-map centres the main view there (`25-rendering.md`)
 
 ### 7.2 Data maps [STATIC]
 
+`[OBSERVED]` In the main view, data layers are chosen in the **View City Layers** dialog, opened
+with the layers button on the navigator panel. The dialog has:
+* an *Above Ground* group of six checkboxes: Transportation, Power Lines, Flora, Zoned Buildings,
+  Other Buildings, Zones;
+* an *Underground* pair of radio buttons: Subways, Water Pipes;
+* a *City Layer Views* toggle with eight radio buttons: Aura, Crime, Density, Electric Power,
+  Flammability, Land Value, Pollution, Traffic. These are greyed out until the toggle is pressed;
+* Apply, Default View and OK buttons.
+
+The selected layer recolours the main view (`25-rendering.md` §9.2) and stays active until it is
+changed or Default View is pressed. The legend images listed below belong to the separate
+map-window data views.
+
 | Map | Title | Legend image (`000005E5:`) | Legend labels (`029541F4:`) | Extra controls |
 |-----|-------|---------------------------|-----------------------------|----------------|
 | Aura (mayor rating) | `111` | `0x01` | `127` good … `129` bad | — |
@@ -879,6 +947,93 @@ garbage `1DF` (plus workforce `1E5`). Pages:
   incinerators `1F5`, recycling `1F6`, collecting in streets `1F7`; total `1F8` (tons per year).
 
 The underlying statistics are owned by `20-sim-population.md` and `16-sim-utilities.md`.
+
+## 7a. Observed reference (build 2.0.949, black-box)
+
+Everything in this section is `[OBSERVED]` by running the original at 1024 × 768 unless stated.
+
+### 7a.1 Tool-column menus and tooltips
+
+| Root button | Second-level items (tooltip text, top to bottom) |
+|---|---|
+| Landscape | (not explored) |
+| Zoning | Residential, Commercial, Industrial, Landfill, Seaport, Airport, De-zone, Demolish. A plain click activates the item's current density directly; there is no visible fly-out on a click |
+| Transportation | Road, Highway, Bus Stop, Rail, Subway, Subway to Rail Connection, Demolish |
+| Utilities | power lines, power plants (opens the power-plant picker), water pipes, water buildings (picker), garbage (picker), demolish |
+| Civic | Police, Fire Station, Health & Education (fly-out: Hospital, School, College, Library, Museum), Parks & Rec, Landmarks, Rewards & Opportunities, Demolish |
+| Meet advisors | (not explored) |
+| View / city info | View Snapshots, Take Snapshots, Budget, Neighbors, Ordinances, Scenario Status, View Data |
+| Options | Save City, Save As, Load, New City, Exit |
+
+Other behaviour:
+* Items whose button carries a small grid badge open a picker dialog or a fly-out (`08` §7).
+* A second-level column stays open after a dialog launched from it has closed. Clicking its root
+  button again closes it.
+* Tooltips appear on hover after a short delay, as small pale-yellow boxes to the left of the
+  item.
+
+### 7a.2 Building pickers and year gating
+
+The picker is titled "Select a Power Plant", "Select A Water Building", and so on. It shows:
+* a building picture;
+* a "Buildings Available" list;
+* below it the name, Cost and Capacity/Power, and a short description;
+* an OK button.
+
+Selecting an entry updates the lower half. Lists are gated by the city's year:
+
+| Picker | 1900 | 2000 |
+|---|---|---|
+| Power plants | Coal, Oil | Coal, Oil, Gas, Nuclear, Wind Mill, Solar Power Collector |
+| Water buildings | Pumping Station, Water Tower | Pumping Station, Water Tower, Water Treatment Plant, Desalinization Plant |
+
+The Bus Stop tool shows no preview and places nothing in 1900, but works in 2000 (§150 each), so
+transit tools are also year-gated. A bus stop need not touch a road (one was placed two tiles
+away). Observed prices: Coal §5,000 (6000 MW-h), Wind Mill §250 (200 MW-h), Pumping Station §300
+(1500 m³/month), police/fire/school/hospital §500, library §1,000, college §3,000, bus stop §150,
+residential zoning §10 per tile.
+
+### 7a.3 Placement feedback
+
+* A valid footprint is tinted translucent cyan; an invalid one (over water, on a road, on an
+  existing building) is tinted red.
+* The cost label follows the cursor.
+* Purchases are charged on release.
+* Details are in `25-rendering.md` §9.4.
+
+### 7a.4 Query panels
+
+The query tool is the green "?" in the bottom bar. It stays active after a panel closes, so each
+further map click opens another query. The panel is modal: map clicks are ignored until it is
+closed with OK or the close box.
+
+| Target | Fields (top to bottom) | Extra controls |
+|---|---|---|
+| Zoned building (R, C or I) | picture, name, Elevation, Land Value, Zone Type (e.g. "Medium Residential", "Dense Commercial", "Light Commercial", "Medium Industrial"), Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution | Tall buildings put the picture on the left and add **Replace** and a **Make Historical** check box |
+| Flora | name, picture, Elevation, Land Value, Zone Type, Powered, Watered, Flammability, Air Pollution, Water Pollution | — |
+| Power plant | picture, name, Age (Max) "N yrs. (M yrs.)", Elevation, Pollution Generated (red when "Hazardous"), Maximum Power Capacity, Current Power Capacity, Usage (MW-h/Month) | **Replace** |
+| Landfill | Elevation, Capacity Citywide (tons), Usage (% full) | — |
+| Road | Elevation, Traffic (word band) | — (smaller panel) |
+
+The **Make Historical** box is probably what sets one of the two per-occupant booleans in the
+occupant record (`10-save-format.md` §6.2.4) [INFERRED].
+
+### 7a.5 Prompts and file dialogs
+
+* **Prompts.** Loading while in a city asks "Would you like to save this city?" (Yes/No). Choosing
+  New City from the Options menu asks "Do you want to save your city?". Both are message boxes with
+  a warning icon.
+* **Save As / Load Saved City.** Both have:
+  * a minimap preview of the selected file;
+  * Population, Funds, Date, Mayor Name and City Name;
+  * a Look In folder drop-down with Scenarios, StarterTowns and Terrains sub-folders;
+  * a file list and a File Name field.
+
+  Load adds a **Show City Stats** check box; Save As has editable Mayor Name and City Name fields.
+  The default save name is the city name.
+* **New City from inside a city.** It opens the same New City Options dialog, about 47 px left and
+  32 px higher than the main-menu version. It remembers the last difficulty, year, size and scheme
+  choices, but resets the name to "New City".
 
 ## 8. Persisted state touched by the UI
 

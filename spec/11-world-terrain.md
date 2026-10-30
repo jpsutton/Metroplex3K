@@ -129,13 +129,30 @@ Option semantics:
   3 = hard). Any other value behaves like 1.
 * The New City dialog's terrain preview calls Generate with seed = timer, hills = 64, water = 64,
   trees = 64 and flags = 0x24 (coast on the last-column edge plus a river across columns).
-* Nothing else in the game generates terrain [STATIC]. The
-  New City dialog offers no hills/water/trees sliders or coast/river/lake/mountain checkboxes; it
-  only selects map size, difficulty (passed to Set difficulty) and starting year. So every
-  generated terrain uses hills = water = trees = 64 and flags = 0x24 with a timer seed [INFERRED,
-  high confidence: the dialog's generated preview is what the new city receives]. The other
-  flag bits and option values are unreachable from the UI but are fully specified above for
-  completeness. Shipped hand-made terrains (`.sct`) come from editing or external tools, not from
+* Map edge per New City size `[OBSERVED]` (from the saves): Miniature 64, Small 128, Medium 192,
+  Large 256 tiles. Miniature maps are drawn with the same earth edge faces, which look
+  proportionally deep on such a small map.
+* **Correction** `[OBSERVED]`: after the New City dialog is confirmed, the game opens a
+  **Terrain Edit** panel over the generated map before the city starts (`09-ui-screens.md` §3.4).
+  That panel makes the generator inputs reachable:
+  * **Pick Features** is a small isometric diagram of the map, drawn with compass, zoom and rotate
+    buttons. Clicking one of its four edge bands toggles a coastline on that map edge.
+    Clicking its centre cycles one exclusive centre feature, in this order: river running from
+    the north-west to the south-east edge → river running from the south-west to the north-east
+    edge → central mountain → nothing → central lake → back to the first river. These are the
+    coast-edge, river-direction, mountain and lake flag bits of the generator input.
+  * **Adjust Parameters** is three vertical sliders: hills, water and trees. All start in the
+    middle position, which corresponds to 64.
+  * **Re-Generate Terrain** runs the generator with the current picker flags and slider values.
+    Changing the picker alone does not regenerate the map.
+  * The initial map (before any change) uses hills = water = trees = 64 and the default feature
+    set: one river from the north-west edge plus a coast on one edge [OBSERVED]. This matches
+    flags = 0x24 [STATIC].
+  * The panel also carries the terraforming tools of §4 (lower, raise, level, trees, water,
+    bulldoze) and an **Accept this Terrain** button that starts the city.
+
+  Which slider position maps to which numeric value outside the middle position is [OPEN].
+  Recommended: linear, 0 at the bottom to 128 at the top. Shipped hand-made terrains (`.sct`) come from editing or external tools, not from
   the generator [INFERRED].
   The in-game "terrain editor" consists of the tools in section 4.
 * The New City dialog offers map sizes 64, 128, 192 and 256 tiles (default 256). Shipped data

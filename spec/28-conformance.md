@@ -89,6 +89,27 @@ sorting match `[OBSERVED]`. Implementers should collect similar reference saves 
 Use them both as L1 fixtures and as templates for new-city record values (`29-open-issues.md` 1.1,
 1.2).
 
+A further five saves made the same way have also been checked; every record parses byte for byte
+`[OBSERVED]`. They are:
+* a fresh city;
+* the same city with six civic buildings, a road and a residential zone, saved immediately;
+* that city after 7 months, 17 months and 41 months of simulation at top speed.
+
+Together they show:
+* the fixed values written for newly placed buildings (`10-save-format.md` §6.2.5);
+* that plant lifetimes stay constant once set;
+* when disaster history seed entries appear;
+* the city-information fields changing over time (day of year 1 → 214 → 147 → 148; speed 1 → 4).
+
+Seven more were captured and also parse fully:
+* fresh cities covering every map size, every difficulty, every start year, and both settings of
+  the Disasters and Auto Budget options;
+* non-default landscape, tree and building sets;
+* a year-2000 city with a bus stop, school, college, library, water tower and wind mill.
+
+Recommended fixture set for L1: one fresh city per (size, difficulty, start year) and one city per
+placed building class, all saved by the original.
+
 ## 4. L2 — deterministic checks
 
 These computations depend only on their inputs and the generator state, so they must match exactly.

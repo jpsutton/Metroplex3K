@@ -197,7 +197,11 @@ The **set speed** operation, with requested speed `s`, runs these steps [STATIC]
 [OPEN] Step 2 with a negative `s` is untested. Recommended: reject negative values, as step 3 does.
 
 Speed changes are requested by the speed buttons and hotkeys (`09-ui-screens.md`). A newly created
-city starts with selected = current = 2 (Llama) [STATIC]. A SimCity 2000 import maps that game's
+city was expected to start at speed 2 (Llama) [STATIC], but the original **starts a new city at
+speed 1 (Turtle)** `[OBSERVED]`: the city-information record of a fresh save stores speed 1, and
+the running clock measured about 10 s per game day with one speed cell lit. Use speed 1.
+Measured at speed 4: one game month every ≈ 5 s, ≈ 166 ms per game day, which matches the
+African Swallow row above `[OBSERVED]`. A SimCity 2000 import maps that game's
 speed 0–3 to 1–4, with 1 as the default when the import has no speed (§9) [STATIC].
 
 **Minute-resolution side effect.** While per-minute work is active (§3.1), time advances in minute

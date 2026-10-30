@@ -533,11 +533,32 @@ rather than blending with it, and no noise is added. [STATIC]
   and colours are interpolated only within the tile, between its corners' shade values.
   [STATIC]
 
-Which data layer uses which ramp, and how a layer value (0..255 in the simulation maps,
-`15-sim-growth.md`, `17-sim-services.md`) is quantised to a row 0..31, is decided by the view
-code that creates the tiles. That mapping is [OPEN]. A plausible default is
-row = ⌊value / 8⌋ on the ramp that matches the layer's colour scheme. data3Pal is the smooth
-gradient. [INFERRED]
+**Layer → ramp** `[OBSERVED]` (shipped city at 2067, all eight layers of the View City Layers
+dialog, `09-ui-screens.md` §7.2).
+
+`data1Pal` runs from grey in its bottom row to deep blue in its top row, in about 11 visible bands.
+`data2Pal` runs from grey through orange to dark red. `data3Pal` is a smooth blue-to-orange
+gradient that none of the eight layers was seen to use.
+
+| Layer | Ramp | Low value | High value | Tiles coloured |
+|---|---|---|---|---|
+| Land Value | data1Pal | grey | dark blue | zoned and developed land, in 2 × 2-tile blocks (the land-value grid) |
+| Density | data1Pal | grey | blue | zoned land |
+| Electric Power | data1Pal, top band | — | deep blue = powered | powered tiles only; unpowered land keeps its terrain colour |
+| Aura | data1Pal for positive, data2Pal for negative | light blue | deep blue (good) / dark red (bad) | developed land |
+| Crime | data2Pal | grey | orange | zoned land |
+| Pollution | data2Pal | grey | dark red-orange | every land tile; a smooth field across zoned and unzoned land |
+| Flammability | data2Pal | light orange | red-orange | land with buildings or flora |
+| Traffic | data2Pal along networks (grey → orange with load) | — | — | road and rail tiles; zoned tiles are tinted by zone type (greens, a tan/yellow and a blue-violet) |
+
+In every layer, buildings, flora and automata are hidden while the layer is shown. Networks stay
+visible, and land outside the layer's tile set keeps its normal terrain colour. The low end of
+both ramps is the grey bottom row (≈ RGB 189,194,197 lit / 181,186,189 shaded). Colours are shaded
+by relief like terrain, so on-screen values differ slightly from the palette entries.
+
+Quantisation [INFERRED]: row = 31 − ⌊value × 32 / 256⌋, i.e. low values on the bottom grey row and
+high values on the top row of the ramp, consistent with all eight screenshots. The exact band
+edges are [OPEN].
 
 ### 9.3 Underground view
 
@@ -550,6 +571,22 @@ network pieces (pipes, subway tunnels and stations) are drawn as sprites from th
 categories (`12-networks.md`). Above-ground objects are hidden. [INFERRED]
 
 ### 9.4 Selection highlight, placement preview, cost text
+
+Observed behaviour `[OBSERVED]`:
+* **Building placement preview:** the building's footprint tiles are filled with a translucent
+  **cyan** tint at the hovered position. The footprint is shown as tiles, not as the building
+  sprite.
+* **Network drag preview:** the planned path is drawn as a one-tile-wide translucent cyan line along
+  the route of `12-networks.md` §6.2, stair-step included.
+* **Zone drag preview:** the rectangle is tinted translucently in the zone's colour (light green for
+  residential).
+* **Occupied target:** hovering a placement tool over an existing building tints that building's
+  sprite red.
+* **Cost label:** a small box with a white background and a 1-pixel black border, showing `§` and the
+  total cost with thousands separators. It sits below and to the right of the cursor (about
+  45 px down at 1024 × 768) and updates live during a drag. The amount includes clearing costs,
+  e.g. §5,005 for a §5,000 plant on a tile with trees.
+* The cost is charged on release, immediately, even while the simulation is paused.
 
 [OPEN] These are drawn by the view module, not the terrain module. Known facts: the terraform
 tools compute a planned cost for the tile under the cursor every time the cursor moves

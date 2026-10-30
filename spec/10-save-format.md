@@ -129,7 +129,7 @@ Versioned record, version 4 in all files. Written by the city object; read first
 | 0x00 | 8 | hdr | header | §2.1, version 4 |
 | — | var | string | marker | Only if header flag bit 0: `City Data Start` |
 | +0 | 16 | s32×4 | appVersion | Version of the program that wrote the file: major, minor, build, revision. Shipped: 2.0.876–2.0.941 (cities, scenarios, terrains), 1.0.544 (starter towns) |
-| +16 | 4 | u32 | (unknown) | Always 3 [OPEN]; written from the same version object as appVersion. Write 3 |
+| +16 | 4 | u32 | (unknown) | 3 in all shipped files; **4** in files written by build 2.0.949 `[OBSERVED]`, whose appVersion is (2, 0, 949, 0). It comes from the same version object as appVersion, so it is probably a format revision [INFERRED]. Write 4 together with appVersion 2.0.949 |
 | +20 | var | string | author | Login name of the user who saved the file (e.g. a short user ID). Informational only |
 | … | 4 | u32 | mapWidth | City size in tiles along X: 128, 192 or 256 |
 | … | 4 | u32 | mapHeight | City size in tiles along Y; equals mapWidth in all files |
@@ -140,8 +140,8 @@ Versioned record, version 4 in all files. Written by the city object; read first
 | … | 4 | u32 | year | Current calendar year |
 | … | 4 | u32 | gameSpeed | Simulation speed setting at save time, 1–4 [INFERRED] (see `14-sim-clock.md`) |
 | … | 4 | u32 | foundingYear | Starting year chosen when the city was founded: 1900, 1950 or 2000 |
-| … | 1 | u8 | flagA | Boolean, restored on load [OPEN]; 1 in starter towns and a few cities, else 0 |
-| … | 1 | u8 | flagB | Boolean, restored on load [OPEN]; 1 in all files |
+| … | 1 | u8 | flagA | Boolean, restored on load. One of the two New City options **Disasters** / **Auto Budget**: flagA and flagB are both 1 when both boxes are checked and both 0 when both are cleared `[OBSERVED]`. Which flag is which is [OPEN] [INFERRED: flagB = Auto Budget, since it is 1 in all shipped files]. Shipped: 1 in starter towns and a few cities, else 0 |
+| … | 1 | u8 | flagB | Boolean, restored on load: the other of Disasters / Auto Budget (see flagA) `[OBSERVED]`. 1 in all shipped files |
 | … | 1 | u8 | flagC | Boolean written from a global service; ignored on load [OPEN]; 0 or 1 |
 | — | var | string | marker | Only if header flag bit 0: `City Data End` |
 
@@ -164,14 +164,15 @@ program version 1.0.544) contain only the first field (4 bytes); all other files
 | Offset | Size | Type | Field | Meaning |
 |---|---|---|---|---|
 | 0x00 | 4 | u32 | stateA | Restored into a city-level state word on load. The current program resets it to 0 immediately before writing, so every file it writes has 0. The 1.0.544 starter towns hold 1–10 here (one distinct value per town) [OPEN meaning] |
-| 0x04 | 4 | u32 | cityId | 1 or 2 in shipped files; a city identifier assigned when 0 at save time [OPEN] |
+| 0x04 | 4 | u32 | cityId | 1 or 2 in shipped files. In cities created by build 2.0.949 it is a large value fixed when the city is created (e.g. 0x24F4FD33) and unchanged in later saves of that city. It grows with the real time at which the city was created `[OBSERVED]`, so it is a time-derived city identifier [INFERRED]. A new city should store a value derived from the current time |
 | 0x08 | 4 | s32 | stateB | 0, 1 or 2 [OPEN] |
 | 0x0C | 4 | s32 | stateC | 0 or 550–711 [OPEN] |
 | 0x10 | 4 | s32 | stateD | Value from a global service; 1 in all files [OPEN] |
 | 0x14 | 4 | s32 | stateE | Value from a global service; 54 in all files [OPEN] |
 
-A writer should copy fields 1–5 from the loaded file (round-trip), write 0 for field 0, and use
-0,1,0,0,1,54 for new cities. A reader must accept a 4-byte record.
+A writer should copy fields 1–5 from the loaded file (round-trip) and write 0 for field 0. Cities
+created by build 2.0.949 store 0, *id*, 1, 54, 1, 54, where *id* is the creation stamp above
+`[OBSERVED, 9 new cities]`; use that for new cities. A reader must accept a 4-byte record.
 
 ### 3.5 Preview record `E2F42628:62F42635:00000000` [DATA 59/59]
 
@@ -255,6 +256,18 @@ u32 IDs, each 0 = the default entry [DATA 59/59: every shipped value is a key of
 | 0x00 | 4 | u32 | buildingSet | Key of `SC3CityScheme.ini` `[BuildingSets]` (e.g. 0xE523F3FB, 0x6523F3D5) |
 | 0x04 | 4 | u32 | floraSet | Key of `[FloraSets]` (e.g. 0xC55A6D84; see `11-world-terrain.md` §6.3) |
 | 0x08 | 4 | u32 | landscape | Key of `[LandScapes]` (terrain colouring scheme, e.g. 0xE55B8055) |
+
+`[OBSERVED]` Mapping from New City dialog choices (icon positions, left to right) to stored IDs.
+In each row, position 1 is the default and stores 0:
+
+| Choice row | Position 2 | Position 3 | Position 4 |
+|---|---|---|---|
+| Landscape | 0xC55A6D62 (snowy terrain) | 0xC55A6D84 (desert terrain) | 0x655B8076 (sandy terrain) |
+| Trees | 0xC55A6D62 | 0xC55A6D84 | 0x79EF435A |
+| Buildings | 0xE523F3FB | 0x6523F3D5 | — |
+
+The same 32-bit value can be a key in more than one section, so each field must be looked up in its
+own section. Position 5 of the landscape and tree rows was not observed.
 
 Round-trip them; an unknown ID should be treated as 0 [INFERRED].
 
@@ -602,6 +615,47 @@ Rules [STATIC][DATA]:
   owns; the class loaders read them by ID, and several stop reading at the first missing ID.
 * `name` is written only when it differs from the occupant type's default name.
 
+**Values written for newly placed buildings** `[OBSERVED]` (build 2.0.949, buildings placed on
+1 January 1900 and saved immediately; property IDs as in the table above):
+
+| Building (agent type) | Footprint | Flags word | Date pair | Integer properties | Float properties |
+|---|---|---|---|---|---|
+| Coal power plant (12111) | 4 × 4 | 0x68D00104 | (1900, 1) | `2351FAF8` = 0, `2351FAF9` = 732, `2351FAFA` = 586, `2351FAFB` = 0 (a second plant placed the same day: 0, 857, 685, 0) | — |
+| Water pumping station (12810) | 1 × 1 | 0x68D00041 | (1900, 1) | `8351FDF3` = 1500, `8351FDF4` = 196608, `8351FDF5` = 3, `8351FDF6` = 0 | — |
+| Police station (13130) | 3 × 3 | 0x689000C3 | none | `A352C8E8` = 1265437, `A352C8E9` = 30, `A352C8EA` = 30 | — |
+| Fire station (13002) | 3 × 3 | 0x689000C3 | none | `2352C88D` = 13092632, `2352C88E` = 30, `2352C88F` = 30 | — |
+| Hospital (13310) | 3 × 3 | 0x6A9000C3 | none | `A352D404` = 1500, `A352D406` = 50, `A352D407` = 100 | `A352D405` = 0.12 |
+| Landmark, plopped (18044) | 5 × 5 | 0x68100145 | none | none | — |
+
+Further newly placed buildings (founded 2000, saved immediately) `[OBSERVED]`:
+
+| Building (agent type) | Footprint | Flags word | Date pair | Integer properties | Float properties |
+|---|---|---|---|---|---|
+| Wind mill (12118) | 1 × 1 | 0x68D00041 | (2000, 1) | `2351FAF8` = 0, `2351FAF9` = 1606, `2351FAFA` = 1285, `2351FAFB` = 0 | — |
+| Water tower (12840) | 2 × 2 | 0x68D00082 | (2000, 1) | `8351FDF3` = 600, `8351FDF4` = 131072, `8351FDF5` = 0, `8351FDF6` = 0 | — |
+| School (13010) | 3 × 3 | 0x689000C3 | none | `8352D5E9` = 100, `8352D5EA` = 30 | — |
+| City college (13873) | 3 × 3 | 0x6A9000C3 | none | `2352D114` = 150, `2352D116` = 125 | `2352D115` = 0.25 |
+| Library (14130) | 2 × 2 | 0x68900082 | none | `A3544E00` = 50 | — |
+| Bus stop (12210) | 1 × 1 | 0x68900041 | none | `6352CCCF` = 5, `6352CCD0` = 5 | — |
+| Oil power plant (12112) | 4 × 4 | 0x68D00104 | (2000, 1) | `2351FAF8` = 0, `2351FAF9` = 752, `2351FAFA` = 601, `2351FAFB` = 0 | — |
+| Gas power plant (12113) | 4 × 4 | 0x68D00104 | (2000, 1) | `2351FAF8` = 0, `2351FAF9` = 976, `2351FAFA` = 781, `2351FAFB` = 0 | — |
+| Nuclear power plant (12115) | 4 × 4 | 0x68D00104 | (2000, 1) | `2351FAF8` = 0, `2351FAF9` = 647, `2351FAFA` = 517, `2351FAFB` = 0 | — |
+| Solar power collector (12117) | 4 × 4 | 0x68D00104 | (2000, 1) | `2351FAF8` = 0, `2351FAF9` = 1216, `2351FAFA` = 973, `2351FAFB` = 0 | — |
+| Water treatment plant (12820) | 2 × 2 | 0x68D00082 | (2000, 1) | `0351D624` = 0, `0351D625` = 0, `0351D626` = 0, `0351D627` = 0 | — |
+| Desalination plant (12830) | 3 × 3 | 0x68D000C3 | (2000, 1) | `8351FDF3` = 5000, `8351FDF4` = 327680 (high half 5), `8351FDF5` = 3, `8351FDF6` = 0 | — |
+| Rail/subway station (12361) | 1 × 1 | 0x68900041 | none | `6352CCCF` = 10, `6352CCD0` = 10 | — |
+| Small park (14311) | 1 × 1 | 0x68100041 | none | none | — |
+
+Footprint sizes follow the flags word's low 12 bits, as in §6.2.4. Classes with a date pair are
+exactly the ones that age (power and water facilities). Flags bit 22 (date present) is set only for
+them; bit 25 (float properties present) is set only for the hospital and the college.
+
+All have state 1. The power-plant pair (732, 586) and (857, 685) is (maximum life, decline age) in
+months. They differ per plant because of the random lifetime spread of `16-sim-utilities.md` §2.3,
+and they stayed unchanged over the following three game years, as did the overwork and expired
+words (0). The pump's 1500 equals its rated capacity (1500 m³/month shown in the purchase
+dialog). The meanings of the other values are [OPEN]; write them as observed for a new building.
+
 #### 6.2.6 Network pieces (`206C6E7C:2147C2DD:1..3`)
 
 Network pieces are serialised by the network manager (`12-networks.md` Persisted state) as a
@@ -881,9 +935,14 @@ fixed-size entries, each an array of u32 whose first word is the date (Julian da
 | `C446F87C` | whirlpool | 1 | 32 (8 × u32) | |
 
 In a brand-new city saved before any simulation has run, every list is empty (n = 0, and the
-locust record carries its extra s32 = 0) `[OBSERVED]`. Once the disaster's occurrence check has run,
-the list always holds at least one entry: an empty list receives a seed entry holding only a date,
-with all other words 0 [STATIC][DATA]. A loader must accept n = 0. Entries written by real occurrences carry non-zero
+locust record carries its extra s32 = 0) `[OBSERVED]`. An empty list receives a seed entry
+(holding only a Julian-day date, all other words 0) the first time that disaster's random
+occurrence check runs [STATIC][DATA]. Observed in a city founded on 1 January 1900:
+* the earthquake and UFO lists gained their seed entry dated 8 February 1900;
+* the space-junk list was still empty in 1903, consistent with its 1960 year gate
+  (`21-disasters.md`).
+
+A loader must accept n = 0. Entries written by real occurrences carry non-zero
 detail words (shipped examples: space junk (date, 26, 0, 0, 6, 181); UFO (date, 17, 5, 5, 0, 0, 0,
 0, 0, 5, 325, 0)). Detail-word meanings are **[OPEN]**; round-trip them verbatim. The same five
 types may also write a companion record with Group + 1 (e.g. `E1F6ABE2:24889F79:0`) holding their
@@ -1414,7 +1473,7 @@ or scenario is saved as an ordinary city: file kind 3 (§3.3), city-only preview
 
    | # | Record | Writer |
    |---|---|---|
-   | 1 | `430E2EE6:530E2EE6:0` (§3.6; not a cheat count). Omitted from a brand-new city saved before any simulation has run `[OBSERVED]`, so it is written only in some cases; the condition is [OPEN] | application shell |
+   | 1 | `430E2EE6:530E2EE6:0` (§3.6; not a cheat count). Not written by build 2.0.949 in normal play `[OBSERVED]`: it is absent from six game-written saves, including saves made after three game years of simulation. It occurs only in the shipped files. A writer should omit it; a loader must accept either | application shell |
    | 2 | `630E2EE6:730E2EE6:0` cheat IDs (only if at least one cheat was used) | application shell |
    | 3 | `C359837E:43598384:0` file kind | city |
    | 4 | `035AD1CB:835AD1D1:0` state words (field 0 forced to 0) | city |

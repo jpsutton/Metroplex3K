@@ -449,6 +449,21 @@ Update rules are in `09-ui-screens.md` §4.1.
 * The bar background continues across the window to the RCI indicator, which sits just left of
   the navigator panel (minimap, zoom and rotate buttons) in the bottom-right corner.
 
+**Observed at 800 × 600 and 640 × 480** `[OBSERVED]`:
+* **800 × 600.** The bottom bar is about 600 px wide at the bottom-left, with the ticker on the
+  top line and city name, population, funds and date on the line below. The tool column is at the
+  right edge, and the navigator panel sits at the bottom-right, overlapping the column's lower
+  part.
+* **640 × 480.** The bottom bar is about 440 px wide, with **three** text lines:
+  * the ticker;
+  * population, funds and date;
+  * the city name, centred under them.
+
+  The nine root buttons of the tool column are stacked without the extra gaps used at larger
+  sizes (Emergency directly below Civic). The navigator is at the bottom-right.
+* At both sizes the main menu shows its own background image, sized to fill the window. At
+  1024 × 768 and above, the 800 × 600 background is centred on black.
+
 ## 5. Hotkeys
 
 ### 5.1 Files and resource keys `[DATA]`
@@ -745,10 +760,21 @@ example `0x8010` and `0x8011` are the top two Review buttons). The first two Opt
 1 px higher than the 36-px grid at 600 and >600 lines; this is in the original table and should be
 kept. Third-level fly-out buttons (`0x3101`…`0x6604`, the zone-density and building-group
 fly-outs with style `0x000018FF`) are not in this table; the fly-out window lays them out
-itself. `[OPEN]` Where does a fly-out open relative to its second-level button, how large is each
-entry, and does the strip colour of `[SC3MenuDescs]` fill the whole fly-out? Until resolved, open
-the fly-out immediately to the right of the button (x = 96 from the column origin, top aligned
-with the button) with one entry per row, as tall as the button (36 px) `[INFERRED]`.
+itself.
+
+`[OBSERVED]` (1024 × 768, Health & Education fly-out):
+* **Opening.** A plain click on a second-level button that owns a fly-out immediately selects the
+  fly-out's currently checked entry and activates its tool. Pressing **and holding** the button
+  for about a second opens the fly-out. Moving onto an entry and releasing the mouse there
+  selects it.
+* **Placement.** The fly-out opens to the **left** of the button, because the column sits at the
+  right edge of the window. Its right side touches the column, and its first entry sits about
+  7 px above the button's centre.
+* **Look.** A single dark-blue rectangle in the menu's strip colour, about 70 px wide. One text
+  row per entry, 16 px tall, in white. The current entry carries a check mark at the left.
+* **Example.** Hospital (checked by default), School, College, Library and Museum.
+
+The fly-out geometry at other resolutions is [OPEN]; assume the same rules.
 
 **Column background pieces** `[STATIC]` (image sizes `[DATA]`). The tool-menu column is 96 px wide
 and is assembled from these instances, chosen by screen height:

@@ -80,6 +80,25 @@ with rates 7/7/7; every starter town (`.st3`) stores funds 20,000 with rates 7/7
 file contains an outstanding bond. A city started from a terrain or starter town begins with the
 funds stored in that file unless the new-city dialog overrides them [INFERRED].
 
+`[OBSERVED]` New cities created by the original:
+
+| Difficulty | Funds | Bonds |
+|---|---|---|
+| Easy | 50,000 | none |
+| Medium | 20,000 | none |
+| Hard | 10,000 | exactly one outstanding bond |
+
+The Hard bond is stored in the budget record as (1, founding year + 10, 10,000, 12,000, 12,000, 0,
+100). That is a 10,000 principal repaid at 100 per month over 120 months (12,000 in total), which
+matches the §8 formula with the shipped `[Bonds]` values. The bond makes the budget record 25 bytes
+longer (2,006 bytes instead of 1,981). This is the only bond observed in any file, and it
+confirms the bond layout of the Persisted state section.
+
+`[OBSERVED]` Yearly costs:
+* A lone police station cost §240 a year, i.e. 20 a month at 100 % funding, charged on 1 January.
+* With Auto Budget **unchecked** and funds positive, no budget window opened at the year end
+  (two year ends observed).
+
 ## 4. Taxes
 
 ### 4.1 Tax groups
@@ -289,7 +308,11 @@ Steps, in order [STATIC]:
     * `funds −= ordCostYTD + dealCostYTD + bondYTD`;
     * every YTD accumulator is reset to 0.
 
-    **Money therefore changes hands only once a year.** During the year the YTD figures are
+    **Money therefore changes hands only once a year.** `[OBSERVED]` A small test city (two coal
+    plants, pump, police, fire, hospital, one road and a residential zone, Auto Budget on) kept
+    its funds unchanged from February to December. Funds dropped by the same §1,344 at each 1
+    January (1902 and 1903), and no year-end budget window appeared. Construction purchases, by
+    contrast, are charged at once (`25-rendering.md` §9.4). During the year the YTD figures are
     "owed" amounts shown in the budget window.
 11. Debt floor: if the budget's "debt floor" flag is set and funds < −99,999, funds are set to
     −99,999 [STATIC]. The flag is clear at creation and load. Each entry of the cheat text

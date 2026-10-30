@@ -20,10 +20,26 @@ type and size (`10-save-format.md` §5.2, §9). The open issues are about **valu
 | # | Issue | Owner | Recommended interim behaviour |
 |---|---|---|---|
 | 1.1 | Initial values for a brand-new city of several record fields: the police and fire records, the flammability trailer, the land-value sums, world-layer scalars, the power month index, the disaster manager | 10 §6.5, §6.12–§6.16 | Best source: a city saved by the original immediately after **New City**, before the simulation runs. Such a save has been checked `[OBSERVED]`, and every record in it parses with the layouts of `10-save-format.md`. Capture one per map size and difficulty and use its records as templates. Second-best source: a shipped terrain file (`.sct`) of the same map size [INFERRED]. |
-| 1.2 | Default per-class property values for a newly placed civic building (power plants, water facilities, services, transit) | 10 §6.2.5, 16, 17 | Use the values observed on freshly built facilities in the shipped cities. Then initialise age and lifetime fields as in `16-sim-utilities.md` §2.3. |
+| 1.2 | Default per-class property values for a newly placed civic building | 10 §6.2.5, 16, 17 | **Mostly closed** `[OBSERVED]`: values for coal plant, wind mill, pump, water tower, police, fire, hospital, school, college, library, bus stop and plopped landmark. Also observed since: oil, gas, nuclear and solar plants (max life differs per plant, random spread), water treatment, desalination, a small park and a rail/subway station (12361). Still open: the rail-only (12230) and subway-only (12360) stations, other park types, and the meaning of several values. The rows are in `10-save-format.md` §6.2.5. The treatment plant's four properties are 0 when new and grow in use. |
 | 1.3 | Record layouts written by the original (pre-Unlimited) release | 10 §7.3 | Treat records with unknown versions as absent, and initialise the subsystem to its new-city state. |
 | 1.4 | Fields with known types but unknown meaning (piece-word bits, two occupant booleans, the six advisor-manager booleans, the outer value `430E2EE6`, minor scalars) | 10 | Preserve them on re-save. Write the most common shipped value for new objects. |
 | 1.5 | Index entry order when a container grows past 1023 entries | 02 §2 | Append in key order. This affects byte comparison only, not loading. |
+
+## 1a. Closed by black-box observation
+
+These items are now settled `[OBSERVED]`:
+* new-city speed is 1 (`14-sim-clock.md`);
+* the terrain editor's feature picker and sliders exist (`11-world-terrain.md` §3.1, `09` §3.4);
+* the record `430E2EE6` is not written by build 2.0.949 (`10` §3.6);
+* the timing of disaster seed entries (`10` §6.5);
+* the format-revision word is 4 (`10` §3.2);
+* money is settled once a year (`19` §7);
+* Hard difficulty stores one 10,000 bond (`19` §3);
+* the New City flags are Disasters / Auto Budget (`10` §3.2);
+* the scheme IDs for each dialog choice are known (`10` §3.7);
+* map edges are 64/128/192/256 (`11`);
+* pickers and transit tools are gated by year (`09` §7a.2);
+* the query panel layouts are known (`09` §7a.4).
 
 ## 2. Simulation fidelity (S2)
 
@@ -38,17 +54,17 @@ type and size (`10-save-format.md` §5.2, §9). The open issues are about **valu
 | 2.7 | Recycling-centre and water-treatment formulas, `DefaultLeak`, expired-plant variant | 16 | Recycling removes `Capacity` units of garbage per month; treatment subtracts its capacity from water pollution (17 §7.2). |
 | 2.8 | Source of each building's power consumption | 12 §9.1, 13, 16 | One unit per lot tile, times the building's density class. |
 | 2.9 | Identity of several advisor metrics, and the ordinance → acknowledgement topic table | 22 §3.8–§3.13 | Use the documented thresholds against the nearest documented statistic. |
-| 2.10 | Department → budget line mapping for police, fire, health and education | 19 §6.1 | As tabled in 19 `[INFERRED]`. |
+| 2.10 | Department → budget line mapping | 19 §6.1, 09 §6.1 | **Partly closed** `[OBSERVED]`: the six funded lines are Education, Public Health, Fire, Roads, Police and Mass Transit. Which department ID belongs to which line, apart from roads and transit, is still [INFERRED]. |
 | 2.11 | Aura layer run trigger | 14 §6, 17 §8 | Run daily, like the police and fire layers. |
 
 ## 3. Presentation (S3)
 
 | # | Issue | Owner | Recommended interim behaviour |
 |---|---|---|---|
-| 3.1 | How a data-map value is mapped to a palette row | 25 §9, 09 §7.2 | Linear mapping of the layer's value range onto palette rows 0–255. |
-| 3.2 | Selection highlight, placement preview and cursor cost text | 25, 09 | Translucent tile tint (green = valid, red = invalid). Cost text next to the cursor. |
+| 3.1 | How a data-map value is mapped to a palette row | 25 §9.2, 09 §7.2 | **Mostly closed** `[OBSERVED]`: the layer → ramp assignment is known; the band edges remain. Use row = 31 − ⌊value/8⌋. |
+| 3.2 | Selection highlight, placement preview and cursor cost text | 25 §9.4 | **Closed** `[OBSERVED]`: cyan footprint, network path and zone-coloured rectangle; red tint over an occupied target; cost label below and to the right of the cursor. |
 | 3.3 | Draw-order tie-break between moving and static objects | 25 §5.2 | Static before moving, when keys are equal. |
-| 3.4 | Slider, framed-window and tab controls; third-level fly-out layout; bottom-bar anchors P1–P4 | 08 | The tool-menu column (right edge) and the bottom-bar arrangement are now `[OBSERVED]` (08 §4.2, §7). Lay out the rest from the shipped images, matching black-box screenshots. |
+| 3.4 | Slider, framed-window and tab controls; bottom-bar anchors P1–P4 | 08 | Fly-out geometry, tool-column placement and the bottom-bar arrangement at 640, 800 and 1024 are now `[OBSERVED]` (08 §4.2, §7; 09 §7a). Lay out the remaining controls from the shipped images. |
 | 3.5 | Edge-scroll border sizes, the animation and view-update tick rate | 08 §8, 25 §10 | 8-px border; 60 view updates per second. |
 | 3.6 | Ambient-sound area weighting by city state and zoom | 06 §5.3 | Choose the schedule of the dominant zone type under the view centre. |
 | 3.7 | Intro video codec | 07 | Decode with an existing TQI/TGQ decoder (the format is publicly documented). |
