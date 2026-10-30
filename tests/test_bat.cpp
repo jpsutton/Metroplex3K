@@ -1,4 +1,5 @@
 #include "core/bat.h"
+#include "core/refpack.h"
 #include <cstdio>
 #include "testutil.h"
 using namespace m3k;
@@ -69,7 +70,7 @@ int main() {
     BldFile v7 = b;
     IxfFile f; f.openMemory(file);
     Bytes mod; f.getBytes(kBldModelKey, mod);
-    mod[0] = 7;
+    mod[0] = 6;
     IxfWriter w; w.add(kBldModelKey, mod);
     threw = false;
     try { BldFile::parse(w.build()); } catch (const FormatError& e) { threw = std::string(e.what()).find("version") != std::string::npos; }
@@ -217,6 +218,48 @@ int main() {
     CHECK(readUserBuildingSet(c3, back2) && back2.pairs.size() == 1);
     IxfFile f; f.openMemory(c3);
     CHECK(f.has({1, 2, 3}));
+  }
+  // .met / .plt text files, palette conventions, categories, legacy version 7, writer tail
+  {
+    size_t bad = 9;
+    auto met = parseBatMet("2,1,3:\"a 1.bmp\",\"a 2.bmp\",\"a 3.bmp\",\"a 4.bmp\"\r\n1,2,3:\"b 1.bmp\", \"b 2.bmp\",\"b 3.bmp\",\"b 4.bmp\"\r\n", &bad);
+    CHECK(bad == 0 && met.size() == 2 && met[0].x == 2 && met[0].z == 3 && met[0].view[3] == "a 4.bmp" && met[1].view[1] == "b 2.bmp");
+    met = parseBatMet("junk\n1,1,1:\"only\"\n", &bad);
+    CHECK(met.empty() && bad == 2);
+    auto plt = parseBatPlt("0,0=\"gothic 01.tga\"\r\n3,2=\"x y.tga\"\nbroken\n", &bad);
+    CHECK(plt.size() == 2 && bad == 1 && plt[1].col == 3 && plt[1].row == 2 && plt[1].file == "x y.tga");
+    BldPaletteEntry pe{"brick 06.tga |1A2B3C4D", 0};
+    std::string base; uint32_t id = 0;
+    CHECK(pe.split(base, id) && base == "brick 06.tga" && id == 0x1A2B3C4D);
+    BldPaletteEntry shortE{"short |1", 0}, plain{"brick 06.tga", 0}, col{"color 10,20,30", 0}, brick{"brick", 0};
+    CHECK(!shortE.split(base, id) && !plain.split(base, id));
+    int rgb[3];
+    CHECK(col.solidColor(rgb) && rgb[0] == 10 && rgb[2] == 30 && !brick.solidColor(rgb));
+    CHECK(std::string(batCategoryName(0x208)) == "Residential" && std::string(batCategoryName(0x217)) == "Other" &&
+          !batCategoryName(0x207) && !batCategoryName(0x218));
+    // version 7 stores H - 1
+    Bytes mod; IxfFile f7; f7.openMemory(file); f7.getBytes(kBldModelKey, mod);
+    mod[0] = 7; mod[5] = uint8_t(b.model.H - 1); mod[6] = 0;
+    IxfWriter w7; w7.add(kBldModelKey, mod);
+    CHECK(BldFile::parse(w7.build()).model.H == b.model.H);
+    // writer defect: RefPack header announces n + n/9 + 1000 bytes; reader ignores the tail
+    Bytes m8; f7.getBytes(kBldModelKey, m8);
+    size_t off = 0x21 + size_t(b.model.N) * b.model.N * 4 + 4;
+    uint32_t P = rd32(&m8[off]);
+    CHECK(rd32(&m8[off + 4]) == P);
+    Bytes packed(m8.begin() + long(off + 8), m8.begin() + long(off + 4 + P));
+    size_t n = b.model.cells.size() * 32;
+    CHECK(refpackDecode(packed.data(), packed.size()).size() == n + n / 9 + 1000);
+    // property records carry the substitute instances; info record keeps its 8-byte trailer
+    Bytes info; f7.getBytes(kBldInfoKey, info);
+    CHECK(rd32(&info[info.size() - 4]) == 0x45FEEAC6 && rd32(&info[info.size() - 8]) == 0);
+    // thumbnail record: format 0x07F0, 200x200
+    Bytes th; f7.getBytes(kBldThumbKey, th);
+    CHECK(rd16(&th[0]) == 0x07F0 && rd16(&th[2]) == 200 && rd16(&th[4]) == 200);
+    // data starts after the 1024-entry index block
+    size_t firstData = 0xFFFFFFF;
+    for (const auto& e : f7.entries()) firstData = std::min<size_t>(firstData, e.offset);
+    CHECK(firstData == 20484);
   }
   // lights
   {

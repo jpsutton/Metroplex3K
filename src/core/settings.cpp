@@ -141,6 +141,102 @@ int chooseCountry(const CountryInputs& in) {
   return kDefaultCountry;
 }
 
+// ---- registry-equivalent values -------------------------------------------------------------
+namespace {
+// Decode a quoted .reg string body (between the quotes): `\\` -> `\`, `\"` -> `"`.
+std::string regUnescape(const std::string& s) {
+  std::string o;
+  for (size_t i = 0; i < s.size(); i++) {
+    if (s[i] == '\\' && i + 1 < s.size() && (s[i + 1] == '\\' || s[i + 1] == '"')) i++;
+    o.push_back(s[i]);
+  }
+  return o;
+}
+bool isOurKey(const std::string& path) {
+  std::string p = toLower(path);
+  std::string q;  // collapse doubled backslashes (Wine) and normalise to single
+  for (char c : p) { if (c == '\\' && !q.empty() && q.back() == '\\') continue; q.push_back(c); }
+  const std::string tail = "electronic arts\\maxis\\simcity 3000 unlimited";
+  if (q.size() < tail.size() || q.compare(q.size() - tail.size(), tail.size(), tail) != 0) return false;
+  std::string head = q.substr(0, q.size() - tail.size());
+  return head.empty() || head.back() == '\\';
+}
+}  // namespace
+
+RegistryValues parseRegFile(const std::string& text) {
+  RegistryValues v;
+  std::istringstream is(text);
+  std::string line;
+  bool inKey = false, done = false;
+  while (!done && std::getline(is, line)) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    if (!line.empty() && line[0] == '[') {
+      if (inKey) { done = true; break; }  // first matching key only
+      size_t e = line.find(']');
+      inKey = e != std::string::npos && isOurKey(line.substr(1, e - 1));
+      if (inKey) v.found = true;
+      continue;
+    }
+    if (!inKey || line.size() < 4 || line[0] != '"') continue;
+    size_t q = line.find('"', 1);
+    if (q == std::string::npos || q + 1 >= line.size() || line[q + 1] != '=') continue;
+    std::string name = toLower(line.substr(1, q - 1)), val = line.substr(q + 2);
+    bool isStr = !val.empty() && val[0] == '"';
+    std::string str;
+    uint32_t dw = 0;
+    bool isDw = false;
+    if (isStr) {
+      size_t e = val.rfind('"');
+      str = regUnescape(val.substr(1, e > 0 ? e - 1 : 0));
+    } else if (val.compare(0, 6, "dword:") == 0) {
+      isDw = true;
+      dw = uint32_t(std::strtoul(val.c_str() + 6, nullptr, 16));
+    } else continue;
+    if (name == "installedpath" && isStr) v.installedPath = str;
+    else if (name == "scenariocreator" && isStr) v.scenarioCreator = str;
+    else if (name == "ergc" && isStr) v.ergc = str;
+    else if (name == "language") { if (isDw) v.languageDword = dw; else v.languageString = str; }
+    else if (name == "country") { if (isDw) v.countryDword = dw; else v.countryString = str; }
+    else if (name == "sku" && isDw) v.sku = dw;
+  }
+  return v;
+}
+
+void RegistryValues::applyTo(LanguageInputs& l, CountryInputs& c) const {
+  l.registryDword = languageDword;
+  l.registryString = languageString;
+  c.registryDword = countryDword;
+  c.registryString = countryString;
+}
+
+uint16_t langIdFromPosixLocale(const std::string& locale) {
+  std::string l = toLower(locale);
+  size_t cut = l.find_first_of(".@");
+  if (cut != std::string::npos) l = l.substr(0, cut);
+  std::string lang = l.substr(0, l.find_first_of("_-")), region;
+  size_t u = l.find_first_of("_-");
+  if (u != std::string::npos) region = l.substr(u + 1);
+  if (lang == "en") return region == "gb" || region == "au" || region == "nz" || region == "ie" || region == "za" ? 0x0809 : 0x0409;
+  if (lang == "fr") return 0x040C;
+  if (lang == "de") return 0x0407;
+  if (lang == "it") return 0x0410;
+  if (lang == "es") return region == "mx" ? 0x080A : 0x0C0A;
+  if (lang == "nl") return 0x0413;
+  if (lang == "da") return 0x0406;
+  if (lang == "sv") return 0x041D;
+  if (lang == "nb" || lang == "nn" || lang == "no") return 0x0414;
+  if (lang == "fi") return 0x040B;
+  if (lang == "he" || lang == "iw") return 0x040D;
+  if (lang == "ru") return 0x0419;
+  if (lang == "pt") return 0x0416;
+  if (lang == "ja") return 0x0411;
+  if (lang == "pl") return 0x0415;
+  if (lang == "zh") return region == "tw" || region == "hk" ? 0x0404 : 0x0804;
+  if (lang == "th") return 0x041E;
+  if (lang == "ko") return 0x0412;
+  return 0;
+}
+
 // ---- command line ---------------------------------------------------------------------------
 std::vector<std::string> tokenizeCommandLine(const std::string& s) {
   std::vector<std::string> out;

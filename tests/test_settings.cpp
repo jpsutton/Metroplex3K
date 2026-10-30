@@ -1,3 +1,4 @@
+#include <map>
 #include "core/cheats.h"
 #include "core/settings.h"
 #include "testutil.h"
@@ -148,6 +149,50 @@ int main() {
     CHECK(!s.load(tmp.parent_path() / "nope.cfg"));
     fs::remove_all(tmp.parent_path());
     CHECK(!defaultPrefsDir().empty());
+  }
+  // LANGID table of spec 05 2.4: every row, and everything else maps to 1.
+  {
+    std::map<int, int> want;
+    auto row = [&](std::initializer_list<int> ids, int lang) { for (int i : ids) want[i] = lang; };
+    row({0x0809, 0x0C09, 0x1409, 0x1809, 0x1C09, 0x2009, 0x2409, 0x2809, 0x2C09, 0x3009, 0x3409}, 2);
+    row({0x040C, 0x080C, 0x0C0C, 0x100C, 0x140C, 0x180C}, 3);
+    row({0x0407, 0x0807, 0x0C07, 0x1007, 0x1407}, 4);
+    row({0x0410, 0x0810}, 5);
+    for (int hi = 0x04; hi <= 0x50; hi += 0x04) if (hi != 0x08) want[(hi << 8) | 0x0A] = 6;
+    row({0x080A}, 41); row({0x0413, 0x0813}, 7); row({0x0406}, 8); row({0x041D, 0x081D}, 9); row({0x0414, 0x0814}, 10);
+    row({0x040B}, 11); row({0x040D}, 12); row({0x0419}, 13); row({0x0416, 0x0816}, 14); row({0x0411}, 15); row({0x0415}, 16);
+    row({0x0804, 0x1004, 0x1404}, 17); row({0x0404, 0x0C04}, 18); row({0x041E}, 19); row({0x0412, 0x0812}, 20);
+    row({0x0439}, 21);
+    for (int hi = 0x04; hi <= 0x40; hi += 0x04) want[(hi << 8) | 0x01] = 22;
+    row({0x0402}, 23); row({0x0422}, 25); row({0x0405}, 26); row({0x0408}, 27); row({0x040E}, 28); row({0x040F}, 29);
+    row({0x0418}, 30); row({0x041B}, 32); row({0x041C}, 33); row({0x041F}, 34); row({0x042A}, 43);
+    for (int id = 0; id < 65536; id++) {
+      auto it = want.find(id);
+      CHECK(languageFromLangId(uint16_t(id)) == (it == want.end() ? 1 : it->second));
+    }
+    CHECK(langIdFromPosixLocale("de_DE.UTF-8") == 0x0407 && langIdFromPosixLocale("en_GB") == 0x0809 &&
+          langIdFromPosixLocale("en_US.utf8") == 0x0409 && langIdFromPosixLocale("zh_TW") == 0x0404 &&
+          langIdFromPosixLocale("sv_SE@euro") == 0x041D && langIdFromPosixLocale("tlh") == 0);
+  }
+  // registry-equivalent values from a Wine / Windows .reg text
+  {
+    const std::string reg =
+        "WINE REGISTRY Version 2\n\n[Software\\\\Other] 1\n\"Language\"=dword:00000001\n\n"
+        "[Software\\\\Wow6432Node\\\\Electronic Arts\\\\Maxis\\\\SimCity 3000 Unlimited] 1600000000\n"
+        "#time=1d\n\"InstalledPath\"=\"C:\\\\GOG\\\\SC3U\\\\Apps\"\n\"Language\"=dword:00000409\n"
+        "\"Country\"=dword:00000036\n\"ergc\"=\"abc\\\"d\"\n\"SKU\"=dword:00000002\n\n[Software\\\\Next]\n\"Language\"=dword:00000007\n";
+    RegistryValues v = parseRegFile(reg);
+    CHECK(v.found && v.languageDword && *v.languageDword == 0x409 && v.countryDword && *v.countryDword == 54);
+    CHECK(v.installedPath == "C:\\GOG\\SC3U\\Apps" && v.ergc == "abc\"d" && v.sku && *v.sku == 2 && !v.languageString);
+    RegistryValues w = parseRegFile("Windows Registry Editor Version 5.00\r\n\r\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Electronic Arts\\Maxis\\SimCity 3000 Unlimited]\r\n\"Language\"=\"German\"\r\n");
+    CHECK(w.found && !w.languageDword && w.languageString && *w.languageString == "German");
+    LanguageInputs li; CountryInputs ci;
+    li.installed = [](int id) { return id == 1 || id == 4; };
+    w.applyTo(li, ci);
+    CHECK(chooseLanguage(li) == 4 && chooseCountry(ci) == 54);
+    v.applyTo(li, ci);
+    CHECK(chooseLanguage(li) == 1 && chooseCountry(ci) == 54);
+    CHECK(!parseRegFile("[Software\\\\Other]\n\"Language\"=dword:00000004\n").found);
   }
   // cheats
   {
