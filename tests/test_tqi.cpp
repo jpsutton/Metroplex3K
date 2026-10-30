@@ -212,9 +212,26 @@ static void testPlayer() {
   CHECK(w2[0] == 0xFFAA0000u && w2[1] == 0xFFAA0000u && w2[2] == 0xFF112233u);
 }
 
+// Real INTRO.TGQ SCHl payload: tag 0xFD opens the audio sub-header and has no length byte.
+static void testRealAudioHeader() {
+  Bytes file;
+  Bytes sch = {'P', 'T', 0, 0, 0x00, 1, 0x02, 0x06, 1, 0x65, 0xFD, 0x85, 3, 0x18, 0x68, 0x0C,
+               0x82, 1, 2, 0x83, 1, 7, 0x8A, 4, 0, 0, 0, 0, 0xFF, 0, 0, 0};
+  chunk(file, "SCHl", sch);
+  Bytes a; put32(a, 28); for (int k = 0; k < 4; k++) put16(a, 0);
+  a.push_back(0); a.push_back(0); for (int k = 0; k < 28; k++) a.push_back(0);
+  chunk(file, "SCDl", a);
+  chunk(file, "SCEl", {});
+  TgqMovie m; CHECK(m.parse(file));
+  CHECK(m.audio().present && m.audio().channels == 2 && m.audio().compression == 7);
+  CHECK(m.audio().totalFrames == 1599500 && m.audio().sampleRate == 22050);
+  PcmBuffer pcm; CHECK(m.decodeAudio(pcm)); CHECK(pcm.samples.size() == 56);
+}
+
 int main() {
   testRoundTrip();
   testRobust();
   testPlayer();
+  testRealAudioHeader();
   TEST_MAIN_END();
 }

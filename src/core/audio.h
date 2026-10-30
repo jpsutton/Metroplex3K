@@ -298,6 +298,8 @@ class AudioSystem {
   void setSongEnabled(int id, bool on) { playlist_.setEnabled(id, on); }
   bool playSong(int id);  // explicit request (also non-list songs)
   void stopMusic();
+  // While held (e.g. intro movie plays its own audio) the playlist neither plays nor advances.
+  void setMusicHeld(bool held);
   int currentSong() const { return curSong_; }
   MusicPlaylist& playlist() { return playlist_; }
 
@@ -330,6 +332,7 @@ class AudioSystem {
   // music
   MusicPlaylist playlist_;
   bool musicOn_ = true;
+  bool musicHeld_ = false;
   AudioMixer::Handle musicH_ = 0;
   int curSong_ = 0;
   int64_t musicElapsed_ = 0, musicDelay_ = 0;

@@ -302,6 +302,7 @@ void Game::startIntro() {
   intro_->start();
   introMs_ = 0;
   if (intro_->state() == IntroState::Finished) { finishIntro(); return; }
+  if (audio_) audio_->setMusicHeld(true);  // movie carries its own soundtrack
   if (audio_ && general_.musicOn) {
     float vol = introVolume(general_.musicVolume);
     auto pcm = std::make_shared<PcmBuffer>();
@@ -314,6 +315,7 @@ void Game::startIntro() {
 
 void Game::finishIntro() {
   if (audio_ && introVoice_) audio_->mixer().stop(introVoice_);
+  if (audio_) audio_->setMusicHeld(false);
   introVoice_ = 0;
   intro_.reset(); movie_.reset();
   if (scr_ == Screen::Intro) scr_ = haveData_ ? Screen::MainMenu : Screen::NeedData;

@@ -15,6 +15,7 @@ void parseSchl(const uint8_t* p, size_t n, TgqAudioInfo& a) {
   while (pos < n) {
     uint8_t tag = p[pos++];
     if (tag == 0xFF) break;
+    if (tag == 0xFD) continue;  // opens the audio sub-header: bare marker, no length byte
     if (pos >= n) break;
     size_t L = p[pos++];
     if (pos + L > n) break;

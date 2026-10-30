@@ -744,6 +744,11 @@ void AudioSystem::setMusicEnabled(bool on) {
   if (!on) stopMusic();
 }
 
+void AudioSystem::setMusicHeld(bool held) {
+  musicHeld_ = held;
+  if (held) stopMusic();
+}
+
 bool AudioSystem::playSong(int id) {
   for (auto& m : ini_.music) {
     if (m.id != id) continue;
@@ -784,7 +789,7 @@ bool AudioSystem::setAmbientArea(int index) {
 void AudioSystem::update(int64_t dt) {
   now_ += dt;
   // music
-  if (musicOn_) {
+  if (musicOn_ && !musicHeld_) {
     if (musicH_ && !mixer_.isPlaying(musicH_)) {
       musicH_ = 0; curSong_ = 0; musicDelayRunning_ = true; musicElapsed_ = 0;
       musicDelay_ = ini_.options.get("MusicPlayerSongDelayMsec", 0);
