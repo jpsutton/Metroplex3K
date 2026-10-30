@@ -174,10 +174,11 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
   auto lines = buildQueryLines(E, q);
   int lh = lineHeight(ui);
   int w = 300, h = 30 + int(lines.size()) * lh + 10 + (q.growable ? 28 : 0) + 6;
-  Rect r = placed ? rect : centered(ui, w, h);
+  Rect r = placed ? rect : Rect{(ui.W - w) / 2, (ui.H - h) / 2, w, h};
   r.w = w; r.h = h;
   if (r.x + r.w > ui.W) r.x = ui.W - r.w;
   if (r.y + r.h > ui.H) r.y = ui.H - r.h;
+  ui.windowRects.push_back(r);
   if (r.x < 0) r.x = 0;
   if (r.y < 0) r.y = 0;
   rect = r; placed = true;   // callers hit-test the drawn rect, not the requested anchor
