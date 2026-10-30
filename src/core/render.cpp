@@ -189,6 +189,8 @@ void Renderer::centreOnWorld(Camera& cam, float x, float z) const {
 void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt) {
   const World& w = *world_;
   if (!shadeValid_) computeShade();
+  roadMask_.assign(size_t(w.W) * w.H, 0);
+  for (const auto& np : w.surface) if (w.inTiles(np.x, np.z)) roadMask_[w.tIdx(np.x, np.z)] = 1;
   const int z = cam.zoom;
   const float Wt = 8.f * float(1 << z), Ht = Wt / 2, A = float(1 << z);
   // Visible view-tile range: project the screen corners back to view space (flat) with margin
@@ -259,6 +261,19 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt) {
       int wx0, wz0; viewToWorldVertex(cam.rot, w.W, w.H, u, v, wx0, wz0);
       int seed = ((-169 * wz0 - 327 * wx0) % 1024 + 1024) % 1024;
       // Split: top(0), right(1), left(2), bottom(3). Left/right equal height -> split along L-R.
+      {
+        int zt = w.zone[w.tIdx(wx[0] < wx[3] ? wx[0] : wx[3], wz[0] < wz[3] ? wz[0] : wz[3])];
+        // tile (min corner) tint: zones and roads
+        int tx0 = std::min(std::min(wx[0], wx[1]), std::min(wx[2], wx[3])), tz0 = std::min(std::min(wz[0], wz[1]), std::min(wz[2], wz[3]));
+        zt = w.zone[w.tIdx(tx0, tz0)];
+        float tr = 0, tg = 0, tb = 0, ta = 0;
+        if (roadMask_[w.tIdx(tx0, tz0)]) { tr = 90; tg = 90; tb = 95; ta = 0.85f; }
+        else if (zt >= 1 && zt <= 3) { tr = 40; tg = 210; tb = 60; ta = 0.45f; }
+        else if (zt >= 5 && zt <= 7) { tr = 60; tg = 100; tb = 250; ta = 0.45f; }
+        else if (zt >= 9 && zt <= 11) { tr = 240; tg = 210; tb = 40; ta = 0.45f; }
+        else if (zt) { tr = 200; tg = 120; tb = 200; ta = 0.45f; }
+        if (ta > 0) for (auto& q : vt) { q.r += (tr - q.r) * ta; q.g += (tg - q.g) * ta; q.b += (tb - q.b) * ta; }
+      }
       auto fillQuad = [&](const Vtx* P, bool noise) {
         float hl = float(w.altAt(wx[2], wz[2])), hr = float(w.altAt(wx[1], wz[1]));
         if (hl == hr) { fillTri(P[2], P[0], P[1], seed, noise); fillTri(P[2], P[1], P[3], seed, noise); }

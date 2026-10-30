@@ -13,6 +13,7 @@
 #include "core/gamedata.h"
 #include "core/gamedir.h"
 #include "core/render.h"
+#include "core/sim.h"
 #include "core/terrain_gen.h"
 #include "core/world.h"
 
@@ -52,6 +53,15 @@ struct App {
   bool running = true;
   std::string status;
   uint32_t newSeed = 1;
+  SimData simData;
+  Sim sim;
+  bool simReady = false;
+  Tool tool = Tool::None;
+  bool paused = true;
+  int speed = 1;
+  double simAccum = 0;
+  int dragX0 = -1, dragZ0 = -1;
+  bool toolDown = false;
 
   void setTitle() {
     std::string t = "Metroplex3K";
@@ -60,6 +70,12 @@ struct App {
       t += "  " + std::to_string(world.W) + "x" + std::to_string(world.H);
       t += "  year " + std::to_string(world.info.year);
       t += "  zoom " + std::to_string(cam.zoom) + " rot " + std::to_string(cam.rot);
+      if (simReady) {
+        t += "  $" + std::to_string(sim.funds) + "  pop " + std::to_string(sim.population());
+        t += "  R" + std::to_string(sim.valveR.value) + " C" + std::to_string(sim.valveC.value) + " I" + std::to_string(sim.valveI.value);
+        t += paused ? "  PAUSED" : "  speed " + std::to_string(speed);
+        t += std::string("  tool: ") + toolName(tool);
+      }
     }
     if (!status.empty()) t += "  [" + status + "]";
     SDL_SetWindowTitle(win, t.c_str());
@@ -84,6 +100,9 @@ struct App {
       if (world.scheme.floraSet) data.mountFloraSet(world.scheme.floraSet);
     }
     renderer.setWorld(&world, haveData ? &data : nullptr);
+    if (haveData && simData.zones.empty()) simData.load(data);
+    sim.init(&world, haveData ? &data : nullptr, &simData, SDL_GetTicks());
+    simReady = true; paused = true;
     cam.zoom = world.view.valid ? std::max(0, std::min(4, world.view.zoom)) : 2;
     cam.rot = world.view.valid ? (world.view.rotation & 3) : 0;
     float cx = world.view.valid ? world.view.centreX : world.W / 2.f, cz = world.view.valid ? world.view.centreZ : world.H / 2.f;
@@ -138,6 +157,23 @@ struct App {
     if (initGame(r)) { status = "game data found"; loadCity(0); }
   }
 
+  void applyTool(int x0, int z0, int x1, int z1) {
+    if (!simReady) return;
+    switch (tool) {
+      case Tool::Road: {
+        std::vector<std::pair<int, int>> path;
+        int x = x0, z = z0;
+        while (x != x1) { path.push_back({x, z}); x += x1 > x ? 1 : -1; }
+        while (z != z1) { path.push_back({x, z}); z += z1 > z ? 1 : -1; }
+        path.push_back({x1, z1});
+        sim.buildRoad(path); break;
+      }
+      case Tool::Bulldoze: sim.bulldoze(x0, z0, x1, z1); break;
+      case Tool::None: break;
+      default: sim.paintZone(x0, z0, x1, z1, tool); break;
+    }
+  }
+
   void ensureTexture(int w, int h) {
     if (tex && texW == w && texH == h) return;
     if (tex) SDL_DestroyTexture(tex);
@@ -171,11 +207,12 @@ struct App {
     const char* help =
         "Arrows/WASD: scroll   Mouse wheel / +,-: zoom   Q/E: rotate   G: grid\n"
         "L / K: next / previous city   N: new random city (Shift: larger map)\n"
-        "F11: fullscreen   Esc: quit\n"
+        "1-9: zone R/C/I low/med/high   R: road   B: bulldoze   X: dezone   0: no tool (drag with left mouse)\n"
+        "Space: pause   F1/F2/F3: speed   F11: fullscreen   Esc: quit\n"
         "Drop a game folder or the GOG installer .exe onto the window to set the game data.";
     std::cout << help << std::endl;
     bool dragging = false;
-    uint32_t last = SDL_GetTicks();
+    uint32_t last = SDL_GetTicks(), lastSim = last;
     while (running) {
       SDL_Event e;
       while (SDL_PollEvent(&e)) {
@@ -185,13 +222,37 @@ struct App {
           case SDL_MOUSEWHEEL:
             if (world.W) { cam.zoom = std::max(0, std::min(4, cam.zoom + (e.wheel.y > 0 ? 1 : e.wheel.y < 0 ? -1 : 0))); }
             break;
-          case SDL_MOUSEBUTTONDOWN: if (e.button.button == SDL_BUTTON_MIDDLE || e.button.button == SDL_BUTTON_RIGHT) dragging = true; break;
-          case SDL_MOUSEBUTTONUP: dragging = false; break;
+          case SDL_MOUSEBUTTONDOWN:
+            if (e.button.button == SDL_BUTTON_MIDDLE || e.button.button == SDL_BUTTON_RIGHT) dragging = true;
+            else if (e.button.button == SDL_BUTTON_LEFT && tool != Tool::None && world.W) {
+              int tx, tz;
+              if (renderer.pickTile(cam, e.button.x, e.button.y, tx, tz)) { dragX0 = tx; dragZ0 = tz; toolDown = true; }
+            }
+            break;
+          case SDL_MOUSEBUTTONUP:
+            dragging = false;
+            if (e.button.button == SDL_BUTTON_LEFT && toolDown) {
+              toolDown = false;
+              int tx, tz;
+              if (renderer.pickTile(cam, e.button.x, e.button.y, tx, tz)) applyTool(dragX0, dragZ0, tx, tz);
+            }
+            break;
           case SDL_MOUSEMOTION: if (dragging && world.W) scrollPixels(-float(e.motion.xrel), -float(e.motion.yrel)); break;
           case SDL_KEYDOWN: {
             bool shift = (e.key.keysym.mod & KMOD_SHIFT) != 0;
             switch (e.key.keysym.sym) {
               case SDLK_ESCAPE: running = false; break;
+              case SDLK_SPACE: paused = !paused; break;
+              case SDLK_F1: speed = 1; paused = false; break;
+              case SDLK_F2: speed = 2; paused = false; break;
+              case SDLK_F3: speed = 3; paused = false; break;
+              case SDLK_1: tool = Tool::ZoneRL; break; case SDLK_2: tool = Tool::ZoneRM; break; case SDLK_3: tool = Tool::ZoneRH; break;
+              case SDLK_4: tool = Tool::ZoneCL; break; case SDLK_5: tool = Tool::ZoneCM; break; case SDLK_6: tool = Tool::ZoneCH; break;
+              case SDLK_7: tool = Tool::ZoneIL; break; case SDLK_8: tool = Tool::ZoneIM; break; case SDLK_9: tool = Tool::ZoneIH; break;
+              case SDLK_r: tool = Tool::Road; break;
+              case SDLK_b: tool = Tool::Bulldoze; break;
+              case SDLK_x: tool = Tool::Dezone; break;
+              case SDLK_0: tool = Tool::None; break;
               case SDLK_g: opt.grid = !opt.grid; break;
               case SDLK_q: if (world.W) rotate(-1); break;
               case SDLK_e: if (world.W) rotate(1); break;
@@ -212,6 +273,18 @@ struct App {
           default: break;
         }
       }
+      if (simReady && !paused && world.W) {
+        uint32_t nowT = SDL_GetTicks();
+        simAccum += double(nowT - lastSim) / 1000.0 * (speed == 1 ? 1 : speed == 2 ? 3 : 10);
+        while (simAccum >= 0.25) {
+          simAccum -= 0.25;
+          sim.tickDay();
+          if (sim.day % 30 == 0) sim.tickMonth();
+          world.info.dayOfYear++;
+          if (world.info.dayOfYear > 365) { world.info.dayOfYear = 1; world.info.year++; }
+        }
+      }
+      lastSim = SDL_GetTicks();
       const Uint8* ks = SDL_GetKeyboardState(nullptr);
       if (world.W) {
         float s = 32.f;

@@ -65,6 +65,7 @@ class Renderer {
   int fbW_ = 0, fbH_ = 0;
   std::vector<uint8_t> shade_;
   bool shadeValid_ = false;
+  std::vector<uint8_t> roadMask_;
   Palettes pal_;
   float noise_[1024];
   bool noiseInit_ = false;
