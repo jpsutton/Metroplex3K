@@ -1,28 +1,34 @@
 # Metroplex3K status
 
-Clean-room SimCity 3000 Unlimited compatible engine. C++17, CMake, SDL2 (host app only). Spec in `spec/`.
+Clean-room SimCity 3000 Unlimited compatible engine. C++17, CMake, SDL2 (desktop host only). Spec in `spec/`.
 Build: `mkdir -p build && cd build && cmake .. && make -j8 && ctest`. Run: `build/metroplex3k [--game-dir DIR]`.
-Game data: user's own install (GOG). Auto-detect (`gamedir.*`), drag-drop folder / GOG installer (needs `innoextract`),
-typed path on first screen, `$M3K_GAME_DIR`.
+Game data = the user's own install (GOG). Auto-detect (`gamedir.*`), drag-drop folder or GOG installer (needs
+`innoextract`), typed path on the first screen, `$M3K_GAME_DIR`. See README.md and docs/.
 
 IMPORTANT: no game install was available while this was written. Everything is built from the spec and tested on
-synthetic fixtures only. First run on real data will need fixes. `build/conformance <game dir>` reports parser coverage.
+synthetic fixtures (tests/fake_install.h builds a tiny install on disk). First run on real data will need fixes.
+`build/conformance <game dir>` reports parser coverage over every shipped file type.
 
-## Layout (src/core is platform independent; src/app is the SDL host; Android port = new host)
-- Containers/data: bytes, refpack, ixf, resdb, ini (SYS.PAK), image, gamedata, gamedir, records (raw record store)
-- Save: savefile (load), savewrite (save), world.h, records.*
-- World: terrain_gen (spec 11 sec 3), terraform (sec 4), flora
-- Render: render.* (spec 25 full), font.* (FBF + builtin fallback), ui.* (immediate mode), game.* (screens/HUD/tool menu)
-- Sim: clock, economy, population, growth/valves/landvalue (namespace growth), utilities/services (namespace us),
-  tiling_rules/tiler/network_tools, traffic, disasters, advisors/news/petitioners, scenario/script, bat, settings/cheats
-- city.* owns all subsystems; sim.* is the thin facade used by Game
-- Media: audio/xa_codec, video (+tqi/intro when landed), automata
+## What exists (all in src/core unless noted)
+- Containers/data: ixf, refpack, ini (SYS.PAK), resdb, image, gamedata, gamedir, records (raw record preservation)
+- Save: savefile (load), savewrite (save), world.h
+- World: terrain_gen (spec 11.3, exact RNG), terraform (11.4), flora
+- Render: render (spec 25), font (FBF + built-in fallback), skin (original UI art loader), ui (immediate mode)
+- Shell: game*.cpp (menus, new city, terrain edit, load/save, HUD, tool menu from MenuItem.INI, tools, previews, hotkeys per
+  spec 08 sec 5, cursors, drag/edge scroll, windows, ticker, scenarios, disasters, cheats, intro movie hook)
+- Sim: clock, economy, population, growth/valves/landvalue (m3k::growth), utilities/services (m3k::us), tiling_rules/tiler/
+  network_tools, traffic, disasters, advisors/news/petitioners, scenario/script, bat, settings/cheats; city.* owns all
+- Media: audio/xa_codec, video/tqi/intro, automata (+ game_street.cpp host adapter)
+- Host: src/app/main.cpp (SDL2). Tools: conformance, render_demo, game_demo, game_play_demo, city_sim_demo, windows_demo, skin_demo
+- 37 test executables; `ctest` must stay green
 
-## Known gaps
-- Windows (budget detail pages, ordinances, advisors, petitioners, query panels, map/graphs) exist as modules; UI
-  hookup in progress (agent K produced src/core/windows.*)
-- Original UI art (MainUI.ixf skins) not used; UI is drawn with the toolkit
-- Growth: some layouts [OPEN] in spec (housing B/C, estates, row houses, seaport pier, runway) fall back
-- Many [OPEN] items use spec/29-open-issues.md recommended defaults; configurable where possible
-- Real-data verification pending (other agent closing open issues on an install)
-- Intro movie: tqi.* (TQI decoder, unverified on real files; tables from MPEG-1 standard, consulted public ffmpeg docs - review licensing notes) + intro.* player
+## Known gaps / approximations
+- Never run against real game data. Parsers follow the spec byte-for-byte but are only verified on synthetic input.
+- Skin: bottom bar art, speed/view button art and main-menu art helpers exist (skin.h) but only the tool-menu column and
+  RCI indicator are hooked into Game; the rest of the HUD uses the toolkit drawing.
+- Advisor inputs (Game::fillAdvisorInputs) fill only the main fields; many advisor rules see zeros.
+- Traffic data-map layer has no per-tile source; street sim needs real sprite data to show anything.
+- Spec [OPEN] items use the defaults from spec/29-open-issues.md; several growth layouts (housing B/C, estates, row houses,
+  seaport pier, runway sequence) fall back to the scatter rule.
+- MPEG-1 tables in tqi.cpp: see docs/LICENSING.md. License not chosen.
+- Android: design notes only (docs/ANDROID.md).
