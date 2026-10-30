@@ -25,3 +25,4 @@ synthetic fixtures only. First run on real data will need fixes. `build/conforma
 - Growth: some layouts [OPEN] in spec (housing B/C, estates, row houses, seaport pier, runway) fall back
 - Many [OPEN] items use spec/29-open-issues.md recommended defaults; configurable where possible
 - Real-data verification pending (other agent closing open issues on an install)
+- Intro movie: tqi.* (TQI decoder, unverified on real files; tables from MPEG-1 standard, consulted public ffmpeg docs - review licensing notes) + intro.* player
