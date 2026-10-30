@@ -170,7 +170,8 @@ int main() {
     { TestCity c = setup(1); c.pw[c.ix(5, 5)] = 0; CHECK(zm.visitTile(c, rng, 5, 5) == kAbNoPower && c.lots[0].state == 2); }
     { TestCity c = setup(1); c.trip[c.ix(5, 5)] = 1; CHECK(zm.visitTile(c, rng, 5, 5) == kAbNoAccess); }
     { TestCity c = setup(1, 3200); c.wt[c.ix(5, 5)] = 0; CHECK(zm.visitTile(c, rng, 5, 5) == kAbNoWater); }   // density 2 without water
-    { TestCity c = setup(1, 3100, 50); CHECK(zm.visitTile(c, rng, 5, 5) == kAbLowLV && c.lots[0].state == 2); } // 200/2 = 100 > 50
+    { TestCity c = setup(1, 3100, 10); CHECK(zm.visitTile(c, rng, 5, 5) == kAbLowLV && c.lots[0].state == 2); } // minLV 30 / 2 = 15 > 10 [OBSERVED threshold]
+    { TestCity c = setup(1, 3100, 50); CHECK(zm.visitTile(c, rng, 5, 5) != kAbLowLV); }                         // 50 >= 15 (the spec's maxLV/2 = 100 would abandon)
     { TestCity c = setup(1, 3100, 90); c.valves[3000].V = -2000; int hit = 0;
       for (int i = 0; i < 30 && !hit; i++) { c.lots[0].state = 1; hit = zm.visitTile(c, rng, 5, 5) == kAbNegDemand; } CHECK(hit); }
     { TestCity c = setup(4); CHECK(zm.visitTile(c, rng, 5, 5) == 0 && c.lots[0].state == 1); }   // construction completes

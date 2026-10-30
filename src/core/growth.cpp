@@ -728,7 +728,10 @@ int ZoneManager::visitRCI(GrowthCity& c, SimRand& rng, int x, int z, const ZoneD
   }
   if (I && farm && (c.airPollution(x, z) > cfg_->ind.maxAgAirPollution || c.waterPollution(x, z) > cfg_->ind.maxAgWaterPollution)) return abandon(kAbFarmPollution);
   if (V < 0 && !field && rng.rand(-int64_t(Min)) < -(int64_t(V - P) / tiles)) return abandon(kAbNegDemand);
-  const bool adequate = cat < 0 || zd.cats[size_t(cat)].maxLV / 2 <= LV;
+  // Spec 15 section 4.3 step 4 says maxLV / 2, but on the shipped cities only 40-60% of the buildings satisfy that
+  // (the loaded cities then lose most of their lots in the first month) while 99.7% satisfy minLV / 2, and the saved
+  // zone-pass statistics show no land-value abandonments. [OBSERVED] threshold: the category's minLV / 2.
+  const bool adequate = cat < 0 || zd.cats[size_t(cat)].minLV / 2 <= LV;
   if (!adequate) return abandon(kAbLowLV);  // rule L never finds a category (original defect)
   const bool flagged = lot.flagged();
   int hi = (!flagged && V > 0 && cat >= 0) ? pickCategoryH(zd, cat, LV, wt) : -1;
