@@ -9,7 +9,7 @@ using namespace m3k;
 static CityConfig makeConfig() {
   CityConfig c;
   c.growth.parseZoneDescriptions(IniFile::fromText(
-      "[ZoneDeveloperDescriptions]\n1=0x619BA64E,3000:3100,1,255,0;3300,1,255,100\n5=0x41A3ADC1,5000:5100,1,255,0\n9=0x41A3ADC2,8000:8100,1,255,0\n"));
+      "[ZoneDeveloperDescriptions]\n1=0x619BA64E,3000:3100,1,255,0;3300,1,255,100\n5=0x41A3ADC1,5000:5100,1,255,0\n9=0xE1A53B30,8000:8100,D,1,255,0\n"));
   auto binds = c.growth.parseRuleBindings(IniFile::fromText(
       "[ZoneDeveloperRules]\n1,0xA22653C0=81F53D09,01F58D3D,4;81F53D09,01F58D3D,11\n5,0x422C9D52=81F53D09,01F58D3D,7\n9,0x422C9D53=81F53D09,01F58D3D,9\n"));
   c.parseFamilyText(4, "TXT! r\r\nLandUse: 3300\r\nKey: 1406,545184782,100,1\r\n");
@@ -64,9 +64,13 @@ int main() {
   CHECK(w.zone[w.tIdx(20, 42)] == 1);
   // power plant (no game data: plopAgent) + power line to the road
   CHECK(c.plopAgent(900, 12111, 4, 4, 42, 30, 100));
-  CHECK(s.buildNetwork(NetworkKind::Power, line(44, 34, 44, 40)));
-  CHECK(c.isPowerLine(44, 36));
-  CHECK(!c.isRoadTile(44, 36));
+  // line crosses the road at z=40 (roads do not conduct, lines may cross them) and touches the zones
+  CHECK(s.buildNetwork(NetworkKind::Power, line(44, 34, 44, 43)));
+  CHECK(s.buildNetwork(NetworkKind::Power, line(41, 38, 43, 38)));
+  CHECK(s.buildNetwork(NetworkKind::Power, line(41, 42, 43, 42)));
+  CHECK(s.buildNetwork(NetworkKind::Power, line(45, 42, 49, 42)));
+  CHECK(c.isPowerLine(44, 36) && c.isPowerLine(44, 40));
+  CHECK(!c.isRoadTile(44, 36) && c.isRoadTile(44, 40));
   int64_t fundsBefore = s.funds;
   // broke player: no-money sound
   int64_t keep = s.funds; s.funds = 0;
@@ -85,6 +89,7 @@ int main() {
   for (auto& o : w.occupants) { if (o.occId == 100 || o.occId == 101 || o.occId == 200 || o.occId == 300) bld++; if (o.state == 1) occupied++; }
   std::printf("year=%d bld=%d occupied=%d pop=%d funds=%lld R=%d C=%d I=%d\n", w.info.year, bld, occupied, s.population(),
               (long long)s.funds, s.valveR.value, s.valveC.value, s.valveI.value);
+  std::printf("%s", c.debugStats().c_str());
   CHECK(bld > 0);
   CHECK(s.funds != fundsBefore);
   CHECK(c.powered(44, 40) || c.powered(20, 42) || c.power.stats().produced > 0);

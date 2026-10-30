@@ -152,6 +152,9 @@ class City {
   // Sound event ids (AUDIO.INI ids) raised by tools; Game maps them to AudioSystem::request.
   std::function<void(int soundId)> onSound;
 
+  // Multi-line human-readable diagnostics: valves, buildings per class/state, power, zone-manager results.
+  std::string debugStats() const;
+
   int64_t lastPowerProduced() const { return power.stats().produced; }
 
  private:

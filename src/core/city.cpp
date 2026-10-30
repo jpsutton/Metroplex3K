@@ -60,6 +60,7 @@ void CityIniSet::load(GameData& g) {
 CityConfig::CityConfig() {
   valve.externalJobDemand = 600;
   valve.jobToResFactor = 1;
+  valve.bootstrapResDemand = 400;
 }
 
 void CityConfig::parseFamilyText(int id, const std::string& text, GameData*) {
@@ -592,7 +593,7 @@ void City::setFallbackRoadPiece(int x, int z) {
   if (it != cfg_.roadFinal.end()) packed = it->second;
   else packed = (mask == 5 ? (29u << 8) | 1 : mask == 10 ? (29u << 8) : (43u << 8));
   NetPiece* p = nullptr;
-  for (auto& q : world_->surface) if (q.x == x && q.z == z) { p = &q; break; }
+  for (auto& q : world_->surface) if (q.x == x && q.z == z && q.pieceId != kFallbackPowerPiece) { p = &q; break; }
   if (!p) { world_->surface.push_back({}); p = &world_->surface.back(); }
   p->x = x; p->z = z; p->y = world_->altAt(x, z);
   p->pieceId = packed >> 8; p->rot = int(packed & 3); p->pieceWord = 0x30000000u | p->pieceId;
@@ -637,7 +638,8 @@ bool City::buildNetworkFallback(NetworkKind k, const std::vector<std::pair<int, 
       world_->pipes.push_back(p); pipe_[i] = 1; placed.push_back({x, z});
       continue;
     }
-    if (transport_[i] || powerLine_[i]) continue;
+    // Power lines may cross roads (and roads cross lines): both pieces share the tile.
+    if (k == NetworkKind::Power ? powerLine_[i] != 0 : transport_[i] != 0) continue;
     if (budget.funds < cost) { lastFailNoMoney = true; break; }
     budget.funds -= cost;
     if (k == NetworkKind::Power) {
@@ -887,6 +889,36 @@ void City::weeklyTraffic() {
 }
 
 // ============================================================================ monthly handlers
+
+std::string City::debugStats() const {
+  std::ostringstream o;
+  auto V = [&](const char* n, int id) {
+    const growth::Valve& v = valves.valve(id);
+    o << n << "(V=" << v.V << " S=" << v.Slast << " D=" << v.Dlast << " P=" << zones.committed(id) << ") ";
+  };
+  o << "valves: "; V("R", 3000); V("C", 5000); V("I", 8000); V("jobs", 7000); o << "\n";
+  int cnt[3][5] = {};
+  int poweredN = 0;
+  for (const auto& oc : world_->occupants) {
+    uint32_t k = oc.agentType / 1000;
+    int c = k == 3 ? 0 : k == 5 ? 1 : k == 8 ? 2 : -1;
+    if (c < 0) continue;
+    int st = oc.state == 1 ? 0 : oc.state == 2 ? 1 : oc.state == 4 ? 2 : 3;
+    cnt[c][st]++;
+    if (power.powered(oc.x, oc.z)) poweredN++;
+  }
+  const char* nm[3] = {"R", "C", "I"};
+  for (int c = 0; c < 3; c++)
+    o << nm[c] << " bld: occ=" << cnt[c][0] << " aband=" << cnt[c][1] << " constr=" << cnt[c][2] << " other=" << cnt[c][3] << "  ";
+  o << "poweredBld=" << poweredN << " residents=" << residents_ << " funds=" << budget.funds
+    << " powerProduced=" << power.stats().produced << "\n";
+  o << "zone results(prev pass): ";
+  for (const auto& kv : zones.resultPrev) o << int(kv.first.first) << ":" << int(kv.first.second) << "=" << kv.second << " ";
+  o << "\ncur: ";
+  for (const auto& kv : zones.resultCur) o << int(kv.first.first) << ":" << int(kv.first.second) << "=" << kv.second << " ";
+  o << "\n";
+  return o.str();
+}
 
 void City::monthlyNeighbours() { neighbours.monthly(clock.date().month, rng_); }
 

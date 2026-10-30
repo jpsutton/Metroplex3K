@@ -290,6 +290,7 @@ void ValveLayer::monthlyUpdate(const ValveCityInput& in) {
   setTaxModifiers(in.population, rates);
   if (effectAcc.size() != size_t(W) * H) { effectAcc.assign(size_t(W) * H, 0); effectMap.assign(size_t(W) * H, 0); }
   for (const auto& b : in.buildings) addBuilding(b);
+  if (in.population <= 0 && tune_.bootstrapResDemand > 0) v3000.Dacc += tune_.bootstrapResDemand;
   for (int k = 0; k < 4; k++) {
     auto it = tune_.connectionEffects.find(k);
     if (it == tune_.connectionEffects.end()) continue;

@@ -60,6 +60,9 @@ struct ValveTuning {
   std::map<uint32_t, std::vector<OrdinanceValveEffect>> ordinanceEffects;  // [OrdinanceEffects]
   int jobToResFactor = 1;      // 0 treated as 1
   int externalJobDemand = 0;
+  // New-city bootstrap (not in the original's INIs, see spec 15 3.4 [OPEN]): while the city has no residents,
+  // this much residential demand is added each cycle so the first houses can be built.
+  int bootstrapResDemand = 0;
   std::vector<CurvePoint> phaseA, phaseB;  // EconomicPhases: pop/1000 -> a, b
   struct Cycle { int duration = 0, pct = 0; };
   std::map<int, std::vector<Cycle>> worldCycles;  // [ListOfWorldValveMapping]
