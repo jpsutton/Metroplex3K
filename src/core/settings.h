@@ -69,7 +69,8 @@ struct CommandLine {
   bool cheatsEnabled = false;          // -cheats:<value>
   std::string cheatsValue;
   bool intro = true, sound = true, music = true;
-  bool restart = false;
+  bool restart = false;                // -restart:on
+  bool restartPresent = false;         // any -restart: switch (drops -r and -d)
   std::string updaterApp;
   std::optional<MachineProfile> profile;  // -p
   std::vector<std::string> ignored;    // -x... and unknown switches
@@ -120,6 +121,8 @@ struct GeneralSettings {  // record 1
   bool flagG = false;
   uint32_t value = 0;
   GeneralSettings();
+  // First-run defaults with detail levels from the machine class (spec 27 section 4).
+  static GeneralSettings defaults(int machineClass);
   Bytes serialize() const;
   static bool parse(const Bytes& payload, GeneralSettings& out);
   std::string deviceName() const;  // up to first NUL; empty if unset (all 0xFF)
@@ -138,6 +141,8 @@ struct Sc3Cfg {
 
   static Sc3Cfg parse(const Bytes& ixf);   // never throws; missing/garbled records are noted in warnings
   Bytes serialize() const;
+  // Record 3 text: the 128-byte string cut at the first control character, forced to end at byte 127.
+  std::string block3Text() const;
   // Typed views of the ID->bool tables (records 2 and 13).
   std::vector<IdFlag> idFlags(int record) const;
   void setIdFlags(int record, const std::vector<IdFlag>& v, uint32_t record13Leading = 0);

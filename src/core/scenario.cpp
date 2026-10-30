@@ -29,6 +29,16 @@ uint32_t advisorPortraitInstance(int idx, int mood, int variant, bool important)
   return (important ? 0x01000000u : 0u) | (uint32_t(variant & 0xFF) << 16) | (uint32_t(idx & 0xFF) << 8) | uint32_t(mood & 0xFF);
 }
 
+std::vector<uint32_t> advisorPortraitCandidates(int idx, int mood, int variant, bool important) {
+  std::vector<uint32_t> v;
+  auto add = [&](uint32_t x) { if (std::find(v.begin(), v.end(), x) == v.end()) v.push_back(x); };
+  add(advisorPortraitInstance(idx, mood, variant, important));
+  add(advisorPortraitInstance(idx, mood, 0, important));
+  add(advisorPortraitInstance(idx, 3, 0, important));
+  add(0x10303);
+  return v;
+}
+
 namespace {
 std::vector<std::string> splitCR(const std::string& t) {
   std::vector<std::string> lines;
@@ -132,6 +142,13 @@ std::string StyleTable::serialize() const {
 const TickerStyle* StyleTable::find(uint32_t id) const {
   auto it = byString.find(id);
   return it == byString.end() ? nullptr : &it->second;
+}
+
+TickerStyle StyleTable::resolve(uint32_t id) const {
+  if (const TickerStyle* t = find(id)) return *t;
+  TickerStyle d;
+  d.cls = 6; d.r1 = d.g1 = d.b1 = 255; d.r2 = d.g2 = d.b2 = 0; d.underline = false; d.repeats = 1;
+  return d;
 }
 
 // ---- presenters -----------------------------------------------------------------------------
@@ -274,6 +291,8 @@ std::string expandScenarioTokens(const std::string& s, const ScenarioTextContext
     else if (up == "CITYNAME" || up == "YOURCITY") rep = c.city;
     else if (up == "POPULATION") rep = groupDigits(c.population);
     else if (up == "YEAR") rep = std::to_string(c.year);
+    else if (up == "PARADENAME" && !c.paradeName.empty()) rep = c.paradeName;
+    else if (up == "ANYNEIGHBOR" && !c.anyNeighbor.empty()) rep = c.anyNeighbor;
     else if (up == "SCNNAME" || up == "SCN_NAME") rep = c.scenarioName;
     else if (up.size() > 5 && up.compare(0, 4, "SCNV") == 0 && up[5] == ' ') {
       size_t p = 6;
@@ -335,6 +354,34 @@ bool ScenarioFile::load(const Bytes& file, ScenarioFile& o, std::string* err) {
     else { if (err) *err = "scenario state record unreadable"; return false; }  // loading fails (spec 8)
   }
   return true;
+}
+
+ResolvedPresenter ScenarioFile::resolvePresenter(uint32_t id, uint32_t kind) const {
+  ResolvedPresenter r;
+  if (kind == 1) {
+    r.advisor = true;
+    r.advisorId = isKnownAdvisor(id) ? id : kAdvisorUtilities;
+    r.advisorIdx = advisorIndex(r.advisorId);
+    return r;
+  }
+  r.advisor = false;
+  r.picture = presenterPictureKey(id);
+  if (const PresenterRow* row = presenters.find(int32_t(id))) {
+    r.nameString = {0x2026960B, header.stringTable, uint32_t(row->name)};
+    r.titleString = {0x2026960B, header.stringTable, uint32_t(row->title)};
+  } else r.found = false;
+  return r;
+}
+
+ScenarioChooserInfo ScenarioFile::chooserInfo() const {
+  ScenarioChooserInfo c;
+  c.stringTable = hasCatalogue ? catalogue.stringTable : header.stringTable;
+  c.string0 = {0x2026960B, c.stringTable, 0};
+  c.string1 = {0x2026960B, c.stringTable, 1};
+  c.hasPicture = !picture.empty();
+  if (hasCatalogue) { c.scenarioType = catalogue.scenarioType; c.difficulty = catalogue.difficulty; }
+  c.author = !author.empty() ? author : shortAuthor;
+  return c;
 }
 
 void ScenarioFile::addRecords(IxfWriter& w) const {
@@ -407,6 +454,29 @@ void ScenarioRuntime::start() {
   }
   started_ = true;
   evaluate();
+}
+
+ScenarioResult ScenarioRuntime::result() const {
+  ScenarioResult r;
+  r.ended = started_ && !st_.active;
+  r.rank = st_.resultRank;
+  auto it = st_.ranks.find(uint32_t(st_.resultRank));
+  if (st_.resultRank >= 0 && it != st_.ranks.end()) r.rankTitle = it->second;
+  r.resultsText = st_.resultsText;
+  r.resultsExtra = st_.resultsExtra;
+  r.goalsTotal = int(st_.goals.size());
+  for (const auto& kv : st_.goals) if (kv.second.met) r.goalsMet++;
+  r.allGoalsMet = r.goalsMet == r.goalsTotal;
+  return r;
+}
+
+ScenarioState ScenarioRuntime::snapshot() const {
+  ScenarioState s = st_;
+  if (s.hasTimeline) {
+    const Script* tl = file_.script(s.timelineScript.instance);
+    if (!tl || size_t(s.cursor + 1) >= tl->cmds.size()) s.hasTimeline = false;
+  }
+  return s;
 }
 
 void ScenarioRuntime::minuteTick() {
@@ -586,6 +656,62 @@ Bytes SscProject::serialize() const {
   put32(b, uint32_t(s.size()));
   b.insert(b.end(), s.begin(), s.end());
   return b;
+}
+
+bool SscProject::toScenario(uint32_t G, ScenarioFile& out, std::string* err) const {
+  out = ScenarioFile();
+  if (scripts.empty()) { if (err) *err = "project has no script"; return false; }
+  std::map<uint32_t, uint32_t> inst;
+  for (size_t i = 0; i < scripts.size(); i++) inst[scripts[i].id] = uint32_t(i + 1);
+  uint32_t entry = inst[scripts[0].id];
+  for (const auto& sc : scripts) if (sc.name == settings[3]) { entry = inst[sc.id]; break; }
+  auto num = [](const std::u16string& t) {
+    std::string a = utf16ToUtf8(t);
+    size_t p = 0; int64_t n = 0;
+    parseLeadingInt(a, p, n);
+    return n;
+  };
+  out.header.sourcePath = utf16ToUtf8(settings[4]);
+  out.header.entry = {kSnrScriptType, kSnrScriptGroup, entry};
+  out.header.title = {G, 1};
+  out.header.presenter = uint32_t(uint64_t(num(settings[2])));
+  out.header.presenterKind = isKnownAdvisor(out.header.presenter) ? 1 : 0;
+  out.header.stringTable = G;
+  for (const auto& sc : scripts) {
+    Script c = compileScript(sc.id);
+    for (auto& cmd : c.cmds) {
+      int id = cmd.cmd;
+      auto scriptArg = [&](size_t i) { return cmd.args[i].kind == 0 && inst.count(uint32_t(cmd.args[i].value)); };
+      if (id == cmdSubRoutine && cmd.args.size() == 1 && scriptArg(0)) {
+        uint32_t n = inst[uint32_t(cmd.args[0].value)];
+        cmd.args = {{0, int32_t(kSnrScriptGroup)}, {0, int32_t(n)}};
+      } else if (id == cmdRepeatRegular && cmd.args.size() == 2 && scriptArg(1)) {
+        uint32_t n = inst[uint32_t(cmd.args[1].value)];
+        cmd.args = {cmd.args[0], {0, int32_t(kSnrScriptGroup)}, {0, int32_t(n)}};
+      } else {
+        int pos = -1;
+        switch (id) {
+          case cmdShowNewsticker: case cmdMakeDialogText: case cmdSetResultsDlgText: case cmdPopUpMsg: pos = 0; break;
+          case cmdAddGoal: case cmdAddRankInfo: pos = 1; break;
+          default: break;
+        }
+        if (pos >= 0 && int(cmd.args.size()) + 1 == commandArgc(id))
+          cmd.args.insert(cmd.args.begin() + pos, ScriptArg{0, int32_t(G)});
+      }
+    }
+    out.scripts[inst[sc.id]] = std::move(c);
+  }
+  out.strings[1] = utf16ToUtf8(name);
+  out.strings[0] = utf16ToUtf8(description);
+  for (const auto& m : messages) out.strings[m.textId] = utf16ToUtf8(m.text);
+  for (const auto& t : tickers) out.strings[t.textId] = utf16ToUtf8(t.text);
+  for (const auto& g : goals) out.strings[g.textId] = utf16ToUtf8(g.text);
+  for (const auto& r : ranks) out.strings[r.textId] = utf16ToUtf8(r.text);
+  out.catalogue = {G, uint32_t(num(settings[5])), uint32_t(num(settings[6]))};
+  out.hasCatalogue = true;
+  out.picture = picture;
+  out.shortAuthor = out.author = utf16ToUtf8(scripts[0].author);
+  return true;
 }
 
 Script SscProject::compileScript(uint32_t id) const {

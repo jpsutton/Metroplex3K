@@ -38,7 +38,16 @@ struct BldCell {
   void setRot(uint32_t r) { packed = (packed & 0x3FFFFFFF) | ((r & 3) << 30); }
 };
 
-struct BldPaletteEntry { std::string name; uint32_t textureId = 0; };
+struct BldPaletteEntry {
+  std::string name;
+  uint32_t textureId = 0;
+  // Name convention `<name> |XXXXXXXX` (spec 1.3.5): splits off the texture ID. False if not present.
+  bool split(std::string& baseName, uint32_t& id) const;
+  // `color R,G,B` pseudo-name for a solid paint.
+  bool solidColor(int rgb[3]) const;
+};
+// Building category label of spec 1.8 (codes 0x208..0x217); nullptr for unknown codes.
+const char* batCategoryName(uint32_t code);
 
 struct BldModel {
   uint8_t version = 8, orientation = 0, N = 8, lotSize = 1;
@@ -104,7 +113,9 @@ struct BldFile {
   // Write the original layout (1024-entry index block). Writes the model with the original's
   // over-long compression buffer (n + n/9 + 1000 bytes, zero filler).
   Bytes serialize() const;
-  uint32_t effectiveId() const;  // stored ID, or a stable hash if none
+  uint32_t effectiveId() const;
+  // Revision (major < 2) models use shape-8 floor markers; the engine renders them as stored (spec 1.8).
+  bool needsRevisionConversion() const;  // stored ID, or a stable hash if none
 };
 
 // ---- rendering (approximate; spec 3 leaves rasteriser details open) -------------------------
