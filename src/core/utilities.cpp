@@ -602,18 +602,20 @@ int64_t GarbageDisposal::dispose(int64_t amount) {
     int64_t t = std::min(rem, std::max<int64_t>(0, budget));
     budget -= t; rem -= t; stats[slot] += t;
   };
-  take(wteBudget, 1);
-  take(incineratorBudget, 2);
+  // Statistic slots as laid out by the original's saves [OBSERVED]: 4 = incinerators (3 x 45,000/month in Liverpool), 5 = WTE
+  // (Madison's whole remainder), 6 = landfill (Berlin, Moscow). Slots 1 and 2 are used here for export and abduction (OPEN).
+  take(wteBudget, 5);
+  take(incineratorBudget, 4);
   if (rem > 0) {
     int64_t t = std::min(rem, landfillRoom());
-    landfillBalance += t; rem -= t; stats[4] += t;
+    landfillBalance += t; pendingLandfill += t; rem -= t; stats[6] += t;
   }
-  if (rem > 0 && exportDeal) { stats[5] += rem; rem = 0; }
+  if (rem > 0 && exportDeal) { stats[1] += rem; rem = 0; }
   if (rem > 0) {
     int64_t room = abductionCap - abducted;
     if (room > 0) {
       int64_t t = std::min(rem, room);
-      abducted += t; rem -= t; stats[6] += t;
+      abducted += t; rem -= t; stats[2] += t;
     }
   }
   return rem;

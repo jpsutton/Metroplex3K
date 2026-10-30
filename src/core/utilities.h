@@ -236,6 +236,7 @@ class GarbageDisposal {
   int64_t abductionCap = 0;         // GarbageAbductionAmount
   int64_t abducted = 0;             // cumulative counter (never reset: OPEN)
   int64_t landfillBalance = 0;      // negative = spare room (spec 7.2.4 step 3)
+  int64_t pendingLandfill = 0;      // garbage accepted by the landfill stage, not yet placed on a landfill tile
   int64_t stats[7] = {};
 
   void beginRun(int64_t wte, int64_t inc, bool exportDealPresent) { wteBudget = wte; incineratorBudget = inc; exportDeal = exportDealPresent; }

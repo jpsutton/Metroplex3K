@@ -246,6 +246,15 @@ class GrowthAdapter : public growth::GrowthCity {
   bool powered(int x, int z) const override { return c_.power.powered(x, z); }
   bool watered(int x, int z) const override { return c_.water.tileServiced(x, z); }
   bool radioactive(int x, int z) const override { return c_.radioactiveAt(x, z); }
+  // Landfill (spec 15 s7): a landfill tile keeps its garbage in the pollution layer's standing word; the zone-17 developer
+  // decays it on each visit (credit back as capacity) and fills tiles from the garbage the disposal stage parked.
+  int landfillGarbage(int x, int z) const override { return c_.world_->inTiles(x, z) ? c_.pollution.standingGarbageAt(x, z) : 0; }
+  void setLandfillGarbage(int x, int z, int g) override { if (c_.world_->inTiles(x, z)) c_.pollution.setStandingGarbage(x, z, g); }
+  void creditGarbageCapacity(int d) override { c_.pollution.disp.landfillBalance -= d; }
+  int takePendingLandfillGarbage() override {
+    int64_t v = std::min<int64_t>(c_.pollution.disp.pendingLandfill, 0x7FFFFFFF); c_.pollution.disp.pendingLandfill -= v; return int(v);
+  }
+  void returnLandfillGarbage(int g) override { c_.pollution.disp.pendingLandfill += g; }
   int landValue(int x, int z) const override {
     if (c_.cfg_.synthetic) return 128;
     return std::max(1, c_.landValue.landValueAtTile(x, z));
