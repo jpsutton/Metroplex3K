@@ -186,6 +186,9 @@ void ValveLayer::init(int w, int h, const ValveTuning& t) {
 void ValveLayer::applyLimits() {
   for (Valve* v : {&v3000, &v5000, &v8000, &v7000}) v->setLimits(2000, -2000);
   for (Valve* v : {&v3001, &v5001, &v8001}) v->setLimits(INT32_MAX, INT32_MIN);
+  // [OBSERVED] The R/C/I demand valves move gradually (spec 15 s3.2 step 5, 'smooth'): the saved industrial valves sit exactly
+  // on the smoothing path (Berlin V = -1680 = 0 - 6 * 280 while D - S clamps to -2000; Liverpool V = -280 while D - S = -1618).
+  for (Valve* v : {&v3000, &v5000, &v8000}) v->smooth = true;
 }
 Valve& ValveLayer::valve(int id) {
   switch (id) { case 3000: return v3000; case 3001: return v3001; case 5000: return v5000; case 5001: return v5001; case 8000: return v8000; case 8001: return v8001; default: return v7000; }

@@ -263,6 +263,7 @@ class PollutionLayer {
   uint16_t recVersion = 3, streamVersion = 2;
   std::vector<uint32_t> state;               // cells x*nz+z
   uint8_t garbageStore[37] = {};
+  int64_t loadedBalance_ = 0;      // landfill balance as loaded (garbageStore is re-patched only when it changed)
   std::vector<uint16_t> standing;            // tiles x*H+z
   GarbageDisposal disp;                      // disp.stats == garbageTotals
   uint32_t avgAir = 0, avgWater = 0;

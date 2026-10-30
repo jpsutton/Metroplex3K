@@ -825,7 +825,14 @@ Bytes PollutionLayer::serialize() const {
   const bool markers = streamVersion >= 3;
   if (markers) putStr(b, "Pollution Layer Start");
   for (auto v : flipRows(state, nx_, nz_)) put32(b, v);
-  b.insert(b.end(), garbageStore, garbageStore + 37);
+  {  // [OBSERVED] u32 at +4 (repeated at +12) is the spare landfill room; keep the saved bytes unless the room changed
+    uint8_t gs[37]; std::memcpy(gs, garbageStore, 37);
+    if (disp.landfillBalance != loadedBalance_) {
+      uint32_t room = uint32_t(std::max<int64_t>(0, std::min<int64_t>(0xFFFFFFFFll, -disp.landfillBalance)));
+      std::memcpy(gs + 4, &room, 4); std::memcpy(gs + 12, &room, 4);
+    }
+    b.insert(b.end(), gs, gs + 37);
+  }
   for (auto v : flipRows(standing, W_, H_)) put16(b, v);
   for (int i = 0; i < 7; i++) put64(b, disp.stats[i]);
   put32(b, avgAir); put32(b, avgWater); put16(b, unk16);
@@ -868,6 +875,10 @@ void PollutionLayer::parse(const uint8_t* p, size_t n, int W, int H) {
   std::vector<uint32_t> sf(cells); for (auto& v : sf) v = r.u32();
   state = flipRows(sf, nx_, nz_);
   { Bytes gs = r.bytes(37); std::memcpy(garbageStore, gs.data(), 37); }
+  {  // spare landfill room = 32767 per landfill tile minus what has been filled (Madison: 9 tiles, room 294,903)
+    uint32_t room; std::memcpy(&room, garbageStore + 4, 4);
+    disp.landfillBalance = loadedBalance_ = -int64_t(room);
+  }
   std::vector<uint16_t> st(tiles); for (auto& v : st) v = r.u16();
   standing = flipRows(st, W, H);
   for (int i = 0; i < 7; i++) disp.stats[i] = rd64(r);
