@@ -115,6 +115,8 @@ void Game::adopt(World&& w) {
     if (world_.scheme.floraSet) data_.mountFloraSet(world_.scheme.floraSet);
   }
   renderer_.setWorld(&world_, haveData_ ? &data_ : nullptr);
+  terra_ = std::make_unique<Terraformer>(world_);
+  { IniFile bl; if (haveData_ && data_.ini().load("SC3BudgetLayer.ini", bl)) terra_->setCosts(TerraformCosts::fromIni(bl)); }
   sim_.init(&world_, haveData_ ? &data_ : nullptr, &simData_, 12345u + uint32_t(world_.W));
   sim_.funds = world_.info.fileKind == 3 ? sim_.funds : sim_.funds;
   simReady_ = true; paused_ = true;
@@ -194,6 +196,11 @@ void Game::dispatch(const MenuItemInfo& mi) {
     for (const auto& p : plops) if (mi.target == p.cls) { setTool(ToolKind::Plop, 0, p.occ); toolName_ = name; return; }
     switch (mi.target) {
       case 0xC2B5DE77: case 0x42B5DE86: case 0x42B5DE98: setTool(ToolKind::Road, 0); toolName_ = name; return;
+      case 0x825AD7F6: setTool(ToolKind::Terrain, 1); toolName_ = name; return;
+      case 0xC25AD94F: setTool(ToolKind::Terrain, 2); toolName_ = name; return;
+      case 0x825AD954: setTool(ToolKind::Terrain, 4); toolName_ = name; return;
+      case 0x02E763C1: setTool(ToolKind::Terrain, 32); toolName_ = name; return;
+      case 0x4253EC3F: setTool(ToolKind::Terrain, 100); toolName_ = name; return;
       case 0xE3166801: setTool(ToolKind::Demolish); toolName_ = name; return;
       case 0x025DDC4A: showBudget_ = true; paused_ = true; return;
       case 0x410438DD: if (currentFile_.empty()) { saveMode_ = true; refreshFiles(0); saveName_ = world_.info.cityName; scr_ = Screen::LoadList; } else saveCurrent(currentFile_.stem().string()); return;
@@ -510,11 +517,29 @@ void Game::handleMap() {
   if (!in.down && !ui_.in.rightPressed) panning_ = panning_ && false;
   if (tool_ == ToolKind::None || tool_ == ToolKind::Unavailable) { statusLine_.clear(); }
   if (onTile) {
-    if (tool_ == ToolKind::Zone || tool_ == ToolKind::Road || tool_ == ToolKind::Demolish || tool_ == ToolKind::Plop || tool_ == ToolKind::Query) {
+    if (tool_ == ToolKind::Terrain) {
+      if (in.pressed) { dragging_ = true; ax_ = tx; az_ = tz; }
+    } else if (tool_ == ToolKind::Zone || tool_ == ToolKind::Road || tool_ == ToolKind::Demolish || tool_ == ToolKind::Plop || tool_ == ToolKind::Query) {
       if (in.pressed) { dragging_ = true; ax_ = tx; az_ = tz; }
     } else if (in.pressed) {
       // Default pointer acts as query.
       tool_ = ToolKind::Query; dragging_ = true; ax_ = tx; az_ = tz;
+    }
+  }
+  // Terrain tools: press-and-hold repeats raise/lower/water/trees; level applies on release.
+  if (onTile && dragging_ && in.down && tool_ == ToolKind::Terrain && toolArg_ != 4 && terra_) {
+    static uint32_t tick = 0;
+    if ((++tick & 3) == 0 || in.pressed) {
+      if (toolArg_ == 100) {
+        FloraRng rng = floraRngFromLcg(floraLcg_);
+        uint8_t cell = randomTreeCell(3, rng);
+        TreeTool tt; TreePlan p = planTree(world_, tx, tz, cell, tt);
+        if (p.legal && sim_.funds >= p.cost) { commitTree(world_, p); sim_.funds -= p.cost; }
+      } else {
+        TerraPlan p = toolArg_ == 1 ? terra_->planRaise(tx, tz) : toolArg_ == 2 ? terra_->planLower(tx, tz) : terra_->planWater(tx, tz);
+        terra_->apply(p, sim_.funds);
+        renderer_.invalidateShade();
+      }
     }
   }
   if (dragging_ && in.released) {
@@ -522,6 +547,9 @@ void Game::handleMap() {
     if (onTile) {
       int x0 = ax_, z0 = az_, x1 = tx, z1 = tz;
       switch (tool_) {
+        case ToolKind::Terrain:
+          if (toolArg_ == 4 && terra_) { TerraPlan p = terra_->planLevel(x0, z0, x1, z1); terra_->apply(p, sim_.funds); renderer_.invalidateShade(); }
+          break;
         case ToolKind::Zone: sim_.paintZoneType(x0, z0, x1, z1, toolArg_); break;
         case ToolKind::Road: {
           std::vector<std::pair<int, int>> path;

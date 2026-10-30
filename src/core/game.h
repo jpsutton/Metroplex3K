@@ -5,7 +5,10 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "core/flora.h"
 #include "core/font.h"
+#include "core/terraform.h"
+#include "core/terrain_gen.h"
 #include "core/gamedata.h"
 #include "core/render.h"
 #include "core/sim.h"
@@ -26,7 +29,7 @@ struct MenuTree {
 };
 
 enum class Screen { NeedData, MainMenu, NewCity, LoadList, InCity };
-enum class ToolKind { None, Zone, Road, Demolish, Plop, Query, Unavailable };
+enum class ToolKind { None, Terrain, Zone, Road, Demolish, Plop, Query, Unavailable };
 
 class Game {
  public:
@@ -85,6 +88,8 @@ class Game {
   RenderOptions ropt_;
   SimData simData_;
   Sim sim_;
+  std::unique_ptr<Terraformer> terra_;
+  Lcg floraLcg_{99};
   bool simReady_ = false;
   bool paused_ = true;
   int speed_ = 1;
