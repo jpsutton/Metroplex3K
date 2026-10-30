@@ -146,6 +146,7 @@ class City {
   const CityConfig& config() const { return cfg_; }
   World* world() { return world_; }
   void markOccupantsDirty() { occDirty_ = true; }
+  int jailCapacity() const;
   void recomputeLandValue();   // recompute every land-value block now (tools / tests)
   std::optional<size_t> evaluateBusinessDeals(const BusinessDeals::Inputs& in) { return business.weeklyEvaluate(in, rng_); }
   // Fall-out marks (disaster MarkRadiation): the tile blocks development and lowers land value. Session-only, not saved.

@@ -931,7 +931,7 @@ void City::syncFacilities() {
                o.agentType == kAgentJail) {
       st.insert(key);
       if (!stationAt_.count(key)) {
-        if (o.agentType == kAgentJail) stationAt_[key] = {2, police.addJail(100)};
+        if (o.agentType == kAgentJail) stationAt_[key] = {2, police.addJail(jailCapacity())};
         else if (usHier_.isAncestorOrSelf(o.agentType, kAgentPolice)) stationAt_[key] = {0, police.addStation(o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1)};
         else stationAt_[key] = {1, fire.addStation(o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1)};
       }
@@ -1001,6 +1001,11 @@ void City::dailyFire() {
   env.occupied = [this](int x, int z) { return occupantAt(x, z) >= 0; };
   env.averageMetric = int(flammability.averageFlammability());
   fire.tick(env, urng_);
+}
+int City::jailCapacity() const {
+  us::IniReader t{&cfg_.ini.tune};
+  int c = int(t.num("Jail", "InmateCapacity", 0));
+  return c > 0 ? c : 100;
 }
 void City::recomputeLandValue() { landValue.recomputeAll(*lvView_); }
 void City::dailyLandValue() { landValue.update(*lvView_); }
@@ -1141,6 +1146,20 @@ void City::monthlyTraffic() {
   in.ord.touristPromotion = ordinances.enacted(kOrdTourist);
   in.ord.subsidizedTransit = ordinances.enacted(kOrdSubsidizedTransit);
   in.roadTiles = roads; in.highwayTiles = hwy; in.railTiles = rail;
+  {  // transit upkeep (spec 18 s8): station buildings' OptimalMonthlyUpkeep plus subway tiles (saved Transit charges: Berlin 1,351)
+    std::set<std::pair<int, int>> subTiles;
+    for (const auto& p : world_->subway) subTiles.insert({p.x, p.z});
+    in.subwayTiles = int(subTiles.size());
+    us::IniReader t{&cfg_.ini.tune};
+    const int64_t bus = t.num("BusStop", "OptimalMonthlyUpkeep", 0), railStn = t.num("RailStation", "OptimalMonthlyUpkeep", 0),
+                  subRail = t.num("SubwayRailStation", "OptimalMonthlyUpkeep", 0), subStn = t.num("SubwayStation", "OptimalMonthlyUpkeep", 0);
+    int64_t up = 0;
+    for (const auto& o : world_->occupants) {
+      if (o.state != 1) continue;
+      switch (o.agentType) { case 12210: up += bus; break; case 12230: up += railStn; break; case 12361: up += subRail; break; case 12360: up += subStn; break; default: break; }
+    }
+    in.stationUpkeep = int(up);
+  }
   cal::Date d = clock.date();
   in.year = d.year; in.month = d.month;
   if (const Department* r = budget.dept(dept::Roads)) traffic->setRoadFunding(r->funding);
@@ -1152,7 +1171,13 @@ void City::monthlyTraffic() {
 void City::monthlyBudget() {
   budget.setDeptFullCost(dept::Roads, roadUpkeep_);
   budget.setDeptFullCost(dept::Transit, transitUpkeep_);
-  budget.setDeptFullCost(dept::Police, police.upkeepTotal);
+  {  // police department cost = station upkeep + a fixed monthly upkeep per jail (SC3Tune [Jail] MonthlyUpkeep = 75; matches the saved
+     // charges: Berlin 12 jails, charge 1,483 vs station upkeep 540)
+    int jails = 0;
+    for (const auto& kv : stationAt_) if (kv.second.first == 2) jails++;
+    us::IniReader t{&cfg_.ini.tune};
+    budget.setDeptFullCost(dept::Police, int64_t(police.upkeepTotal) + int64_t(jails) * t.num("Jail", "MonthlyUpkeep", 0));
+  }
   budget.setDeptFullCost(dept::Fire, fire.upkeepTotal);
   if (const Department* p = budget.dept(dept::Police)) if (p->funding != police.funding()) police.setFunding(p->funding);
   if (const Department* f = budget.dept(dept::Fire)) if (f->funding != fire.funding()) fire.setFunding(f->funding);
