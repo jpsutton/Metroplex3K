@@ -1009,6 +1009,9 @@ void City::dailyPollution() {
   us::PollutionEnv env;
   env.zone = &world_->zone;
   env.ordinances = usOrdinances();
+  env.exportDeal = neighbours.dealOfType(4);   // garbage export deal: the whole remainder leaves the city
+  for (const auto& d : neighbours.active)      // garbage import deal (the player is paid): enters the pipeline first
+    if (!d.terminated() && d.dealType == 5) env.importMonthly += d.quantity;
   pollution.run(env);
 }
 void City::dailyCrime() {
