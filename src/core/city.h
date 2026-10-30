@@ -97,6 +97,15 @@ class City {
   bool buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path);
   bool bulldoze(int x0, int z0, int x1, int z1);
 
+  // ---- quotes (spec 09 5.1): dry-run of the player actions. valid=false: nothing in the area is legal.
+  struct Quote { bool valid = false; int64_t cost = 0; };
+  Quote quoteZone(int x0, int z0, int x1, int z1, int zoneType) const;
+  Quote quotePlop(uint32_t occId, int x, int z) const;
+  Quote quoteBulldoze(int x0, int z0, int x1, int z1) const;
+  Quote quoteNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path) const;
+  // Footprint of a building (1x1 when unknown).
+  void footprint(uint32_t occId, int& sx, int& sz) const;
+
   // Reason the last player action failed (for the error sound): 0 none/invalid, 1 not enough funds.
   bool lastFailNoMoney = false;
 

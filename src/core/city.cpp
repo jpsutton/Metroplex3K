@@ -532,12 +532,84 @@ void City::removeOccupantIdx(const std::set<int>& kill) {
 }
 
 // ============================================================================ player actions
+namespace { PlacementCosts makeCosts(const Budget& b, const CityConfig& cfg); }
+
 
 int City::zoneCost(int zt) const {
   if (zt == 0) { int64_t c = budget.specialCost(6); return int(c > 0 ? c : 1); }
   int d = (zt >= 1 && zt <= 3) ? zt - 1 : (zt >= 5 && zt <= 7) ? zt - 5 : (zt >= 9 && zt <= 11) ? zt - 9 : 0;
   int64_t c = budget.specialCost(std::min(2, d));
   return int(c > 0 ? c : 5);
+}
+
+void City::footprint(uint32_t id, int& sx, int& sz) const {
+  sx = sz = 1;
+  if (!game_) return;
+  if (const OccAttr* a = game_->occupant(id)) { sx = std::max(1, int(a->sizeX)); sz = std::max(1, int(a->sizeZ)); }
+}
+
+City::Quote City::quoteZone(int x0, int z0, int x1, int z1, int zt) const {
+  if (x0 > x1) std::swap(x0, x1);
+  if (z0 > z1) std::swap(z0, z1);
+  Quote q; int cost = zoneCost(zt);
+  for (int x = x0; x <= x1; x++)
+    for (int z = z0; z <= z1; z++) {
+      if (!inMap(x, z) || world_->zone[idx(x, z)] == zt) continue;
+      if (zt && !tileBuildable(x, z)) continue;
+      q.valid = true; q.cost += cost;
+    }
+  return q;
+}
+
+City::Quote City::quotePlop(uint32_t id, int x, int z) const {
+  Quote q; int sx = 1, sz = 1; int64_t cost = 0;
+  if (game_) {
+    const OccAttr* a = game_->occupant(id);
+    if (!a) return q;
+    sx = int(a->sizeX); sz = int(a->sizeZ);
+    cost = budget.placementCost(a->agentType, ecoHier_, false);
+  }
+  for (int dx = 0; dx < sx; dx++)
+    for (int dz = 0; dz < sz; dz++)
+      if (!tileBuildable(x + dx, z + dz)) return q;
+  q.valid = true; q.cost = cost;
+  return q;
+}
+
+City::Quote City::quoteBulldoze(int x0, int z0, int x1, int z1) const {
+  if (x0 > x1) std::swap(x0, x1);
+  if (z0 > z1) std::swap(z0, z1);
+  Quote q; std::set<int> kill; int tiles = 0;
+  for (int x = x0; x <= x1; x++)
+    for (int z = z0; z <= z1; z++) {
+      if (!inMap(x, z)) continue;
+      size_t i = idx(x, z);
+      if (occ_[i] >= 0) kill.insert(occ_[i]);
+      if (transport_[i] || powerLine_[i]) tiles++;
+      if (world_->flora[i]) q.valid = true;
+    }
+  if (!kill.empty() || tiles) { q.valid = true; q.cost = int64_t(kill.size()) + tiles; }
+  return q;
+}
+
+City::Quote City::quoteNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path) const {
+  Quote q;
+  Tool tool = k == NetworkKind::Road ? TOOL_ROAD : k == NetworkKind::Rail ? TOOL_RAIL : k == NetworkKind::Power ? TOOL_POWER
+            : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
+  PlacementCosts pc = makeCosts(budget, cfg_);
+  int cost = pc.cost(toolParams(tool).costKey);
+  if (cost == 0 && budget.cfg.placementCost.empty()) cost = 10;
+  for (auto [x, z] : path) {
+    if (!inMap(x, z)) continue;
+    size_t i = idx(x, z);
+    if (k == NetworkKind::Pipe ? pipe_[i] != 0 : k == NetworkKind::Power ? powerLine_[i] != 0 : transport_[i] != 0) continue;
+    if (k != NetworkKind::Pipe && k != NetworkKind::Subway && occ_[i] >= 0) continue;
+    int lo = std::min(std::min(world_->altAt(x, z), world_->altAt(x + 1, z)), std::min(world_->altAt(x, z + 1), world_->altAt(x + 1, z + 1)));
+    bool water = lo < world_->waterAt(x, z);
+    if (water && cfg_.haveTiling == false) continue;
+    q.valid = true; q.cost += cost;
+  }
+  return q;
 }
 
 bool City::paintZoneType(int x0, int z0, int x1, int z1, int zt) {
