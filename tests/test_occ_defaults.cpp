@@ -14,5 +14,15 @@ int main() {
   CHECK(applyNewBuildingDefaults(coal, 1900, 1, 732, 586) && coal.intProps[1].second == 732 && coal.intProps[2].second == 586);
   Occupant park; park.agentType = 14311; park.intProps = {{1, 2}};
   CHECK(!applyNewBuildingDefaults(park, 2000, 1, 0, 0) && park.intProps.empty() && !park.hasDate);
+  Occupant inc; inc.agentType = 12852;
+  CHECK(applyNewBuildingDefaults(inc, 2000, 1, 0, 0) && inc.hasDate && inc.intProps.size() == 4 && inc.intProps[0].second == 1500);
+  Occupant rec; rec.agentType = 12851;
+  CHECK(applyNewBuildingDefaults(rec, 2000, 1, 0, 0) && rec.hasDate && rec.intProps.size() == 3 && rec.intProps[1].second == 50000);
+  Occupant wte; wte.agentType = 12853;
+  CHECK(applyNewBuildingDefaults(wte, 2000, 1, 0, 0) && wte.intProps.size() == 7 && wte.intProps[6].second == 52500);
+  Occupant jail; jail.agentType = 13881;
+  CHECK(applyNewBuildingDefaults(jail, 2000, 1, 0, 0) && !jail.hasDate && jail.intProps.size() == 2);
+  Occupant hall; hall.agentType = 10120;
+  CHECK(applyNewBuildingDefaults(hall, 2001, 5, 0, 0) && hall.hasDate && hall.dateYear == 2001 && hall.intProps.empty());
   TEST_MAIN_END();
 }

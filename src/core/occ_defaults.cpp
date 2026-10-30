@@ -43,7 +43,25 @@ bool applyNewBuildingDefaults(Occupant& o, int year, int dayOfYear, int lifeMax,
       ints(o, {{0x6352CCCF, 5}, {0x6352CCD0, 5}}); return true;
     case 12361:  // rail/subway station
       ints(o, {{0x6352CCCF, 10}, {0x6352CCD0, 10}}); return true;
-    default: return false;  // incl. small park 14311 and plopped landmarks: no properties
+    // Classes below were not placed fresh in the original; values are the most common ones in the shipped cities [OBSERVED
+    // statistics over all 60 saves, spec 29 1.4 'write the most common shipped value'].
+    case 12851:  // recycling centre (all 126 shipped centres carry exactly these)
+      date(); ints(o, {{0x4352C330, 45}, {0x4352C331, 50000}, {0x4352C332, 0}}); return true;
+    case 12852:  // incinerator: per-run burn capacity 1,500 and monthly 45,000 (= 30 runs), nothing burnt yet
+      date(); ints(o, {{0xE352C57C, 1500}, {0xE352C57D, 0}, {0xE352C57E, 45000}, {0xE352C57F, 0}}); return true;
+    case 12853:  // waste-to-energy plant: power-plant words (no life limit seen) plus capacity 1,750 / 52,500
+      date(); ints(o, {{0x2351FAF8, 0}, {0x2351FAF9, 0}, {0x2351FAFA, 0}, {0x2351FAFB, 0}, {0xA352179A, 1750}, {0xA352179B, 0}, {0xA352179C, 52500}}); return true;
+    case 12230:  // rail-only station
+      ints(o, {{0x6352CCCF, 10}, {0x6352CCD0, 10}}); return true;
+    case 12360:  // subway-only station
+      ints(o, {{0x6352CCCF, 10}, {0x6352CCD0, 12}}); return true;
+    case 13881:  // jail: inmates, second word (75 is the commonest)
+      ints(o, {{0x0352FBBD, 0}, {0x0352FBBE, 75}}); return true;
+    case 14140:  // museum
+      ints(o, {{0x63544FDD, 75}}); return true;
+    case 10120: case 11002: case 13871: case 14370:  // city hall, military base, university, golf course: build date only
+      date(); return true;
+    default: return false;  // incl. small park 14311, plopped landmarks (no properties) and stadiums (team name needs a prompt)
   }
 }
 
