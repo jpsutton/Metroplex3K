@@ -133,6 +133,7 @@ class City {
   Population pop;
   growth::ValveLayer valves;
   growth::LandValueLayer landValue;
+  bool saltOff = false;   // cheat `Salt off`: every water body counts as fresh
   growth::ZoneManager zones;
   us::PowerLayer power;
   us::WaterLayer water;
@@ -145,6 +146,12 @@ class City {
   const CityConfig& config() const { return cfg_; }
   World* world() { return world_; }
   void markOccupantsDirty() { occDirty_ = true; }
+  int jailCapacity() const;
+  void recomputeLandValue();   // recompute every land-value block now (tools / tests)
+  std::optional<size_t> evaluateBusinessDeals(const BusinessDeals::Inputs& in) { return business.weeklyEvaluate(in, rng_); }
+  // Fall-out marks (disaster MarkRadiation): the tile blocks development and lowers land value. Session-only, not saved.
+  void markRadiation(int x, int z) { if (inMap(x, z)) radiation_[idx(x, z)] = 1; }
+  bool radioactiveAt(int x, int z) const { return inMap(x, z) && idx(x, z) < radiation_.size() && radiation_[idx(x, z)]; }
   void markNetworkDirty() { netDirty_ = true; }
 
   // Taxes: all three groups follow `rate` (the simplified UI has one slider).
@@ -217,6 +224,8 @@ class City {
   std::vector<uint8_t> transport_, powerLine_, pipe_;
   bool occDirty_ = true, netDirty_ = true;
   int residents_ = 0;
+  std::vector<uint8_t> radiation_;
+  int countResidents() const;
   std::map<std::pair<int, int>, int> plantAt_, waterFacAt_;      // anchor -> layer id
   std::map<std::pair<int, int>, std::pair<int, int>> stationAt_;  // anchor -> (kind 0 police 1 fire 2 jail, id)
   int roadUpkeep_ = 0, transitUpkeep_ = 0;

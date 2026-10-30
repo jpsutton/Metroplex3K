@@ -279,9 +279,13 @@ static void testWaterPumpRings() {
   f.kind[11 * 32 + 11] = 1;  // distance 1 (diagonal counts)
   f.L.monthlyUpdate(env);
   CHECK(f.L.facilities()[0].output == 2000 && f.L.facilities()[0].status == WaterFacility::Good);
-  // Salt water does not feed pumps.
+  // Salt water feeds pumps too [OBSERVED: computed per-pump outputs match the shipped saves only this way].
   std::fill(f.kind.begin(), f.kind.end(), 0);
   f.kind[11 * 32 + 11] = 2;
+  f.L.monthlyUpdate(env);
+  CHECK(f.L.facilities()[0].output == 2000);
+  // No water at all => 0.
+  std::fill(f.kind.begin(), f.kind.end(), 0);
   f.L.monthlyUpdate(env);
   CHECK(f.L.facilities()[0].output == 0);
   // Unpowered => 0.
@@ -408,14 +412,14 @@ static void testGarbage() {
   g.beginRun(5, 7, false);
   g.landfillBalance = -4;           // 4 landfill room
   CHECK(g.dispose(30) == 30 - 5 - 7 - 4 - 10);
-  CHECK(g.stats[1] == 5 && g.stats[2] == 7 && g.stats[4] == 4 && g.stats[6] == 10 && g.stats[5] == 0);
+  CHECK(g.stats[5] == 5 && g.stats[4] == 7 && g.stats[6] == 4 && g.stats[2] == 10 && g.stats[1] == 0);
   CHECK(g.landfillBalance == 0 && g.abducted == 10);
   // Abduction capped cumulatively.
   g.beginRun(0, 0, false);
   CHECK(g.dispose(3) == 3);
   // Export swallows everything left after burners and landfill.
   GarbageDisposal e; e.beginRun(2, 0, true);
-  CHECK(e.dispose(100) == 0 && e.stats[5] == 98 && e.stats[6] == 0);
+  CHECK(e.dispose(100) == 0 && e.stats[1] == 98 && e.stats[2] == 0);
   CHECK(reduceByPercent(100, 25) == 75 && reduceByPercent(7, 50) == 4);
   RunBudget rb;
   int64_t tot = 0;

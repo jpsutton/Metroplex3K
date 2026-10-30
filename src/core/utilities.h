@@ -165,7 +165,7 @@ struct WaterDeal { int tx = -1, tz = -1; bool purchase = true; int amount = 0; }
 struct WaterEnv {
   int nowAbsMonth = 0;
   const std::vector<uint8_t>* pipes = nullptr;        // x*H+z
-  const std::vector<uint8_t>* waterKind = nullptr;    // x*H+z: 0 land, 1 fresh, 2 salt
+  const std::vector<uint8_t>* waterKind = nullptr;    // x*H+z bit mask: 1 fresh, 2 salt, 0 land
   const PowerLayer* power = nullptr;                  // powered bits (null = everything powered)
   std::function<int(int, int)> waterPollutionAt;      // 0..32767 at tile; null = 0
   int maxWaterPollutionGrid = 0;                      // used when !usePollutionConstantMax
@@ -236,6 +236,7 @@ class GarbageDisposal {
   int64_t abductionCap = 0;         // GarbageAbductionAmount
   int64_t abducted = 0;             // cumulative counter (never reset: OPEN)
   int64_t landfillBalance = 0;      // negative = spare room (spec 7.2.4 step 3)
+  int64_t pendingLandfill = 0;      // garbage accepted by the landfill stage, not yet placed on a landfill tile
   int64_t stats[7] = {};
 
   void beginRun(int64_t wte, int64_t inc, bool exportDealPresent) { wteBudget = wte; incineratorBudget = inc; exportDeal = exportDealPresent; }

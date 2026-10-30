@@ -254,6 +254,7 @@ class PollutionLayer {
   int airAt(int x, int z) const { return (state[size_t(x / 2) * nz_ + z / 2] >> 15) & 0x7FFF; }
   int waterAt(int x, int z) const { return state[size_t(x / 2) * nz_ + z / 2] & 0x7FFF; }
   int standingGarbageAt(int x, int z) const { return standing[size_t(x) * H_ + z] & 0x7FFF; }
+  void setStandingGarbage(int x, int z, int g) { uint16_t& w = standing[size_t(x) * H_ + z]; w = uint16_t((w & 0x8000) | (g & 0x7FFF)); }
   bool airPolluted(int x, int z) const { return airAt(x, z) >= params_.airThreshold; }
   bool waterPolluted(int x, int z) const { return waterAt(x, z) >= params_.waterThreshold; }
   bool garbagePolluted(int x, int z) const { return standingGarbageAt(x, z) >= params_.garbageThreshold; }
@@ -263,6 +264,7 @@ class PollutionLayer {
   uint16_t recVersion = 3, streamVersion = 2;
   std::vector<uint32_t> state;               // cells x*nz+z
   uint8_t garbageStore[37] = {};
+  int64_t loadedBalance_ = 0;      // landfill balance as loaded (garbageStore is re-patched only when it changed)
   std::vector<uint16_t> standing;            // tiles x*H+z
   GarbageDisposal disp;                      // disp.stats == garbageTotals
   uint32_t avgAir = 0, avgWater = 0;

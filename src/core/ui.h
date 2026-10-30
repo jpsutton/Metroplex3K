@@ -51,7 +51,10 @@ class Ui {
   int focusId = 0;       // text box with keyboard focus
   int activeId = 0;      // widget being dragged
 
-  void begin(std::vector<uint32_t>* f, int w, int h, const Input& i) { fb = f; W = w; H = h; in = i; tooltip.clear(); idCounter_ = 0; }
+  void begin(std::vector<uint32_t>* f, int w, int h, const Input& i) { fb = f; W = w; H = h; in = i; tooltip.clear(); idCounter_ = 0; windowRects.clear(); }
+  // Frames of the windows drawn this frame (windows register theirs through wui::centered), so the host can tell
+  // whether the pointer is over a window instead of guessing sizes.
+  mutable std::vector<Rect> windowRects;
   int nextId() { return ++idCounter_; }
 
   void fill(Rect r, uint32_t c);

@@ -872,7 +872,9 @@ NeighbourDeals::Money NeighbourDeals::monthlyMoney() {
   Money m;
   for (auto& d : active) {
     if (d.terminated() || d.dealType >= kDealTypes) continue;
-    d.monthlyAmount = amountFor(cfg, d);
+    // [OBSERVED] shipped saves: units * rate / Base reproduces neither sell deals (Berlin 26,775 * 20 / 1000 = 535 vs saved
+    // 1,071) nor buy deals (the saved rate field equals the amount), so a loaded deal keeps its saved amount.
+    if (!(d.fromSave && d.monthlyAmount > 0)) d.monthlyAmount = amountFor(cfg, d);
     if (d.dealType & 1) m.income += d.monthlyAmount; else m.cost += d.monthlyAmount;
   }
   return m;
@@ -998,6 +1000,7 @@ static void parseDeal(Reader& r, Deal& d) {
   d.rate = r.s32();
   d.sizeOrTerm = r.u32();
   d.year = r.u32();
+  d.fromSave = true;
 }
 static void putDeal(Bytes& b, const Deal& d) {
   putString(b, d.neighbourName);

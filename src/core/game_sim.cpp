@@ -45,11 +45,19 @@ class CityDisasterWorld : public DisasterWorld {
   City& c_;
 };
 
-DisasterInputs inputsFor(City& c, bool enabled) {
+DisasterInputs inputsFor(City& c, bool enabled, const CheatRegistry& cheats) {
   DisasterInputs in;
   in.jdn = c.clock.jdn();
   in.year = c.clock.date().year;
   in.disastersEnabled = enabled;
+  // spec 29 section 2.6 interim sources: U = unemployment %, A = city aura.
+  in.unrest = std::max(0, std::min(100, c.pop.unemploymentPercent()));
+  in.aura = int(c.aura.cityAura);
+  in.ordCleanIndustry = c.ordinances.enacted(ord::CleanIndustry);
+  in.ordIndPollutantFee = c.ordinances.enacted(ord::IndPollutantFee);
+  in.ordWasteDisposal = c.ordinances.enacted(ord::IndWasteDisposal);
+  for (const auto& o : c.world()->occupants) if (o.agentType == 19001 && o.state == 1) in.toxicWastePlants++;
+  in.cheatUfoSwarm = cheats.active("UFO Swarm"); in.cheatLocustSwarm = cheats.active("Locust Swarm");
   return in;
 }
 
@@ -110,7 +118,8 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   in.year = c.clock.date().year;
   in.mapWidth = world_.W; in.mapHeight = world_.H;
   in.budget.treasury = sim_.funds;
-  for (int i = 0; i < 3; i++) in.budget.taxRate[i] = sim_.taxRate;
+  for (int i = 0; i < 3; i++) in.budget.taxRate[i] = c.budget.tax[i].rate;
+  in.aura = int(c.aura.cityAura);
   in.plan.demand[0] = sim_.valveR.value; in.plan.demand[1] = sim_.valveC.value; in.plan.demand[2] = sim_.valveI.value;
   in.plan.treasury = sim_.funds;
   in.plan.monthIndex = c.clock.date().month - 1;
@@ -152,6 +161,34 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   if (const Department* d = c.budget.dept(dept::Health)) in.demo.healthFunding = d->funding;
   if (const Department* d = c.budget.dept(dept::Education)) in.demo.eduFunding = d->funding;
   in.neighbourConnections = 0;
+  {  // neighbour connections and deals
+    const NeighbourDeals& nd = c.neighbours;
+    bool anyPower = false, anyPipe = false;
+    for (const auto& nb : nd.neighbours) {
+      if (nb.nRoad + nb.nRail + nb.nPower + nb.nPipe + nb.nHighway + nb.nSubway > 0) in.neighbourConnections++;
+      anyPower = anyPower || nb.nPower > 0; anyPipe = anyPipe || nb.nPipe > 0;
+    }
+    in.util.neighbours = in.neighbourConnections;
+    in.util.powerLineConnection = anyPower; in.util.pipeConnection = anyPipe;
+    for (const auto& d : nd.active) {
+      if (d.terminated()) continue;
+      in.budget.anyNeighbourDealActive = true;
+      switch (d.dealType) {
+        case 0: in.util.dealBuyPower = true; break;
+        case 1: in.util.dealSellPower = true; break;
+        case 2: in.util.dealBuyWater = true; break;
+        case 3: in.util.dealSellWater = true; break;
+        case 4: in.env.trashExportDealActive = in.env.anyTrashDeal = true; break;
+        case 5: in.budget.trashImportDealKind5Exists = in.env.trashImportDealExists = in.env.anyTrashDeal = true; break;
+        default: break;
+      }
+    }
+  }
+  in.util.waterUsed = c.water.stats.used; in.util.waterCap = c.water.stats.supply;
+  in.plan.landValue = c.landValue.cityAverage();
+  in.safety.curfewEnacted = c.ordinances.enacted(ord::YouthCurfew);
+  in.safety.youthSportsEnacted = c.ordinances.enacted(ord::YouthSports);
+  in.demo.healthStrike = c.pop.healthStrike; in.demo.schoolStrike = c.pop.schoolStrike; in.demo.collegeStrike = c.pop.collegeStrike;
   for (auto z : world_.zone) {
     if (z >= 1 && z <= 3) in.plan.zoned[0]++; else if (z >= 5 && z <= 7) in.plan.zoned[1]++; else if (z >= 9 && z <= 11) in.plan.zoned[2]++;
   }
@@ -167,6 +204,16 @@ void Game::weeklyHook() {
   PetitionerInputs pi;
   pi.population = ai.population; pi.year = ai.year;
   petitioners_.weeklyCycle(pi, rng_);
+  {  // spec 19 section 11: low-treasury business-deal offers, raised as advisor petitions
+    City& c = city();
+    BusinessDeals::Inputs bi;
+    bi.funds = sim_.funds; bi.population = uint32_t(std::max<int64_t>(0, ai.population)); bi.currentYear = ai.year;
+    bi.cityHasBusiness = [this](uint32_t type) {
+      for (const auto& o : world_.occupants) if (o.agentType == type) return true;
+      return false;
+    };
+    if (auto offer = c.evaluateBusinessDeals(bi)) petitioners_.request(c.business.defs[*offer].messageId, 0, 48);
+  }
   presentPetitions();
 }
 
@@ -204,6 +251,17 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
           renderer_.invalidateShade();
         }
         break;
+      case DisasterCommand::MarkRadiation: c.markRadiation(cmd.x, cmd.z); break;
+      case DisasterCommand::Crater:
+        if (cmd.pts.size() >= 2) {
+          std::set<int> hit;
+          for (int x = cmd.pts[0].first; x <= cmd.pts[1].first; x++)
+            for (int z = cmd.pts[0].second; z <= cmd.pts[1].second; z++) { int i = c.occupantAt(x, z); if (i >= 0) hit.insert(i); }
+          for (int i : hit) world_.occupants[size_t(i)].state = 8;
+          if (!hit.empty()) c.markOccupantsDirty();
+          sound(244);
+        }
+        break;
       default: break;
     }
   }
@@ -219,7 +277,7 @@ void Game::startDisaster(DisasterType t) {
   if (!managersReady_) initManagers();
   CityDisasterWorld dw(world_, city());
   DisasterOutput out;
-  if (!disasters_.startRandom(t, dw, inputsFor(city(), disastersOn_), out)) message("The disaster could not start.");
+  if (!disasters_.startRandom(t, dw, inputsFor(city(), disastersOn_, cheats_), out)) message("The disaster could not start.");
   applyDisasterOutput(out);
 }
 
@@ -240,8 +298,40 @@ void Game::dispatchUnit(int kind, int tx, int tz) {
 
 void Game::typeCheat(const std::string& s) {
   CheatResult r = cheats_.submit(s);
-  (void)r;
-  if (r.match.info) message("Cheat accepted.");
+  if (!r.match.info) return;
+  applyCheat(r);
+}
+
+// Effects of spec 27 section 5.3 that the engine models. Build-menu unlocks, petitioner/advisor forcing and the
+// developer cheats are not wired yet (tracked in issue #33).
+void Game::applyCheat(const CheatResult& r) {
+  const CheatInfo& c = *r.match.info;
+  std::string phrase;
+  for (char ch : std::string(c.phrase)) phrase += char(std::tolower(static_cast<unsigned char>(ch)));
+  if (!r.tickerEcho.empty()) {
+    cal::Date d = sim_.city().clock.date();
+    std::string text = r.tickerEcho;
+    news_.post(kTickerStringTable, r.tickerMsg, tickerStamp(d.month, d.day, d.year), false, 0, 0, &text);
+  } else if (r.tickerMsg) {
+    postNews(kTickerStringTable, r.tickerMsg);
+  }
+  if (!simReady_) return;
+  City& cy = city();
+  if (phrase == "i am weak") cy.budget.freePlacement = r.stateOn;
+  else if (phrase == "so sue me") cy.budget.debtFloor = r.stateOn;
+  else if (phrase == "i love red tape") {
+    std::vector<uint32_t> announced;
+    cy.ordinances.makeAllAvailable(&announced);
+  } else if (phrase == "salt off") cy.saltOff = true;
+  else if (phrase == "salt on") cy.saltOff = false;
+  else if (int delta = terrainCheatDelta(&c)) {
+    World& w = world_;
+    for (auto& v : w.alt) v = uint8_t(shiftTerrainAltitude(v, delta));
+    for (auto& v : w.water) v = uint8_t(shiftTerrainAltitude(v, delta));
+    w.seaLevel = uint8_t(shiftTerrainAltitude(w.seaLevel, delta));
+    terrainChanged();
+    dirty_ = true;
+  }
 }
 
 bool Game::scenarioActive() const { return scen_ && scen_->active(); }
@@ -266,13 +356,28 @@ void Game::startScenarioHooks() {
 }
 
 void Game::applyPetitionEffect(const PetitionEffect& e) {
-  if (!e.accepted) return;
   City& c = city();
+  if (!e.accepted) {
+    if (e.kind == PetitionEffect::BusinessDeal) c.business.pendingOffer.reset();   // declined: offers may be raised again
+    return;
+  }
   switch (e.kind) {
     case PetitionEffect::Treasury: sim_.funds += e.treasuryDelta; break;
     case PetitionEffect::SetOrdinance:
       if (e.value) c.ordinances.enact(e.ordinance); else c.ordinances.repeal(e.ordinance);
       break;
+    case PetitionEffect::RewardAvailable:
+      if (e.buildingType) advisors_.rewards.markAvailable(e.buildingType);
+      break;
+    case PetitionEffect::BusinessDeal: {
+      BusinessDeals& b = c.business;
+      if (b.pendingOffer && b.defs[*b.pendingOffer].messageId == e.petition) {
+        int type = int(b.defs[*b.pendingOffer].buildingType);
+        if (b.accept()) advisors_.rewards.markAvailable(type);
+        else b.pendingOffer.reset();
+      }
+      break;
+    }
     default: break;
   }
   if (e.voiceSound) sound(e.voiceSound);
@@ -302,7 +407,7 @@ void Game::tickSim(uint32_t dtMs) {
     sim_.tickDay();
     CityDisasterWorld dw(world_, city());
     DisasterOutput out;
-    DisasterInputs in = inputsFor(city(), disastersOn_);
+    DisasterInputs in = inputsFor(city(), disastersOn_, cheats_);
     disasters_.dayTick(dw, in, out);
     int month = city().clock.date().month;
     if (month != lastMonth_) { lastMonth_ = month; disasters_.monthlyTick(dw, in, out); }

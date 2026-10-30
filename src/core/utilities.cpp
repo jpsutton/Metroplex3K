@@ -383,7 +383,7 @@ static bool ringAny(int W, int H, int x0, int z0, int x1, int z1, const std::vec
     for (int z = z0; z <= z1; z++) {
       if (x != x0 && x != x1 && z != z0 && z != z1) continue;
       if (x < 0 || z < 0 || x >= W || z >= H) continue;
-      if ((*kind)[size_t(x) * H + z] == want) return true;
+      if ((*kind)[size_t(x) * H + z] & want) return true;
     }
   return false;
 }
@@ -415,8 +415,10 @@ void WaterLayer::monthlyUpdate(const WaterEnv& env) {
     int64_t out = 0;
     if (f.kind == WaterKind::Tower) { out = cap; f.status = WaterFacility::Good; }
     else if (f.kind == WaterKind::Pump) {
-      if (ringAny(W, H, f.x - 1, f.z - 1, f.x + 1, f.z + 1, env.waterKind, 1)) { out = cap; f.status = WaterFacility::Good; }
-      else if (ringAny(W, H, f.x - 2, f.z - 2, f.x + 2, f.z + 2, env.waterKind, 1)) {
+      // [OBSERVED] pumps accept any adjacent water, salt included: with this rule the computed per-pump outputs match the
+      // saved ones (spec 16 s3.3 says fresh only; that makes coastal pumps in Liverpool produce nothing).
+      if (ringAny(W, H, f.x - 1, f.z - 1, f.x + 1, f.z + 1, env.waterKind, 3)) { out = cap; f.status = WaterFacility::Good; }
+      else if (ringAny(W, H, f.x - 2, f.z - 2, f.x + 2, f.z + 2, env.waterKind, 3)) {
         out = int64_t(cap) * params_.pumpDistanceFactor / 100; f.status = WaterFacility::Far;
       } else f.status = WaterFacility::NoWater;
     } else {
@@ -600,18 +602,20 @@ int64_t GarbageDisposal::dispose(int64_t amount) {
     int64_t t = std::min(rem, std::max<int64_t>(0, budget));
     budget -= t; rem -= t; stats[slot] += t;
   };
-  take(wteBudget, 1);
-  take(incineratorBudget, 2);
+  // Statistic slots as laid out by the original's saves [OBSERVED]: 4 = incinerators (3 x 45,000/month in Liverpool), 5 = WTE
+  // (Madison's whole remainder), 6 = landfill (Berlin, Moscow). Slots 1 and 2 are used here for export and abduction (OPEN).
+  take(wteBudget, 5);
+  take(incineratorBudget, 4);
   if (rem > 0) {
     int64_t t = std::min(rem, landfillRoom());
-    landfillBalance += t; rem -= t; stats[4] += t;
+    landfillBalance += t; pendingLandfill += t; rem -= t; stats[6] += t;
   }
-  if (rem > 0 && exportDeal) { stats[5] += rem; rem = 0; }
+  if (rem > 0 && exportDeal) { stats[1] += rem; rem = 0; }
   if (rem > 0) {
     int64_t room = abductionCap - abducted;
     if (room > 0) {
       int64_t t = std::min(rem, room);
-      abducted += t; rem -= t; stats[6] += t;
+      abducted += t; rem -= t; stats[2] += t;
     }
   }
   return rem;

@@ -245,6 +245,16 @@ class GrowthAdapter : public growth::GrowthCity {
   int zoneAt(int x, int z) const override { return c_.world_->zone[c_.idx(x, z)]; }
   bool powered(int x, int z) const override { return c_.power.powered(x, z); }
   bool watered(int x, int z) const override { return c_.water.tileServiced(x, z); }
+  bool radioactive(int x, int z) const override { return c_.radioactiveAt(x, z); }
+  // Landfill (spec 15 s7): a landfill tile keeps its garbage in the pollution layer's standing word; the zone-17 developer
+  // decays it on each visit (credit back as capacity) and fills tiles from the garbage the disposal stage parked.
+  int landfillGarbage(int x, int z) const override { return c_.world_->inTiles(x, z) ? c_.pollution.standingGarbageAt(x, z) : 0; }
+  void setLandfillGarbage(int x, int z, int g) override { if (c_.world_->inTiles(x, z)) c_.pollution.setStandingGarbage(x, z, g); }
+  void creditGarbageCapacity(int d) override { c_.pollution.disp.landfillBalance -= d; }
+  int takePendingLandfillGarbage() override {
+    int64_t v = std::min<int64_t>(c_.pollution.disp.pendingLandfill, 0x7FFFFFFF); c_.pollution.disp.pendingLandfill -= v; return int(v);
+  }
+  void returnLandfillGarbage(int g) override { c_.pollution.disp.pendingLandfill += g; }
   int landValue(int x, int z) const override {
     if (c_.cfg_.synthetic) return 128;
     return std::max(1, c_.landValue.landValueAtTile(x, z));
@@ -330,11 +340,15 @@ class LandValueAdapter : public growth::LandValueCity {
   int crime(int x, int z) const override { return c_.crime.crimeAt(x, z); }
   int altitude(int x, int z) const override { return c_.world_->altAt(std::min(x, c_.world_->W), std::min(z, c_.world_->H)); }
   int seaLevel() const override { return c_.world_->seaLevel; }
+  bool radioactive(int x, int z) const override { return c_.radioactiveAt(x, z); }
   bool hasWater(int x, int z) const override {
     if (!c_.world_->inTiles(x, z)) return false;
     return c_.world_->waterAt(x, z) > c_.world_->altAt(x, z);
   }
-  int64_t population() const override { return c_.residents_; }
+  // [OBSERVED] The centre-value curves (spec 15 s6.2) reproduce the saved land-value grids of the shipped cities only when
+  // read at about twice the resident count: with the plain count our blocks come out 10-25% low in every city tested
+  // (Madison, Liverpool, London, Sacramento, Seoul, Frankfurt), with ~1.9-2.0 the mean ratio to the saved grid is 1.00.
+  int64_t population() const override { return 2 * int64_t(c_.residents_); }
   bool ordinanceEnacted(uint32_t id) const override { return c_.ordinances.enacted(id); }
   void occupants(std::vector<growth::LvOccupant>& out) const override {
     for (const auto& o : c_.world_->occupants) out.push_back({o.x, o.z, o.sizeX, o.sizeZ, o.agentType, o.state == 1});
@@ -420,6 +434,7 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   flammability = us::FlammabilityLayer(); flammability.init(W, H, us::FlammabilityParams::fromIni(cfg_.ini.tune));
   traffic = std::make_unique<TrafficSim>(W, H, TrafficParams::fromIni(cfg_.ini.traffic), seed);
 
+  radiation_.assign(size_t(W) * H, 0);
   plantAt_.clear(); waterFacAt_.clear(); stationAt_.clear(); preserved_.clear();
   residents_ = 0; lastTaxRate_ = -1; roadUpkeep_ = transitUpkeep_ = 0; refreshSkips_ = 0;
   growthView_ = std::make_unique<GrowthAdapter>(*this);
@@ -431,6 +446,16 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   if (!haveLv) landValue.recomputeAll(*lvView_);
   wire();
   refresh(true);
+  residents_ = countResidents();   // HUD and dialogs read this before the first month end
+  // Full monthly costs are normally supplied by the owning subsystem at the first month end, and health and education
+  // have no modelled upkeep yet (issue #44). Until then reuse the loaded city's last monthly charge so the budget
+  // window's year-end estimate and the next settlement start from the saved level.
+  for (auto& d : budget.depts)
+    if (d.fullCost == 0 && d.lastCharge > 0 && d.funding > 0) d.fullCost = (d.lastCharge * 100 + d.funding - 1) / d.funding;
+  // Business deals are not stored in the save: a deal is in force while its business building stands (spec 19 s11).
+  for (const auto& d : business.defs)
+    for (const auto& o : world_->occupants)
+      if (o.agentType == d.buildingType) { business.inForce.push_back(d.buildingType); break; }
   if (!power.plants().empty()) {   // loaded city: coverage must be valid before the first month end
     auto consumers = simOccupants(true);
     consumers.erase(std::remove_if(consumers.begin(), consumers.end(), [](const us::SimOccupant& o) { return us::powerCategory(o.agentType) >= 0; }), consumers.end());
@@ -564,6 +589,7 @@ namespace { PlacementCosts makeCosts(const Budget& b, const CityConfig& cfg); }
 
 
 int City::zoneCost(int zt) const {
+  if (budget.freePlacement) return 0;
   if (zt == 0) { int64_t c = budget.specialCost(6); return int(c > 0 ? c : 1); }
   int d = (zt >= 1 && zt <= 3) ? zt - 1 : (zt >= 5 && zt <= 7) ? zt - 5 : (zt >= 9 && zt <= 11) ? zt - 9 : 0;
   int64_t c = budget.specialCost(std::min(2, d));
@@ -626,7 +652,7 @@ City::Quote City::quoteNetwork(NetworkKind k, const std::vector<std::pair<int, i
             : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
   PlacementCosts pc = makeCosts(budget, cfg_);
   int cost = pc.cost(toolParams(tool).costKey);
-  if (cost == 0 && budget.cfg.placementCost.empty()) cost = 10;
+  if (cost == 0 && budget.cfg.placementCost.empty() && !budget.freePlacement) cost = 10;
   for (auto [x, z] : path) {
     if (!inMap(x, z)) continue;
     size_t i = idx(x, z);
@@ -722,6 +748,7 @@ PlacementCosts makeCosts(const Budget& b, const CityConfig& cfg) {
   pc.parent = cfg.parent;
   pc.demolish = int(b.cfg.specialCostFor(7));
   pc.demolishRubble = int(b.cfg.specialCostFor(12));
+  if (b.freePlacement) { pc.byType.clear(); pc.demolish = pc.demolishRubble = 0; return pc; }
   if (cfg.synthetic) {
     static const std::pair<Tool, int> defs[] = {{TOOL_ROAD, 10}, {TOOL_RAIL, 20}, {TOOL_POWER, 5}, {TOOL_PIPE, 3},
                                                 {TOOL_HIGHWAY, 50}, {TOOL_SUBWAY, 30}};
@@ -738,7 +765,7 @@ bool City::buildNetworkFallback(NetworkKind k, const std::vector<std::pair<int, 
   PlacementCosts pc = makeCosts(budget, cfg_);
   Tool tool = k == NetworkKind::Power ? TOOL_POWER : k == NetworkKind::Pipe ? TOOL_PIPE : TOOL_ROAD;
   int cost = pc.cost(toolParams(tool).costKey);
-  if (cost == 0 && budget.cfg.placementCost.empty()) cost = 10;
+  if (cost == 0 && budget.cfg.placementCost.empty() && !budget.freePlacement) cost = 10;
   std::vector<std::pair<int, int>> placed;
   for (auto [x, z] : path) {
     if (!inMap(x, z)) continue;
@@ -895,13 +922,16 @@ void City::syncFacilities() {
       wf.insert(key);
       if (!waterFacAt_.count(key)) {
         us::WaterKind kind = o.agentType == kAgentPump ? us::WaterKind::Pump : o.agentType == kAgentTower ? us::WaterKind::Tower : us::WaterKind::Desalination;
-        waterFacAt_[key] = water.addFacility(kind, o.x, o.z, now);
+        // Build date (year, day of year) from the occupant's date pair when the save has one; otherwise it is new.
+        int built = now;
+        if (o.hasDate && o.dateYear > 0) built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
+        waterFacAt_[key] = water.addFacility(kind, o.x, o.z, std::min(built, now));
       }
     } else if (usHier_.isAncestorOrSelf(o.agentType, kAgentPolice) || usHier_.isAncestorOrSelf(o.agentType, kAgentFire) ||
                o.agentType == kAgentJail) {
       st.insert(key);
       if (!stationAt_.count(key)) {
-        if (o.agentType == kAgentJail) stationAt_[key] = {2, police.addJail(100)};
+        if (o.agentType == kAgentJail) stationAt_[key] = {2, police.addJail(jailCapacity())};
         else if (usHier_.isAncestorOrSelf(o.agentType, kAgentPolice)) stationAt_[key] = {0, police.addStation(o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1)};
         else stationAt_[key] = {1, fire.addStation(o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1)};
       }
@@ -972,12 +1002,21 @@ void City::dailyFire() {
   env.averageMetric = int(flammability.averageFlammability());
   fire.tick(env, urng_);
 }
+int City::jailCapacity() const {
+  us::IniReader t{&cfg_.ini.tune};
+  int c = int(t.num("Jail", "InmateCapacity", 0));
+  return c > 0 ? c : 100;
+}
+void City::recomputeLandValue() { landValue.recomputeAll(*lvView_); }
 void City::dailyLandValue() { landValue.update(*lvView_); }
 void City::dailyZoneDev() { zones.tick(*growthView_, zoneRng_, zoneCrt_); }
 void City::dailyPollution() {
   us::PollutionEnv env;
   env.zone = &world_->zone;
   env.ordinances = usOrdinances();
+  env.exportDeal = neighbours.dealOfType(4);   // garbage export deal: the whole remainder leaves the city
+  for (const auto& d : neighbours.active)      // garbage import deal (the player is paid): enters the pipeline first
+    if (!d.terminated() && d.dealType == 5) env.importMonthly += d.quantity;
   pollution.run(env);
 }
 void City::dailyCrime() {
@@ -1038,28 +1077,33 @@ std::string City::debugStats() const {
 
 void City::monthlyNeighbours() { neighbours.monthly(clock.date().month, rng_); }
 
+int City::countResidents() const {
+  int residents = 0;
+  for (const auto& o : world_->occupants) {
+    if (o.state != 1) continue;
+    auto it = cfg_.valve.agentEffects.find(o.agentType);
+    if (it != cfg_.valve.agentEffects.end())
+      for (const auto& vi : it->second) if (vi.valve == growth::kValveRes) residents += vi.supply * o.sizeX * o.sizeZ;
+  }
+  return residents;
+}
+
 void City::monthlyValves() {
   growth::ValveCityInput in;
-  int residents = 0;
   for (const auto& o : world_->occupants) {
     growth::ValveBuilding b;
     b.agentType = o.agentType; b.x = o.x; b.z = o.z; b.sizeX = o.sizeX; b.sizeZ = o.sizeZ;
     b.operating = o.state == 1;
     in.buildings.push_back(b);
-    if (o.state == 1) {
-      auto it = cfg_.valve.agentEffects.find(o.agentType);
-      if (it != cfg_.valve.agentEffects.end())
-        for (const auto& vi : it->second) if (vi.valve == growth::kValveRes) residents += vi.supply * o.sizeX * o.sizeZ;
-    }
   }
-  residents_ = residents;
+  residents_ = countResidents();
   in.connectionCount[0] = int(neighbours.conn[1].size());   // saved order: rail, road, pipe, power, highway, subway
   in.connectionCount[1] = int(neighbours.conn[0].size());
   in.connectionCount[2] = int(neighbours.conn[4].size());
   in.connectionCount[3] = int(neighbours.conn[5].size());
   for (const auto& kv : ordinances.catalogue()) if (ordinances.enacted(kv.first)) in.enactedOrdinances.insert(kv.first);
   in.workforceFraction = pop.workforceFraction();
-  in.population = residents;
+  in.population = residents_;
   cal::Date d = clock.date();
   in.year = d.year; in.month = d.month;
   for (int g = 0; g < kTaxGroups; g++) in.taxRate[g] = budget.tax[g].rate;
@@ -1102,6 +1146,20 @@ void City::monthlyTraffic() {
   in.ord.touristPromotion = ordinances.enacted(kOrdTourist);
   in.ord.subsidizedTransit = ordinances.enacted(kOrdSubsidizedTransit);
   in.roadTiles = roads; in.highwayTiles = hwy; in.railTiles = rail;
+  {  // transit upkeep (spec 18 s8): station buildings' OptimalMonthlyUpkeep plus subway tiles (saved Transit charges: Berlin 1,351)
+    std::set<std::pair<int, int>> subTiles;
+    for (const auto& p : world_->subway) subTiles.insert({p.x, p.z});
+    in.subwayTiles = int(subTiles.size());
+    us::IniReader t{&cfg_.ini.tune};
+    const int64_t bus = t.num("BusStop", "OptimalMonthlyUpkeep", 0), railStn = t.num("RailStation", "OptimalMonthlyUpkeep", 0),
+                  subRail = t.num("SubwayRailStation", "OptimalMonthlyUpkeep", 0), subStn = t.num("SubwayStation", "OptimalMonthlyUpkeep", 0);
+    int64_t up = 0;
+    for (const auto& o : world_->occupants) {
+      if (o.state != 1) continue;
+      switch (o.agentType) { case 12210: up += bus; break; case 12230: up += railStn; break; case 12361: up += subRail; break; case 12360: up += subStn; break; default: break; }
+    }
+    in.stationUpkeep = int(up);
+  }
   cal::Date d = clock.date();
   in.year = d.year; in.month = d.month;
   if (const Department* r = budget.dept(dept::Roads)) traffic->setRoadFunding(r->funding);
@@ -1113,7 +1171,13 @@ void City::monthlyTraffic() {
 void City::monthlyBudget() {
   budget.setDeptFullCost(dept::Roads, roadUpkeep_);
   budget.setDeptFullCost(dept::Transit, transitUpkeep_);
-  budget.setDeptFullCost(dept::Police, police.upkeepTotal);
+  {  // police department cost = station upkeep + a fixed monthly upkeep per jail (SC3Tune [Jail] MonthlyUpkeep = 75; matches the saved
+     // charges: Berlin 12 jails, charge 1,483 vs station upkeep 540)
+    int jails = 0;
+    for (const auto& kv : stationAt_) if (kv.second.first == 2) jails++;
+    us::IniReader t{&cfg_.ini.tune};
+    budget.setDeptFullCost(dept::Police, int64_t(police.upkeepTotal) + int64_t(jails) * t.num("Jail", "MonthlyUpkeep", 0));
+  }
   budget.setDeptFullCost(dept::Fire, fire.upkeepTotal);
   if (const Department* p = budget.dept(dept::Police)) if (p->funding != police.funding()) police.setFunding(p->funding);
   if (const Department* f = budget.dept(dept::Fire)) if (f->funding != fire.funding()) fire.setFunding(f->funding);
@@ -1135,8 +1199,20 @@ void City::monthlyBudget() {
 }
 
 us::PowerEnv City::powerEnv(std::vector<uint8_t>& conductive) const {
-  conductive.assign(size_t(world_->W) * world_->H, 0);
-  for (size_t i = 0; i < conductive.size(); i++) conductive[i] = powerLine_[i] || world_->zone[i] != 0 || occ_[i] >= 0;
+  // spec 12 section 9.1: every building footprint and power-line piece conducts to anything within 2 tiles.
+  const int Wt = world_->W, Ht = world_->H;
+  std::vector<uint8_t> src(size_t(Wt) * Ht, 0);
+  for (size_t i = 0; i < src.size(); i++) src[i] = powerLine_[i] || occ_[i] >= 0;
+  std::vector<uint8_t> dx(src.size(), 0);
+  conductive.assign(src.size(), 0);
+  for (int x = 0; x < Wt; x++)
+    for (int z = 0; z < Ht; z++)
+      if (src[idx(x, z)])
+        for (int d = std::max(0, x - 2); d <= std::min(Wt - 1, x + 2); d++) dx[idx(d, z)] = 1;
+  for (int x = 0; x < Wt; x++)
+    for (int z = 0; z < Ht; z++)
+      if (dx[idx(x, z)])
+        for (int d = std::max(0, z - 2); d <= std::min(Ht - 1, z + 2); d++) conductive[idx(x, d)] = 1;
   us::PowerEnv env;
   env.conductive = &conductive;
   env.ordinances = usOrdinances();
@@ -1171,10 +1247,70 @@ void City::monthlyWater() {
       for (int dz = 0; dz < o.sizeZ; dz++)
         if (inMap(o.x + dx, o.z + dz)) pipes[idx(o.x + dx, o.z + dz)] = 1;
   }
+  // Salt vs fresh water: the sea flag is not persisted (spec 11 section 5), so derive it. A water body (4-connected
+  // wet tiles) is sea when it touches the map edge and is wide: some tile of it is at least kSeaWidth tiles from land.
+  // Rivers that run off the map edge, and inland lakes, stay fresh even when their surface equals the sea level (as in
+  // nearly every shipped file; Berlin's pumps beside an edge-crossing river are saved as working).
   std::vector<uint8_t> kind(size_t(world_->W) * world_->H, 0);
-  for (int x = 0; x < world_->W; x++)
-    for (int z = 0; z < world_->H; z++)
-      if (world_->waterAt(x, z) > world_->altAt(x, z)) kind[idx(x, z)] = world_->waterAt(x, z) <= world_->seaLevel ? 2 : 1;
+  {
+    const int Wt = world_->W, Ht = world_->H;
+    // The generator treats a vertex as land only when altitude > water surface (spec 11 section 3), so a vertex whose
+    // altitude equals the surface is water; no shipped building stands on such tiles.
+    auto wet = [&](int x, int z) { return world_->waterAt(x, z) >= world_->altAt(x, z); };
+    auto deep = [&](int x, int z) { return world_->waterAt(x, z) > world_->altAt(x, z) && world_->waterAt(x, z) <= world_->seaLevel; };
+    for (int x = 0; x < Wt; x++)
+      for (int z = 0; z < Ht; z++)
+        if (wet(x, z)) kind[idx(x, z)] = 1;
+    if (!saltOff) {
+      // Distance to the nearest non-water tile (capped), by multi-source BFS.
+      constexpr int kSeaWidth = 8;
+      std::vector<uint8_t> dist(size_t(Wt) * Ht, 255);
+      std::vector<int> q;
+      for (int x = 0; x < Wt; x++)
+        for (int z = 0; z < Ht; z++)
+          if (!deep(x, z)) { dist[idx(x, z)] = 0; q.push_back(int(idx(x, z))); }
+      static const int d4[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+      for (size_t h = 0; h < q.size(); h++) {
+        int c = q[h], x = c / Ht, z = c % Ht;
+        if (dist[size_t(c)] >= kSeaWidth) continue;
+        for (auto& d : d4) {
+          int nx = x + d[0], nz = z + d[1];
+          if (nx < 0 || nz < 0 || nx >= Wt || nz >= Ht || dist[idx(nx, nz)] != 255) continue;
+          dist[idx(nx, nz)] = uint8_t(dist[size_t(c)] + 1); q.push_back(int(idx(nx, nz)));
+        }
+      }
+      std::vector<uint8_t> seen(size_t(Wt) * Ht, 0);
+      auto component = [&](int sx, int sz) {
+        std::vector<int> comp{int(idx(sx, sz))}; seen[idx(sx, sz)] = 1; bool wide = false;
+        for (size_t h = 0; h < comp.size(); h++) {
+          int c = comp[h], x = c / Ht, z = c % Ht;
+          if (dist[size_t(c)] >= kSeaWidth) wide = true;
+          for (auto& d : d4) {
+            int nx = x + d[0], nz = z + d[1];
+            if (nx < 0 || nz < 0 || nx >= Wt || nz >= Ht || seen[idx(nx, nz)] || !deep(nx, nz)) continue;
+            seen[idx(nx, nz)] = 1; comp.push_back(int(idx(nx, nz)));
+          }
+        }
+        if (wide) for (int c : comp) kind[size_t(c)] = 2;
+      };
+      auto edge = [&](int x, int z) { if (deep(x, z) && !seen[idx(x, z)]) component(x, z); };
+      for (int x = 0; x < Wt; x++) { edge(x, 0); edge(x, Ht - 1); }
+      for (int z = 0; z < Ht; z++) { edge(0, z); edge(Wt - 1, z); }
+    }
+  }
+  {  // A tile is water when any of its four corners is (spec 11: "some corners under water" for shoreline tiles), so
+     // pumps beside a shore see it at distance 1. Bit 0 = fresh, bit 1 = salt (a shoreline tile can be both).
+    std::vector<uint8_t> tile(kind.size(), 0);
+    for (int x = 0; x < world_->W; x++)
+      for (int z = 0; z < world_->H; z++) {
+        uint8_t m = 0;
+        for (int dx = 0; dx <= 1; dx++)
+          for (int dz = 0; dz <= 1; dz++)
+            if (x + dx < world_->W && z + dz < world_->H) { uint8_t k = kind[idx(x + dx, z + dz)]; m |= k == 1 ? 1 : k == 2 ? 2 : 0; }
+        tile[idx(x, z)] = m;
+      }
+    kind.swap(tile);
+  }
   auto consumers = simOccupants(true);
   us::WaterEnv env;
   env.nowAbsMonth = absMonthOf(clock);

@@ -402,7 +402,7 @@ static void testPollutionRun() {
     SimOccupant inc; inc.agentType = 12852; inc.x = 10; inc.z = 10;
     L.addOccupant(g); L.addOccupant(inc);
     runSweep(L, env, 4);
-    CHECK(L.standingGarbageAt(4, 4) == 0 && L.disp.stats[2] == 16);
+    CHECK(L.standingGarbageAt(4, 4) == 0 && L.disp.stats[4] == 16);
   }
   {   // Export deal swallows remainder
     PollutionLayer L; L.init(16, 16, p, &h);
@@ -410,7 +410,7 @@ static void testPollutionRun() {
     L.addOccupant(g);
     PollutionEnv e2; e2.exportDeal = true;
     runSweep(L, e2, 4);
-    CHECK(L.standingGarbageAt(4, 4) == 0 && L.disp.stats[5] == 16);
+    CHECK(L.standingGarbageAt(4, 4) == 0 && L.disp.stats[1] == 16);
   }
   {   // Backyard composting only for zone 1-2 tiles; zone 3 (high-density res) not included.
     PollutionLayer L; L.init(16, 16, p, &h);

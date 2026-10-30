@@ -186,6 +186,9 @@ void ValveLayer::init(int w, int h, const ValveTuning& t) {
 void ValveLayer::applyLimits() {
   for (Valve* v : {&v3000, &v5000, &v8000, &v7000}) v->setLimits(2000, -2000);
   for (Valve* v : {&v3001, &v5001, &v8001}) v->setLimits(INT32_MAX, INT32_MIN);
+  // [OBSERVED] The R/C/I demand valves move gradually (spec 15 s3.2 step 5, 'smooth'): the saved industrial valves sit exactly
+  // on the smoothing path (Berlin V = -1680 = 0 - 6 * 280 while D - S clamps to -2000; Liverpool V = -280 while D - S = -1618).
+  for (Valve* v : {&v3000, &v5000, &v8000}) v->smooth = true;
 }
 Valve& ValveLayer::valve(int id) {
   switch (id) { case 3000: return v3000; case 3001: return v3001; case 5000: return v5000; case 5001: return v5001; case 8000: return v8000; case 8001: return v8001; default: return v7000; }
@@ -235,18 +238,11 @@ void ValveLayer::addJobsDemand(int64_t n) {
   v3000.Dacc += int32_t(int64_t(std::max(1, tune_.jobToResFactor)) * n);
 }
 
-static int familyOf(const ValveBuilding& b) {
-  if (b.family) return b.family;
-  uint32_t k = b.agentType / 1000;
-  return k == 3 ? 3000 : (k == 5 ? 5000 : (k == 8 ? 8000 : 0));
-}
-
 void ValveLayer::addBuilding(const ValveBuilding& b) {
   if (!b.operating) return;
   auto it = tune_.agentEffects.find(b.agentType);
   if (it == tune_.agentEffects.end()) return;
   int64_t tiles = int64_t(b.sizeX) * b.sizeZ;
-  int fam = familyOf(b);
   for (const ValveItem& vi : it->second) {
     int64_t s = tiles * vi.supply * b.serviceMul, d = tiles * vi.demand * b.serviceMul;
     bool mapped = vi.valve == 3000 || vi.valve == 5000 || vi.valve == 8000, jobs = vi.valve == 7000;
@@ -258,7 +254,7 @@ void ValveLayer::addBuilding(const ValveBuilding& b) {
           c = uint8_t(clamp64(int64_t(c) + add, 0, 255));
         }
     }
-    if (mapped && fam == vi.valve) {
+    if (mapped) {   // [OBSERVED] every building with a valve 3000/5000/8000 item counts (saved resUnits = the resident count)
       uint32_t u = uint32_t(tiles * vi.supply);
       (vi.valve == 3000 ? resAcc : vi.valve == 5000 ? comAcc : indAcc) += u;
     }

@@ -261,12 +261,10 @@ void Game::drawWindows(uint32_t dtMs) {
     handleWindowResult(r);
     if (r.close || r.has(Act::Close) || r.has(Act::Done)) flag = false;
   };
-  auto hit = [&](int w, int h) { if (ui_.hover(wui::centered(ui_, w, h))) uiHit_ = true; };
 
   // Modeless.
   if (showMap_) {
     MapSource src; buildMapSource(src);
-    hit(640, 440);
     finish(mapWin_.draw(ui_, E, src), showMap_);
   }
   if (showGraphs_) {
@@ -277,7 +275,17 @@ void Game::drawWindows(uint32_t dtMs) {
       std::copy(u.decade, u.decade + 10, c.decade); c.max = u.max;
     };
     cv(city.pollution.chart, conv[0]); cv(city.crime.chart, conv[1]); cv(city.power.chart, conv[2]); cv(city.water.chart, conv[3]);
+    // World layer charts (spec 10 6.13): city size, commerce, industry, unemployment, national population.
+    Chart wc[5];
+    for (int k = 0; k < 5; k++) {
+      const auto& w = city.valves.world.charts[k].w;
+      for (int i = 0; i < 12; i++) wc[k].monthly[i] = w[size_t(i)];
+      for (int i = 0; i < 10; i++) { wc[k].yearly[i] = w[size_t(12 + i)]; wc[k].decade[i] = w[size_t(22 + i)]; }
+      wc[k].max = w[32];
+    }
     if (series.size() >= 14) {
+      series[0].chart = &wc[0]; series[2].chart = &wc[1]; series[3].chart = &wc[2];
+      series[7].chart = &wc[3]; series[4].chart = &wc[4];
       series[1].chart = &city.pop.popChart;
       series[6].chart = &conv[0];
       series[8].chart = &conv[1];
@@ -286,27 +294,27 @@ void Game::drawWindows(uint32_t dtMs) {
       series[11].chart = &city.pop.leChart;
       series[12].chart = &city.pop.eqChart;
     }
-    hit(680, 420);
     finish(graphsWin_.draw(ui_, E, series), showGraphs_);
   }
   if (showCharts_) {
     ChartsData d = chartsFromPopulation(city.pop, uint32_t(std::max(0, city.population())));
-    hit(600, 420);
     finish(chartsWin_.draw(ui_, E, d), showCharts_);
   }
   if (showNeigh_) {
-    hit(372, 445);
     neighWin_.cityName = world_.info.cityName; neighWin_.cityPop = city.population();
-    uint64_t np = uint64_t(std::max(0, city.population()));
-    for (const auto& nb : city.neighbours.neighbours) np += nb.population;
-    neighWin_.nationalPop = np;   // [approximation] the original shows the SimNation total (issue filed)
+    // The SimNation population is the newest sample of the world layer's fifth chart (Berlin: 41,000,660 = the original's value).
+    uint64_t np = city.valves.world.charts[4].w[0];
+    if (np == 0) {
+      np = uint64_t(std::max(0, city.population()));
+      for (const auto& nb : city.neighbours.neighbours) np += nb.population;
+    }
+    neighWin_.nationalPop = np;
     neighWin_.centreMap = neighMap_.empty() ? nullptr : &neighMap_;
     finish(neighWin_.draw(ui_, E, city.neighbours), showNeigh_);
   }
   if (showGoals_) {
     ScenarioGoalsView v;
     if (scen_) v = scen_->goalsView(); else v.inScenario = false;
-    hit(560, 420);
     finish(goalsWin_.draw(ui_, E, v), showGoals_);
   }
   drawQueryPopup();
@@ -314,45 +322,36 @@ void Game::drawWindows(uint32_t dtMs) {
   // Modal.
   if (showBudget_) {
     BudgetView v; buildBudgetView(v);
-    hit(budgetWin_.boxW(), budgetWin_.boxH());
     finish(budgetWin_.draw(ui_, E, city.budget, v), showBudget_);
   }
   if (showOrd_) {
     OrdinanceMoneyInput money; money.population = uint32_t(std::max(0, city.population()));
-    hit(520, 400);
     finish(ordWin_.draw(ui_, E, city.ordinances, money), showOrd_);
   }
   if (showDeals_) {
-    hit(500, 380);
     finish(dealsWin_.draw(ui_, E, city.business, lastBriefing_), showDeals_);
   }
   if (showAdv_) {
     advWin_.ordinances = &city.ordinances;
     advWin_.money.population = uint32_t(std::max(0, city.population()));
-    hit(680, 460);
     finish(advWin_.draw(ui_, E, advisors_, petitioners_), showAdv_);
   }
   if (showProps_) {
-    hit(540, 420);
     finish(propsDlg_.draw(ui_, E, propsState_), showProps_);
   }
   if (showPrefs_) {
-    hit(620, 470);
     finish(prefsDlg_.draw(ui_, E, prefsState_), showPrefs_);
     if (!showPrefs_) { saveSettings(); applySettingsToAudio(); }
   }
   if (showPicker_) {
-    hit(480, 380);
     finish(picker_.draw(ui_, E, pickerEntries_), showPicker_);
   }
   if (petView_) {
-    hit(520, 330);
     WindowResult r = petDlg_.draw(ui_, E, *petView_);
     handleWindowResult(r);
     if ((r.close || r.has(Act::Close)) && petView_) petView_.reset();
   }
   if (showTip_) {
-    hit(420, 210);
     WindowResult r = tipWin_.draw(ui_, E);
     handleWindowResult(r);
     if (r.close || r.has(Act::Done) || r.has(Act::Close)) showTip_ = false;
@@ -367,6 +366,7 @@ void Game::drawWindows(uint32_t dtMs) {
   if (modal && modalDepth_ == 0) modalOpened();
   else if (!modal && modalDepth_ > 0) { modalDepth_ = 1; modalClosed(); }
   if (modal) uiHit_ = true;
+  for (const Rect& wr : ui_.windowRects) if (ui_.hover(wr)) uiHit_ = true;   // windows register their frames while drawing
 }
 
 // ---------------------------------------------------------------- results

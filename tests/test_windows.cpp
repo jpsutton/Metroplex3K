@@ -291,7 +291,7 @@ void testNeighbours() {
   SimRng rng(5);
   n.newCity(rng, 128, 128);
   for (int i = 0; i < kNeighbours; i++) { n.neighbours[i].exists = true; n.neighbours[i].cityName = "Town" + std::to_string(i); }
-  n.neighbours[3].exists = false;
+  n.neighbours[3].exists = false; n.neighbours[3].cityName.clear();   // unnamed and absent: not drawn, not selectable
   Deal dl; dl.neighbourName = "Town1"; dl.neighbourIndex = 1; dl.dealType = 0; dl.quantity = 100; dl.rate = 10; dl.monthlyAmount = 1000;
   n.active.push_back(dl);
   Deal off = dl; off.dealType = 2; off.neighbourIndex = 2;

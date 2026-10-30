@@ -162,6 +162,16 @@ int main() {
     CHECK(plant && plant->hasDate && plant->intProps.size() == 4 && plant->intProps[0].first == 0x2351FAF8 &&
           plant->intProps[0].second == 0 && plant->intProps[1].second > plant->intProps[2].second && plant->intProps[3].second == 0);
   }
+  {  // issue #75: a business building in the saved city puts its deal in force on load
+    World wb = loadCity(f2);
+    Occupant biz = wb.occupants.front();
+    biz.agentType = 19004; biz.x = 5; biz.z = 5; biz.sizeX = biz.sizeZ = 1;
+    wb.occupants.push_back(biz);
+    Sim sb;
+    sb.init(&wb, nullptr, &cfg, 9);
+    CHECK(sb.city().business.inForce.size() == 1 && sb.city().business.inForce[0] == 19004);
+    CHECK(sb.city().business.monthlyIncome() == 250);
+  }
   // outer unknown record survives too
   w2.raw->setOuter(unkOuter, Bytes{9, 9, 9});
   Bytes f3 = saveCity(w2);
@@ -178,6 +188,11 @@ int main() {
   CHECK(s2.city().roadCount() == s.roadCount());
   CHECK(s2.valveR.value == s.valveR.value && s2.valveC.value == s.valveC.value && s2.valveI.value == s.valveI.value);
   CHECK(s2.city().powered(20, 42));
+  CHECK(s2.city().business.inForce.empty());
+  CHECK(!s2.city().radioactiveAt(5, 5));
+  s2.city().markRadiation(5, 5);
+  CHECK(s2.city().radioactiveAt(5, 5) && !s2.city().radioactiveAt(6, 5));
+  CHECK(s2.population() > 0);   // issue #72: available right after load, before any month end
   for (int d = 0; d < 400; d++) s2.tickDay();
   CHECK(s2.day == 400);
   CHECK(s2.population() > 0 && s2.city().powered(20, 42));

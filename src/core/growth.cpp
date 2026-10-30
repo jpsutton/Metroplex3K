@@ -28,11 +28,13 @@ int SimRand::rand(int64_t n) {
 // ---------------- configuration ----------------
 ZoneDescription ZoneDescription::parse(int zone, const std::string& value) {
   ZoneDescription zd; zd.zone = zone;
+  // Airport, seaport and landfill zones have no category list ("14=0xc1f81e7e,3000", "17=0x82348de5,0"): the head still
+  // names the developer class, so parse it even when there is no ':'.
   size_t colon = value.find(':');
-  if (colon == std::string::npos) return zd;
-  auto head = split(value.substr(0, colon), ',');
+  auto head = split(colon == std::string::npos ? value : value.substr(0, colon), ',');
   if (head.size() >= 1) zd.developerClass = parseIdNumber(head[0]);
   if (head.size() >= 2) zd.baseAgentType = parseIdNumber(head[1]);
+  if (colon == std::string::npos) return zd;
   for (const auto& c : split(value.substr(colon + 1), ';')) {
     if (c.empty()) continue;
     auto f = split(c, ',');
@@ -728,7 +730,10 @@ int ZoneManager::visitRCI(GrowthCity& c, SimRand& rng, int x, int z, const ZoneD
   }
   if (I && farm && (c.airPollution(x, z) > cfg_->ind.maxAgAirPollution || c.waterPollution(x, z) > cfg_->ind.maxAgWaterPollution)) return abandon(kAbFarmPollution);
   if (V < 0 && !field && rng.rand(-int64_t(Min)) < -(int64_t(V - P) / tiles)) return abandon(kAbNegDemand);
-  const bool adequate = cat < 0 || zd.cats[size_t(cat)].maxLV / 2 <= LV;
+  // Spec 15 section 4.3 step 4 says maxLV / 2, but on the shipped cities only 40-60% of the buildings satisfy that
+  // (the loaded cities then lose most of their lots in the first month) while 99.7% satisfy minLV / 2, and the saved
+  // zone-pass statistics show no land-value abandonments. [OBSERVED] threshold: the category's minLV / 2.
+  const bool adequate = cat < 0 || zd.cats[size_t(cat)].minLV / 2 <= LV;
   if (!adequate) return abandon(kAbLowLV);  // rule L never finds a category (original defect)
   const bool flagged = lot.flagged();
   int hi = (!flagged && V > 0 && cat >= 0) ? pickCategoryH(zd, cat, LV, wt) : -1;
