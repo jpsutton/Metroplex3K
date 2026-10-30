@@ -33,7 +33,8 @@ bool Game::StreetHost::pedEligible(int x, int y) const {
 
 int Game::StreetHost::trafficDensity(int x, int y) const {
   if (!w || !c) return 0;
-  // Cheap stand-in for the traffic layer: density of road pieces around the tile.
+  if (int live = c->trafficDensityAt(x, y)) return live;
+  // Cheap stand-in for the traffic layer where the simulator has no live data: density of road pieces around the tile.
   int n = 0;
   for (int dx = -2; dx <= 2; dx++) for (int dy = -2; dy <= 2; dy++) if (c->isRoadTile(x + dx, y + dy)) n++;
   return std::min(255, n * 12);

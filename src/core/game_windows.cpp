@@ -225,7 +225,13 @@ void Game::buildMapSource(MapSource& src) {
         if (c.valves.effectMap.size() != size_t(W) * H) return nullptr;
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = c.valves.effectMap[size_t(x) * H + z];
         break;
-      default: return nullptr;   // Traffic: the traffic simulator exposes no per-tile density yet
+      case DataLayer::Traffic:   // networks coloured by live load; other tiles keep their terrain colour
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
+          bool net = c.isRoadTile(x, z);
+          at(x, z) = net ? clampB(c.trafficDensityAt(x, z)) : 0xFF;
+        }
+        break;
+      default: return nullptr;
     }
     return buf.get();
   };

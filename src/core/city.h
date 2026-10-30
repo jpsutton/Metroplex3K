@@ -116,6 +116,8 @@ class City {
   bool isPowerLine(int x, int z) const { return inMap(x, z) && powerLine_[idx(x, z)]; }
   bool isPipe(int x, int z) const { return inMap(x, z) && pipe_[idx(x, z)]; }
   int occupantAt(int x, int z) const { return inMap(x, z) ? occ_[idx(x, z)] : -1; }
+  int trafficDensityAt(int x, int z) const;     // live traffic (0..255): strongest of surface, highway and subway at the tile
+  int trafficDensityAverage() const;            // mean live density over network tiles that carry any
   const us::AgentHierarchy& agentHierarchy() const { return usHier_; }
   int occupantIndexByUid(uint32_t uid) const {   // -1 when the occupant is gone
     if (!world_ || !uid) return -1;

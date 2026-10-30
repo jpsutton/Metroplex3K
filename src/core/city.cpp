@@ -1008,6 +1008,16 @@ void City::dailyFire() {
   env.averageMetric = int(flammability.averageFlammability());
   fire.tick(env, urng_);
 }
+int City::trafficDensityAt(int x, int z) const {
+  if (!traffic || !inMap(x, z)) return 0;
+  return std::max({int(traffic->liveSurface(x, z)), int(traffic->liveHighway(x, z)), int(traffic->liveSubway(x, z))});
+}
+int City::trafficDensityAverage() const {
+  if (!traffic || !world_) return 0;
+  int64_t sum = 0, n = 0;
+  for (int x = 0; x < world_->W; x++) for (int z = 0; z < world_->H; z++) { int d = trafficDensityAt(x, z); if (d) { sum += d; n++; } }
+  return n ? int(sum / n) : 0;
+}
 int City::jailCapacity() const {
   us::IniReader t{&cfg_.ini.tune};
   int c = int(t.num("Jail", "InmateCapacity", 0));
