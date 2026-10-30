@@ -99,6 +99,9 @@ class GameData {
   void remountBat();
 
   std::string language = "English";
+  // Requested UI language (name as in the spec, e.g. "French"): empty = choose from $LC_ALL / $LC_MESSAGES / $LANG, falling back to
+  // English. Resolved by `open()` with spec 05 section 2 (an installed language is always chosen).
+  std::string languageRequest;
 
  private:
   void mountSegments();

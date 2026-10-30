@@ -198,6 +198,7 @@ bool Game::init(const fs::path& gameRoot, std::string& err) {
   loadSettings();
   if (gameRoot.empty()) { scr_ = Screen::NeedData; return true; }
   GameData g;
+  g.languageRequest = !languageRequest_.empty() ? languageRequest_ : (std::getenv("M3K_LANGUAGE") ? std::getenv("M3K_LANGUAGE") : "");
   if (!g.open(gameRoot, err)) { scr_ = Screen::NeedData; return false; }
   data_ = std::move(g);
   haveData_ = true; root_ = data_.root();

@@ -45,13 +45,15 @@ static void audioCallback(void* user, Uint8* stream, int len) {
 }
 
 int main(int argc, char** argv) {
-  std::string gameArg, cityArg;
+  std::string gameArg, cityArg, langArg;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
     if ((a == "--game-dir" || a == "--game") && i + 1 < argc) gameArg = argv[++i];
     else if (a == "--city" && i + 1 < argc) cityArg = argv[++i];
+    else if ((a == "--language" || a == "-l") && i + 1 < argc) langArg = argv[++i];
     else if (a == "--help" || a == "-h") {
-      std::cout << "metroplex3k [--game-dir DIR] [--city FILE]\n"
+      std::cout << "metroplex3k [--game-dir DIR] [--city FILE] [--language NAME]\n"
+                   "Language: NAME (English, French, German, ...), $M3K_LANGUAGE, else the OS locale (an installed language).\n"
                    "Game data: DIR (game root, its Apps folder, or a parent), $M3K_GAME_DIR, the saved choice,\n"
                    "or auto-detected GOG install locations. You can also drop the folder or the GOG installer\n"
                    "onto the window, or type the path on the first screen.\n";
@@ -67,6 +69,7 @@ int main(int argc, char** argv) {
 
   std::srand(uint32_t(SDL_GetTicks()));
   Game game;
+  if (!langArg.empty()) game.setLanguage(langArg);
   fs::path root = gameArg.empty() ? detectGameRoot(exeDirOf(argv[0])) : findGameRoot(gameArg);
   std::string err;
   if (!game.init(root, err) && !err.empty()) std::cerr << err << "\n";

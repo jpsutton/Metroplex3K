@@ -1,7 +1,9 @@
 #include "core/gamedata.h"
+#include "core/settings.h"
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 
 namespace m3k {
 
@@ -114,6 +116,16 @@ bool GameData::open(const fs::path& root, std::string& err) {
   }
   root_ = base; apps_ = apps;
   ini_.setSources(resolveCI(apps, "Sys"));
+  {  // language selection (spec 05 section 2): explicit request, else the OS locale, else English; always an installed folder
+    LanguageInputs li;
+    li.cmdLine = languageRequest;
+    li.installed = [&](int id) { return languageInstalled(apps_, id); };
+    for (const char* var : {"LC_ALL", "LC_MESSAGES", "LANG"}) {
+      const char* v = std::getenv(var);
+      if (v && *v) { uint16_t id = langIdFromPosixLocale(v); if (id) li.registryDword = id; break; }
+    }
+    if (const char* name = languageFolder(chooseLanguage(li))) language = name;
+  }
   mountSegments();
   mountSpriteDats();
   return true;
