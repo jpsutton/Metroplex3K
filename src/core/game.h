@@ -247,6 +247,7 @@ class Game {
   int64_t edFunds_ = 1000000000;
   RenderScene scene_;
   int snapSize_ = 0;
+  uint32_t frameDt_ = 0;   // dt of the current frame (ticker scrolling)
   bool disastersOn_ = true, autoBudget_ = false;
   bool dirty_ = false;
   int pendingAfterLeave_ = 0;
