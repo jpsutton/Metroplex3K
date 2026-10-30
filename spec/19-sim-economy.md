@@ -236,17 +236,25 @@ Each department is identified by a 32-bit ID and provides:
 
 Monthly charge [STATIC]: `charge = floor(funding × fullCost / 100)` (64-bit integer arithmetic).
 
-Departments present in shipped saves (all six appear in every save that has them) [DATA for IDs,
-INFERRED for the service mapping]:
+Departments present in shipped saves (all six appear in every save that has them) [DATA for IDs].
+The service mapping of the first four IDs is `[OBSERVED]`: each budget slider was set to a distinct
+value in the original's budget window, the city was saved, and the funding byte of each department
+entry was read back. The entries are stored in the order Education, Public Health, Fire, Roads,
+Police, Mass Transit, which is also the order of the rows in the window. This **replaces** an
+earlier inference (police, fire, health, education) that was wrong for all four.
 
 | Department ID | Provided by | Service |
 |---|---|---|
-| `0x02922A5D` | public-safety side | Police [INFERRED, medium: queried as a pair with `0x42922A6C` by the public-safety advisor; ID order matches police-then-fire] |
-| `0x42922A6C` | public-safety side | Fire [INFERRED, medium] |
-| `0x62963928` | health/education side | Health [INFERRED, medium: queried as a pair with `0xA2963983` by the demographics advisor] |
-| `0xA2963983` | health/education side | Education [INFERRED, medium] |
-| `0x8290F605` | traffic simulator | Roads: `fullCost = ceil(roadTiles × road cost) + ceil(highwayTiles × highway cost)` [STATIC, `18-sim-transport.md`] |
-| `0xC290F609` | traffic simulator | Mass transit: `fullCost = Σ station upkeep + ceil(railTiles × rail cost) + ceil(subwayTiles × subway cost)` [STATIC, `18-sim-transport.md`] |
+| `0x02922A5D` | health/education side | Education [OBSERVED; funding byte at entry offset +4; value 0 after the Education slider was set to its minimum] |
+| `0x42922A6C` | health/education side | Public Health [OBSERVED; slider value 25 read back as 0x19] |
+| `0x62963928` | public-safety side | Fire [OBSERVED; 57 read back as 0x39] |
+| `0xA2963983` | public-safety side | Police [OBSERVED; 31 read back as 0x1F] |
+| `0x8290F605` | traffic simulator | Roads: `fullCost = ceil(roadTiles × road cost) + ceil(highwayTiles × highway cost)` [STATIC, `18-sim-transport.md`]; slider value 76 read back as 0x4C [OBSERVED] |
+| `0xC290F609` | traffic simulator | Mass transit: `fullCost = Σ station upkeep + ceil(railTiles × rail cost) + ceil(subwayTiles × subway cost)` [STATIC, `18-sim-transport.md`]; slider value 6 read back as 0x06 [OBSERVED] |
+
+In a new city the six funding bytes are all 100 (0x64). The funding byte equals the slider
+percentage; values 0 to 76 were observed, and shipped saves go up to 108, so the slider's maximum
+is above 100 (the exact range is open).
 
 Unknown department IDs found in a saved budget record are skipped on load (their bytes are
 consumed); departments not present in the save keep their freshly registered defaults [STATIC].
