@@ -68,13 +68,22 @@ void Game::openPicker(uint32_t param) {
   if (!pickerCategoryFromParam(param, pc)) return;
   picker_.category = pc; picker_.sel = -1; picker_.scroll = 0;
   buildPickerEntries(pc);
+  for (const auto& e : pickerEntries_) if (e.available) { picker_.sel = 0; break; }   // first entry starts selected (observed)
   showPicker_ = true;
 }
 
 void Game::openWindow(const std::string& name) {
   if (name == "budget") { budgetWin_.openMain(); showBudget_ = true; }
+  else if (name == "budget.income") { budgetWin_.openMain(); budgetWin_.incomeTab = true; showBudget_ = true; }
+  else if (name == "budget.loans") { budgetWin_.openMain(); budgetWin_.incomeTab = false; budgetWin_.page = BudgetWindow::Page::Loans; showBudget_ = true; }
   else if (name == "ordinances") { showOrd_ = true; ordWin_.scroll = 0; }
-  else if (name == "neighbours" || name == "neighbors") showNeigh_ = true;
+  else if (name == "neighbours" || name == "neighbors") {
+    showNeigh_ = true;
+    // Centre of the region map: the city's overview thumbnail from its file's preview record.
+    neighMap_ = Image();
+    Bytes b; CityPreview cp;
+    if (!currentFile_.empty() && readFile(currentFile_, b) && readCityPreview(b, cp)) neighMap_ = cp.image;
+  }
   else if (name == "deals") showDeals_ = true;
   else if (name == "advisors") { advWin_.open(0); advWin_.ordinances = &sim_.city().ordinances; showAdv_ = true; }
   else if (name == "prefs") { prefsState_ = prefsFromSettings(general_, prefs_); applySettingsToAudio(); showPrefs_ = true; }
@@ -89,6 +98,9 @@ void Game::openWindow(const std::string& name) {
     s.landscape = int(indexOfId(schemeIdsL_, world_.scheme.landscape));
     s.flora = int(indexOfId(schemeIdsF_, world_.scheme.floraSet));
     s.buildings = int(indexOfId(schemeIdsB_, world_.scheme.buildingSet));
+    s.landscapeIcons = schemeIconL_; s.floraIcons = schemeIconF_; s.buildingIcons = schemeIconB_;
+    s.landscapePreview = schemePrevL_; s.floraPreview = schemePrevF_; s.buildingPreview = schemePrevB_;
+    s.disasters = disastersOn_; s.autoBudget = autoBudget_;
     s.editable = true;
     showProps_ = true;
   }
@@ -97,6 +109,8 @@ void Game::openWindow(const std::string& name) {
   else if (name == "graphs") showGraphs_ = true;
   else if (name == "charts") showCharts_ = true;
   else if (name == "tip") showTip_ = true;
+  else if (name == "userbuildings") openUserBuildings();
+  else if (name == "buildinglist") { openUserBuildings(); openBuildingList(); }
 }
 
 // ---------------------------------------------------------------- view builders
@@ -143,7 +157,18 @@ void Game::buildPickerEntries(PickerCategory c) {
       };
     pickerEntries_ = collectPickerEntries(data_, PickerFilter::defaults(c), &city.budget, &hier, {}, placed);
   }
-  for (auto& e : pickerEntries_) if (!e.picture) e.picture = nullptr;
+  // Second info column (observed: "Power: 6000 MW-h", plain number) from the utility tunables.
+  for (auto& e : pickerEntries_) {
+    if (c == PickerCategory::PowerPlants) {
+      auto it = city.power.params().plants.find(e.agentType);
+      if (it != city.power.params().plants.end() && it->second.capacity > 0)
+        e.capacity = subst(str(kTblCatalog, 3).empty() ? std::string("Power: %s MW-h") : str(kTblCatalog, 3), {std::to_string(it->second.capacity)});
+    } else if (c == PickerCategory::Water) {
+      const us::WaterParams& wp = city.water.params();
+      int cap = e.agentType == 12840 ? wp.towerCapa : e.agentType == 12810 ? wp.pumpCapa : e.agentType == 12830 ? wp.desaltCapa : 0;
+      if (cap > 0) e.capacity = subst(str(kTblCatalog, 4).empty() ? std::string("Capacity: %s m\xB3/Month") : str(kTblCatalog, 4), {std::to_string(cap)});
+    }
+  }
 }
 
 void Game::buildMapSource(MapSource& src) {
@@ -270,7 +295,12 @@ void Game::drawWindows(uint32_t dtMs) {
     finish(chartsWin_.draw(ui_, E, d), showCharts_);
   }
   if (showNeigh_) {
-    hit(600, 400);
+    hit(372, 445);
+    neighWin_.cityName = world_.info.cityName; neighWin_.cityPop = city.population();
+    uint64_t np = uint64_t(std::max(0, city.population()));
+    for (const auto& nb : city.neighbours.neighbours) np += nb.population;
+    neighWin_.nationalPop = np;   // [approximation] the original shows the SimNation total (issue filed)
+    neighWin_.centreMap = neighMap_.empty() ? nullptr : &neighMap_;
     finish(neighWin_.draw(ui_, E, city.neighbours), showNeigh_);
   }
   if (showGoals_) {
@@ -284,7 +314,7 @@ void Game::drawWindows(uint32_t dtMs) {
   // Modal.
   if (showBudget_) {
     BudgetView v; buildBudgetView(v);
-    hit(620, 460);
+    hit(budgetWin_.boxW(), budgetWin_.boxH());
     finish(budgetWin_.draw(ui_, E, city.budget, v), showBudget_);
   }
   if (showOrd_) {
@@ -347,6 +377,7 @@ void Game::handleWindowResult(const WindowResult& r) {
     switch (e.act) {
       case Act::Close: case Act::Done: case Act::DismissTopic: case Act::SelectAdvisor:
       case Act::SetTimeRange:
+      case Act::OpenBuildingList: case Act::BatRemove: case Act::BatAdd: case Act::BatSelectFile: case Act::BatOpenFolder:   // user-building dialogs (game_userbldg.cpp)
         break;
       case Act::OpenBudget: openWindow("budget"); break;
       case Act::OpenOrdinances: openWindow("ordinances"); break;
@@ -418,7 +449,8 @@ void Game::handleWindowResult(const WindowResult& r) {
         applySettingsToAudio();
         break;
       case Act::PreviewMusic:
-        if (audio_) {
+        if (audio_ && e.a < 0) audio_->stopMusic();   // preview stop button
+        else if (audio_) {
           int i = 0;
           for (const auto& m : audio_->ini().music)
             if (m.inSongList) { if (i++ == int(e.a)) { audio_->playSong(m.id); break; } }
@@ -434,6 +466,9 @@ void Game::handleWindowResult(const WindowResult& r) {
       case Act::ApplyCityProps: {
         const CityPropsState& s = propsState_;
         world_.info.cityName = s.name; world_.info.mayorName = s.mayor;
+        disastersOn_ = s.disasters; autoBudget_ = s.autoBudget;
+        world_.info.flagA = disastersOn_ ? 1 : 0; world_.info.flagB = autoBudget_ ? 1 : 0;
+        disasters_.setDisastersEnabled(disastersOn_);
         uint32_t L = size_t(s.landscape) < schemeIdsL_.size() ? schemeIdsL_[size_t(s.landscape)] : world_.scheme.landscape;
         uint32_t F = size_t(s.flora) < schemeIdsF_.size() ? schemeIdsF_[size_t(s.flora)] : world_.scheme.floraSet;
         uint32_t B = size_t(s.buildings) < schemeIdsB_.size() ? schemeIdsB_[size_t(s.buildings)] : world_.scheme.buildingSet;
@@ -468,9 +503,12 @@ void Game::handleWindowResult(const WindowResult& r) {
       case Act::CenterView: case Act::TickerClick:
         centreOn(int(e.a), int(e.b));
         break;
+      case Act::OpenUserBuildings:
+        openUserBuildings();
+        break;
       case Act::MessageResult:
         msgBox_.active = false;
-        msgBoxPurpose_ = 0;
+        onMessageResult(MsgButton(e.a));
         break;
       case Act::TipChanged: break;
       case Act::ShowTipsChanged:

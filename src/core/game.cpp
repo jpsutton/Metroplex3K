@@ -397,15 +397,14 @@ void Game::dispatch(const MenuItemInfo& mi) {
       else message(snapshotNames_.empty() ? "No snapshots taken yet." : "Snapshots: " + std::to_string(snapshotNames_.size()) + " taken this session.");
       return;
     case 0x410438DD:
-      if (mi.arg1 == 0xC3172AEA || currentFile_.empty()) { saveMode_ = true; refreshFiles(0); saveName_ = world_.info.cityName; scr_ = Screen::LoadList; }
-      else saveCurrent(currentFile_.stem().string());
+      if (mi.arg1 == 0xC3172AEA || currentFile_.empty()) openSaveAs();
+      else saveCurrent(currentFile_.stem().string(), currentFile_.parent_path());
       return;
     case 0x610438A4:
-      saveMode_ = false;
-      refreshFiles(mi.arg1 == 0x63172B74 ? 1 : mi.arg1 == 0x23172AF2 ? 2 : mi.arg1 == 0xA42C7725 ? 3 : 0);
-      scr_ = Screen::LoadList; return;
-    case 0xE3270FE9: scr_ = Screen::NewCity; return;
-    case 0xA10438E9: scr_ = Screen::MainMenu; return;
+      requestLeave(kLeaveLoad + (mi.arg1 == 0x63172B74 ? 1 : mi.arg1 == 0x23172AF2 ? 2 : mi.arg1 == 0xA42C7725 ? 3 : 0));
+      return;
+    case 0xE3270FE9: requestLeave(kLeaveNew); return;
+    case 0xA10438E9: requestLeave(kLeaveQuit); return;   // the original's Exit quits the program after its prompts
     default: break;
   }
   setTool(ToolKind::Unavailable); toolName_ = name; message("Not available: " + name);
@@ -426,7 +425,9 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
   W_ = w; H_ = h; frameDt_ = dtMs;
   if (audio_) audio_->update(dtMs);
   if (screen_.size() != size_t(w) * h) screen_.assign(size_t(w) * h, 0xFF302820u);
-  bool world3d = (scr_ == Screen::InCity || scr_ == Screen::TerrainEdit) && world_.W;
+  // Dialogs opened from a city (Load / Save As) keep the city view and HUD behind them, frozen.
+  const bool cityBackdrop = (scr_ == Screen::LoadList || scr_ == Screen::NewCity) && world_.W && simReady_;
+  bool world3d = (scr_ == Screen::InCity || scr_ == Screen::TerrainEdit || cityBackdrop) && world_.W;
   if (world3d) {
     if (renderer_.width() != w || renderer_.height() != h) renderer_.resize(w, h);
     if (scr_ == Screen::InCity) {
@@ -448,17 +449,37 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
   if (haveData_ && (skinH_ != h || skinW_ != w)) { skin_ = Skin(); skin_.load(data_, h, w); skinH_ = h; skinW_ = w; }
   ui_.skin = (haveData_ && skin_.loaded()) ? &skin_ : nullptr;
   uiHit_ = false;
+  const bool ubOpen = showBrm_ || showBle_;
+  const Input ubLive = ui_.in;
+  if (ubOpen) { ui_.in = Input(); ui_.in.mx = ui_.in.my = -1; }   // the dialogs behind the BRM take no input
   switch (scr_) {
     case Screen::NeedData: drawNeedData(); break;
     case Screen::Intro: drawIntro(dtMs); break;
     case Screen::MainMenu: drawMainMenu(); break;
-    case Screen::NewCity: drawNewCity(); break;
     case Screen::TerrainEdit: drawTerrainEdit(); break;
-    case Screen::LoadList: drawLoadList(); break;
+    case Screen::LoadList:
+      if (cityBackdrop && !panelsHidden_) {
+        Input live = ui_.in;
+        ui_.in = Input(); ui_.in.mx = ui_.in.my = -1;   // the HUD behind the dialog takes no input
+        drawToolMenu(); drawHud();
+        ui_.in = live; ui_.tooltip.clear();
+      }
+      drawLoadList();
+      break;
+    case Screen::NewCity:
+      if (cityBackdrop && !panelsHidden_) {
+        Input live = ui_.in;
+        ui_.in = Input(); ui_.in.mx = ui_.in.my = -1;
+        drawToolMenu(); drawHud();
+        ui_.in = live; ui_.tooltip.clear();
+      }
+      drawNewCity();
+      break;
     case Screen::Credits: drawCredits(dtMs); break;
     case Screen::InCity: drawInCity(dtMs); break;
     case Screen::ScenarioEnd: drawScenarioEnd(); break;
   }
+  if (ubOpen) { ui_.in = ubLive; drawUserBuildings(); }
   drawMessage();
   // Over any HUD element, window or dialog the cursor is the normal desktop arrow; tool cursors only apply on the map.
   if ((uiHit_ && !panning_) || scr_ != Screen::InCity) cursorName_.clear();
@@ -655,7 +676,8 @@ void Game::drawHud() {
   if (skinBar && imPause && skin_.get("run") && skin_.get("speed.0")) {
     Rect pr{place.p2x, place.p2y, 22, 22}, rr{place.p1x, place.p1y, 26, 22};
     // Lit (red / green) for the current state, grey otherwise; hover shows the yellow variant.
-    const Image* pa = ui_.hover(pr) ? skin_.get("pause.hover") : paused_ ? imPause : skin_.get("pause.off");
+    const bool pauseLit = paused_ && pauseFlashMs_ < 750;
+    const Image* pa = ui_.hover(pr) ? skin_.get("pause.hover") : pauseLit ? imPause : skin_.get("pause.off");
     const Image* ra = ui_.hover(rr) ? skin_.get("run.hover") : !paused_ ? skin_.get("run") : skin_.get("run.off");
     if (pa) ui_.blit(*pa, pr.x, pr.y);
     if (ra) ui_.blit(*ra, rr.x, rr.y);

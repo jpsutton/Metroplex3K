@@ -38,6 +38,7 @@ OccAttr parseOccAttr(const uint8_t* p, size_t n) {
         case 0x64: if (!strs.empty()) a.designName = strs[0]; break;
         case 0x6B: if (!keys.empty()) a.pedProdKey = keys[0]; break;
         case 0x6C: if (!keys.empty()) a.vehProdKey = keys[0]; break;
+        case 0x7C: if (!keys.empty()) a.descKey = keys[0]; break;
         default: break;
       }
     }
@@ -143,6 +144,13 @@ void GameData::mountSpriteDats() {
   // Composite-sprite attribute IXFs are listed in [DBSegments]; BAT.DAT is mounted on demand.
   fs::path bat = resolveCI(apps_, "BARender/BAT.DAT");
   if (!bat.empty()) db_.mount(bat, "bat");
+}
+
+void GameData::remountBat() {
+  db_.unmountTag("bat");
+  fs::path bat = resolveCI(apps_, "BARender/BAT.DAT");
+  if (!bat.empty()) db_.mount(bat, "bat");
+  spriteCache_.clear(); planeCache_.clear(); csCache_.clear();
 }
 
 bool GameData::mountBuildingSet(uint32_t setId) {

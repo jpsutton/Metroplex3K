@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include "core/windows.h"
+#include "core/gamedata.h"
 #include "core/skin.h"
 
 namespace m3k {
@@ -174,6 +176,80 @@ void portrait(Ui& ui, Rect r, const Image* im, const std::string& letter, uint32
   ui.frame(r, false);
 }
 
+void sunkenLines(Ui& ui, Rect b) {
+  ui.fill({b.x, b.y, b.w, 1}, rgb(0x7B, 0x8A, 0xFF)); ui.fill({b.x, b.y, 1, b.h}, rgb(0x7B, 0x8A, 0xFF));
+  ui.fill({b.x, b.y + b.h - 1, b.w, 1}, rgb(0xFF, 0xF3, 0xFF)); ui.fill({b.x + b.w - 1, b.y, 1, b.h}, rgb(0xFF, 0xF3, 0xFF));
+}
+
+void blueBand(Ui& ui, Rect b) {
+  ui.fill(b, rgb(0xAD, 0xB6, 0xFF));
+  ui.fill({b.x + 1, b.y + 1, b.w - 2, b.h - 2}, rgb(0x7B, 0x92, 0xFF));
+}
+
+bool editField(Ui& ui, const WinEnv& E, const std::string& name, Rect fr, std::string& val, int id, size_t maxLen, bool multiLine,
+               const char* filter) {
+  const uint32_t ink = rgb(0x31, 0x34, 0x7B);
+  E.spot(name, fr);
+  ui.fill(fr, rgb(255, 255, 255));
+  ui.fill({fr.x, fr.y, fr.w, 1}, rgb(0x6B, 0x71, 0xBD)); ui.fill({fr.x, fr.y, 1, fr.h}, rgb(0x6B, 0x71, 0xBD));
+  ui.fill({fr.x + 1, fr.y + 1, fr.w - 2, 1}, ink); ui.fill({fr.x + 1, fr.y + 1, 1, fr.h - 2}, ink);
+  ui.fill({fr.x + fr.w - 2, fr.y + 1, 1, fr.h - 2}, rgb(0x7B, 0x82, 0xBD));
+  if (multiLine) ui.fill({fr.x + 1, fr.y + fr.h - 2, fr.w - 2, 1}, rgb(0x7B, 0x82, 0xBD));
+  ui.fill({fr.x + fr.w - 1, fr.y, 1, fr.h}, rgb(0xB5, 0xB6, 0xE7)); ui.fill({fr.x, fr.y + fr.h - 1, fr.w, 1}, rgb(0xB5, 0xB6, 0xE7));
+  if (ui.in.pressed) { if (fr.contains(ui.in.mx, ui.in.my)) ui.focusId = id; else if (ui.focusId == id) ui.focusId = 0; }
+  bool focus = ui.focusId == id, edited = false;
+  if (focus) {
+    for (char c : ui.in.text)
+      if (c >= 32 && val.size() < maxLen && !(filter && std::strchr(filter, c))) { val.push_back(c); edited = true; }
+    if (ui.in.key[K_BACKSPACE] && !val.empty()) { val.pop_back(); edited = true; }
+  }
+  std::string shown = val + (focus ? "|" : "");
+  if (!multiLine) ui.text(fr.x + 4, fr.y + 3, shown, "main9", ink);
+  else {
+    int y = fr.y + 3;
+    for (const auto& l : wrap(ui, shown, fr.w - 8, "main9")) { if (y + 14 > fr.y + fr.h - 2) break; ui.text(fr.x + 4, y, l, "main9", ink); y += 14; }
+  }
+  return edited;
+}
+
+void spriteAt(Ui& ui, GameData* gd, uint32_t cat, uint32_t id, int ax, int ay) {
+  if (!gd || !id || !ui.fb) return;
+  const SpriteImage* sp = gd->sprite(cat, id);
+  if (!sp) return;
+  const Plane* pl = gd->spritePlane(cat, id + 1);
+  if (pl && (pl->w != sp->img.w || pl->h != sp->img.h)) pl = nullptr;
+  const int x0 = ax - sp->L, y0 = ay - sp->T;
+  for (int y = 0; y < sp->img.h; y++) {
+    int dy = y0 + y; if (dy < 0 || dy >= ui.H) continue;
+    for (int x = 0; x < sp->img.w; x++) {
+      int dx = x0 + x; if (dx < 0 || dx >= ui.W) continue;
+      uint32_t c = sp->img.px[size_t(y) * sp->img.w + x];
+      int a = pl ? pl->v[size_t(y) * pl->w + x] * 255 / 31 : int(c >> 24);
+      if (!pl && (c & 0xFFFFFF) == 0xFF00FF) a = 0;
+      if (a <= 0) continue;
+      uint32_t& d = (*ui.fb)[size_t(dy) * ui.W + dx];
+      uint32_t o = 0xFF000000u;
+      for (int k = 0; k < 24; k += 8) o |= uint32_t((int((c >> k) & 255) * a + int((d >> k) & 255) * (255 - a) + 127) / 255) << k;
+      d = o;
+    }
+  }
+}
+
+void schemePreview(Ui& ui, GameData* gd, int x, int y, uint32_t land, uint32_t flora, uint32_t building) {
+  // Top-left corners fitted on the original's previews (dialog-relative): landscape (444,92), left tree (445,110) and
+  // house (470,145) for every set seen; right tree see below. Drawn back to front:
+  // landscape, right tree, house, left tree.
+  auto put = [&](uint32_t id, int px, int py) {
+    if (const SpriteImage* sp = gd ? gd->sprite(0, id) : nullptr) spriteAt(ui, gd, 0, id, x + px + sp->L, y + py + sp->T);
+  };
+  put(land, 444, 92);
+  // The right tree's place depends on the tree set; observed for the default pines (3FBE0000) and the broadleaf set
+  // (3FBB0000). Other sets use the pine position until observed (the sprite spans do not explain the difference).
+  if (flora == 0x3FBB0000) put(flora, 546, 90); else put(flora, 554, 133);
+  put(building, 470, 145);
+  put(flora, 445, 110);
+}
+
 }  // namespace wui
 
 // ================================================================ message box (spec 08 9.1)
@@ -188,8 +264,8 @@ std::vector<MsgButton> MessageBox::buttonsFor(int style) {
   }
 }
 
-void MessageBox::open(const std::string& title, const std::string& message, int style) {
-  title_ = title; message_ = message; style_ = std::max(0, std::min(5, style)); active = true;
+void MessageBox::open(const std::string& title, const std::string& message, int style, int icon) {
+  title_ = title; message_ = message; style_ = std::max(0, std::min(5, style)); icon_ = icon; active = true;
 }
 
 std::string msgButtonCaption(const WinEnv& E, MsgButton b) {
@@ -203,14 +279,6 @@ std::string msgButtonCaption(const WinEnv& E, MsgButton b) {
     case MsgButton::Yes: return E.app(0xC0, "Yes");
   }
   return "";
-}
-
-static uint32_t msgButtonColour(MsgButton b) {
-  switch (b) {
-    case MsgButton::Abort: case MsgButton::Cancel: case MsgButton::No: return rgb(192, 0, 0);
-    case MsgButton::Ignore: return rgb(192, 192, 192);
-    default: return rgb(0, 192, 0);
-  }
 }
 
 MessageBox::Layout MessageBox::layout(const Ui& ui) const {
@@ -228,8 +296,18 @@ MessageBox::Layout MessageBox::layout(const Ui& ui) const {
     H = int(lines.size()) * lh;
   }
   L.W = W; L.H = H; L.lines = lines;
-  L.buttonY = H + 24 + (title_.empty() ? 0 : std::max(lh, ui.fonts->get("title12").height() + 2));
-  L.buttonX0 = (W - L.base) / 2 + 8;
+  // Frame measured on the original 2-button prompts (288x139 for one text line): the text column is W wide and
+  // starts 56 px in (icon column at the left); title band 4..34; sunken body panel from y 39, at least 53 tall;
+  // blue button band 8 px below it, 35 tall, 4 px bottom margin; the 33 px button art sits unscaled 1 px into the
+  // band, 100 px wide, 8 px apart, centred.
+  L.boxW = W + 80;
+  L.textX = 56;
+  L.bodyY = 39;
+  L.bodyH = std::max(53, H + 26);
+  L.bandY = L.bodyY + L.bodyH + 8;
+  L.boxH = L.bandY + 35 + 4;
+  L.buttonY = L.bandY + 1;
+  L.buttonX0 = (L.boxW - L.base) / 2;
   return L;
 }
 
@@ -237,23 +315,45 @@ WindowResult MessageBox::draw(Ui& ui, const WinEnv& E) {
   WindowResult R;
   if (!active) return R;
   Layout L = layout(ui);
-  int lh = wui::lineHeight(ui);
-  int titleBar = 24;
-  Rect box = wui::centered(ui, L.W + 16, titleBar + L.buttonY + 24 + 12);
-  ui.fillAlpha({0, 0, ui.W, ui.H}, rgb(0, 0, 0), 0.35f);   // modal dim
-  ui.panel(box, "");
-  int cx = box.x + 8, cy = box.y + titleBar;
-  int ty = cy;
-  if (!title_.empty()) { ui.text(cx, ty, title_, "title12"); ty += std::max(lh, ui.fonts->get("title12").height() + 2); }
-  for (auto& l : L.lines) { ui.text(cx, ty + 4, l); ty += lh; }
+  const int lh = wui::lineHeight(ui);
+  Rect box = wui::centered(ui, L.boxW, L.boxH);
+  const uint32_t ink = rgb(0x31, 0x34, 0x7B);
+  bool closeClicked = false;
+  if (ui.skin && ui.skin->drawDialogFrame(ui, box, title_)) {
+    Rect hit;
+    if (ui.skin->dialogCloseBox(ui, box, hit, closeClicked)) E.spot("close", hit);
+    // Sunken body panel: dark blue top/left line, light bottom/right line over the cloud body.
+    Rect body{box.x + 4, box.y + L.bodyY, box.w - 8, L.bodyH};
+    ui.fill({body.x, body.y, body.w, 1}, rgb(0x7B, 0x8A, 0xFF));
+    ui.fill({body.x, body.y, 1, body.h}, rgb(0x7B, 0x8A, 0xFF));
+    ui.fill({body.x, body.y + body.h - 1, body.w, 1}, rgb(0xFF, 0xF3, 0xFF));
+    ui.fill({body.x + body.w - 1, body.y, 1, body.h}, rgb(0xFF, 0xF3, 0xFF));
+    // Button band: same blue band with lighter ring as the title bar.
+    Rect band{box.x + 4, box.y + L.bandY, box.w - 9, 35};
+    ui.fill(band, rgb(173, 182, 255));
+    ui.fill({band.x + 1, band.y + 1, band.w - 2, band.h - 2}, rgb(123, 146, 255));
+    const Image* icons = ui.skin->image(skin_group::Sys, 0x42E55FD4);
+    if (icons && icon_ >= 0) Skin::drawCell(ui, icons, 4, icon_, box.x + 12, box.y + L.bodyY + 12);
+  } else {
+    ui.panel(box, title_.empty() ? " " : title_);
+    if (wui::button(ui, E, "close", {box.x + box.w - 21, box.y + 4, 16, 16}, "x")) closeClicked = true;
+  }
+  // Text block centred in the body panel, each line centred in the text column (odd leftover rounds right, as observed).
+  int ty = box.y + L.bodyY + (L.bodyH - int(L.lines.size()) * lh) / 2;
+  const int fh = ui.fonts->get("main10").height();
+  for (auto& l : L.lines) {
+    ui.text(box.x + L.textX + (L.W - ui.textWidth(l) + 1) / 2, ty + (lh - fh) / 2, l, "main10", ink);
+    ty += lh;
+  }
   auto bs = buttonsFor(style_);
   int idx = -1;
   for (size_t i = 0; i < bs.size(); i++) {
-    Rect b{cx + L.buttonX0 - 8 + int(i) * 108, cy + L.buttonY, 100, 24};
-    if (wui::colourButton(ui, E, "msg." + std::to_string(i), b, msgButtonCaption(E, bs[i]), msgButtonColour(bs[i]))) idx = int(i);
+    Rect b{box.x + L.buttonX0 + int(i) * 108, box.y + L.buttonY, 100, 33};
+    E.spot("msg." + std::to_string(i), b);
+    if (ui.button(b, msgButtonCaption(E, bs[i]), true, false, "title9")) idx = int(i);   // caption font as observed
   }
   if (ui.in.key[K_ENTER]) idx = 0;
-  if (ui.in.key[K_ESC]) idx = int(bs.size()) - 1;
+  if (ui.in.key[K_ESC] || closeClicked) idx = int(bs.size()) - 1;
   if (idx >= 0) {
     active = false;
     R.add(Act::MessageResult, 0, int64_t(bs[size_t(idx)]));
@@ -337,7 +437,7 @@ void TickerWidget::push(const NewsItem& n, int width, const Ui& ui) {
   if (n.cls == 1) alarm = true;
 }
 
-void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t, int32_t today, GameRng* rng) {
+void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t, int32_t today, GameRng* rng, bool paused) {
   accumMs += int(dtMs);
   int px = TickerScroll::advance(accumMs);
   if (px) {
@@ -345,9 +445,23 @@ void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t,
     for (auto& i : items) i.x -= px;
   }
   items.erase(std::remove_if(items.begin(), items.end(), [&](const Item& i) { return i.x + ui.textWidth(i.n.text) < 0; }), items.end());
+  if (paused) {
+    // Repeat the paused message across the whole strip; 4 glyph widths between copies.
+    static const char* kMsg = "Simulation Paused";
+    const int gap = ui.textWidth("0000");
+    for (int guard = 0; guard < 16; guard++) {
+      int right = 0;
+      for (auto& i : items) right = std::max(right, i.x + ui.textWidth(i.n.text) + i.gap);
+      if (!items.empty() && right > width) break;
+      Item it; it.n.text = kMsg; it.n.cls = 6; it.n.number = 0; it.gap = gap;
+      it.x = std::max(width, right);
+      items.push_back(it);
+    }
+    return;
+  }
   for (int guard = 0; guard < 4 && t && rng; guard++) {
     int right = 0;
-    for (auto& i : items) right = std::max(right, i.x + ui.textWidth(i.n.text) + TickerScroll::kGapPixels);
+    for (auto& i : items) right = std::max(right, i.x + ui.textWidth(i.n.text) + i.gap);
     if (!items.empty() && right > width) break;
     NewsItem n = t->next(today, *rng);
     if (n.text.empty()) break;

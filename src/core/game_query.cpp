@@ -231,7 +231,9 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
 void Game::drawTicker(Rect r) {
   cal::Date d = sim_.city().clock.date();
   int32_t today = tickerStamp(d.month, d.day, d.year);
-  ticker_.update(paused_ ? 0 : frameDt_, r.w, ui_, &news_, today, &rng_);
+  ticker_.update(frameDt_, r.w, ui_, &news_, today, &rng_, paused_);
+  // Paused indicator flashes 750 ms on / 750 ms off, starting lit.
+  pauseFlashMs_ = paused_ ? (pauseFlashMs_ + frameDt_) % 1500 : 0;
   WinEnv E = env();
   WindowResult R = ticker_.draw(ui_, E, r);
   for (const auto& e : R.events) {

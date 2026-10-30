@@ -1,6 +1,6 @@
 // Headless UI screenshot. Optionally loads a city file, then runs scripted steps in order:
 //   hud_shot --game DIR [--city FILE] --size WxH [--do STEP]... out.png
-// STEP: move:X,Y | click:X,Y | hold:X,Y (press, 90 frames, release) | frames:N | shot:FILE | cmd:HEXID | win:NAME
+// STEP: move:X,Y | click:X,Y | hold:X,Y (press, 90 frames, release) | frames:N | shot:FILE | cmd:HEXID[,HEXARG] | win:NAME | dirty
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -33,8 +33,13 @@ int main(int argc, char** argv) {
     else if (op == "click") { in.mx = x; in.my = y; frame(2); in.pressed = in.down = true; frame(1); in.released = true; in.down = false; frame(3); }
     else if (op == "hold") { in.mx = x; in.my = y; frame(2); in.pressed = in.down = true; frame(90); in.released = true; in.down = false; frame(3); }
     else if (op == "frames") frame(std::atoi(arg.c_str()));
-    else if (op == "cmd") { g.runCommand(uint32_t(std::strtoul(arg.c_str(), nullptr, 16))); frame(3); }
+    else if (op == "cmd") {   // cmd:TARGET[,ARG] (hex)
+      size_t k = arg.find(',');
+      uint32_t a1 = k == std::string::npos ? 0 : uint32_t(std::strtoul(arg.c_str() + k + 1, nullptr, 16));
+      g.runCommand(uint32_t(std::strtoul(arg.c_str(), nullptr, 16)), a1); frame(3);
+    }
     else if (op == "win") { g.openWindow(arg); frame(4); }
+    else if (op == "dirty") g.setDirty(true);
     else if (op == "shot") writePng(arg, W, H, g.screen());
   }
   writePng(out, W, H, g.screen());

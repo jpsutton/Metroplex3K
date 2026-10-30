@@ -247,4 +247,37 @@ World loadCity(const Bytes& file, std::vector<std::string>* warnings) {
   return w;
 }
 
+bool readCityPreview(const Bytes& file, CityPreview& out) {
+  out = CityPreview();
+  IxfFile ixf;
+  if (!ixf.openMemory(file)) return false;
+  Bytes b, k;
+  if (!ixf.getBytes({0xE2F42628, 0x62F42635, 0}, b)) return false;
+  int kind = ixf.getBytes({0xC359837E, 0x43598384, 0}, k) && k.size() >= 4 ? int(rd32(k.data())) : 3;
+  try {
+    Reader r(b);
+    r.skip(16);                                   // application version
+    if (kind == 3) {
+      out.population = r.u32(); out.funds = r.s32(); r.u32();
+      out.dayOfYear = r.u32(); out.year = r.u32();
+      out.mayorName = rdString(r); out.cityName = rdString(r);
+      out.hasStats = true;
+    }
+    if (r.u32() != 2) return true;                // image version
+    uint32_t packed = r.u32(), w = r.u32(), h = r.u32(), fmt = r.u32();
+    if (w == 0 || h == 0 || w > 1024 || h > 1024 || packed < 4 || packed > r.remaining()) return true;
+    r.skip(4);                                    // block size (= packed)
+    Bytes px = refpackDecode(r.ptr(), packed - 4);
+    if (px.size() < size_t(w) * h * 2) return true;
+    out.image.w = int(w); out.image.h = int(h); out.image.px.resize(size_t(w) * h);
+    for (size_t i = 0; i < out.image.px.size(); i++) {
+      uint32_t v = uint32_t(px[2 * i]) | uint32_t(px[2 * i + 1]) << 8, R, G, B;
+      if (fmt == 5) { R = (v >> 10 & 31) * 255 / 31; G = (v >> 5 & 31) * 255 / 31; B = (v & 31) * 255 / 31; }
+      else { R = (v >> 11 & 31) * 255 / 31; G = (v >> 5 & 63) * 255 / 63; B = (v & 31) * 255 / 31; }
+      out.image.px[i] = rgba(uint8_t(R), uint8_t(G), uint8_t(B));
+    }
+  } catch (const FormatError&) { return out.hasStats; }
+  return true;
+}
+
 }  // namespace m3k

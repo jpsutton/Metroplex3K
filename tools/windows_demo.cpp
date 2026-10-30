@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
   PrefsState ps; ps.tracks = {{"Track A", true}, {"Track B", true}, {"Track C", false}, {"Track D", true}};
   { PreferencesDialog d; shot(dir, "prefs", [&](Ui& ui, WinEnv& E) { d.draw(ui, E, ps); }); }
   CityPropsState cp; cp.name = "New Metroplex"; cp.mayor = "Mayor Mayor"; cp.landscapes = {"Temperate", "Desert"}; cp.floraSets = {"Deciduous"}; cp.buildingSets = {"New York"};
-  cp.descriptions = {"Rolling hills and rivers."};
+  cp.description = "Rolling hills and rivers.";
   { CityPropertiesDialog d; shot(dir, "cityprops", [&](Ui& ui, WinEnv& E) { d.draw(ui, E, cp); }); }
   ScenarioGoalsView gv; gv.title = "Dullsville"; gv.briefing = "Dullsville is a dull town. Bring it to life by growing to 100,000 sims within 20 years without going into debt.";
   gv.goals = {{"Population 100000", false}, {"No debt", true}, {"Crime under 20", false}}; gv.status = "1 of 3 goals met";

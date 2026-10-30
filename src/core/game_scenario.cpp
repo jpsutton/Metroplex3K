@@ -130,6 +130,8 @@ bool ScenarioController::peek(const Bytes& file, const std::function<std::string
   out.description = lookup(ci.stringTable, ci.string0.instance);
   if (out.title.empty()) out.title = lookup(f.header.title.group, f.header.title.id);
   out.author = ci.author.empty() ? f.shortAuthor : ci.author;
+  out.shortAuthor = f.shortAuthor.empty() ? out.author : f.shortAuthor;
+  out.picture = f.picture;
   return true;
 }
 

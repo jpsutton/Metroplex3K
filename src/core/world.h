@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include "core/bytes.h"
+#include "core/image.h"
 #include "core/ixf.h"
 
 namespace m3k {
@@ -39,7 +40,7 @@ struct CityInfo {
   int dayOfYear = 1, year = 2000, gameSpeed = 1, foundingYear = 2000;
   int fileKind = 3;  // 3 city, 4 terrain, 5 starter town
   // New City options Disasters / Auto Budget (spec 10 3.2): both 1 when both boxes checked, both 0 when cleared [OBSERVED].
-  // Which is which is [INFERRED]: flagA = Disasters, flagB = Auto Budget.
+  // flagA = Disasters, flagB = Auto Budget (observed: the original's City Options for Berlin, Germany shows flags 0 / 1 as Disasters off, Auto Budget on).
   uint8_t flagA = 0, flagB = 1;
 };
 
@@ -79,6 +80,17 @@ struct World {
 // Load a .sc3 / .st3 / .sct / .SNR file. Throws FormatError on failure. `warnings` receives
 // non-fatal notes (e.g. unreadable optional records).
 World loadCity(const Bytes& file, std::vector<std::string>* warnings = nullptr);
+
+// Preview record (spec/10 3.5): what the load dialogs show without loading the city. City-only fields are present
+// for file kind 3. `image` is the W x H overview thumbnail (RGBA), empty if absent or undecodable.
+struct CityPreview {
+  bool hasStats = false;
+  uint32_t population = 0, dayOfYear = 0, year = 0;
+  int32_t funds = 0;
+  std::string mayorName, cityName;
+  Image image;
+};
+bool readCityPreview(const Bytes& file, CityPreview& out);
 
 // Inner record database (the decompressed packed segment, spec/10 section 5).
 class InnerDb {

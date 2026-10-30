@@ -31,6 +31,8 @@ struct ScenarioHooks {
 
 struct ScenarioInfo {
   std::string title, description, author;
+  std::string shortAuthor;   // 2026960B:19A6CEA1:2, the name the chooser shows ("Maxis")
+  Bytes picture;             // chooser picture (BMP), may be empty
 };
 
 class ScenarioController {

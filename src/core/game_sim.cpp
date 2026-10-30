@@ -60,7 +60,8 @@ void Game::initManagers() {
   managersReady_ = true;
   lastMonth_ = city().clock.date().month;
   lastWeekDay_ = -1;
-  auto textFn = [this](uint32_t t, uint32_t i) { return str(t, i); };
+  // Ticker text carries %CITYNAME%/%YOURCITY%/%MAYOR%... tags; expand when the item is created.
+  auto textFn = [this](uint32_t t, uint32_t i) { return expandTokens(str(t, i), env().tc); };
   tickerDb_ = TickerDb();
   if (haveData_) {
     IniFile nc;

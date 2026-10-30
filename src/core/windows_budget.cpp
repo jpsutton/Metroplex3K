@@ -1,5 +1,8 @@
 // Budget, ordinances, business deals, neighbours (spec 09 sections 6.1, 6.3, 6.4, 6.7).
 #include <algorithm>
+#include <cmath>
+#include <iterator>
+#include "core/skin.h"
 #include "core/windows.h"
 
 namespace m3k {
@@ -61,8 +64,325 @@ std::vector<BudgetWindow::Line> BudgetWindow::lines(const WinEnv& E, const Budge
   return out;
 }
 
+// ---- main page (Expenditures / Income tabs) and Loans sub-dialog, laid out after the original 2.0 dialogs
+// (box 500x480 and 360x400; measured coordinates are box-relative). Art comes from the dialog group 42DEC7D2.
+namespace {
+
+const uint32_t kInkLabel = rgb(0x18, 0x20, 0x6B), kInkHead = rgb(0x7B, 0x79, 0xB5), kInkDark = rgb(0x31, 0x34, 0x7B);
+const uint32_t kBlack = rgb(0, 0, 0), kRed = rgb(0xFF, 0, 0), kWhite = rgb(255, 255, 255);
+const char* kMonthName[12] = {"January", "February", "March", "April", "May", "June",
+                              "July", "August", "September", "October", "November", "December"};
+
+const Image* dlgArt(const Ui& ui, uint32_t inst) { return ui.skin ? ui.skin->image(skin_group::Gonzo, inst) : nullptr; }
+
+// 4-cell image button (0 disabled, 1 normal, 2 pressed, 3 hover) with a plain text fallback.
+bool artButton(Ui& ui, const WinEnv& E, const std::string& name, const Image* strip, Rect r, const std::string& fb,
+               bool enabled = true) {
+  E.spot(name, r);
+  bool c = false;
+  if (!(ui.skin && strip && ui.skin->imageButtonCells(ui, strip, 4, r, "", false, enabled, c))) c = ui.button(r, fb, enabled);
+  return c && enabled;
+}
+
+// Up/down spinner (42DEC7D2:0B, 4 cells 12x18; the pressed cell shows both halves pressed, only the held half is used).
+// Returns +1 / -1 when the upper / lower half is clicked. Spots: name.plus (upper half) and name.minus (lower half).
+int spinner(Ui& ui, const WinEnv& E, const std::string& name, int x, int y) {
+  Rect up{x, y, 12, 9}, dn{x, y + 9, 12, 9};
+  E.spot(name + ".plus", up);
+  E.spot(name + ".minus", dn);
+  const Image* s = dlgArt(ui, 0x0B);
+  if (s && !s->empty() && s->w >= 48) {
+    Skin::drawCell(ui, s, 4, CELL_NORMAL, x, y);
+    for (int h = 0; h < 2; h++) {
+      Rect hr = h ? dn : up;
+      if (ui.hover(hr)) ui.blitRect(*s, hr.x, hr.y, (ui.in.down ? CELL_PRESSED : CELL_HOVER) * 12, h * 9, 12, 9);
+    }
+  } else {
+    ui.button(up, "");
+    ui.button(dn, "");
+  }
+  return ui.clicked(up) ? 1 : ui.clicked(dn) ? -1 : 0;
+}
+
+// Union of blue bands: all rings first, then all fills, so overlapping bands merge into one shape.
+void bands(Ui& ui, Rect box, std::initializer_list<Rect> rs) {
+  for (Rect b : rs) ui.fill({box.x + b.x, box.y + b.y, b.w, b.h}, rgb(0xAD, 0xB6, 0xFF));
+  for (Rect b : rs) ui.fill({box.x + b.x + 1, box.y + b.y + 1, b.w - 2, b.h - 2}, rgb(0x7B, 0x92, 0xFF));
+}
+
+// Sunken field with white interior.
+void whiteField(Ui& ui, Rect f) {
+  ui.fill({f.x + 1, f.y + 1, f.w - 2, f.h - 2}, kWhite);
+  sunkenLines(ui, f);
+}
+
+// Two-line heading split before its last word, centred on `cx`.
+void splitHeading(Ui& ui, int cx, int y, const std::string& s, const char* font, uint32_t col, bool wordPerLine = false) {
+  std::vector<std::string> parts;
+  if (wordPerLine) {
+    size_t p = 0;
+    while (p < s.size()) { size_t e = s.find(' ', p); if (e == std::string::npos) e = s.size(); if (e > p) parts.push_back(s.substr(p, e - p)); p = e + 1; }
+  } else {
+    size_t sp = s.rfind(' ');
+    if (sp == std::string::npos) parts.push_back(s);
+    else { parts.push_back(s.substr(0, sp)); parts.push_back(s.substr(sp + 1)); }
+  }
+  for (size_t i = 0; i < parts.size(); i++) ui.text(cx - ui.textWidth(parts[i], font) / 2, y + int(i) * 14, parts[i], font, col);
+}
+
+uint32_t moneyCol(int64_t v) { return v < 0 ? kRed : kBlack; }
+
+// Main-page row: line key (lines()), label id/fallback, adjust-column icon (0 none), "?" button.
+struct MainRow { const char* key; uint32_t label; const char* fb; uint32_t icon; const char* link; bool details; };
+const MainRow kExpRows[] = {
+  {"ord.exp", 0x8F, "Ordinances", 0x09, "link.ord", false},
+  {"deal.exp", 0x90, "Neighbor Deals", 0x08, "link.deals", true},
+  {"loans", 0x236, "Loans", 0x13, "link.loans", true},
+  {nullptr, 0, "", 0, nullptr, false},
+  {"education", 0x96, "Education", 0, nullptr, true},
+  {"health", 0x95, "Public Health", 0, nullptr, true},
+  {"fire", 0x94, "Fire", 0, nullptr, true},
+  {"roads", 0x1AD, "Roads", 0, nullptr, true},
+  {"police", 0x92, "Police", 0, nullptr, true},
+  {"transit", 0x27E, "Mass Transit", 0, nullptr, true},
+};
+const MainRow kIncRows[] = {
+  {"ord.inc", 0x8F, "Ordinances", 0x09, "link.ord", false},
+  {"deal.inc", 0x90, "Neighbor Deals", 0x08, "link.deals", true},
+  {"biz", 0xA2, "Business Deals", 0x14, "link.biz", true},
+  {"fares", 0x288, "Transit Fares", 0, nullptr, false},
+  {"relief", 0x1AF, "Disaster Relief", 0, nullptr, false},
+  {nullptr, 0, "", 0, nullptr, false},
+  {"tax.r", 0xA3, "Residential Tax Rate", 0, nullptr, true},
+  {"tax.c", 0xA4, "Commercial Tax Rate", 0, nullptr, true},
+  {"tax.i", 0xA5, "Industrial Tax Rate", 0, nullptr, true},
+};
+
+// Funding slider geometry: knob 18x15 travels x 150..247 for 0..kMaxFundingUi (100% sits on the marker bar).
+constexpr int kKnobX0 = 150, kKnobTravel = 97;
+
+}  // namespace
+
+void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const BudgetView& v, Rect r, WindowResult& R) {
+  const char* F = "system9";
+  auto at = [&](int x, int y, int w, int h) { return Rect{r.x + x, r.y + y, w, h}; };
+  auto L = lines(E, b, v);
+  auto line = [&](const std::string& k) -> const Line* { for (auto& l : L) if (l.key == k) return &l; return nullptr; };
+  int64_t incY = 0, incE = 0, expY = 0, expE = 0;
+  for (auto& l : L) { if (l.income) { incY += l.ytd; incE += l.est; } else { expY += l.ytd; expE += l.est; } }
+
+  ui.panel(r, E.win(0x89, "Budget"));
+  // Title-bar page tabs (42DEC7D2:01, 4 cells 54x31, stretched; active page = pressed cell).
+  {
+    const Image* tab = dlgArt(ui, 0x01);
+    struct Tab { const char* name; Rect rc; uint32_t id; const char* fb; bool income; };
+    Tab tabs[2] = {{"tab.exp", at(176, 4, 110, 31), 0x86, "Expenditures", false}, {"tab.inc", at(294, 4, 74, 31), 0x87, "Income", true}};
+    for (auto& t : tabs) {
+      E.spot(t.name, t.rc);
+      bool active = incomeTab == t.income;
+      std::string cap = E.win(t.id, t.fb);
+      if (ui.skin && tab && ui.skin->drawButton3(ui, tab, 4, active ? CELL_PRESSED : CELL_NORMAL, t.rc))
+        ui.text(t.rc.x + 15, t.rc.y + 6, cap, "title9", kInkDark);   // caption 15 px in, same on both states
+      else ui.button(t.rc, cap, true, active, "title9");
+      if (ui.clicked(t.rc)) incomeTab = t.income;
+    }
+  }
+  bands(ui, r, {{4, 34, 8, 442}, {4, 75, 489, 8}, {144, 75, 128, 269}, {432, 75, 48, 269}, {4, 336, 489, 8},
+                {4, 446, 64, 30}, {434, 441, 59, 34}});
+  // Zebra rows of the label list.
+  for (int j = 0; j < 5; j++) ui.fill(at(12, 106 + 46 * j, 131, 22), kWhite);
+
+  // Header: date box (doubles as the link to the city indicators page), column headings.
+  Rect dateBox = at(16, 39, 127, 35);
+  sunkenLines(ui, dateBox);
+  E.spot("indicators", dateBox);
+  if (ui.clicked(dateBox)) page = Page::Indicators;
+  int month = std::max(1, std::min(12, v.in.month));
+  ui.text(r.x + 20, r.y + 43, subst(E.win(0x8A, "%s Budget"), {std::to_string(v.in.year)}), F, kInkHead);
+  ui.text(r.x + 20, r.y + 57, std::string(kMonthName[month - 1]) + " " + std::to_string(v.in.year), F, kInkHead);
+  ui.text(r.x + 192, r.y + 43, E.win(0x8B, "Adjust:"), F, kInkHead);
+  splitHeading(ui, r.x + 310, r.y + 43, incomeTab ? E.win(0x99, "Year to Date Income") : E.win(0x8C, "Yr. To Date Expense"), F, kInkHead);
+  splitHeading(ui, r.x + 390, r.y + 43, E.win(0x8D, "Year End Estimate"), F, kInkHead);
+  splitHeading(ui, r.x + 456, r.y + 43, E.win(0x8E, "Meet Advisor:"), F, kInkHead);
+
+  // Rows.
+  const MainRow* rows = incomeTab ? kIncRows : kExpRows;
+  int nRows = incomeTab ? int(std::size(kIncRows)) : int(std::size(kExpRows));
+  if (!incomeTab) ui.fillAlpha(at(235, 177, 8, 139), kWhite, 0.33f);   // 100% funding marker behind the sliders
+  for (int k = 0; k < nRows; k++) {
+    const MainRow& row = rows[k];
+    if (!row.key) continue;
+    int fy = 87 + 23 * k;
+    std::string key = row.key;
+    ui.text(r.x + 18, r.y + fy + 2, E.win(row.label, row.fb), F, kInkLabel);
+    if (const Line* l = line(key)) {
+      int64_t ya = incomeTab ? l->ytd : -l->ytd, ye = incomeTab ? l->est : -l->est;
+      whiteField(ui, at(275, fy, 76, 18));
+      whiteField(ui, at(353, fy, 76, 18));
+      rightText(ui, r.x + 349, r.y + fy + 2, E.money(ya), F, moneyCol(ya));
+      rightText(ui, r.x + 429, r.y + fy + 2, E.money(ye), F, moneyCol(ye));
+    }
+    if (row.icon && artButton(ui, E, row.link, dlgArt(ui, row.icon), at(190, fy - 2, 36, 24), E.win(row.label, row.fb))) {
+      if (key == "ord.exp" || key == "ord.inc") R.add(Act::OpenOrdinances);
+      else if (key == "deal.exp" || key == "deal.inc") R.add(Act::OpenNeighbours);
+      else if (key == "biz") R.add(Act::OpenBusinessDeals);
+      else if (key == "loans") page = Page::Loans;
+    }
+    if (row.details && artButton(ui, E, "details:" + key, dlgArt(ui, 0x19), at(438, fy - 2, 36, 24), "?")) {
+      if (key == "deal.exp" || key == "deal.inc") R.add(Act::OpenNeighbours);
+      else if (key == "biz") R.add(Act::OpenBusinessDeals);
+      else if (key == "loans") page = Page::Loans;
+      else if (key == "tax.r") openTax(0);
+      else if (key == "tax.c") openTax(1);
+      else if (key == "tax.i") openTax(2);
+      else for (auto& dr : kDepts) if (key == dr.key) openDept(dr.id);
+    }
+    // Tax-rate spinner + value box (income page).
+    for (int g = 0; g < 3; g++) {
+      if (key != kTaxKey[g]) continue;
+      int d = spinner(ui, E, kTaxKey[g], r.x + 190, r.y + fy + 1);
+      int rate = std::max(0, std::min(kMaxTaxRate, b.tax[g].rate + d));
+      if (d && rate != b.tax[g].rate) { b.setTaxRate(g, rate); R.add(Act::SetTax, uint32_t(g), rate); }
+      whiteField(ui, at(206, fy, 20, 23));
+      rightText(ui, r.x + 222, r.y + fy + 2, std::to_string(b.tax[g].rate), F, kInkDark);
+    }
+    // Funding slider (expenditures page): track + knob 42DEC7D2:1C.
+    for (auto& dr : kDepts) {
+      if (key != dr.key) continue;
+      Department* dp = b.dept(dr.id);
+      if (!dp) continue;
+      int ty = r.y + fy + 8;
+      ui.fill({r.x + 150, ty, 116, 1}, rgb(0x39, 0x38, 0x7B));
+      ui.fill({r.x + 151, ty + 1, 114, 1}, rgb(0x08, 0x0C, 0x18));
+      ui.fill({r.x + 150, ty + 2, 116, 1}, rgb(0x9C, 0x9A, 0xE7));
+      Rect track = at(kKnobX0, fy + 2, kKnobTravel + 18, 15);
+      E.spot("fund." + key, track);
+      int id = ui.nextId();
+      if (ui.in.pressed && ui.hover(track)) ui.activeId = id;
+      if (ui.activeId == id && !ui.in.down) ui.activeId = 0;
+      int val = std::max(0, std::min(kMaxFundingUi, int(dp->funding)));
+      if (ui.activeId == id && ui.in.down) {
+        int nv = int(std::lround(double(ui.in.mx - (track.x + 9)) * kMaxFundingUi / kKnobTravel));
+        nv = std::max(0, std::min(kMaxFundingUi, nv));
+        if (nv != dp->funding) { b.setFunding(dr.id, nv); R.add(Act::SetFunding, dr.id, nv); val = nv; }
+      }
+      int kx = track.x + val * kKnobTravel / kMaxFundingUi;
+      const Image* knob = dlgArt(ui, 0x1C);
+      int cell = ui.activeId == id ? CELL_PRESSED : ui.hover({kx, track.y, 18, 15}) ? CELL_HOVER : CELL_NORMAL;
+      if (!(knob && !knob->empty() && Skin::drawCell(ui, knob, 4, cell, kx, track.y))) ui.fill({kx, track.y, 18, 15}, kInkDark);
+    }
+  }
+
+  // Summary block.
+  int64_t ytdExp = -expY, estExp = -expE, flowY = incY - expY, flowE = incE - expE;
+  int64_t endFunds = b.funds + flowE;   // funds settle at year end (spec 19 s7), so add the whole-year estimate
+  for (int y : {346, 378, 410}) whiteField(ui, at(275, y, 154, 30));
+  whiteField(ui, at(275, 441, 154, 16));
+  whiteField(ui, at(275, 459, 154, 16));
+  struct Sum { int y; uint32_t id; const char* fb; uint32_t lc; int64_t val; int right; };
+  Sum sums[] = {{346, 0x99, "Year to Date Income", kBlack, incY, 348}, {360, 0x9A, "Estimated Income", kBlack, incE, 428},
+                {378, 0x9B, "Year to Date Expense", kRed, ytdExp, 348}, {392, 0x9C, "Estimated Expense", kRed, estExp, 428},
+                {410, 0x9D, "Year to Date Cash Flow", kInkLabel, flowY, 348}, {424, 0x9E, "Estimated Cash Flow", kInkLabel, flowE, 428},
+                {442, 0x9F, "Current Funds", kInkLabel, b.funds, 428}, {460, 0xA0, "End of Year Funds", kInkLabel, endFunds, 428}};
+  for (auto& s : sums) {
+    rightText(ui, r.x + 269, r.y + s.y, E.win(s.id, s.fb), F, s.lc);
+    rightText(ui, r.x + s.right + 1, r.y + s.y, E.money(s.val), F, moneyCol(s.val));
+  }
+  {
+    std::string adv = E.win(0x238, "Meet Financial Advisor:");
+    size_t sp = adv.rfind(' ');
+    ui.text(r.x + 17, r.y + 410, sp == std::string::npos ? adv : adv.substr(0, sp), "main9", kInkHead);
+    if (sp != std::string::npos) ui.text(r.x + 17, r.y + 424, adv.substr(sp + 1), "main9", kInkHead);
+  }
+  if (artButton(ui, E, "advisor", dlgArt(ui, 0x19), at(31, 450, 36, 24), "?")) R.add(Act::OpenAdvisor, kAdvBudget);
+  const Image* done = ui.skin ? ui.skin->image(skin_group::Sys, 0xA2DEFD9A) : nullptr;
+  if (artButton(ui, E, "ok", done, at(450, 442, 42, 32), E.app(0xB4, "OK")) || ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
+}
+
+void BudgetWindow::drawLoans(Ui& ui, const WinEnv& E, Budget& b, const BudgetView& v, Rect r, WindowResult& R) {
+  const char* F = "main9";
+  auto at = [&](int x, int y, int w, int h) { return Rect{r.x + x, r.y + y, w, h}; };
+  ui.panel(r, E.win(0x236, "Loans"));
+  bands(ui, r, {{28, 273, 40, 28}, {92, 312, 176, 82}, {310, 358, 46, 36}});
+  // Loan table: 5 rows, white zebra on rows 0, 2, 4.
+  sunkenLines(ui, at(6, 73, 348, 181));
+  auto rowY = [](int i) { return 74 + i * 179 / 5; };
+  for (int i = 0; i < 5; i += 2) ui.fill(at(7, rowY(i), 346, 35), kWhite);
+  const int colC[4] = {46, 136, 224, 312};
+  splitHeading(ui, r.x + colC[0], r.y + 41, E.win(0x1B3, "Maturity Date Mo/Yr"), F, kInkLabel);
+  const uint32_t hid[3] = {0x1B4, 0x1B5, 0x1B6};
+  const char* hfb[3] = {"Total", "Amount Owed", "Amount Paid"};
+  for (int i = 0; i < 3; i++) {
+    std::string h = E.win(hid[i], hfb[i]);
+    ui.text(r.x + colC[i + 1] - ui.textWidth(h, F) / 2, r.y + 41, h, F, kInkLabel);
+  }
+  int i = 0;
+  for (auto& bd : b.bonds) {
+    if (i >= 5) break;
+    int y = r.y + rowY(i) + 11;
+    std::string cells[4] = {std::to_string(bd.month) + "/" + std::to_string(bd.maturityYear), E.money(bd.totalRepayable),
+                            E.money(bd.remaining), E.money(bd.paid)};
+    for (int c = 0; c < 4; c++) ui.text(r.x + colC[c] - ui.textWidth(cells[c], F) / 2, y, cells[c], F, kBlack);
+    i++;
+  }
+  rightText(ui, r.x + 179, r.y + 259, E.win(0x1B7, "Borrowed:"), F, kInkLabel);
+  rightText(ui, r.x + 267, r.y + 259, E.money(b.totalPrincipal), F, kBlack);
+  rightText(ui, r.x + 179, r.y + 277, E.win(0x1B8, "Borrowing Limit:"), F, kInkLabel);
+  rightText(ui, r.x + 267, r.y + 277, E.money(int64_t(b.cfg.maxBondAmt) * 1000 * b.cfg.maxBonds), F, kInkLabel);
+  if (artButton(ui, E, "advisor", dlgArt(ui, 0x19), at(30, 275, 36, 24), "?")) R.add(Act::OpenAdvisor, kAdvBudget);
+  splitHeading(ui, r.x + 46, r.y + 301, E.win(0x1B9, "Consult Financial Advisor"), F, kInkLabel, true);
+  // New loan.
+  std::string nl = E.win(0x23B, "New Loan:");
+  ui.text(r.x + 180 - ui.textWidth(nl, F) / 2, r.y + 316, nl, F, kInkLabel);
+  int maxK = std::max(5, b.cfg.maxBondAmt);
+  newLoanThousands = std::max(5, std::min(maxK, newLoanThousands / 5 * 5));
+  int d = spinner(ui, E, "amount", r.x + 136, r.y + 335);
+  if (d) newLoanThousands = std::max(5, std::min(maxK, newLoanThousands + 5 * d));
+  whiteField(ui, at(152, 334, 72, 24));
+  rightText(ui, r.x + 220, r.y + 339, std::to_string(int64_t(newLoanThousands) * 1000), "system9", kInkDark);
+  Rect acc = at(128, 360, 104, 33);
+  E.spot("accept", acc);
+  bool clicked = false;
+  std::string cap = E.win(0x27F, "Accept Loan");
+  if (ui.skin && ui.skin->button3(ui, dlgArt(ui, 0x15), acc, "", true, false, clicked)) {
+    int off = ui.hover(acc) && ui.in.down ? 1 : 0;
+    ui.text(acc.x + 15 + off, acc.y + 7 + off, cap, "title9", kInkDark);
+  } else clicked = ui.button(acc, cap, true, false, "title9");
+  if (clicked) {
+    int64_t amt = int64_t(newLoanThousands) * 1000;
+    bool ok = b.issueBond(amt, v.in.month, v.in.year);
+    R.add(Act::IssueBond, 0, amt, ok);
+    loanMessage = ok ? "" : "Loan refused";
+  }
+  if (!loanMessage.empty()) ui.text(r.x + 274, r.y + 322, loanMessage, F, kRed);
+  const Image* done = ui.skin ? ui.skin->image(skin_group::Sys, 0xA2DEFD9A) : nullptr;
+  if (artButton(ui, E, "back", done, at(312, 360, 42, 32), E.app(0xB4, "OK")) || ui.in.key[K_ESC]) openMain();
+}
+
 WindowResult BudgetWindow::draw(Ui& ui, const WinEnv& E, Budget& b, const BudgetView& v) {
   WindowResult R;
+  if (page == Page::Main) {
+    drawMainPage(ui, E, b, v, centered(ui, 500, 480), R);
+    return R;
+  }
+  if (page == Page::Loans) {
+    // Loans opens over the expenditures page, which stays visible but inert.
+    {
+      WinEnv bg = E;
+      bg.spots = nullptr;
+      Input saved = ui.in;
+      ui.in = Input();
+      ui.in.mx = ui.in.my = -1;
+      bool inc = incomeTab;
+      incomeTab = false;
+      WindowResult ignored;
+      drawMainPage(ui, bg, b, v, centered(ui, 500, 480), ignored);
+      incomeTab = inc;
+      ui.in = saved;
+    }
+    drawLoans(ui, E, b, v, centered(ui, 360, 400), R);
+    return R;
+  }
   int lh = lineHeight(ui);
   int month = std::max(1, std::min(12, v.in.month));
   Rect r = centered(ui, 620, 460);
@@ -72,9 +392,9 @@ WindowResult BudgetWindow::draw(Ui& ui, const WinEnv& E, Budget& b, const Budget
     if (page == Page::Dept) { if (auto* dr = deptRow(dept)) rowName = label(E, dr->label, dr->fb); }
     else rowName = E.win(kTaxLabel[taxGroup % 3], kTaxFb[taxGroup % 3]);
     title = subst(E.win(0x8A, "%s"), {rowName});
-  } else if (page == Page::Loans) title = E.win(0x236, "Loans");
-  else if (page == Page::Indicators) title = E.win(0x161, "City indicators");
+  } else if (page == Page::Indicators) title = E.win(0x161, "City indicators");
   if (frame(ui, E, r, title)) { R.close = true; R.add(Act::Close); }
+  if (ui.in.key[K_ESC]) openMain();
   int x0 = r.x + 14, y0 = r.y + 34;
 
   auto backAndAdvisor = [&](uint32_t advisor) {
@@ -89,57 +409,6 @@ WindowResult BudgetWindow::draw(Ui& ui, const WinEnv& E, Budget& b, const Budget
     if (button(ui, E, "link.deals", {r.x + r.w - 150, r.y + 186, 136, 22}, E.win(0x90, "Neighbor deals"))) R.add(Act::OpenNeighbours);
     if (button(ui, E, "link.biz", {r.x + r.w - 150, r.y + 212, 136, 22}, E.win(0xA2, "Business deals"))) R.add(Act::OpenBusinessDeals);
   };
-
-  if (page == Page::Main) {
-    auto L = lines(E, b, v);
-    int64_t incY = 0, incE = 0, expY = 0, expE = 0;
-    for (auto& l : L) { if (l.income) { incY += l.ytd; incE += l.est; } else { expY += l.ytd; expE += l.est; } }
-    // Two columns.
-    const int colW = 292, rowH = lh + 5;
-    for (int col = 0; col < 2; col++) {
-      bool income = col == 1;
-      int cx = x0 + col * (colW + 8);
-      ui.text(cx, y0, E.win(income ? 0x87 : 0x86, income ? "Income" : "Expenditures"), "title12");
-      rightText(ui, cx + colW - 90, y0 + 2, "YTD");
-      rightText(ui, cx + colW - 22, y0 + 2, "Est.");
-      int y = y0 + lh + 8;
-      for (auto& l : L) {
-        if (l.income != income) continue;
-        ui.text(cx, y, l.label);
-        rightText(ui, cx + colW - 90, y, E.money(l.ytd));
-        rightText(ui, cx + colW - 22, y, E.money(l.est));
-        Rect d{cx + colW - 18, y - 2, 18, rowH - 2};
-        if (button(ui, E, "details:" + l.key, d, "?")) {
-          if (l.key == "ord.exp" || l.key == "ord.inc") R.add(Act::OpenOrdinances);
-          else if (l.key == "deal.exp" || l.key == "deal.inc") R.add(Act::OpenNeighbours);
-          else if (l.key == "biz") R.add(Act::OpenBusinessDeals);
-          else if (l.key == "loans") page = Page::Loans;
-          else if (l.key == "tax.r") openTax(0);
-          else if (l.key == "tax.c") openTax(1);
-          else if (l.key == "tax.i") openTax(2);
-          else for (auto& dr : kDepts) if (l.key == dr.key) openDept(dr.id);
-        }
-        y += rowH;
-      }
-    }
-    // Summary block.
-    int sy = y0 + lh + 8 + 9 * (lh + 5) + 10;
-    ui.fill({x0, sy - 4, r.w - 28, 1}, ui.panelDark);
-    int w2 = 280;
-    int64_t endFunds = b.funds + (incE - expE);   // funds settle at year end (spec 19 s7), so add the whole-year estimate
-    labelValue(ui, x0, sy, w2, E.win(0x99, "Year-to-date income"), E.money(incY));
-    labelValue(ui, x0, sy + lh, w2, E.win(0x9A, "Estimated income"), E.money(incE));
-    labelValue(ui, x0, sy + 2 * lh, w2, E.win(0x9B, "Year-to-date expenses"), E.money(expY));
-    labelValue(ui, x0, sy + 3 * lh, w2, E.win(0x9C, "Estimated expenses"), E.money(expE));
-    labelValue(ui, x0, sy + 4 * lh, w2, E.win(0x9D, "Year-to-date cash flow"), E.money(incY - expY));
-    labelValue(ui, x0, sy + 5 * lh, w2, E.win(0x9E, "Estimated cash flow"), E.money(incE - expE));
-    labelValue(ui, x0 + 300, sy, w2, E.win(0x9F, "Current funds"), E.money(b.funds), b.funds < 0 ? rgb(255, 0, 0) : 0);
-    labelValue(ui, x0 + 300, sy + lh, w2, E.win(0xA0, "End-of-year funds"), E.money(endFunds), endFunds < 0 ? rgb(255, 0, 0) : 0);
-    if (button(ui, E, "advisor", {x0 + 300, sy + 3 * lh, 200, 24}, E.win(0x238, "Meet financial advisor"))) R.add(Act::OpenAdvisor, kAdvBudget);
-    if (button(ui, E, "indicators", {x0 + 300, sy + 3 * lh + 30, 200, 24}, E.win(0x161, "Indicators"))) page = Page::Indicators;
-    if (button(ui, E, "ok", {r.x + r.w - 104, r.y + r.h - 34, 90, 24}, E.app(0xB4, "OK"))) { R.close = true; R.add(Act::Close); }
-    return R;
-  }
 
   if (page == Page::Dept) {
     Department* d = b.dept(dept);
@@ -182,43 +451,6 @@ WindowResult BudgetWindow::draw(Ui& ui, const WinEnv& E, Budget& b, const Budget
       ui.text(x0, ry + 8 * lh, E.win(0x1D2, "Approval rating"));
       bar(ui, {x0 + 170, ry + 8 * lh, 210, lh - 3}, float(v.approval) / 100.f, rgb(0, 160, 60));
     }
-    return R;
-  }
-
-  if (page == Page::Loans) {
-    if (button(ui, E, "back", {r.x + 14, r.y + r.h - 34, 90, 24}, E.win(0x84, "Back"))) openMain();
-    const int cw[4] = {120, 130, 130, 130};
-    const uint32_t hid[4] = {0x1B3, 0x1B4, 0x1B5, 0x1B6};
-    const char* hfb[4] = {"Maturity", "Total", "Owed", "Paid"};
-    int cx[4]; cx[0] = x0; for (int i = 1; i < 4; i++) cx[i] = cx[i - 1] + cw[i - 1];
-    for (int i = 0; i < 4; i++) ui.text(cx[i], y0, E.win(hid[i], hfb[i]), "title12");
-    ui.fill({x0, y0 + lh + 4, 520, 1}, ui.panelDark);
-    int y = y0 + lh + 8;
-    for (auto& bd : b.bonds) {
-      ui.text(cx[0], y, std::to_string(bd.month) + "/" + std::to_string(bd.maturityYear));
-      rightText(ui, cx[1] + cw[1] - 14, y, E.money(bd.totalRepayable));
-      rightText(ui, cx[2] + cw[2] - 14, y, E.money(bd.remaining));
-      rightText(ui, cx[3] + cw[3] - 14, y, E.money(bd.paid));
-      y += lh;
-      if (y > r.y + 250) break;
-    }
-    int fy = r.y + 270;
-    labelValue(ui, x0, fy, 320, E.win(0x1B7, "Borrowed"), E.money(b.totalPrincipal));
-    labelValue(ui, x0, fy + lh, 320, E.win(0x1B8, "Borrowing limit"), E.money(int64_t(b.cfg.maxBondAmt) * 1000 * b.cfg.maxBonds));
-    ui.text(x0, fy + 2 * lh + 8, E.win(0x23B, "New loan amount"));
-    int maxK = std::max(5, b.cfg.maxBondAmt);
-    newLoanThousands = std::max(5, std::min(maxK, newLoanThousands / 5 * 5));
-    stepper(ui, E, "amount", {x0 + 150, fy + 2 * lh + 4, 300, 22}, newLoanThousands, 5, maxK, 5, "K");
-    if (button(ui, E, "accept", {x0, fy + 2 * lh + 34, 140, 24}, E.win(0x27F, "Accept loan"))) {
-      int64_t amt = int64_t(newLoanThousands) * 1000;
-      bool ok = b.issueBond(amt, v.in.month, v.in.year);
-      R.add(Act::IssueBond, 0, amt, ok);
-      loanMessage = ok ? "" : "Loan refused";
-    }
-    ui.text(x0 + 150, fy + 2 * lh + 38, loanMessage, "main10", rgb(192, 0, 0));
-    ui.text(x0, fy + 2 * lh + 66, subst(E.win(0x23D, "Maximum number of loans: %s"), {std::to_string(b.cfg.maxBonds)}) +
-                                      "  (" + std::to_string(b.bondCount()) + ")");
-    if (button(ui, E, "advisor", {r.x + r.w - 214, r.y + r.h - 34, 200, 24}, E.win(0x1B9, "Consult financial advisor"))) R.add(Act::OpenAdvisor, kAdvBudget);
     return R;
   }
 
@@ -292,47 +524,69 @@ WindowResult OrdinancesWindow::draw(Ui& ui, const WinEnv& E, Ordinances& o, cons
 }
 
 // ================================================================ Business deals
+// Layout measured on dialog-shots/hud--review--budget--income--business-deals.png (800x600): 328x196 frame, deals list
+// in a sunken lavender box (name left, "+$value" right), total line, and two blue plates: the "?" (finance briefing from
+// the financial advisor) and the check mark. Rows are selectable; the selected deal can be cancelled. A pending offer
+// (no reference screenshot) shows Accept / Decline pills between the plates.
 WindowResult BusinessDealsWindow::draw(Ui& ui, const WinEnv& E, BusinessDeals& d, const std::string& briefing) {
   WindowResult R;
-  int lh = lineHeight(ui);
-  Rect r = centered(ui, 500, 380);
-  if (frame(ui, E, r, E.win(0x1FE, "Business deals"))) { R.close = true; R.add(Act::Close); }
-  int x0 = r.x + 14, y = r.y + 34;
-  if (d.pendingOffer && *d.pendingOffer < d.defs.size()) {
-    const auto& def = d.defs[*d.pendingOffer];
-    ui.text(x0, y, "Offer: " + def.name + " (" + E.money(def.value) + "/mo)", "main10", rgb(0, 120, 0));
-    if (button(ui, E, "accept", {x0 + 300, y - 4, 80, 22}, E.app(0xC0, "Accept"))) { size_t i = *d.pendingOffer; if (d.accept()) R.add(Act::AcceptDeal, uint32_t(i)); }
-    if (button(ui, E, "decline", {x0 + 386, y - 4, 80, 22}, E.app(0xC2, "Decline"))) { size_t i = *d.pendingOffer; d.decline(); R.add(Act::DeclineDeal, uint32_t(i)); }
-    y += lh + 12;
-  }
-  ui.text(x0, y, E.win(0x1D0, "Current deals"), "title12");
-  rightText(ui, x0 + 420, y + 2, E.win(0x13E, "Monthly"));
-  y += lh + 8;
-  int rowH = lh + 6;
+  const uint32_t ink = rgb(0x31, 0x34, 0x7B), white = rgb(255, 255, 255);
+  Rect r = centered(ui, 328, 196);
+  ui.panel(r, E.win(0x1FE, "Business Deals"));   // no close box in the original; the check mark (or Esc) closes
+  auto T = [&](int x, int y, const std::string& s) { ui.text(r.x + x, r.y + y, s, "main9", ink); };
+  auto plus = [&](int64_t v) { return (v >= 0 ? "+" : "") + E.money(v); };
+  T(24, 43, E.win(0x1D0, "Current Business Deals:"));
+  T(178, 43, E.win(0x13E, "Monthly Contribution:"));
+  Rect lr{r.x + 7, r.y + 59, 315, 69};
+  ui.fill(lr, rgb(0xDE, 0xDF, 0xFF)); sunkenLines(ui, lr);
   std::vector<uint32_t> types = d.inForce;
-  int visible = 6;
-  wui::scrollBar(ui, E, {x0, y, 440, visible * rowH}, int(types.size()), visible, scroll);
-  if (types.empty()) ui.text(x0 + 4, y, "-");
+  const int visible = (lr.h - 1) / 14;
+  if (ui.hover(lr) && ui.in.wheel) scroll -= ui.in.wheel;
+  scroll = std::max(0, std::min(scroll, std::max(0, int(types.size()) - visible)));
   for (int i = 0; i < visible && scroll + i < int(types.size()); i++) {
     uint32_t t = types[size_t(scroll + i)];
     std::string name = "Deal " + std::to_string(t);
     int val = 0;
     for (auto& def : d.defs) if (def.buildingType == t) { name = def.name.empty() ? name : def.name; val = def.value; break; }
-    ui.text(x0 + 4, y + 3, name);
-    rightText(ui, x0 + 340, y + 3, E.money(val));
-    if (button(ui, E, "cancel." + std::to_string(t), {x0 + 352, y, 70, rowH - 2}, E.app(0xB6, "Cancel"))) {
-      d.remove(t);
-      R.add(Act::CancelDeal, t, 0, 0, "business");
-    }
-    y += rowH;
+    Rect row{lr.x + 1, lr.y + 1 + 14 * i, lr.w - 2, 14};
+    E.spot("row." + std::to_string(i), row);
+    bool on = selType == int(t);
+    if (on) ui.fill(row, rgb(0x7B, 0x92, 0xFF));
+    ui.text(r.x + 25, row.y, name, "main9", on ? white : ink);
+    std::string vs = plus(val);
+    ui.text(r.x + 304 - ui.textWidth(vs, "main9"), row.y, vs, "main9", on ? white : ink);
+    if (ui.clicked(row)) selType = on ? -1 : int(t);
   }
-  int fy = r.y + 34 + 8 * (lh + 8) + 30;
-  ui.fill({x0, fy - 6, 440, 1}, ui.panelDark);
-  ui.text(x0, fy, E.win(0x239, "Total monthly income"));
-  rightText(ui, x0 + 340, fy, E.money(d.monthlyIncome()));
-  ui.text(x0, fy + lh + 6, E.win(0x23A, "Finance briefing"), "title12");
-  paragraph(ui, {x0, fy + 2 * lh + 10, 460, r.y + r.h - (fy + 2 * lh + 10) - 44}, briefing);
-  if (button(ui, E, "ok", {r.x + r.w - 104, r.y + r.h - 34, 90, 24}, E.app(0xB4, "OK"))) { R.close = true; R.add(Act::Close); }
+  T(92, 129, E.win(0x239, "Total Monthly Contribution:"));
+  { std::string tv = plus(d.monthlyIncome()); ui.text(r.x + 303 - ui.textWidth(tv, "main9"), r.y + 129, tv, "main9", ink); }
+  // Plates.
+  blueBand(ui, {r.x + 86, r.y + 155, 44, 34});
+  blueBand(ui, {r.x + 271, r.y + 155, 44, 34});
+  { std::string fb = E.win(0x23A, "Finance Briefing:");
+    size_t sp = fb.rfind(' ');
+    T(24, 159, sp == std::string::npos ? fb : fb.substr(0, sp));
+    if (sp != std::string::npos) T(24, 173, fb.substr(sp + 1)); }
+  Rect q{r.x + 90, r.y + 158, 36, 28};
+  E.spot("briefing", q);
+  { bool c = false; const Image* art = E.img(0x42DEC7D2, 0x19);
+    if (!(ui.skin && art && ui.skin->imageButtonCells(ui, art, 4, q, briefing, false, true, c))) c = ui.button(q, "?");
+    if (c) R.add(Act::OpenAdvisor, kAdvBudget); }
+  // Pending offer / cancel the selected deal (no reference): pills between the plates.
+  if (d.pendingOffer && *d.pendingOffer < d.defs.size()) {
+    if (button(ui, E, "accept", {r.x + 134, r.y + 156, 66, 33}, E.app(0xC0, "Accept"))) { size_t i = *d.pendingOffer; if (d.accept()) R.add(Act::AcceptDeal, uint32_t(i)); }
+    if (button(ui, E, "decline", {r.x + 202, r.y + 156, 66, 33}, E.app(0xC2, "Decline"))) { size_t i = *d.pendingOffer; d.decline(); R.add(Act::DeclineDeal, uint32_t(i)); }
+  } else if (selType >= 0) {
+    if (button(ui, E, "cancel." + std::to_string(selType), {r.x + 150, r.y + 156, 100, 33}, E.app(0xB6, "Cancel"))) {
+      d.remove(uint32_t(selType));
+      R.add(Act::CancelDeal, uint32_t(selType), 0, 0, "business");
+      selType = -1;
+    }
+  }
+  Rect done{r.x + 272, r.y + 157, 42, 32};
+  E.spot("ok", done);
+  { bool c = false;
+    if (!(ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Sys, 0xA2DEFD9A), 4, done, "", false, true, c))) c = ui.button(done, E.app(0xB4, "OK"));
+    if (c || ui.in.key[K_ENTER] || ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); } }
   return R;
 }
 
@@ -364,63 +618,129 @@ PetitionerView makeDealOfferView(const WinEnv& E, const Deal& d, size_t pendingI
   return v;
 }
 
+// "Neighbors Map", measured on dialog-shots/hud--review--budget--income--neighbor-deals.png (800x600): 372x445 frame,
+// region diamond (3 x 3 cells; the city in the middle, the four neighbours on the diagonal cells) with names and
+// populations, compass, national population, the selected neighbour's name, "Discuss Deal" (42DEC7D2:10) and the
+// current deals with that neighbour in a sunken list. Neighbour cells: see offs below.
 WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) {
   WindowResult R;
-  int lh = lineHeight(ui);
-  Rect r = centered(ui, 600, 400);
-  if (frame(ui, E, r, E.win(0x117, "Neighbors"))) { R.close = true; R.add(Act::Close); }
-  // Map area with four compass boxes.
-  Rect m{r.x + 14, r.y + 34, 280, 300};
-  ui.fill(m, rgb(0xB0, 0xC4, 0xA0)); ui.frame(m, false);
-  struct Pos { int idx; Rect box; uint32_t id; const char* fb; };
-  Pos pos[4] = {{0, {m.x + 70, m.y + 8, 140, 40}, 0x11D, "North"}, {1, {m.x + 146, m.y + 130, 128, 40}, 0x11F, "East"},
-                {2, {m.x + 70, m.y + 252, 140, 40}, 0x120, "South"}, {3, {m.x + 6, m.y + 130, 128, 40}, 0x11E, "West"}};
-  for (auto& p : pos) {
-    const Neighbour& nb = n.neighbours[p.idx];
-    std::string lbl = E.win(p.id, p.fb);
-    std::string nm = nb.exists ? (nb.cityName.empty() ? "Neighbour " + std::to_string(p.idx + 1) : nb.cityName) : "";
-    if (button(ui, E, "nb." + std::to_string(p.idx), p.box, "", nb.exists, selected == p.idx)) selected = p.idx;
-    uint32_t tc = !nb.exists ? rgb(0x90, 0x94, 0xA0) : selected == p.idx ? rgb(255, 255, 255) : 0;
-    ui.textCentered({p.box.x, p.box.y + 4, p.box.w, lh}, lbl, "main10", tc);
-    if (!nm.empty()) ui.textCentered({p.box.x, p.box.y + 4 + lh, p.box.w, lh}, nm, "main10", tc);
+  const uint32_t ink = rgb(0x31, 0x34, 0x7B), lav = rgb(0x7B, 0x7D, 0xB5), white = rgb(255, 255, 255);
+  Rect r = centered(ui, 372, 445);
+  if (frame(ui, E, r, E.win(0x117, "Neighbors Map"))) { R.close = true; R.add(Act::Close); }
+  for (Rect b : {Rect{10, 325, 111, 26}, Rect{232, 300, 131, 51}, Rect{10, 326, 11, 110}, Rect{352, 300, 11, 136}, Rect{10, 395, 353, 41}})
+    ui.fill({r.x + b.x, r.y + b.y, b.w, b.h}, rgb(0x7B, 0x92, 0xFF));
+  // Region diamond.
+  const double cx = r.x + 182.5, cy = r.y + 191.5;
+  auto inDia = [&](double px, double py, double ox, double oy, double h) { return std::abs(px - (cx + ox)) + std::abs(py - (cy + oy)) <= h; };
+  for (int y = r.y + 39; y <= r.y + 345; y++)
+    for (int x = r.x + 30; x <= r.x + 336; x++) {
+      double px = x + 0.5, py = y + 0.5, d = std::abs(px - cx) + std::abs(py - cy);
+      if (d > 153) continue;
+      uint32_t c;
+      if (d > 151) c = px < cx ? rgb(0x7B, 0x8A, 0xFF) : rgb(0xFF, 0xF3, 0xFF);
+      else {
+        int cell = int(std::floor((px - cx + py - cy) / 100.0 + 1.5)) * 3 + int(std::floor((py - cy - (px - cx)) / 100.0 + 1.5));
+        static const uint32_t pal[5] = {rgb(0x8C, 0x9E, 0x6B), rgb(0x7B, 0x92, 0x6B), rgb(0x9C, 0xA2, 0x73), rgb(0x94, 0x86, 0x63), rgb(0x84, 0x71, 0x5A)};
+        c = pal[(cell % 5 + 5) % 5];
+        if (centreMap && inDia(px, py, 0, 0, 50)) {
+          // City thumbnail (column = x, row = H-1-z) mapped into the centre cell like the load dialog's diamond.
+          int N = std::max(centreMap->w, centreMap->h);
+          double s = N / 100.0, dx = px - cx, dy = py - cy;
+          int u = int((dy - dx) * s + N * 0.5), v = int((dy + dx) * s + N * 0.5);
+          int col = std::max(0, std::min(centreMap->w - 1, u)), row = std::max(0, std::min(centreMap->h - 1, centreMap->h - 1 - v));
+          c = centreMap->px[size_t(row) * centreMap->w + col];
+        }
+      }
+      ui.fill({x, y, 1, 1}, c);
+    }
+  // Neighbour cells: outlines (blue, the selected one red), click to select, names and populations in white.
+  const int offs[4][2] = {{50, -50}, {-50, -50}, {-50, 50}, {50, 50}};   // neighbour 0 top-right, 1 top-left, 2 bottom-left, 3 bottom-right (observed)
+  auto outline = [&](double ox, double oy, double h, double w, uint32_t col) {
+    for (int y = int(cy + oy - h - w); y <= int(cy + oy + h + w); y++)
+      for (int x = int(cx + ox - h - w); x <= int(cx + ox + h + w); x++) {
+        double d = std::abs(x + 0.5 - (cx + ox)) + std::abs(y + 0.5 - (cy + oy));
+        if (d > h - w && d <= h) ui.fill({x, y, 1, 1}, col);
+      }
+  };
+  for (int i = 0; i < kNeighbours; i++) {
+    const Neighbour& nb = n.neighbours[i];
+    double ox = offs[i][0], oy = offs[i][1];
+    Rect hit{int(cx + ox - 35), int(cy + oy - 35), 70, 70};
+    E.spot("nb." + std::to_string(i), hit);
+    if (!nb.exists) continue;
+    outline(ox, oy, 47, 2, rgb(0x6B, 0x92, 0xF7));
+    if (selected == i) outline(ox, oy, 45.5, 3, rgb(255, 0, 0));
+    std::string nm = nb.cityName.empty() ? "Neighbour " + std::to_string(i + 1) : nb.cityName;
+    std::string pop = groupDigits(nb.population);
+    ui.text(int(cx + ox) - ui.textWidth(nm, "main9") / 2, int(cy + oy) - 22, nm, "main9", white);
+    ui.text(int(cx + ox) - ui.textWidth(pop, "main9") / 2, int(cy + oy) - 1, pop, "main9", white);
+    if (ui.clicked(hit)) selected = i;
   }
-  ui.textCentered({m.x + 100, m.y + 70, 80, 30}, "City");
-  int x0 = r.x + 310, y = r.y + 40;
-  if (selected >= 0 && selected < kNeighbours) {
-    const Neighbour& nb = n.neighbours[selected];
-    labelValue(ui, x0, y, 270, E.win(0x29A, "Neighbor"), nb.cityName.empty() ? "Neighbour " + std::to_string(selected + 1) : nb.cityName);
-    labelValue(ui, x0, y + lh, 270, E.win(0x165, "National population"), groupDigits(nb.population));
-    y += 3 * lh;
-    ui.text(x0, y, E.win(0x13D, "Current deals"), "title12");
-    y += lh + 6;
-    bool any = false;
-    int64_t total = 0;
+  if (!cityName.empty()) {
+    std::string pop = groupDigits(cityPop);
+    ui.text(int(cx) - ui.textWidth(cityName, "main9") / 2, int(cy) - 11, cityName, "main9", white);
+    ui.text(int(cx) - ui.textWidth(pop, "main9") / 2, int(cy) + 10, pop, "main9", white);
+  }
+  // Compass (drawn): blue disc, four-pointed star, N W E S.
+  {
+    const double kx = r.x + 49.5, ky = r.y + 79.5;
+    for (int y = int(ky - 30); y <= int(ky + 30); y++)
+      for (int x = int(kx - 30); x <= int(kx + 30); x++)
+        if ((x + 0.5 - kx) * (x + 0.5 - kx) + (y + 0.5 - ky) * (y + 0.5 - ky) <= 29.5 * 29.5) ui.fill({x, y, 1, 1}, rgb(0x7B, 0x92, 0xFF));
+    const int sx = r.x + 50, sy = r.y + 80;
+    const uint32_t dk = rgb(0x18, 0x20, 0x6B), lt = rgb(0xD6, 0xDB, 0xFF);
+    for (int k = 0; k <= 12; k++) {
+      int w = std::max(0, 3 - k / 4);
+      ui.fill({sx - w, sy - k, w, 1}, dk); ui.fill({sx, sy - k, w, 1}, lt);       // north arm
+      ui.fill({sx - k, sy - w, 1, w}, dk); ui.fill({sx - k, sy, 1, w}, lt);       // west arm
+      ui.fill({sx + k, sy - w, 1, w}, lt); ui.fill({sx + k, sy, 1, w}, dk);       // east arm
+      ui.fill({sx - w, sy + k, w, 1}, lt); ui.fill({sx, sy + k, w, 1}, dk);       // south arm
+    }
+    ui.text(r.x + 45, r.y + 52, E.win(0x11D, "N"), "title9", lt);
+    ui.text(r.x + 25, r.y + 72, E.win(0x11E, "W"), "title9", lt);
+    ui.text(r.x + 67, r.y + 71, E.win(0x11F, "E"), "title9", lt);
+    ui.text(r.x + 46, r.y + 90, E.win(0x120, "S"), "title9", lt);
+  }
+  ui.text(r.x + 242, r.y + 52, E.win(0x165, "Nat'l Pop"), "main9", lav);
+  ui.text(r.x + 242, r.y + 66, groupDigits(int64_t(nationalPop)), "main9", lav);
+  // Selected neighbour's name.
+  ui.text(r.x + 17, r.y + 308, E.win(0x29A, "City:"), "main9", lav);
+  Rect cf{r.x + 18, r.y + 329, 98, 17};
+  ui.fill(cf, rgb(0, 0, 0)); ui.fill({cf.x + 1, cf.y + 1, cf.w - 2, cf.h - 2}, white);
+  const bool haveSel = selected >= 0 && selected < kNeighbours && n.neighbours[selected].exists;
+  if (haveSel) ui.text(r.x + 20, r.y + 330, n.neighbours[selected].cityName, "main9", ink);
+  ui.text(r.x + 239, r.y + 318, E.win(0x29C, "Discuss Deal:"), "main9", ink);
+  { Rect db{r.x + 322, r.y + 310, 38, 33};
+    E.spot("discuss", db);
+    bool c = false; const Image* art = E.img(0x42DEC7D2, 0x10);
+    if (!(ui.skin && art && ui.skin->imageButtonCells(ui, art, 4, db, "", false, haveSel, c))) c = ui.button(db, "?", haveSel);
+    if (c && haveSel) R.add(Act::DiscussDeal, uint32_t(selected)); }
+  // Current deals with the selected neighbour.
+  ui.text(r.x + 48, r.y + 357, E.win(0x13D, "Current Deals:"), "main9", lav);
+  ui.text(r.x + 185, r.y + 357, E.win(0x29B, "Rate:"), "main9", lav);
+  { std::string mc = E.win(0x13E, "Monthly Contribution:"); size_t sp = mc.find(' ');
+    std::string a = sp == std::string::npos ? mc : mc.substr(0, sp), b2 = sp == std::string::npos ? "" : mc.substr(sp + 1);
+    ui.text(r.x + 294 - ui.textWidth(a, "main9") / 2, r.y + 350, a, "main9", lav);
+    ui.text(r.x + 294 - ui.textWidth(b2, "main9") / 2, r.y + 364, b2, "main9", lav); }
+  Rect lr{r.x + 30, r.y + 380, 311, 60};
+  ui.fill(lr, rgb(0xDE, 0xDF, 0xFF)); sunkenLines(ui, lr);
+  if (haveSel) {
+    int y = lr.y + 1;
     for (auto& d : n.active) {
-      if (d.neighbourIndex != selected || d.terminated()) continue;
-      any = true;
-      ui.text(x0, y, dealKindName(E, d.dealType));
-      y += lh;
-      ui.text(x0 + 8, y, E.win(0x29B, "Rate") + ": " + dealRateText(E, d));
-      y += lh;
-      ui.text(x0 + 8, y, E.win(0x13E, "Monthly") + ": " + E.money(d.monthlyAmount));
-      total += d.monthlyAmount;
-      if (button(ui, E, "cancel." + std::to_string(d.dealType), {x0 + 190, y - 2, 78, lh + 2}, E.app(0xB6, "Cancel"))) {
+      if (d.neighbourIndex != selected || d.terminated() || y + 14 > lr.y + lr.h) continue;
+      ui.text(lr.x + 4, y, dealKindName(E, d.dealType), "main9", ink);
+      ui.text(r.x + 160, y, dealRateText(E, d), "main9", ink);
+      std::string mv = E.money(d.monthlyAmount);
+      ui.text(lr.x + lr.w - 22 - ui.textWidth(mv, "main9"), y, mv, "main9", ink);
+      if (button(ui, E, "cancel." + std::to_string(d.dealType), {lr.x + lr.w - 18, y + 1, 14, 13}, "x")) {
         int64_t pen = n.cancel(d.dealType);
         R.add(Act::CancelDeal, d.dealType, pen);
         break;   // active list changed
       }
-      y += lh + 6;
+      y += 14;
     }
-    if (!any) { ui.text(x0 + 8, y, "-"); y += lh; }
-    size_t pend = 0;
-    for (auto& d : n.pending) if (d.neighbourIndex == selected) pend++;
-    if (pend) ui.text(x0, y + 4, std::to_string(pend) + " offer(s) pending", "main10", rgb(0, 120, 0));
-    if (button(ui, E, "discuss", {x0, r.y + r.h - 70, 160, 24}, E.win(0x29C, "Discuss deal"), nb.exists)) R.add(Act::DiscussDeal, uint32_t(selected));
-    (void)total;
-  } else {
-    ui.text(x0, y, "-");
   }
-  if (button(ui, E, "ok", {r.x + r.w - 104, r.y + r.h - 34, 90, 24}, E.app(0xB4, "OK"))) { R.close = true; R.add(Act::Close); }
+  if (ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
   return R;
 }
 

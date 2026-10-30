@@ -68,15 +68,15 @@ void Ui::blit(const Image& im, int x, int y, int sx, int sw) {
   }
 }
 
-bool Ui::button(Rect r, const std::string& label, bool enabled, bool toggled) {
+bool Ui::button(Rect r, const std::string& label, bool enabled, bool toggled, const char* font) {
   if (skin && skin->get("button")) {
     bool c = false;
-    if (skin->button3(*this, skin->get("button"), r, label, enabled, toggled, c, enabled ? textCol : rgb(0x90, 0x94, 0xA0))) return c;
+    if (skin->button3(*this, skin->get("button"), r, label, enabled, toggled, c, enabled ? textCol : rgb(0x90, 0x94, 0xA0), font)) return c;
   }
   bool hot = enabled && hover(r), down = hot && in.down;
   fill(r, toggled ? panelDark : hot ? rgb(0xDC, 0xE4, 0xF0) : panelCol);
   frame(r, !(down || toggled));
-  textCentered({r.x + (down ? 1 : 0), r.y + (down ? 1 : 0), r.w, r.h}, label, "main10", enabled ? (toggled ? rgb(255, 255, 255) : 0) : rgb(0x90, 0x94, 0xA0));
+  textCentered({r.x + (down ? 1 : 0), r.y + (down ? 1 : 0), r.w, r.h}, label, font, enabled ? (toggled ? rgb(255, 255, 255) : 0) : rgb(0x90, 0x94, 0xA0));
   return enabled && clicked(r);
 }
 

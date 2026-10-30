@@ -43,7 +43,7 @@ struct WinEnv {
   std::function<std::string(uint32_t, uint32_t)> textFn;             // optional override (tests)
   std::function<const Image*(uint32_t group, uint32_t inst)> image;  // UI image provider (optional)
   TextContext tc;                                                    // %MAYOR% / %CITY% ... tokens
-  std::string currency = "$";                                        // the original prints the section sign (0xA7)
+  std::string currency = "$";                                        // the game fonts draw "$" as the simoleon sign (observed in the file dialogs)
   // Test hook: when non-null every interactive control appends its (name, rect) here.
   mutable std::vector<Spot>* spots = nullptr;
 
@@ -90,10 +90,16 @@ enum class Act {
   CenterView,         // a = x, b = z (tile)
   DataMapOptionChanged,
   MessageResult,      // a = MsgButton
+  OpenUserBuildings,  // City Options / New City "Select": open the user-made buildings dialog
   TipChanged, ShowTipsChanged,
   TickerClick,        // a = x, b = z (also PlaySound 47; urgent items PlaySound 54)
   ToggleHistorical,   // a = x, b = z
   SetTimeRange,       // a = 0 year / 1 decade / 2 century
+  OpenBuildingList,   // Building Replacement Manager "Edit List": open the Building List Editor
+  BatRemove,          // Building List Editor "Remove": id = BAT building ID
+  BatAdd,             // Building List Editor "Add": text = .bld path
+  BatSelectFile,      // Building List Editor: a .bld row was selected (text = path; the shell fills the preview)
+  BatOpenFolder,      // Building List Editor: folder row activated (text = path)
   Done                // OK pressed on a form
 };
 
@@ -143,6 +149,25 @@ bool stepper(Ui& ui, const WinEnv& E, const std::string& name, Rect r, int& v, i
 void scrollBar(Ui& ui, const WinEnv& E, Rect r, int total, int visible, int& scroll);
 // Portrait or filler box when no image is available.
 void portrait(Ui& ui, Rect r, const Image* im, const std::string& fallbackLetter, uint32_t col);
+// Original-look pieces measured on the shipped dialogs:
+// sunken outline (dark 7B8AFF top/left, light FFF3FF bottom/right), lines only.
+void sunkenLines(Ui& ui, Rect r);
+// Blue band with a 1 px lighter ring (title-bar style).
+void blueBand(Ui& ui, Rect r);
+// White edit field with the original's outline (main9 text, dark ink); keyboard focus by click. `multiLine` wraps the
+// text and adds the inner bottom line of the description box. `filter` drops these characters. Returns true if edited.
+bool editField(Ui& ui, const WinEnv& E, const std::string& name, Rect r, std::string& val, int focusId, size_t maxLen = 31,
+               bool multiLine = false, const char* filter = nullptr);
+// Colour sprite from the mounted sprite data blended through its opacity plane (id + 1, 0..31), drawn at
+// (ax, ay) minus the sprite's span origin. Missing sprite: nothing drawn.
+void spriteAt(Ui& ui, GameData* gd, uint32_t cat, uint32_t id, int ax, int ay);
+// City-scheme preview (New City / City Options): landscape, a tree, the house and another tree at the original's
+// fixed positions relative to the dialog origin (x, y). Ids are GAME_UI.DAT sprite ids (0 = skip).
+void schemePreview(Ui& ui, GameData* gd, int x, int y, uint32_t land, uint32_t flora, uint32_t building);
+// Composite-sprite record (frame 0, orientation 0) at the largest zoom that fits maxW x maxH (windows_userbldg.cpp).
+bool thumbSprite(GameData* gd, const ResKey& appearance, int maxW, int maxH, uint32_t& cat, uint32_t& id, bool* dbl = nullptr);
+// That sprite blended through its opacity plane, centred in `box`, clipped to `clip`.
+void spriteCentred(Ui& ui, GameData* gd, const ResKey& appearance, Rect box, Rect clip);
 }  // namespace wui
 
 // ---- 6.1 Budget window --------------------------------------------------------------------------------
@@ -166,8 +191,12 @@ class BudgetWindow {
   int taxGroup = 0;           // 0 R, 1 C, 2 I on Page::Tax
   int newLoanThousands = 5;   // loan amount selector (thousands, multiples of 5)
   std::string loanMessage;
+  bool incomeTab = false;     // main page: false = Expenditures tab, true = Income tab
 
   void openMain() { page = Page::Main; }
+  // Dialog size for the current page (the main page and its Loans sub-dialog use the original 500x480 box).
+  int boxW() const { return page == Page::Main || page == Page::Loans ? 500 : 620; }
+  int boxH() const { return page == Page::Main || page == Page::Loans ? 480 : 460; }
   void openDept(uint32_t id) { page = Page::Dept; dept = id; }
   void openTax(int g) { page = Page::Tax; taxGroup = g; }
   // Edits Budget funding / taxes / loans in place and reports each as an event (SetFunding, SetTax,
@@ -179,6 +208,14 @@ class BudgetWindow {
   struct Line { std::string key; std::string label; int64_t ytd = 0, est = 0; bool income = false; uint32_t labelId = 0; };
   static std::vector<Line> lines(const WinEnv& E, const Budget& b, const BudgetView& v);
   static constexpr int kMaxFundingUi = 120;
+
+ private:
+  // Main page: Expenditures / Income tabs with inline funding sliders (fund.<dept key>) and tax spinners
+  // (tax.r/c/i.plus/minus), Adjust-column icons (link.ord / link.deals / link.biz / link.loans), Meet-advisor "?"
+  // buttons (details:<line key>), date box (indicators), advisor "?" and Done (ok; Esc also closes).
+  void drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const BudgetView& v, Rect r, WindowResult& R);
+  // Loans sub-dialog (360x400) over the inert expenditures page: amount.plus/minus, accept, advisor, back (Done).
+  void drawLoans(Ui& ui, const WinEnv& E, Budget& b, const BudgetView& v, Rect r, WindowResult& R);
 };
 
 // ---- 6.3 Ordinances ----------------------------------------------------------------------------------------
@@ -194,6 +231,7 @@ std::string ordinanceName(const WinEnv& E, const OrdinanceDef& d);
 class BusinessDealsWindow {
  public:
   int scroll = 0;
+  int selType = -1;   // selected deal (building type), -1 none
   // `briefing` = finance briefing text from the financial advisor (may be empty). A pending offer is
   // shown with Accept / Decline buttons (events AcceptDeal / DeclineDeal; the deal is applied in place).
   WindowResult draw(Ui& ui, const WinEnv& E, BusinessDeals& d, const std::string& briefing);
@@ -205,6 +243,11 @@ std::string dealRateText(const WinEnv& E, const Deal& d);   // "$10 per 1000 MW-
 class NeighboursWindow {
  public:
   int selected = -1;
+  // Filled by the game before drawing: the player's city and the nation.
+  std::string cityName;
+  int64_t cityPop = 0;
+  uint64_t nationalPop = 0;
+  const Image* centreMap = nullptr;   // city overview thumbnail (preview record), may be null
   // Compass placement: index 0 N, 1 E, 2 S, 3 W [OPEN: spec does not say which edge is which side].
   WindowResult draw(Ui& ui, const WinEnv& E, NeighbourDeals& n);
 };
@@ -222,11 +265,14 @@ class AdvisorWindow {
   OrdinanceMoneyInput money;
   OrdinancesWindow ordWindow;
 
-  void open(uint32_t advisorId = 0) { selected = advisorId; tab = 0; topicSel = -1; scroll = 0; }
+  void open(uint32_t advisorId = 0) { selected = advisorId; tab = 0; topicSel = -1; scroll = 0; comboOpen = false; }
   WindowResult draw(Ui& ui, const WinEnv& E, AdvisorManager& am, const PetitionerManager& pm);
-  static std::string advisorName(const WinEnv& E, uint32_t advisorId);
+  bool comboOpen = false;     // "Discuss:" drop-down open
+  static std::string advisorName(const WinEnv& E, uint32_t advisorId);   // title, e.g. "City Planner"
+  static std::string personName(const WinEnv& E, uint32_t advisorId);    // e.g. "Constance Lee"
   static int advisorIndex(uint32_t advisorId);                  // 1..7 (Utilities, Budget, Planner, Environment, Safety, Transport, Demographics)
-  static uint32_t portraitInstance(int advisorIdx, int mood);   // image 52DB60A0:<inst>
+  static uint32_t portraitInstance(int advisorIdx, int mood);   // big portrait 52DB60A0:<inst> (92x115 cells)
+  static uint32_t smallPortraitInstance(int advisorIdx, int mood);   // 45x56 portrait for the Meet list
   // Visible topics for a tab (0 news = non-persistent, 1 briefings = persistent).
   static std::vector<uint32_t> topicsFor(const TopicList& l, int tab);
 };
@@ -273,20 +319,24 @@ class PreferencesDialog {
   int scroll = 0;
   int startResolution = -1;
   bool ambientDirty = false;
+  bool resOpen = false;       // resolution drop-down open
+  int dragSlider = -1;        // volume slider being dragged (0 music, 1 ambient, 2 effects)
   WindowResult draw(Ui& ui, const WinEnv& E, PrefsState& s);
 };
 
 // ---- 6.9 City properties ----------------------------------------------------------------------------------------------------------------------------------
 struct CityPropsState {
-  std::string name, mayor;
+  std::string name, mayor, description;
   int landscape = 0, flora = 0, buildings = 0;                    // selected scheme index
   std::vector<std::string> landscapes, floraSets, buildingSets;   // scheme names
-  std::vector<std::string> descriptions;                          // optional, per landscape
+  std::vector<uint32_t> landscapeIcons, floraIcons, buildingIcons;      // selector icon instance (group 85535958) per entry
+  std::vector<uint32_t> landscapePreview, floraPreview, buildingPreview; // GAME_UI.DAT preview sprite id per entry
+  bool disasters = true, autoBudget = false;
   bool editable = true;
 };
 class CityPropertiesDialog {
  public:
-  // OK -> Done + ApplyCityProps; Cancel / close -> Close.
+  // Check mark -> Done + ApplyCityProps; close box -> Close. Layout as New City Options (same 639x368 frame).
   WindowResult draw(Ui& ui, const WinEnv& E, CityPropsState& s);
 };
 
@@ -310,6 +360,10 @@ struct PickerEntry {
   int sizeX = 1, sizeZ = 1;
   int64_t cost = 0;
   const Image* picture = nullptr;
+  ResKey appearance;          // occupant appearance (composite-sprite record) for the picture
+  uint32_t agentType = 0;
+  std::string description;    // description string (attr 0x7C); for landmarks this is the location line
+  std::string capacity;       // second info column (e.g. "Power: 6,000 MW-h"); empty when unknown
   bool placed = false;        // landmarks/rewards already placed: greyed, marked "already built"
   bool available = true;
 };
@@ -465,13 +519,15 @@ class ChartsWindow {
 // ---- 4.4 news ticker strip ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 class TickerWidget {
  public:
-  struct Item { NewsItem n; int x = 0; };
+  struct Item { NewsItem n; int x = 0; int gap = TickerScroll::kGapPixels; };
   std::vector<Item> items;
   int accumMs = 0;
   bool alarm = false;                          // an urgent (class 1) item entered: draw() emits PlaySound(54) once
   // Advance by dtMs: step 2 px each time more than 50 ms elapsed, and pull the next item from `t`
   // when the strip has room (items separated by 20 px). `width` = strip width.
-  void update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t, int32_t today, GameRng* rng);
+  // `paused`: keep scrolling, but fill the strip with repeated "Simulation Paused" copies (gap of ~4
+  // characters) instead of pulling news from `t`.
+  void update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t, int32_t today, GameRng* rng, bool paused = false);
   void push(const NewsItem& n, int width);     // append at the right edge / after the last item (glyph-count width estimate)
   void push(const NewsItem& n, int width, const Ui& ui);   // same with measured text width
   // Draws the strip inside r. Click on an item with a map location -> TickerClick (and PlaySound 47).
@@ -483,18 +539,92 @@ enum class MsgButton { Abort, Cancel, Ignore, No, OK, Retry, Yes };
 class MessageBox {
  public:
   bool active = false;
-  void open(const std::string& title, const std::string& message, int style = 0);   // style 0..5
-  // Layout of spec 08 9.1 (exposed for tests).
-  struct Layout { int W = 0, H = 0, buttonY = 0, buttonX0 = 0, base = 0; std::vector<std::string> lines; };
+  // Icon cells of the SYS MBIcons sheet (82B9B75B:42E55FD4), measured on the art.
+  enum Icon { NoIcon = -1, IconError = 0, IconWarning = 1, IconInfo = 2, IconQuestion = 3 };
+  void open(const std::string& title, const std::string& message, int style = 0, int icon = IconWarning);   // style 0..5
+  // Layout of spec 08 9.1 (exposed for tests). W/H = wrapped text block; the rest is the frame measured on the
+  // original (dialog-relative): title band, sunken body panel with the icon at its left, blue button band.
+  struct Layout {
+    int W = 0, H = 0, buttonY = 0, buttonX0 = 0, base = 0;
+    int boxW = 0, boxH = 0, bodyY = 0, bodyH = 0, textX = 0, bandY = 0;
+    std::vector<std::string> lines;
+  };
   Layout layout(const Ui& ui) const;
   static std::vector<MsgButton> buttonsFor(int style);
-  // Event MessageResult(a = MsgButton). Enter = first button, Esc = last.
+  // Event MessageResult(a = MsgButton). Enter = first button, Esc / close box = last.
   WindowResult draw(Ui& ui, const WinEnv& E);
  private:
   std::string title_, message_;
-  int style_ = 0;
+  int style_ = 0, icon_ = IconWarning;
 };
 std::string msgButtonCaption(const WinEnv& E, MsgButton b);
+
+// ---- user-made buildings: Building Replacement Manager / Building List Editor (spec 24 section 2.5) -------------------
+// One building shown by the dialogs: a BAT.DAT building (buildingId != 0) or a replaceable occupant (key = its TKB1 key).
+struct UbBuilding {
+  ResKey key;                 // replaceable occupant key (Type, Group, Instance); BAT: the appearance key
+  ResKey appearance;          // composite-sprite key (BAT.DAT buildings: 00006300:BA1DBF1E:x)
+  std::string name, author;
+  uint32_t buildingId = 0;
+  int lot = 1;                // square footprint (tiles)
+  int zone = 0;               // filter class 0..4 (residential, commercial, industrial, utility/transport, civic/special)
+};
+// Filter class of an occupant agent type (the five zone filter buttons).
+int ubZoneClass(uint32_t agentType);
+// Pair list in the shape of bat.h's UserBuildingSet (kept local so windows.h stays independent of bat.h).
+struct UbPairs {
+  std::vector<std::pair<ResKey, ResKey>> pairs;   // (replaced occupant key, replacement appearance)
+  const ResKey* find(const ResKey& k) const { for (auto& p : pairs) if (p.first == k) return &p.second; return nullptr; }
+  void set(const ResKey& k, const ResKey& a) { for (auto& p : pairs) if (p.first == k) { p.second = a; return; } pairs.push_back({k, a}); }
+  bool revert(const ResKey& k) { for (size_t i = 0; i < pairs.size(); i++) if (pairs[i].first == k) { pairs.erase(pairs.begin() + long(i)); return true; } return false; }
+};
+
+struct UserBuildingsState {
+  std::vector<UbBuilding> bat;           // BAT.DAT buildings
+  std::vector<UbBuilding> replaceable;   // replaceable occupants whose attributes resolve
+  int totalReplaceable = 0;              // entries listed in [ReplaceableBuildings] ("of %y%")
+  UbPairs set;                           // working copy (Done applies it, the close box discards it)
+  int zoneFilter = 0, sizeFilter = 0;    // filter button selected in each group (0..4; size = lot - 1)
+  int sel = 0;                           // index into filtered() of the building in the lower preview box
+  int batSel = -1, batScroll = 0;        // index into bat (-1 none)
+  // Indices into replaceable passing the filters / into bat with the lot size of the selected replaceable building.
+  std::vector<int> filtered() const;
+  std::vector<int> batChoices() const;
+  const UbBuilding* selected() const;
+};
+
+// Building Replacement Manager (635x478, measured on dialog-shots/main-menu--start-new-city--user-made-buildings-select.png).
+// Replace (green arrow) pairs the selected replaceable building with the selected BAT building, Revert removes the pair,
+// Clear Set asks (041F2625:141) and clears. Events: Done (check mark; apply `set`), Close (close box; discard),
+// OpenBuildingList ("Edit List"). Import Set is not implemented (shows a note).
+class UserBuildingsDialog {
+ public:
+  WindowResult draw(Ui& ui, const WinEnv& E, UserBuildingsState& s);
+  MessageBox prompt;    // Clear Set confirmation / notes, drawn on top
+ private:
+  int promptKind_ = 0;  // 1 clear-set confirmation
+};
+
+struct BuildingListState {
+  std::vector<UbBuilding> active;        // BAT.DAT buildings ("Active List")
+  struct File { std::string label, path; int type = 2; };   // type 0 parent folder, 1 folder, 2 .bld
+  std::vector<File> files;
+  std::string folder = "Buildings";      // "Look in" caption
+  int activeSel = -1, activeScroll = 0, fileSel = -1, fileScroll = 0;
+  bool previewFile = false;              // preview shows the selected .bld (else the selected active building)
+  Image fileThumb;                       // selected .bld thumbnail (filled by the shell)
+  int fileLot = 0;
+  const Image* icons[3] = {};            // parent folder, folder, document
+};
+
+// Building List Editor (515x345, dialog-shots/...--edit-list.png). Events: BatRemove (id), BatAdd (text = path),
+// BatSelectFile, BatOpenFolder (text = path), Done / Close.
+class BuildingListEditor {
+ public:
+  WindowResult draw(Ui& ui, const WinEnv& E, BuildingListState& s);
+ private:
+  int lastClickRow_ = -1, lastClickFrame_ = -100, frame_ = 0;
+};
 
 // ---- 6.14 Tip of the Day, 6.15 Credits ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 class TipWindow {

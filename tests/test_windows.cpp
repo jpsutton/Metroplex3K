@@ -79,7 +79,33 @@ void testBudget() {
   h.drawFn = [&] { return w.draw(h.ui, h.E, b, v); };
   WindowResult r = h.frame();
   CHECK(h.inked() > 1000);
-  CHECK(h.has("close") && h.has("ok") && h.has("details:tax.r"));
+  // Main page opens on the Expenditures tab; the Income tab carries the tax rows.
+  CHECK(h.has("ok") && h.has("tab.exp") && h.has("tab.inc") && h.has("details:police") && !h.has("details:tax.r"));
+  CHECK(h.has("link.ord") && h.has("link.deals") && h.has("link.loans") && h.has("fund.police"));
+  h.click("tab.inc");
+  CHECK(w.incomeTab && h.has("details:tax.r") && h.has("link.biz") && h.has("tax.r.plus") && !h.has("fund.police"));
+  // Inline tax spinner.
+  { int rr = b.tax[0].rate;
+    r = h.click("tax.r.plus");
+    CHECK(b.tax[0].rate == rr + 1 && r.has(Act::SetTax) && r.find(Act::SetTax)->id == 0 && r.find(Act::SetTax)->a == rr + 1);
+    r = h.click("tax.r.minus");
+    CHECK(b.tax[0].rate == rr); }
+  r = h.click("link.biz"); CHECK(r.has(Act::OpenBusinessDeals));
+  // Inline funding slider (expenditures tab): drag to the far left -> 0, far right -> max.
+  h.click("tab.exp");
+  CHECK(!w.incomeTab);
+  { Rect s; h.frame(); h.find("fund.police", s);
+    Input in; in.mx = s.x + 1; in.my = s.y + s.h / 2; in.down = in.pressed = true;
+    r = h.frame(in);
+    CHECK(b.dept(dept::Police)->funding == 0);
+    CHECK(r.has(Act::SetFunding) && r.find(Act::SetFunding)->id == dept::Police && r.find(Act::SetFunding)->a == 0);
+    in.pressed = false; in.mx = s.x + s.w + 40;
+    r = h.frame(in);
+    CHECK(b.dept(dept::Police)->funding == BudgetWindow::kMaxFundingUi);
+    in.down = false; in.released = true; h.frame(in);
+    b.setFunding(dept::Police, 100); }
+  r = h.click("link.loans"); CHECK(w.page == BudgetWindow::Page::Loans);
+  w.openMain(); w.incomeTab = true;
   // Lines table: 3 tax lines + 6 depts + ordinances/deals/loans etc.
   auto L = BudgetWindow::lines(h.E, b, v);
   CHECK(L.size() >= 14);
@@ -133,16 +159,17 @@ void testBudget() {
   r = h.click("adjust.plus");
   CHECK(b.dept(dept::Police)->funding == BudgetWindow::kMaxFundingUi || b.dept(dept::Police)->funding >= 120);
   // Every department reachable from the main page.
-  for (const char* key : {"details:tax.r", "details:tax.i", "details:loans", "details:ord.exp", "details:deal.inc", "details:biz"}) {
+  for (const char* key : {"details:tax.r", "details:tax.i", "details:loans", "link.ord", "details:deal.inc", "details:biz"}) {
     w.openMain();
+    w.incomeTab = strcmp(key, "details:loans") != 0;
     r = h.click(key);
     if (!strcmp(key, "details:loans")) CHECK(w.page == BudgetWindow::Page::Loans);
-    if (!strcmp(key, "details:ord.exp")) CHECK(r.has(Act::OpenOrdinances));
+    if (!strcmp(key, "link.ord")) CHECK(r.has(Act::OpenOrdinances));
     if (!strcmp(key, "details:deal.inc")) CHECK(r.has(Act::OpenNeighbours));
     if (!strcmp(key, "details:biz")) CHECK(r.has(Act::OpenBusinessDeals));
   }
   // Loans: accept 5K.
-  w.openMain(); h.frame(); h.click("details:loans");
+  w.openMain(); w.incomeTab = false; h.frame(); h.click("details:loans");
   CHECK(w.page == BudgetWindow::Page::Loans);
   int64_t funds = b.funds;
   w.newLoanThousands = 5;
@@ -161,6 +188,8 @@ void testBudget() {
   CHECK(r.has(Act::IssueBond) && r.find(Act::IssueBond)->b == 0);
   CHECK(!w.loanMessage.empty());
   r = h.click("advisor"); CHECK(r.has(Act::OpenAdvisor));
+  CHECK(w.page == BudgetWindow::Page::Loans);
+  h.click("back"); CHECK(w.page == BudgetWindow::Page::Main);
   // Indicators page.
   w.openMain();
   h.click("indicators");
@@ -172,7 +201,7 @@ void testBudget() {
   h.click("back"); CHECK(w.page == BudgetWindow::Page::Main);
   // OK / close.
   r = h.click("ok"); CHECK(r.close && r.has(Act::Close));
-  r = h.click("close"); CHECK(r.close);
+  r = h.key(K_ESC); CHECK(r.close);
   // Tax approval bar on tax page.
   w.openTax(0); h.frame(); CHECK(h.inked() > 1000);
 }
@@ -248,7 +277,7 @@ void testBusinessDeals() {
   CHECK(r.has(Act::AcceptDeal) && r.find(Act::AcceptDeal)->id == 0);
   CHECK(d.inForce.size() == 1 && d.inForce[0] == 77);
   CHECK(d.monthlyIncome() == 500);
-  h.frame();
+  h.click("row.0");   // select the deal; its Cancel button appears
   CHECK(h.has("cancel.77"));
   r = h.click("cancel.77");
   CHECK(r.has(Act::CancelDeal) && r.find(Act::CancelDeal)->id == 77);
@@ -282,7 +311,7 @@ void testNeighbours() {
   r = h.click("cancel.0");
   CHECK(r.has(Act::CancelDeal) && r.find(Act::CancelDeal)->id == 0);
   CHECK(n.active.empty() || n.active[0].terminated());
-  r = h.click("ok"); CHECK(r.close);
+  r = h.click("close"); CHECK(r.close);
 
   CHECK(!dealKindName(h.E, 0).empty() && dealKindName(h.E, 99).empty());
   CHECK(dealRateText(h.E, dl).find("$10") != std::string::npos);
@@ -328,24 +357,28 @@ void testAdvisors() {
   CHECK(AdvisorWindow::topicsFor(am.list(kAdvBudget), 0).size() == 1);
   CHECK(AdvisorWindow::topicsFor(am.list(kAdvBudget), 1).size() == 1);
   h.frame();
-  CHECK(h.has("topic.0") && h.has("tab.1"));
+  CHECK(h.has("topic.0") && h.has("discuss") && h.has("back"));
   h.click("topic.0");
   CHECK(w.topicSel == 0x101);
   r = h.click("dismiss");
   CHECK(r.has(Act::DismissTopic) && r.find(Act::DismissTopic)->id == kAdvBudget && r.find(Act::DismissTopic)->a == 0x101);
   CHECK(!am.list(kAdvBudget).visible(0x101));
   CHECK(w.topicSel == -1);
+  h.click("discuss");   // open the "Discuss:" drop-down
   h.click("tab.1");
   CHECK(w.tab == 1);
   h.click("topic.0");
   CHECK(w.topicSel == 0x102);
   h.frame(); CHECK(h.inked() > 1000);
   // Ordinances tab shows ordinance checkboxes filtered by the advisor.
+  h.click("discuss");
   h.click("tab.2");
   CHECK(w.tab == 2);
   h.frame();
   bool anyOrd = false; for (auto& sp : h.spots) if (sp.name.rfind("ord.", 0) == 0) anyOrd = true;
   CHECK(anyOrd || true);
+  h.click("back");      // title-bar back button returns to the Meet list
+  CHECK(w.selected == 0);
   r = h.click("advisor.1");
   CHECK(w.selected == kAdvUtilities && w.tab == 0);
   w.open(0); h.frame(); CHECK(h.inked() > 1000);
@@ -430,7 +463,8 @@ void testPrefs() {
   // Resolution change then OK -> restart prompt.
   int start = s.resolution;
   if (s.modes.size() > 1) {
-    r = h.click(start + 1 < int(s.modes.size()) ? "res.next" : "res.prev");
+    h.click("res");   // open the drop-down, pick another mode
+    r = h.click("res." + std::to_string(start + 1 < int(s.modes.size()) ? start + 1 : start - 1));
     CHECK(s.resolution != start);
     CHECK(r.has(Act::PrefsChanged));
   }
@@ -445,7 +479,7 @@ void testPrefs() {
   r = h.click("ok");
   CHECK(r.has(Act::Done) && r.close);
   if (s.modes.size() > 1) CHECK(r.has(Act::RestartPrompt));
-  r = h.click("cancel"); CHECK(r.close && r.has(Act::Close));
+  r = h.click("close"); CHECK(r.close && r.has(Act::Close));   // the close box cancels
 
   // Settings round trip.
   GeneralSettings g; Preferences p;
@@ -461,14 +495,15 @@ void testCityProps() {
   CityPropsState s;
   s.name = "Old"; s.mayor = "Me";
   s.landscapes = {"Temperate", "Desert", "Arctic"}; s.floraSets = {"A", "B"}; s.buildingSets = {"New York", "Houston"};
-  s.descriptions = {"d0", "d1", "d2"};
   CityPropertiesDialog d;
   h.drawFn = [&] { return d.draw(h.ui, h.E, s); };
   h.frame(); CHECK(h.inked() > 1000);
-  h.click("landscape.next"); CHECK(s.landscape == 1);
-  h.click("landscape.prev"); h.click("landscape.prev"); CHECK(s.landscape == 2);   // wraps
-  h.click("flora.next"); CHECK(s.flora == 1);
-  h.click("buildings.prev"); CHECK(s.buildings == 1);
+  h.click("landscape.1"); CHECK(s.landscape == 1);     // selector icons pick directly
+  h.click("landscape.2"); CHECK(s.landscape == 2);
+  h.click("flora.1"); CHECK(s.flora == 1);
+  h.click("buildings.1"); CHECK(s.buildings == 1);
+  bool dis = s.disasters; h.click("disasters"); CHECK(s.disasters != dis);
+  WindowResult rs = h.click("select"); CHECK(rs.has(Act::OpenUserBuildings));
   // Typing into the name box: click then feed text.
   { Rect r; h.frame(); h.find("name", r);
     Input in; in.mx = r.x + 5; in.my = r.y + 5; in.down = in.pressed = true; h.frame(in);
@@ -478,7 +513,7 @@ void testCityProps() {
     CHECK(s.name == "Ol"); }
   WindowResult r = h.click("ok");
   CHECK(r.has(Act::ApplyCityProps) && r.has(Act::Done) && r.close);
-  r = h.click("cancel"); CHECK(r.close && !r.has(Act::ApplyCityProps));
+  r = h.click("close"); CHECK(r.close && !r.has(Act::ApplyCityProps));   // the close box cancels
   s.editable = false;
   h.frame(); CHECK(h.inked() > 1000);
   s.name = "Locked";
@@ -529,7 +564,7 @@ void testPicker() {
   CHECK(r.has(Act::PickBuilding) && r.find(Act::PickBuilding)->id == 1003 && r.close);
   CHECK(r.find(Act::PickBuilding)->text == "power");
   w.sel = -1;
-  r = h.click("cancel"); CHECK(r.close && r.has(Act::Close));
+  r = h.click("close"); CHECK(r.close && r.has(Act::Close));   // the close box cancels
   // Empty list shows the empty message.
   std::vector<PickerEntry> none;
   h.drawFn = [&] { return w.draw(h.ui, h.E, none); };
@@ -716,6 +751,22 @@ void testTicker() {
   CHECK(t.items[0].x == x0 - 2);             // 64 ms > 50: one 2 px step
   TickerScroll ts;
   CHECK(ts.advance(50) == 0 && ts.advance(51) == 2);
+  // Paused: keeps scrolling and fills the strip with "Simulation Paused" copies ~4 glyphs apart.
+  {
+    TickerWidget p;
+    p.update(16, strip.w, h.ui, nullptr, 0, nullptr, true);
+    CHECK(p.items.size() == 1 && p.items[0].x == strip.w);   // first copy enters at the right edge
+    for (int k = 0; k < 120; k++) p.update(51, strip.w, h.ui, nullptr, 0, nullptr, true);
+    CHECK(p.items.size() >= 2);
+    bool allMsg = true;
+    for (auto& i : p.items) allMsg = allMsg && i.n.text == "Simulation Paused";
+    CHECK(allMsg);
+    int w = h.ui.textWidth("Simulation Paused");
+    CHECK(p.items[1].x - (p.items[0].x + w) == h.ui.textWidth("0000"));
+    int px0 = p.items[0].x;
+    for (int k = 0; k < 4; k++) p.update(16, strip.w, h.ui, nullptr, 0, nullptr, true);
+    CHECK(p.items[0].x < px0);                 // still scrolling while paused
+  }
   // Move item on screen and click it.
   t.items[0].x = 20; t.items[1].x = 300;
   h.drawFn = [&] { return t.draw(h.ui, h.E, strip); };
@@ -749,6 +800,10 @@ void testMessageBox() {
   CHECK(m.active);
   auto L = m.layout(h.ui);
   CHECK(L.W >= 208 && L.H > 0 && L.lines.size() >= 1);
+  // One-line two-button prompt: 288x139 frame as measured on the original (body 39..91, band 100..134,
+  // buttons 1 px into the band starting 40 px in).
+  CHECK(L.W == 208 && L.boxW == 288 && L.boxH == 139 && L.bodyY == 39 && L.bodyH == 53 && L.bandY == 100);
+  CHECK(L.buttonY == 101 && L.buttonX0 == 40 && L.textX == 56);
   h.frame(); CHECK(h.inked() > 1000);
   WindowResult r = h.click("msg.1");
   CHECK(r.has(Act::MessageResult) && r.find(Act::MessageResult)->a == int64_t(MsgButton::No) && !m.active);
@@ -800,6 +855,44 @@ void testScenarioViewIsPlain() {
   ScenarioGoalsView v; CHECK(v.inScenario && v.goals.empty());
 }
 
+void testUserBuildings() {
+  Harness h;
+  UserBuildingsState s;
+  s.totalReplaceable = 5;
+  auto rb = [](uint32_t inst, int lot, int zone) { UbBuilding u; u.key = {0x207EDC0E, 0x57E, inst}; u.appearance = {0x6300, 1, inst}; u.lot = lot; u.zone = zone; u.name = "r"; return u; };
+  s.replaceable = {rb(1, 1, 0), rb(2, 1, 0), rb(3, 2, 0), rb(4, 1, 1)};
+  UbBuilding b1; b1.name = "One"; b1.lot = 1; b1.buildingId = 7; b1.appearance = {0x6300, 0xBA1DBF1E, 0xB};
+  UbBuilding b2; b2.name = "Two"; b2.lot = 2; b2.buildingId = 8; b2.appearance = {0x6300, 0xBA1DBF1E, 0xC};
+  s.bat = {b1, b2};
+  UserBuildingsDialog d;
+  h.drawFn = [&] { return d.draw(h.ui, h.E, s); };
+  h.frame(); CHECK(h.inked() > 1000);
+  CHECK(s.filtered().size() == 2 && s.batChoices().size() == 1 && s.batSel == 0);
+  h.click("replace"); CHECK(s.set.pairs.size() == 1 && s.set.find(s.replaceable[0].key));
+  h.click("next"); CHECK(s.sel == 1);
+  h.click("revert"); CHECK(s.set.pairs.size() == 1);        // nothing to revert for the second building
+  h.click("prev"); h.click("revert"); CHECK(s.set.pairs.empty());
+  h.click("size.1"); h.frame(); CHECK(s.filtered().size() == 1 && s.batChoices().size() == 1 && s.batSel == 1);
+  h.click("replace"); CHECK(s.set.pairs.size() == 1);
+  h.click("clear"); CHECK(d.prompt.active && s.set.pairs.size() == 1);
+  d.prompt.active = false; s.set.pairs.clear(); s.set.set(s.replaceable[2].key, b2.appearance);
+  WindowResult r = h.click("editList"); CHECK(r.has(Act::OpenBuildingList));
+  r = h.click("ok"); CHECK(r.has(Act::Done) && r.close);
+  r = h.click("close"); CHECK(r.close && r.has(Act::Close));
+  CHECK(ubZoneClass(3100) == 0 && ubZoneClass(5100) == 1 && ubZoneClass(8100) == 2 && ubZoneClass(12310) == 3 && ubZoneClass(10110) == 4);
+
+  BuildingListState ls; ls.active = {b1, b2}; ls.files = {{"Tower", "/x/Tower.bld", 2}};
+  BuildingListEditor e;
+  h.drawFn = [&] { return e.draw(h.ui, h.E, ls); };
+  h.frame(); CHECK(h.inked() > 1000);
+  h.click("active.1"); CHECK(ls.activeSel == 1);
+  r = h.click("remove"); CHECK(r.has(Act::BatRemove) && r.find(Act::BatRemove)->id == 8);
+  r = h.click("add"); CHECK(!r.has(Act::BatAdd));          // disabled until a .bld is selected
+  r = h.click("file.0"); CHECK(r.has(Act::BatSelectFile) && ls.previewFile);
+  r = h.click("add"); CHECK(r.has(Act::BatAdd) && r.find(Act::BatAdd)->text == "/x/Tower.bld");
+  r = h.click("ok"); CHECK(r.has(Act::Done) && r.close);
+}
+
 }  // namespace
 
 int main() {
@@ -812,6 +905,7 @@ int main() {
   testPetitioner();
   testPrefs();
   testCityProps();
+  testUserBuildings();
   testScenarioGoals();
   testPicker();
   testQuery();

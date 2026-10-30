@@ -133,10 +133,10 @@ class Skin {
   static bool sliceCell(const Image& strip, int cells, int cell, Image& out);
   // 3-slice stretchable button: cell split in thirds, middle stretched. Caption centred if non-empty.
   bool drawButton3(Ui& ui, const Image* strip, int cells, int cell, Rect r, const std::string& label = "",
-                   uint32_t textCol = 0) const;
+                   uint32_t textCol = 0, const char* font = "main10") const;
   // Whole stretchable button with hover/press handling; returns false if no art, else sets clicked.
   bool button3(Ui& ui, const Image* strip, Rect r, const std::string& label, bool enabled, bool toggled,
-               bool& clicked, uint32_t textCol = 0) const;
+               bool& clicked, uint32_t textCol = 0, const char* font = "main10") const;
   // Check box / radio (8-cell strip) at (x,y); returns cell width (0 if art missing).
   int drawCheck(Ui& ui, const Image* strip, int x, int y, bool checked, bool enabled = true, bool hover = false,
                 bool pressed = false) const;

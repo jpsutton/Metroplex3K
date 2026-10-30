@@ -1,5 +1,6 @@
 // Preferences, city properties, scenario goals, building picker (spec 09 sections 6.8-6.11).
 #include <algorithm>
+#include "core/skin.h"
 #include "core/windows.h"
 
 namespace m3k {
@@ -37,148 +38,278 @@ void prefsToSettings(const PrefsState& s, GeneralSettings& g, Preferences& p) {
   p.setBool("autoGoToDisasters", s.autoGoToDisasters);
 }
 
+// Layout measured on the original at 800x600 (dialog-shots/main-menu--preferences.png): 480x472 frame, three sunken
+// groups (performance, sound, general options), GZRadioBtn / GZCheckBox controls with main9 labels, the volume block
+// with GZSliderH knobs, the music list with a GZScrollbar, the preview band with play / stop buttons and the check-mark
+// (GZBtnDone) button. The close box cancels.
 WindowResult PreferencesDialog::draw(Ui& ui, const WinEnv& E, PrefsState& s) {
   WindowResult R;
-  int lh = lineHeight(ui);
-  Rect r = centered(ui, 620, 470);
+  Rect r = centered(ui, 480, 472);
   if (startResolution < 0) startResolution = s.resolution;
+  const Skin* sk = ui.skin;
+  const uint32_t label = rgb(0x7B, 0x82, 0xB5), ink = rgb(0x31, 0x34, 0x7B), white = rgb(255, 255, 255);
+  const uint32_t dark = rgb(0x7B, 0x8A, 0xFF), light = rgb(0xFF, 0xF3, 0xFF), blue = rgb(0x7B, 0x92, 0xFF);
   if (frame(ui, E, r, E.win(0x14E, "Preferences"))) { R.close = true; R.add(Act::Close); }
   auto changed = [&](const char* key) { R.add(Act::PrefsChanged, 0, 0, 0, key); };
-  auto radio = [&](const std::string& name, Rect rc, const std::string& lbl, int& var, int val, const char* key) {
-    if (button(ui, E, name, rc, lbl, true, var == val)) { if (var != val) { var = val; changed(key); } }
+  auto sunkenLines = [&](Rect b) {
+    ui.fill({b.x, b.y, b.w, 1}, dark); ui.fill({b.x, b.y, 1, b.h}, dark);
+    ui.fill({b.x, b.y + b.h - 1, b.w, 1}, light); ui.fill({b.x + b.w - 1, b.y, 1, b.h}, light);
   };
-  int lx = r.x + 14, y = r.y + 34;
-  // ---- Performance
-  ui.text(lx, y, E.win(0x1FF, "Performance"), "title12");
-  y += lh + 6;
-  ui.text(lx, y, E.win(0x200, "Traffic visible"));
-  y += lh + 2;
-  const uint32_t tr[4] = {0x201, 0x202, 0x203, 0x20A};
-  const char* trFb[4] = {"Closest 3 zooms", "Closest 2 zooms", "Closest zoom", "Off"};
-  for (int i = 0; i < 4; i++) radio("traffic." + std::to_string(i), {lx + (i % 2) * 140, y + (i / 2) * 24, 136, 22}, E.win(tr[i], trFb[i]), s.traffic, i, "traffic");
-  y += 54;
-  ui.text(lx, y, E.win(0x207, "Sims visible"));
-  y += lh + 2;
-  const uint32_t sm[3] = {0x208, 0x209, 0x20A};
-  const char* smFb[3] = {"Closest 2 zooms", "Closest zoom", "Off"};
-  for (int i = 0; i < 3; i++) radio("sims." + std::to_string(i), {lx + (i % 2) * 140, y + (i / 2) * 24, 136, 22}, E.win(sm[i], smFb[i]), s.sims, i, "sims");
-  y += 54;
-  ui.text(lx, y, E.win(0x204, "Other animations"));
-  y += lh + 2;
-  int oa = s.otherAnimations ? 1 : 0;
-  radio("anim.on", {lx, y, 136, 22}, E.win(0x205, "On"), oa, 1, "otherAnimations");
-  radio("anim.off", {lx + 140, y, 136, 22}, E.win(0x206, "Off"), oa, 0, "otherAnimations");
-  s.otherAnimations = oa != 0;
-  y += 32;
-  ui.text(lx, y, E.win(0x20B, "Screen resolution"));
-  y += lh + 2;
-  if (button(ui, E, "res.prev", {lx, y, 24, 22}, "<") && s.resolution > 0) { s.resolution--; changed("resolution"); }
-  if (!s.modes.empty()) {
-    const DisplayMode& m = s.modes[size_t(std::max(0, std::min(int(s.modes.size()) - 1, s.resolution)))];
-    ui.textCentered({lx + 28, y, 120, 22}, std::to_string(m.w) + "x" + std::to_string(m.h));
-  }
-  if (button(ui, E, "res.next", {lx + 152, y, 24, 22}, ">") && s.resolution + 1 < int(s.modes.size())) { s.resolution++; changed("resolution"); }
-  y += 40;
-  // ---- General
-  ui.text(lx, y, E.win(0x2D0, "General"), "title12");
-  y += lh + 6;
-  bool v = s.showTips;
-  if (check(ui, E, "showTips", {lx, y, 280, 18}, E.win(0x293, "Show tips at startup"), v)) { s.showTips = v; changed("showTips"); }
-  v = s.autoGoToDisasters;
-  if (check(ui, E, "autoDisaster", {lx, y + 22, 280, 18}, E.win(0x21F, "Auto go to disasters"), v)) { s.autoGoToDisasters = v; changed("autoGoToDisasters"); }
+  auto lab = [&](int x, int y, const std::string& t, uint32_t c) { ui.text(r.x + x, r.y + y, t, "main9", c); };
+  sunkenLines({r.x + 6, r.y + 42, 200, 300});
+  sunkenLines({r.x + 212, r.y + 42, 262, 300});
+  sunkenLines({r.x + 6, r.y + 346, 468, 76});
 
-  // ---- Sound (right column)
-  int rx = r.x + 320;
-  y = r.y + 34;
-  ui.text(rx, y, E.win(0x292, "Sound"), "title12");
-  y += lh + 6;
-  struct Vol { const char* key; uint32_t id; const char* fb; int* vol; bool* on; };
-  Vol vols[3] = {{"music", 0x153, "Music", &s.musicVolume, &s.musicOn}, {"ambient", 0x219, "Ambient sound", &s.ambientVolume, &s.ambientOn},
-                 {"sfx", 0x14F, "Sound effects", &s.sfxVolume, &s.sfxOn}};
-  for (auto& vo : vols) {
-    bool on = *vo.on;
-    if (check(ui, E, std::string(vo.key) + ".on", {rx, y, 200, 18}, E.win(vo.id, vo.fb), on)) { *vo.on = on; changed(vo.key); }
-    Rect sl{rx + 20, y + 20, 240, 14};
-    E.spot(std::string(vo.key) + ".slider", sl);
-    int val = *vo.vol;
-    if (ui.slider(sl, val, 0, 1024)) {
-      *vo.vol = val;
-      changed(vo.key);
-      if (std::string(vo.key) == "ambient") ambientDirty = true;
+  // Radio button (GZRadioBtn, 8 cells of 12x12) 1 px below its main9 label's top; label at x 32.
+  const Image* radioArt = sk ? sk->get("radio") : nullptr;
+  auto radio = [&](const std::string& name, int y, const std::string& lbl, int& var, int val, const char* key) {
+    Rect hit{r.x + 18, r.y + y, 14 + ui.textWidth(lbl, "main9"), 14};
+    E.spot(name, hit);
+    bool hot = ui.hover(hit);
+    if (!(sk && sk->drawCheck(ui, radioArt, r.x + 18, r.y + y + 1, var == val, true, hot, hot && ui.in.down))) {
+      ui.fill({r.x + 18, r.y + y + 1, 12, 12}, white); ui.frame({r.x + 18, r.y + y + 1, 12, 12}, false);
+      if (var == val) ui.fill({r.x + 21, r.y + y + 4, 6, 6}, ink);
     }
-    y += 42;
+    lab(32, y, lbl, ink);
+    if (ui.clicked(hit) && var != val) { var = val; changed(key); }
+  };
+  // Check box (GZCheckBox, 8 cells of 13x13) 1 px below the label's top; label 16 px right of the box.
+  const Image* checkArt = sk ? sk->get("check") : nullptr;
+  auto check = [&](const std::string& name, int x, int y, const std::string& lbl, bool& v, const char* key) {
+    Rect hit{r.x + x, r.y + y, 16 + ui.textWidth(lbl, "main9"), 15};
+    E.spot(name, hit);
+    bool hot = ui.hover(hit);
+    if (!(sk && sk->drawCheck(ui, checkArt, r.x + x, r.y + y + 1, v, true, hot, hot && ui.in.down))) {
+      ui.fill({r.x + x, r.y + y + 1, 13, 13}, white); ui.frame({r.x + x, r.y + y + 1, 13, 13}, false);
+      if (v) ui.fill({r.x + x + 3, r.y + y + 4, 7, 7}, ink);
+    }
+    lab(x + 16, y, lbl, ink);
+    if (ui.clicked(hit)) { v = !v; changed(key); return true; }
+    return false;
+  };
+
+  // ---- Performance (left group)
+  lab(14, 48, E.win(0x1FF, "Performance"), label);
+  lab(14, 70, E.win(0x200, "Traffic Visible"), label);
+  const uint32_t tr[4] = {0x201, 0x202, 0x203, 0x20A};
+  const char* trFb[4] = {"Closest 3 Zooms", "Closest 2 Zooms", "Closest Zoom", "Off"};
+  for (int i = 0; i < 4; i++) radio("traffic." + std::to_string(i), 88 + 18 * i, E.win(tr[i], trFb[i]), s.traffic, i, "traffic");
+  lab(14, 164, E.win(0x207, "Sims Visible"), label);
+  const uint32_t sm[3] = {0x208, 0x209, 0x20A};
+  const char* smFb[3] = {"Closest 2 Zooms", "Closest Zoom", "Off"};
+  for (int i = 0; i < 3; i++) radio("sims." + std::to_string(i), 182 + 18 * i, E.win(sm[i], smFb[i]), s.sims, i, "sims");
+  lab(14, 240, E.win(0x204, "Other Animations"), label);
+  int oa = s.otherAnimations ? 1 : 0;
+  radio("anim.on", 258, E.win(0x205, "On"), oa, 1, "otherAnimations");
+  radio("anim.off", 276, E.win(0x206, "Off"), oa, 0, "otherAnimations");
+  s.otherAnimations = oa != 0;
+  lab(14, 298, E.win(0x20B, "Screen Resolution"), label);
+  // Resolution drop-down: sunken white field (system9 text) and the combo arrow.
+  Rect combo{r.x + 18, r.y + 314, 159, 20}, arrow{r.x + 178, r.y + 316, 16, 16};
+  ui.fill(combo, white); sunkenLines(combo);
+  auto modeName = [&](int i) {
+    if (s.modes.empty()) return std::string();
+    const DisplayMode& m = s.modes[size_t(std::max(0, std::min(int(s.modes.size()) - 1, i)))];
+    return std::to_string(m.w) + "x" + std::to_string(m.h);
+  };
+  ui.text(combo.x + 3, combo.y + 3, modeName(s.resolution), "system9", ink);
+  E.spot("res", arrow);
+  { bool c = false;
+    if (!(sk && sk->imageButtonCells(ui, sk->get("combo"), 4, arrow, "", false, true, c))) c = ui.button(arrow, "v");
+    if (c || ui.clicked(combo)) resOpen = !resOpen; }
+
+  // ---- Sound (right group): check boxes, volume block with the level wedge and three sliders.
+  lab(220, 48, E.win(0x292, "Sound"), label);
+  Rect block{r.x + 372, r.y + 46, 96, 110};
+  ui.fill(block, blue); ui.fill({block.x, block.y, block.w, 1}, dark); ui.fill({block.x, block.y + block.h - 1, block.w, 1}, dark);
+  ui.fill({block.x, block.y, 1, block.h}, dark); ui.fill({block.x + block.w - 1, block.y, 1, block.h}, dark);
+  // Level wedge: seven bars rising left to right (drawn, approximating the original's decoration).
+  for (int k = 0; k < 7; k++)
+    for (int x = 0; x < 8; x++) {
+      int gx = 16 + k * 10 + x, top = 59 - (gx - 16) * 9 / 67;
+      ui.fill({r.x + 370 + gx, r.y + top, 1, 60 - top}, rgb(0xD6, 0xDB, 0xFF));
+      ui.fill({r.x + 370 + gx, r.y + top, 1, 1}, rgb(0x94 + x * 8, 0xA2 + x * 6, 0xFF));
+    }
+  struct Vol { const char* key; uint32_t id; const char* fb; int* vol; bool* on; };
+  Vol vols[3] = {{"music", 0x153, "Music", &s.musicVolume, &s.musicOn}, {"ambient", 0x219, "Ambient Sound", &s.ambientVolume, &s.ambientOn},
+                 {"sfx", 0x14F, "Sound Effects", &s.sfxVolume, &s.sfxOn}};
+  const Image* knobArt = sk ? sk->image(skin_group::Sys, 0xC2B99E09) : nullptr;
+  for (int i = 0; i < 3; i++) {
+    Vol& vo = vols[i];
+    int y = 69 + 24 * i;
+    check(std::string(vo.key) + ".on", 222, y, E.win(vo.id, vo.fb), *vo.on, vo.key);
+    // Groove from x 379 to 454 (dark, darker, darker, white rows); the 20 px knob is centred on the value.
+    const int x0 = r.x + 379, x1 = r.x + 454, gy = r.y + y + 6;
+    ui.fill({x0, gy, x1 - x0 + 1, 1}, rgb(0x39, 0x38, 0x7B)); ui.fill({x0, gy + 1, x1 - x0 + 1, 2}, rgb(0x08, 0x0C, 0x18));
+    ui.fill({x0, gy + 3, x1 - x0 + 1, 1}, white);
+    Rect sl{x0, r.y + y - 2, x1 - x0 + 1, 20};
+    E.spot(std::string(vo.key) + ".slider", sl);
+    if (ui.in.pressed && ui.hover(sl)) dragSlider = i;
+    if (dragSlider == i && ui.in.down) {
+      int v = std::max(0, std::min(1024, (ui.in.mx - x0) * 1024 / (x1 - x0)));
+      if (v != *vo.vol) { *vo.vol = v; changed(vo.key); if (i == 1) ambientDirty = true; }
+    }
+    int kx = x0 + *vo.vol * (x1 - x0) / 1024 - 10;
+    if (knobArt && knobArt->w >= 80) Skin::drawCell(ui, knobArt, 4, dragSlider == i && ui.in.down ? 2 : 3, kx, r.y + y - 2);
+    else { ui.fill({kx + 4, r.y + y + 2, 12, 12}, white); ui.frame({kx + 4, r.y + y + 2, 12, 12}, true); }
   }
+  if (!ui.in.down) dragSlider = -1;
   if (ambientDirty && !ui.in.down) { ambientDirty = false; R.add(Act::PlaySound, 0, 67); }   // ambience slider plays sound 67 on release
-  v = s.sounds3D;
-  if (check(ui, E, "sound3d", {rx, y, 260, 18}, E.win(0x291, "Enable 3D sounds"), v)) { s.sounds3D = v; changed("sound3d"); }
-  y += 26;
-  ui.text(rx, y, E.win(0x21A, "Music choices"));
-  y += lh + 2;
-  int rowH = lh + 4, visible = 5;
-  Rect lr{rx, y, 270, visible * rowH};
-  ui.fill(lr, rgb(255, 255, 255)); ui.frame(lr, false);
-  scrollBar(ui, E, lr, int(s.tracks.size()), visible, scroll);
-  for (int i = 0; i < visible && scroll + i < int(s.tracks.size()); i++) {
+  check("sound3d", 222, 141, E.win(0x291, "Enable 3D Sounds"), s.sounds3D, "sound3d");
+
+  // Music choices: sunken lavender list (system9 rows of 17 px with a check box) and a GZScrollbar.
+  lab(220, 162, E.win(0x21A, "Music Choices"), label);
+  Rect lr{r.x + 218, r.y + 178, 234, 130};
+  ui.fill(lr, rgb(0xDE, 0xDF, 0xFF)); sunkenLines(lr);
+  const int rowH = 17, visible = (lr.h - 2) / rowH, total = int(s.tracks.size());
+  if (ui.hover(lr) && ui.in.wheel) scroll -= ui.in.wheel;
+  scroll = std::max(0, std::min(scroll, std::max(0, total - visible)));
+  for (int i = 0; i < visible && scroll + i < total; i++) {
     auto& tk = s.tracks[size_t(scroll + i)];
-    Rect row{lr.x + 2, lr.y + 2 + i * rowH, lr.w - 20, rowH};
-    if (s.trackSel == scroll + i) ui.fill(row, rgb(0x90, 0xA8, 0xE0));
-    bool on = tk.second;
+    Rect row{lr.x + 1, lr.y + 1 + i * rowH, lr.w - 2, rowH};
+    bool sel = s.trackSel == scroll + i;
+    if (sel) ui.fill(row, rgb(0, 0, 255));
     E.spot("track." + std::to_string(i), row);
-    ui.fill({row.x + 2, row.y + 3, 10, 10}, rgb(255, 255, 255));
-    ui.frame({row.x + 2, row.y + 3, 10, 10}, false);
-    if (on) ui.fill({row.x + 4, row.y + 5, 6, 6}, ui.textCol);
-    ui.text(row.x + 18, row.y + 2, tk.first);
+    if (!(sk && sk->drawCheck(ui, checkArt, row.x + 2, row.y + 2, tk.second))) {
+      ui.fill({row.x + 2, row.y + 3, 10, 10}, white); ui.frame({row.x + 2, row.y + 3, 10, 10}, false);
+      if (tk.second) ui.fill({row.x + 4, row.y + 5, 6, 6}, ink);
+    }
+    ui.text(row.x + 19, row.y + 2, tk.first, "system9", sel ? white : ink);
     if (ui.clicked(row)) {
-      if (ui.in.mx < row.x + 14) { tk.second = !tk.second; changed("musicChoice"); }
+      if (ui.in.mx < row.x + 15) { tk.second = !tk.second; changed("musicChoice"); }
       s.trackSel = scroll + i;
     }
   }
-  y += visible * rowH + 8;
-  if (button(ui, E, "preview", {rx, y, 270, 22}, E.win(0x294, "Preview highlighted score"), s.trackSel >= 0)) R.add(Act::PreviewMusic, 0, s.trackSel);
-  // ---- OK / Cancel
-  if (button(ui, E, "ok", {r.x + r.w - 200, r.y + r.h - 34, 90, 24}, E.app(0xB4, "OK"))) {
-    if (s.resolution != startResolution) R.add(Act::RestartPrompt);
-    R.add(Act::Done);
-    R.close = true;
+  {
+    const Image* sb = sk ? sk->image(skin_group::Sys, 0xE2B99E01) : nullptr;
+    Rect up{r.x + 453, lr.y, 16, 16}, dn{r.x + 453, lr.y + lr.h - 16, 16, 16};
+    Rect track{up.x, up.y + 16, 16, dn.y - up.y - 16};
+    int range = std::max(0, total - visible), ty = track.y + (range ? (track.h - 16) * scroll / range : 0);
+    if (sb && sb->w >= 192) {
+      for (int y = track.y; y < track.y + track.h; y += 16) ui.blitRect(*sb, track.x, y, 9 * 16, 0, 16, std::min(16, track.y + track.h - y));
+      Skin::drawCell(ui, sb, 12, ui.hover(up) && ui.in.down ? 7 : 6, up.x, up.y);
+      Skin::drawCell(ui, sb, 12, ui.hover(dn) && ui.in.down ? 11 : 10, dn.x, dn.y);
+      Skin::drawCell(ui, sb, 12, 8, track.x, ty);
+    } else { ui.fill(track, ui.panelDark); ui.button(up, "^"); ui.button(dn, "v"); }
+    E.spot("scroll.up", up); E.spot("scroll.down", dn);
+    if (ui.clicked(up)) scroll--;
+    if (ui.clicked(dn)) scroll++;
+    scroll = std::max(0, std::min(scroll, range));
   }
-  if (button(ui, E, "cancel", {r.x + r.w - 104, r.y + r.h - 34, 90, 24}, E.app(0xB6, "Cancel"))) { R.close = true; R.add(Act::Close); }
+  // Preview band: play (82FAB6D2) and stop (22FAB6DE) buttons, cells of 24x25.
+  Rect band{r.x + 218, r.y + 310, 250, 28};
+  ui.fill(band, blue); ui.fill({band.x, band.y, band.w, 1}, dark); ui.fill({band.x, band.y + band.h - 1, band.w, 1}, dark);
+  ui.fill({band.x, band.y, 1, band.h}, dark); ui.fill({band.x + band.w - 1, band.y, 1, band.h}, dark);
+  lab(226, 317, E.win(0x294, "Preview Highlighted Score"), ink);
+  Rect play{r.x + 414, r.y + 313, 24, 25}, stop{r.x + 438, r.y + 313, 24, 25};
+  E.spot("preview", play); E.spot("preview.stop", stop);
+  { bool c = false;
+    if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::Sys, 0x82FAB6D2), 4, play, "", false, true, c))) c = ui.button(play, ">");
+    if (c && s.trackSel >= 0) R.add(Act::PreviewMusic, 0, s.trackSel); }
+  { bool c = false;
+    if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::Sys, 0x22FAB6DE), 4, stop, "", false, true, c))) c = ui.button(stop, "#");
+    if (c) R.add(Act::PreviewMusic, 0, -1); }
+
+  // ---- General options (bottom group)
+  lab(14, 348, E.win(0x2D0, "General Options:"), label);
+  check("showTips", 18, 365, E.win(0x293, "Show tips at startup"), s.showTips, "showTips");
+  check("autoDisaster", 18, 382, E.win(0x21F, "Auto Go To Disasters"), s.autoGoToDisasters, "autoGoToDisasters");
+
+  // Done (check mark).
+  Rect done{r.x + 432, r.y + 434, 42, 32};
+  E.spot("ok", done);
+  { bool c = false;
+    if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::Sys, 0xA2DEFD9A), 4, done, "", false, true, c))) c = ui.button(done, E.app(0xB4, "OK"));
+    if (c || (ui.in.key[K_ENTER] && !resOpen)) {
+      if (s.resolution != startResolution) R.add(Act::RestartPrompt);
+      R.add(Act::Done);
+      R.close = true;
+    } }
+  if (ui.in.key[K_ESC] && !resOpen) { R.close = true; R.add(Act::Close); }
+
+  // Resolution drop-down list, drawn last (on top).
+  if (resOpen) {
+    Rect dd{combo.x, combo.y + combo.h, combo.w + 17, 17 * int(s.modes.size()) + 2};
+    ui.fill(dd, white); ui.frame(dd, false);
+    for (int i = 0; i < int(s.modes.size()); i++) {
+      Rect row{dd.x + 1, dd.y + 1 + 17 * i, dd.w - 2, 17};
+      E.spot("res." + std::to_string(i), row);
+      bool hot = ui.hover(row) || (i == s.resolution && !ui.hover(dd));
+      if (hot) ui.fill(row, rgb(0, 0, 255));
+      ui.text(row.x + 2, row.y + 2, modeName(i), "system9", hot ? white : ink);
+      if (ui.clicked(row)) { resOpen = false; if (i != s.resolution) { s.resolution = i; changed("resolution"); } }
+    }
+    if (ui.in.released && !dd.contains(ui.in.mx, ui.in.my) && !arrow.contains(ui.in.mx, ui.in.my) && !combo.contains(ui.in.mx, ui.in.my)) resOpen = false;
+    if (ui.in.key[K_ESC]) resOpen = false;
+  }
   return R;
 }
 
 // ================================================================ City properties (6.9)
+// City Options: the New City Options frame (639x368, measured on dialog-shots/hud--options--city-properties.png) with
+// the name fields, a Description box, the Disasters / Auto Budget check boxes, the scheme selectors and preview.
 WindowResult CityPropertiesDialog::draw(Ui& ui, const WinEnv& E, CityPropsState& s) {
   WindowResult R;
-  int lh = lineHeight(ui);
-  Rect r = centered(ui, 480, 380);
-  if (frame(ui, E, r, E.win(0x281, "City properties"))) { R.close = true; R.add(Act::Close); }
-  int x0 = r.x + 16, y = r.y + 38;
-  ui.text(x0, y + 4, E.win(0x229, "City name"));
-  E.spot("name", {x0 + 120, y, 300, 22});
-  if (s.editable) ui.textBox({x0 + 120, y, 300, 22}, s.name, 31);
-  else ui.text(x0 + 124, y + 4, s.name);
-  y += 30;
-  ui.text(x0, y + 4, E.win(0x22A, "Mayor name"));
-  E.spot("mayor", {x0 + 120, y, 300, 22});
-  if (s.editable) ui.textBox({x0 + 120, y, 300, 22}, s.mayor, 31);
-  else ui.text(x0 + 124, y + 4, s.mayor);
-  y += 40;
-  struct Sch { const char* key; uint32_t id; const char* fb; int* sel; const std::vector<std::string>* names; };
-  Sch sch[3] = {{"landscape", 0x28, "Landscape", &s.landscape, &s.landscapes}, {"flora", 0x29, "Trees", &s.flora, &s.floraSets},
-                {"buildings", 0x2A, "Buildings", &s.buildings, &s.buildingSets}};
-  for (auto& c : sch) {
-    ui.text(x0, y + 4, E.se(c.id, c.fb));
-    int n = int(c.names->size());
-    if (button(ui, E, std::string(c.key) + ".prev", {x0 + 120, y, 24, 22}, "<", n > 1)) *c.sel = (*c.sel + n - 1) % n;
-    ui.textCentered({x0 + 148, y, 200, 22}, n ? (*c.names)[size_t(std::max(0, std::min(n - 1, *c.sel)))] : "-");
-    if (button(ui, E, std::string(c.key) + ".next", {x0 + 352, y, 24, 22}, ">", n > 1)) *c.sel = (*c.sel + 1) % n;
-    y += 30;
-  }
-  y += 6;
-  ui.text(x0, y, E.se(0x2E, "Description"));
-  if (s.landscape >= 0 && s.landscape < int(s.descriptions.size()))
-    paragraph(ui, {x0, y + lh + 2, r.w - 32, 60}, s.descriptions[size_t(s.landscape)]);
-  if (button(ui, E, "ok", {r.x + r.w - 200, r.y + r.h - 34, 90, 24}, E.app(0xB4, "OK"))) { R.add(Act::ApplyCityProps); R.add(Act::Done); R.close = true; }
-  if (button(ui, E, "cancel", {r.x + r.w - 104, r.y + r.h - 34, 90, 24}, E.app(0xB6, "Cancel"))) { R.close = true; R.add(Act::Close); }
+  Rect r = centered(ui, 639, 368);
+  const Skin* sk = ui.skin;
+  const uint32_t ink = rgb(0x31, 0x34, 0x7B), white = rgb(255, 255, 255);
+  if (frame(ui, E, r, E.win(0x21C, "City Options"))) { R.close = true; R.add(Act::Close); }
+  blueBand(ui, {r.x + 4, r.y + 39, 10, 287}); blueBand(ui, {r.x + 218, r.y + 39, 10, 287}); blueBand(ui, {r.x + 4, r.y + 330, 631, 34});
+  auto lab = [&](int x, int y, const std::string& t) { ui.text(r.x + x, r.y + y, t, "main9", ink); };
+  lab(17, 38, E.win(0x229, "City Name:"));
+  lab(17, 76, E.win(0x22A, "Mayor Name:"));
+  if (s.editable) {
+    editField(ui, E, "name", {r.x + 23, r.y + 54, 190, 20}, s.name, 0x4350524E);
+    editField(ui, E, "mayor", {r.x + 23, r.y + 92, 190, 20}, s.mayor, 0x4350524D);
+  } else { lab(27, 57, s.name); lab(27, 95, s.mayor); }
+  lab(17, 116, E.se(0x2E, "Description:"));
+  editField(ui, E, "description", {r.x + 23, r.y + 132, 190, 144}, s.description, 0x43505244, 255, true);
+  const Image* checkArt = sk ? sk->get("check") : nullptr;
+  auto check = [&](const std::string& name, int y, const std::string& lbl, bool& v) {
+    Rect hit{r.x + 17, r.y + y, 16 + ui.textWidth(lbl, "main9"), 15};
+    E.spot(name, hit);
+    bool hot = ui.hover(hit);
+    if (!(sk && sk->drawCheck(ui, checkArt, r.x + 17, r.y + y + 1, v, true, hot, hot && ui.in.down))) {
+      ui.fill({r.x + 17, r.y + y + 1, 13, 13}, white); ui.frame({r.x + 17, r.y + y + 1, 13, 13}, false);
+      if (v) ui.fill({r.x + 20, r.y + y + 4, 7, 7}, ink);
+    }
+    lab(33, y, lbl);
+    if (ui.clicked(hit)) v = !v;
+  };
+  check("disasters", 295, E.win(0x21D, "Disasters"), s.disasters);
+  check("autoBudget", 312, E.win(0x21E, "Auto Budget"), s.autoBudget);
+  // Scheme selector icons (cell 1 normal, 2 selected, 3 hover); spots "<kind>.<index>".
+  auto selector = [&](const char* key, int x0, int y, int pitch, int n, const std::vector<uint32_t>& icons, int& sel) {
+    for (int i = 0; i < n; i++) {
+      const Image* strip = i < int(icons.size()) && sk ? sk->image(0x85535958, icons[size_t(i)]) : nullptr;
+      int cw = strip ? strip->w / 4 : pitch - 4;
+      Rect hit{r.x + x0 + i * pitch, r.y + y, cw, strip ? strip->h : 30};
+      E.spot(std::string(key) + "." + std::to_string(i), hit);
+      bool hot = ui.hover(hit);
+      if (!(strip && Skin::drawCell(ui, strip, 4, i == sel ? 2 : hot ? 3 : 1, hit.x, hit.y))) ui.button(hit, std::to_string(i + 1), true, i == sel);
+      if (ui.clicked(hit)) sel = i;
+    }
+  };
+  lab(234, 46, E.se(0x28, "Landscape:"));
+  selector("landscape", 248, 63, 43, int(s.landscapes.size()), s.landscapeIcons, s.landscape);
+  lab(234, 108, E.se(0x29, "Trees:"));
+  selector("flora", 248, 121, 39, int(s.floraSets.size()), s.floraIcons, s.flora);
+  lab(234, 190, E.se(0x2A, "Buildings:"));
+  selector("buildings", 249, 205, 49, int(s.buildingSets.size()), s.buildingIcons, s.buildings);
+  auto pick = [](const std::vector<uint32_t>& v, int i) { return i >= 0 && i < int(v.size()) ? v[size_t(i)] : 0u; };
+  schemePreview(ui, E.data, r.x, r.y, pick(s.landscapePreview, s.landscape), pick(s.floraPreview, s.flora), pick(s.buildingPreview, s.buildings));
+  lab(306, 294, E.se(0x2B, "User-Made Buildings:"));
+  Rect sel{r.x + 434, r.y + 282, 78, 33};
+  ui.fill(sel, rgb(0x7B, 0x92, 0xFF));
+  E.spot("select", sel);
+  if (ui.button(sel, E.se(0x2F, "Select"), true, false, "title9")) R.add(Act::OpenUserBuildings);
+  // Check mark.
+  Rect done{r.x + 589, r.y + 331, 42, 32};
+  E.spot("ok", done);
+  bool ok = false;
+  if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::Sys, 0xA2DEFD9A), 4, done, "", false, true, ok))) ok = ui.button(done, E.app(0xB4, "OK"));
+  if (ok) { R.add(Act::ApplyCityProps); R.add(Act::Done); R.close = true; }
+  if (ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
   return R;
 }
 
@@ -241,10 +372,10 @@ PickerFilter PickerFilter::defaults(PickerCategory c) {
   PickerFilter f;
   switch (c) {
     case PickerCategory::PowerPlants: f.ranges = {{12111, 12118}}; break;                 // coal .. wind (spec 16 s2)
-    case PickerCategory::Garbage: f.ranges = {{12852, 12853}, {12005, 12005}}; break;     // incinerator, WTE, garbage family
+    case PickerCategory::Garbage: f.ranges = {{12851, 12853}, {12005, 12005}}; break;     // recycling, incinerator, WTE, garbage family
     case PickerCategory::Landmarks: f.ranges = {{18000, 18045}, {19999, 20002}}; break;   // spec 13 section 4
     case PickerCategory::Rewards: f.ranges = {{19000, 19004}, {11001, 11099}}; break;
-    case PickerCategory::Water: f.ranges = {{12400, 12499}}; break;                       // [OPEN] water facility agent types not listed in the spec
+    case PickerCategory::Water: f.ranges = {{12810, 12840}}; break;                       // pump 12810, treatment 12820, desalination 12830, tower 12840 (observed in the picker)
   }
   return f;
 }
@@ -270,12 +401,30 @@ std::vector<PickerEntry> collectPickerEntries(GameData& data, const PickerFilter
     if (e.name.empty() && a->nameKey.instance) e.name = data.string(a->nameKey.group, a->nameKey.instance);
     if (e.name.empty()) e.name = a->designName.empty() ? "Building " + std::to_string(k.instance) : a->designName;
     e.sizeX = int(a->sizeX); e.sizeZ = int(a->sizeZ);
+    e.appearance = a->appearance;
+    e.agentType = a->agentType;
+    if (a->descKey.instance && a->descKey.instance != 0xFFFFFFFFu) e.description = data.string(a->descKey.group, a->descKey.instance);
     if (budget) e.cost = budget->placementCost(a->agentType, hier ? *hier : empty, false);
     e.placed = isPlaced ? isPlaced(k.instance, *a) : false;
     out.push_back(e);
   }
-  std::sort(out.begin(), out.end(), [](const PickerEntry& a, const PickerEntry& b) { return a.name != b.name ? a.name < b.name : a.occupantId < b.occupantId; });
-  return out;
+  // Order as observed in the original's pickers: power and water in a fixed order (probably by availability year),
+  // garbage by agent type, landmarks by occupant id; duplicates (same agent type and name) shown once.
+  static const uint32_t kOrder[] = {12111, 12112, 12113, 12115, 12118, 12117, 12114, 12116, 12810, 12840, 12820, 12830};
+  auto rank = [](uint32_t t) { for (size_t i = 0; i < sizeof kOrder / sizeof kOrder[0]; i++) if (kOrder[i] == t) return int(i); return 1000; };
+  std::stable_sort(out.begin(), out.end(), [&](const PickerEntry& a, const PickerEntry& b) {
+    int ra = rank(a.agentType), rb = rank(b.agentType);
+    if (ra != rb) return ra < rb;
+    if (a.agentType != b.agentType && ra == 1000 && (a.agentType < 18000 || b.agentType < 18000)) return a.agentType < b.agentType;
+    return a.occupantId < b.occupantId;
+  });
+  std::vector<PickerEntry> uniq;
+  for (auto& e : out) {
+    bool dup = false;
+    for (auto& u : uniq) if (u.agentType == e.agentType && u.name == e.name) { dup = true; break; }
+    if (!dup) uniq.push_back(std::move(e));
+  }
+  return uniq;
 }
 
 std::vector<PickerEntry> rewardPickerEntries(const RewardTable& t, const Budget* budget, const AgentHierarchy* hier) {
@@ -295,44 +444,94 @@ std::vector<PickerEntry> rewardPickerEntries(const RewardTable& t, const Budget*
   return out;
 }
 
+// Layout measured on the original (dialog-shots/hud--utilities--power-plants-picker.png, 800x600): 370x412 frame with a
+// blue strip down the left and a blue divider at y 225; building picture (sprite) in a sunken box, "Buildings
+// Available:" list (main9 rows of 14 px, selected row 5A59FF / white), name, cost / capacity and the description
+// below the divider, and the check-mark button on a blue plate. The close box cancels.
 WindowResult BuildingPicker::draw(Ui& ui, const WinEnv& E, const std::vector<PickerEntry>& entries) {
   WindowResult R;
-  int lh = lineHeight(ui);
-  Rect r = centered(ui, 560, 420);
-  if (frame(ui, E, r, E.text(kTblCatalog, pickerTitleId(category), "Buildings"))) { R.close = true; R.add(Act::Close); }
-  int x0 = r.x + 12, y = r.y + 34;
-  ui.text(x0, y, E.text(kTblCatalog, 0x76, "Buildings available"), "title12");
-  y += lh + 8;
+  const Skin* sk = ui.skin;
+  const uint32_t ink = rgb(0x31, 0x34, 0x7B), white = rgb(255, 255, 255), lav = rgb(0xDE, 0xDF, 0xFF), grey = rgb(0x90, 0x94, 0xA0);
+  Rect r = centered(ui, 370, 412);
+  // Title drawn after the left strip (which runs into the title bar) so the strip does not cover it.
+  if (frame(ui, E, r, " ")) { R.close = true; R.add(Act::Close); }
+  blueBand(ui, {r.x + 4, r.y + 4, 8, 407});
+  if (ui.skin) ui.fill({r.x + 5, r.y + 5, 8, 29}, rgb(0x7B, 0x92, 0xFF));   // the strip runs into the title bar seamlessly
+  blueBand(ui, {r.x + 4, r.y + 225, 365, 8});
+  ui.text(r.x + 8, r.y + 8, E.text(kTblCatalog, pickerTitleId(category), "Buildings"), "title12", ui.skin ? rgb(222, 223, 255) : rgb(255, 255, 255));
   std::vector<const PickerEntry*> shown;
   for (auto& e : entries) if (e.available) shown.push_back(&e);
-  int rowH = 40, visible = std::max(1, (r.y + r.h - 50 - y) / rowH);
-  if (shown.empty()) {
-    paragraph(ui, {x0, y, r.w - 24, 60}, E.text(kTblCatalog, pickerEmptyId(category), "No buildings are available."));
-  }
-  scrollBar(ui, E, {x0, y, r.w - 24, visible * rowH}, int(shown.size()), visible, scroll);
-  for (int i = 0; i < visible && scroll + i < int(shown.size()); i++) {
+  // Picture of the selected building.
+  Rect pic{r.x + 26, r.y + 38, 138, 183};
+  ui.fill(pic, lav); sunkenLines(ui, pic);
+  const PickerEntry* cur = sel >= 0 && sel < int(shown.size()) ? shown[size_t(sel)] : nullptr;
+  if (cur) spriteCentred(ui, E.data, cur->appearance, {pic.x, pic.y + 1, pic.w - 2, pic.h - 2}, pic);   // centring as observed
+  // List.
+  ui.text(r.x + 175, r.y + 40, E.text(kTblCatalog, 0x76, "Buildings Available:"), "main9", rgb(0x63, 0x61, 0x9C));
+  Rect lr{r.x + 173, r.y + 56, 166, 164};
+  ui.fill(lr, lav); sunkenLines(ui, lr);
+  const int rowH = 14, visible = (lr.h - 2) / rowH, total = int(shown.size());
+  const bool scrolls = false;   // the original list shows no scroll bar, even for the 45 landmarks (wheel scrolls)
+  if (ui.hover(lr) && ui.in.wheel) scroll -= ui.in.wheel;
+  scroll = std::max(0, std::min(scroll, std::max(0, total - visible)));
+  if (shown.empty()) paragraph(ui, {lr.x + 4, lr.y + 4, lr.w - 8, lr.h - 8}, E.text(kTblCatalog, pickerEmptyId(category), "No buildings are available."), "main9", ink);
+  for (int i = 0; i < visible && scroll + i < total; i++) {
     const PickerEntry& e = *shown[size_t(scroll + i)];
-    Rect row{x0, y + i * rowH, r.w - 44, rowH - 2};
-    bool selRow = sel == scroll + i;
-    ui.fill(row, selRow ? rgb(0x90, 0xA8, 0xE0) : rgb(255, 255, 255));
+    Rect row{lr.x + 1, lr.y + 1 + i * rowH, lr.w - 2 - (scrolls ? 16 : 0), rowH};
+    bool on = sel == scroll + i;
+    if (on) ui.fill(row, rgb(0x5A, 0x59, 0xFF));
     E.spot("row." + std::to_string(i), row);
-    portrait(ui, {row.x + 2, row.y + 2, 36, 36}, e.picture, e.name.empty() ? "?" : e.name.substr(0, 1), rgb(0x7A, 0x84, 0xB8));
-    uint32_t col = e.placed ? rgb(0x90, 0x94, 0xA0) : 0;
-    ui.text(row.x + 44, row.y + 4, e.name, "main10", col);
-    std::string size = subst(E.se(0x133, "%sx%s"), {std::to_string(e.sizeX), std::to_string(e.sizeZ)});
-    ui.text(row.x + 44, row.y + 4 + lh, size, "main10", col);
-    rightText(ui, row.x + row.w - 8, row.y + 4, E.money(e.cost), "main10", col);
-    if (e.placed) rightText(ui, row.x + row.w - 8, row.y + 4 + lh, E.text(kTblCatalog, 0x70, "Already built"), "main10", col);
+    // Names wider than the row end in "..." (observed: "American Museum of Nat...").
+    std::string nm = e.name;
+    if (ui.textWidth(nm, "main9") > row.w - 4) {
+      while (!nm.empty() && ui.textWidth(nm + "...", "main9") > row.w - 1) nm.pop_back();
+      nm += "...";
+    }
+    ui.text(row.x + 2, row.y, nm, "main9", on ? white : e.placed ? grey : ink);
     if (ui.clicked(row)) sel = scroll + i;
   }
-  bool canPick = sel >= 0 && sel < int(shown.size()) && !shown[size_t(sel)]->placed;
-  if (button(ui, E, "ok", {r.x + r.w - 200, r.y + r.h - 34, 90, 24}, E.app(0xB4, "OK"), canPick)) {
-    const PickerEntry& e = *shown[size_t(sel)];
+  if (scrolls) {
+    const Image* sb = sk ? sk->image(skin_group::Sys, 0xE2B99E01) : nullptr;
+    Rect up{lr.x + lr.w - 17, lr.y + 1, 16, 16}, dn{lr.x + lr.w - 17, lr.y + lr.h - 17, 16, 16};
+    Rect tr{up.x, up.y + 16, 16, dn.y - up.y - 16};
+    int range = total - visible, ty = tr.y + (tr.h - 16) * scroll / std::max(1, range);
+    if (sb && sb->w >= 192) {
+      for (int y = tr.y; y < tr.y + tr.h; y += 16) ui.blitRect(*sb, tr.x, y, 9 * 16, 0, 16, std::min(16, tr.y + tr.h - y));
+      Skin::drawCell(ui, sb, 12, ui.hover(up) && ui.in.down ? 7 : 6, up.x, up.y);
+      Skin::drawCell(ui, sb, 12, ui.hover(dn) && ui.in.down ? 11 : 10, dn.x, dn.y);
+      Skin::drawCell(ui, sb, 12, 8, tr.x, ty);
+    } else { ui.fill(tr, ui.panelDark); ui.button(up, "^"); ui.button(dn, "v"); }
+    E.spot("scroll.up", up); E.spot("scroll.down", dn);
+    if (ui.clicked(up)) scroll--;
+    if (ui.clicked(dn)) scroll++;
+    scroll = std::max(0, std::min(scroll, range));
+  }
+  // Details of the selected building.
+  if (cur) {
+    ui.text(r.x + 28, r.y + 248, cur->name, "main9", ink);
+    if (cur->placed) ui.text(r.x + 180, r.y + 248, E.text(kTblCatalog, 0x70, "Already Placed"), "main9", ink);
+    int y = r.y + 262;
+    if (category == PickerCategory::Landmarks) {
+      if (!cur->description.empty()) ui.text(r.x + 28, y, cur->description, "main9", ink);   // location line
+    } else {
+      ui.text(r.x + 28, y, subst(E.text(kTblCatalog, 2, "Cost: %s"), {E.money(cur->cost)}), "main9", ink);
+      if (!cur->capacity.empty()) ui.text(r.x + 180, y, cur->capacity, "main9", ink);
+      if (!cur->description.empty()) paragraph(ui, {r.x + 52, r.y + 290, 255, 74}, cur->description, "main9", ink);
+    }
+  }
+  // Check mark on its plate.
+  ui.fill({r.x + 317, r.y + 369, 47, 34}, rgb(0x7B, 0x92, 0xFF));
+  bool canPick = cur && !cur->placed;
+  Rect done{r.x + 320, r.y + 370, 42, 32};
+  E.spot("ok", done);
+  bool ok = false;
+  if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::Sys, 0xA2DEFD9A), 4, done, "", false, canPick, ok))) ok = ui.button(done, E.app(0xB4, "OK"), canPick);
+  if ((ok || (ui.in.key[K_ENTER] && canPick)) && canPick) {
     static const char* names[5] = {"power", "water", "garbage", "landmarks", "rewards"};
-    R.add(Act::PickBuilding, e.occupantId, e.buildingType, 0, names[int(category)]);
+    R.add(Act::PickBuilding, cur->occupantId, cur->buildingType, 0, names[int(category)]);
     R.close = true;
   }
-  if (button(ui, E, "cancel", {r.x + r.w - 104, r.y + r.h - 34, 90, 24}, E.app(0xB6, "Cancel"))) { R.close = true; R.add(Act::Close); }
+  if (ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
   return R;
 }
 

@@ -3,4 +3,5 @@ build/
 .cache/
 build-release/
 shots/
+dialog-shots/
 build-debug/

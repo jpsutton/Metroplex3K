@@ -99,5 +99,27 @@ int main() {
   for (int y = 10; y < 280; y += 20) { click(50, y); frame(1); }
   frame(5);
   CHECK(game.currentScreen() == Screen::InCity || game.currentScreen() == Screen::MainMenu);
+
+  // Leaving the city: Exit asks "Now leaving" (OK / Cancel), then a modified city asks to save (Yes / No);
+  // New / Load ask to save only when modified. Enter = first button, Esc = last.
+  auto key = [&](int k) { in.key[k] = true; frame(2); };
+  game.gotoScreen(Screen::InCity); game.setDirty(true); frame(2);
+  game.runCommand(0xA10438E9); frame(2);
+  CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);
+  key(K_ESC);                                       // Cancel: stay
+  CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);
+  game.runCommand(0xE3270FE9); frame(2);
+  CHECK(game.currentScreen() == Screen::InCity);    // save prompt up, not yet the New City screen
+  key(K_ESC);                                       // No: discard and go on
+  CHECK(game.currentScreen() == Screen::NewCity);
+  game.gotoScreen(Screen::InCity); game.setDirty(false); frame(2);
+  game.runCommand(0x610438A4); frame(2);
+  CHECK(game.currentScreen() == Screen::LoadList);  // unmodified: no prompt
+  game.gotoScreen(Screen::InCity); game.setDirty(true); frame(2);
+  game.runCommand(0xA10438E9); frame(2);
+  key(K_ENTER);                                     // OK on "Now leaving"
+  CHECK(!game.wantQuit());                          // save prompt follows for a modified city
+  key(K_ESC);                                       // No
+  CHECK(game.wantQuit());
   TEST_MAIN_END();
 }

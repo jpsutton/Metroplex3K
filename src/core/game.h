@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include "core/audio.h"
+#include "core/bat.h"
 #include "core/automata.h"
 #include "core/cheats.h"
 #include "core/city.h"
@@ -90,6 +91,7 @@ class Game {
   void startDisaster(DisasterType t);
   void typeCheat(const std::string& s);
   void setPaused(bool p) { paused_ = p; }
+  void setDirty(bool d) { dirty_ = d; }            // mark the city modified (save prompts); tools/tests
   bool paused() const { return paused_; }
   const std::string& lastMessage() const { return lastMsg_; }
   NewsTicker& news() { return news_; }
@@ -146,7 +148,14 @@ class Game {
   void beginTerrainEditFrom(bool fromNewCity);
   void acceptTerrain();
   void loadFile(const fs::path& p);
-  void saveCurrent(const std::string& name);
+  void saveCurrent(const std::string& name, const fs::path& dir = fs::path());   // dir empty = Cities/
+  // Leaving the current city (Exit / New / Load). `action`: kLeaveQuit, kLeaveNew, or kLeaveLoad + file kind (0..3).
+  // Exit first shows the "Now leaving" prompt; a modified city then asks to save (Yes / No) before the action runs.
+  static constexpr int kLeaveQuit = 1, kLeaveNew = 2, kLeaveLoad = 10;
+  void requestLeave(int action);
+  void askSaveBeforeLeave(int action);
+  void doLeave(int action);
+  void onMessageResult(MsgButton b);
   void adopt(World&& w);
   void attachWorld();
   void refreshFiles(int kind);
@@ -282,9 +291,10 @@ class Game {
   RenderScene scene_;
   int snapSize_ = 0;
   uint32_t frameDt_ = 0;   // dt of the current frame (ticker scrolling)
+  uint32_t pauseFlashMs_ = 0;   // position in the 1500 ms paused-indicator flash cycle (0 when running)
   bool disastersOn_ = true, autoBudget_ = false;
   bool dirty_ = false;
-  int pendingAfterLeave_ = 0;
+  int pendingAfterLeave_ = 0;   // leave action to run once the Save As screen has saved (0 = none)
 
   // windows
   bool showBudget_ = false, showOrd_ = false, showNeigh_ = false, showDeals_ = false, showAdv_ = false,
@@ -297,6 +307,7 @@ class Game {
   AdvisorWindow advWin_;
   CityPropertiesDialog propsDlg_;
   CityPropsState propsState_;
+  Image neighMap_;   // city thumbnail for the Neighbors Map centre cell
   ScenarioGoalsWindow goalsWin_;
   MapWindow mapWin_;
   GraphsWindow graphsWin_;
@@ -309,7 +320,8 @@ class Game {
   TipWindow tipWin_;
   CreditsWindow creditsWin_;
   MessageBox msgBox_;
-  int msgBoxPurpose_ = 0;
+  int msgBoxPurpose_ = 0;   // 0 info, 1 "Now leaving" (OK/Cancel), 2 save before leaving (Yes/No)
+  int msgBoxAction_ = 0;    // leave action the open prompt belongs to
   PetitionerDialog petDlg_;
   std::unique_ptr<PetitionerView> petView_;
   uint32_t petViewId_ = 0;
@@ -377,26 +389,60 @@ class Game {
   HotkeyTable hotkeyTable_;
 
   // dialogs
-  struct FileRow { fs::path path; std::string label; };
+  struct FileRow { fs::path path; std::string label; int type = 2; };   // type: 0 parent folder, 1 folder, 2 file
   std::vector<FileRow> files_;
   std::vector<std::string> fileLabels_;
   int fileSel_ = -1, fileScroll_ = 0, fileKind_ = 0, previewFor_ = -2;
+  fs::path fileDir_;                    // folder shown in the file dialog
+  bool fileComboOpen_ = false;          // "Look In" drop-down
+  int fileLastClickRow_ = -1, fileFrame_ = 0, fileLastClickFrame_ = -100;   // double click
   bool saveMode_ = false;
   std::string saveName_;
-  struct FilePreview { bool ok = false; std::string name, mayor, date, extra; int64_t population = 0, funds = 0; bool hasStats = false; };
+  struct FilePreview { bool ok = false; std::string name, mayor, date, extra; int64_t population = 0, funds = 0; bool hasStats = false; Image diamond; };   // diamond: view diamond (flat picture for starter towns)
   FilePreview preview_;
+  // 0 parent folder, 1 folder, 2 placeholder diamond, 3 placeholder starter-town picture, 4 + kind: document icon per file kind
+  Image fileIcons_[8];
+  bool fileIconsTried_ = false;
+  void openFileDir(const fs::path& dir);
+  void openSaveAs();                    // Save As dialog for the current city
+  void applySaveNames();
+  std::string saveMayor_, saveCity_;    // Save As: editable mayor / city names
+  FilePreview savePreview_;             // Save As: the current city (stats + diamond)
   bool showStats_ = true;
   bool confirmOverwrite_ = false;
-  std::string nc_name_ = "New City", nc_mayor_ = "Mayor";
-  int nc_size_ = 256, nc_diff_ = 1, nc_year_ = 2000;
-  bool nc_disasters_ = true, nc_autoBudget_ = false;
+  std::string nc_name_ = "New City", nc_mayor_ = "Defacto";   // defaults observed (029541F4:282 / 281)
+  int nc_size_ = 256, nc_diff_ = 1, nc_year_ = 1900;
+  bool nc_disasters_ = true, nc_autoBudget_ = true;
   int nc_landscape_ = 0, nc_flora_ = 0, nc_buildings_ = 0;
   std::vector<uint32_t> schemeIdsL_, schemeIdsF_, schemeIdsB_;
+  // Per scheme entry (parallel to schemeIds*_): selector icon instance (group 85535958) and preview sprite id (GAME_UI.DAT).
+  std::vector<uint32_t> schemeIconL_, schemeIconF_, schemeIconB_, schemePrevL_, schemePrevF_, schemePrevB_;
   bool schemesLoaded_ = false;
   uint32_t edSeed_ = 1;
+  int edHills_ = 64, edWater_ = 64, edTrees_ = 64, edFlags_ = 0x24;   // terrain editor generator parameters (spec 11 3.1)
+  int edDrag_ = -1;                                                   // terrain editor slider being dragged
   fs::path currentFile_;
   std::map<std::string, Image> iconCache_;
   const Image* icon(uint32_t group, uint32_t inst);
+  void ensureFileIcons();
+
+  // User-made buildings (game_userbldg.cpp): Building Replacement Manager over New City / City Options, and the
+  // Building List Editor over it. The set applies to the city being set up / played and is written on save.
+  UserBuildingSet userSet_;
+  BatDatabase batDb_;
+  bool showBrm_ = false, showBle_ = false;
+  UserBuildingsDialog brmDlg_;
+  UserBuildingsState brmState_;
+  BuildingListEditor bleDlg_;
+  BuildingListState bleState_;
+  fs::path bleDir_;
+  void loadBatDb();
+  void fillBrmBat();
+  void openUserBuildings();
+  void openBuildingList();
+  void refreshBleFiles();
+  void drawUserBuildings();
+  void handleUserBuildingsResult(const WindowResult& r, bool editor);
 };
 
 }  // namespace m3k

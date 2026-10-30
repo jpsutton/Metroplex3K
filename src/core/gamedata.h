@@ -36,6 +36,7 @@ struct OccAttr {
   ResKey nameKey;               // attr 0x6D
   std::string designName;       // attr 0x64
   ResKey pedProdKey, vehProdKey;  // attr 0x6B / 0x6C: pedestrian / vehicle production keys (automata sources)
+  ResKey descKey;               // attr 0x7C: description string key 2026960B:62E69238:n (instance FFFFFFFF = none)
 };
 
 struct CsFrame { uint32_t category = 0, spriteId = 0; int8_t flags = 0; int16_t offX = 0, offY = 0; };
@@ -93,6 +94,8 @@ class GameData {
   bool mountBuildingSet(uint32_t setId);
   bool mountFloraSet(uint32_t setId);
   void unmountSets();
+  // Re-read Apps/BARender/BAT.DAT after it was rewritten (Building List Editor add / remove).
+  void remountBat();
 
   std::string language = "English";
 

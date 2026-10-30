@@ -1,4 +1,5 @@
 #include "core/image.h"
+#include "core/peicon.h"
 #include "core/refpack.h"
 #include "testutil.h"
 using namespace m3k;
@@ -54,5 +55,23 @@ int main() {
   for (int i = 0; i < 8; i++) bmp[54 + i] = px[i];
   auto im = decodeBmp(bmp.data(), bmp.size(), true);
   CHECK(im.px[0] == rgba(255, 0, 0) && im.px[1] == 0);
+
+  // Icon DIB, 4 bpp 2x2 (height doubled for the AND mask), palette 0 = blue, 1 = red; bottom-up rows.
+  {
+    Bytes dib(40 + 16 * 4 + 4 * 2 + 4 * 2, 0);
+    wr32(&dib[0], 40); wr32(&dib[4], 2); wr32(&dib[8], 4); wr16(&dib[12], 1); wr16(&dib[14], 4);
+    dib[40 + 0] = 255;               // entry 0: B=255 (blue)
+    dib[40 + 4 + 2] = 255;           // entry 1: R=255 (red)
+    size_t xo = 40 + 64, ao = xo + 8;
+    dib[xo + 0] = 0x01;              // bottom row: blue, red
+    dib[xo + 4] = 0x10;              // top row: red, blue
+    dib[ao + 0] = 0x40;              // bottom row: second pixel transparent
+    Image ic;
+    CHECK(decodeIconDib(dib.data(), dib.size(), ic) && ic.w == 2 && ic.h == 2);
+    CHECK(ic.px[0] == rgba(255, 0, 0) && ic.px[1] == rgba(0, 0, 255));   // top row
+    CHECK(ic.px[2] == rgba(0, 0, 255) && ic.px[3] == 0);                 // bottom row, masked pixel
+    Bytes notPe = {'M', 'Z'};
+    CHECK(!loadPeIcon(notPe, 1001, 16, ic));
+  }
   TEST_MAIN_END();
 }

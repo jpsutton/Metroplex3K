@@ -377,7 +377,7 @@ bool Skin::imageButtonCells(Ui& ui, const Image* s, int cells, Rect r, const std
 }
 
 bool Skin::drawButton3(Ui& ui, const Image* s, int cells, int cell, Rect r, const std::string& label,
-                       uint32_t textCol) const {
+                       uint32_t textCol, const char* font) const {
   if (!s || s->empty() || cells <= 0 || cell < 0 || cell >= cells) return false;
   int cw = s->w / cells, third = cw / 3;
   if (third <= 0) return false;
@@ -388,18 +388,20 @@ bool Skin::drawButton3(Ui& ui, const Image* s, int cells, int cell, Rect r, cons
   if (r.w > lw + rw) skinBlitScaled(ui, *s, {sx + third, 0, cw - 2 * third, s->h}, {r.x + lw, r.y, r.w - lw - rw, r.h});
   if (!label.empty() && ui.fonts) {
     int off = cell == CELL_PRESSED ? 1 : 0;
-    ui.textCentered({r.x + off, r.y + off, r.w, r.h}, label, "main10",
+    // Centre on the pill, not the whole cell: the art carries a drop shadow on the right and bottom (measured on the
+    // original's prompt buttons: caption sits 2 px left and 1 px up of the cell centre).
+    ui.textCentered({r.x + off, r.y + off, r.w - 4, r.h - 2}, label, font,
                     cell == CELL_DISABLED ? rgb(0x90, 0x94, 0xA0) : textCol ? textCol : ui.textCol);
   }
   return true;
 }
 
 bool Skin::button3(Ui& ui, const Image* s, Rect r, const std::string& label, bool enabled, bool toggled,
-                   bool& clicked, uint32_t textCol) const {
+                   bool& clicked, uint32_t textCol, const char* font) const {
   clicked = false;
   if (!s || s->empty()) return false;
   bool hot = enabled && ui.hover(r), down = hot && ui.in.down;
-  if (!drawButton3(ui, s, 4, cell4For(enabled, down, toggled, hot), r, label, textCol)) return false;
+  if (!drawButton3(ui, s, 4, cell4For(enabled, down, toggled, hot), r, label, textCol, font)) return false;
   clicked = enabled && ui.clicked(r);
   return true;
 }
@@ -418,7 +420,7 @@ bool Skin::drawDialogFrame(Ui& ui, Rect r, const std::string& title) const {
   Rect bar{r.x + 4, r.y + 4, r.w - 9, 31};
   ui.fill(bar, rgb(173, 182, 255));
   ui.fill({bar.x + 1, bar.y + 1, bar.w - 2, bar.h - 2}, rgb(123, 146, 255));
-  ui.text(r.x + 9, r.y + 9, title, "title12", rgb(214, 215, 255));
+  ui.text(r.x + 8, r.y + 8, title, "title12", rgb(222, 223, 255));
   return true;
 }
 
@@ -427,7 +429,7 @@ bool Skin::dialogCloseBox(Ui& ui, Rect d, Rect& hit, bool& clicked) const {
   clicked = false;
   if (!sb || sb->w < 96 || sb->h < 100) return false;
   const int cw = sb->w / 4, ch = sb->h / 4;   // 4 columns (states) x 4 rows (close, back, minimise, maximise)
-  hit = {d.x + d.w - 33, d.y + 6, cw, ch};
+  hit = {d.x + d.w - 32, d.y + 7, cw, ch};
   bool hot = ui.hover(hit), down = hot && ui.in.down;
   int col = down ? 2 : hot ? 3 : 1;
   ui.blitRect(*sb, hit.x, hit.y, col * cw, 0, cw, ch);

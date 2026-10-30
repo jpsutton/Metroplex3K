@@ -1,6 +1,7 @@
 // Immediate-mode UI toolkit drawing into an RGBA framebuffer. Platform independent: the host feeds
 // mouse/keyboard state each frame. Used for all menus, dialogs and the in-city HUD.
 #pragma once
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <vector>
@@ -62,7 +63,9 @@ class Ui {
   int textWidth(const std::string& s, const char* font = "main10") const;
   void blit(const Image& im, int x, int y, int sx = 0, int sw = -1);  // optionally a horizontal slice
   void blitRect(const Image& im, int dx, int dy, int sx, int sy, int sw, int sh);   // source sub-rectangle
-  bool button(Rect r, const std::string& label, bool enabled = true, bool toggled = false);
+  bool button(Rect r, const std::string& label, bool enabled = true, bool toggled = false, const char* font = "main10");
+  // Button width that fits `label` (text plus side padding), at least `minW`.
+  int buttonWidth(const std::string& label, int minW = 0) const { return std::max(minW, textWidth(label) + 28); }
   bool imageButton(Rect r, const Image& strip, int cells, const std::string& tip, bool toggled = false);
   bool checkbox(Rect r, const std::string& label, bool& v);
   bool slider(Rect r, int& v, int lo, int hi);
