@@ -217,6 +217,7 @@ class City {
   std::vector<uint8_t> transport_, powerLine_, pipe_;
   bool occDirty_ = true, netDirty_ = true;
   int residents_ = 0;
+  int countResidents() const;
   std::map<std::pair<int, int>, int> plantAt_, waterFacAt_;      // anchor -> layer id
   std::map<std::pair<int, int>, std::pair<int, int>> stationAt_;  // anchor -> (kind 0 police 1 fire 2 jail, id)
   int roadUpkeep_ = 0, transitUpkeep_ = 0;

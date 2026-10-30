@@ -431,6 +431,7 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   if (!haveLv) landValue.recomputeAll(*lvView_);
   wire();
   refresh(true);
+  residents_ = countResidents();   // HUD and dialogs read this before the first month end
   if (!power.plants().empty()) {   // loaded city: coverage must be valid before the first month end
     auto consumers = simOccupants(true);
     consumers.erase(std::remove_if(consumers.begin(), consumers.end(), [](const us::SimOccupant& o) { return us::powerCategory(o.agentType) >= 0; }), consumers.end());
@@ -1038,28 +1039,33 @@ std::string City::debugStats() const {
 
 void City::monthlyNeighbours() { neighbours.monthly(clock.date().month, rng_); }
 
+int City::countResidents() const {
+  int residents = 0;
+  for (const auto& o : world_->occupants) {
+    if (o.state != 1) continue;
+    auto it = cfg_.valve.agentEffects.find(o.agentType);
+    if (it != cfg_.valve.agentEffects.end())
+      for (const auto& vi : it->second) if (vi.valve == growth::kValveRes) residents += vi.supply * o.sizeX * o.sizeZ;
+  }
+  return residents;
+}
+
 void City::monthlyValves() {
   growth::ValveCityInput in;
-  int residents = 0;
   for (const auto& o : world_->occupants) {
     growth::ValveBuilding b;
     b.agentType = o.agentType; b.x = o.x; b.z = o.z; b.sizeX = o.sizeX; b.sizeZ = o.sizeZ;
     b.operating = o.state == 1;
     in.buildings.push_back(b);
-    if (o.state == 1) {
-      auto it = cfg_.valve.agentEffects.find(o.agentType);
-      if (it != cfg_.valve.agentEffects.end())
-        for (const auto& vi : it->second) if (vi.valve == growth::kValveRes) residents += vi.supply * o.sizeX * o.sizeZ;
-    }
   }
-  residents_ = residents;
+  residents_ = countResidents();
   in.connectionCount[0] = int(neighbours.conn[1].size());   // saved order: rail, road, pipe, power, highway, subway
   in.connectionCount[1] = int(neighbours.conn[0].size());
   in.connectionCount[2] = int(neighbours.conn[4].size());
   in.connectionCount[3] = int(neighbours.conn[5].size());
   for (const auto& kv : ordinances.catalogue()) if (ordinances.enacted(kv.first)) in.enactedOrdinances.insert(kv.first);
   in.workforceFraction = pop.workforceFraction();
-  in.population = residents;
+  in.population = residents_;
   cal::Date d = clock.date();
   in.year = d.year; in.month = d.month;
   for (int g = 0; g < kTaxGroups; g++) in.taxRate[g] = budget.tax[g].rate;

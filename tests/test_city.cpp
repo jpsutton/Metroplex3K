@@ -178,6 +178,7 @@ int main() {
   CHECK(s2.city().roadCount() == s.roadCount());
   CHECK(s2.valveR.value == s.valveR.value && s2.valveC.value == s.valveC.value && s2.valveI.value == s.valveI.value);
   CHECK(s2.city().powered(20, 42));
+  CHECK(s2.population() > 0);   // issue #72: available right after load, before any month end
   for (int d = 0; d < 400; d++) s2.tickDay();
   CHECK(s2.day == 400);
   CHECK(s2.population() > 0 && s2.city().powered(20, 42));
