@@ -363,6 +363,7 @@ class Game {
 
   // simulation glue
   AdvisorManager advisors_;
+  std::unique_ptr<DealHandler> dealHandler_;   // utilities advisor's neighbour-deal hook (game_sim.cpp)
   PetitionerManager petitioners_;
   NewsTicker news_;
   TickerDb tickerDb_;

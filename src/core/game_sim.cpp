@@ -8,6 +8,58 @@ namespace m3k {
 
 namespace {
 
+// Neighbour-deal hook of the utilities advisor (spec 22 s3.13.1): offer terms come from NeighbourDeals::makeOffer.
+class UtilityDeals : public DealHandler {
+ public:
+  explicit UtilityDeals(Game& g) : g_(g) {}
+  bool dealActive(int type) override { return g_.city().neighbours.dealOfType(type); }
+  int dealAgeMonths(int type) override {
+    for (const auto& d : g_.city().neighbours.active) if (d.dealType == type && !d.terminated()) return d.monthCounter;
+    return 0;
+  }
+  bool eligibleNeighbour(int type) override {
+    SimRng probe = rng_;   // the neighbour pick draws a random number; do not consume it for a mere eligibility test
+    return g_.city().neighbours.chooseNeighbour(type, context(type), probe) >= 0;
+  }
+  bool offersDisabled() override { return !g_.city().neighbours.newDealsEnabled; }
+  bool offerStillValid(int type) override {
+    for (const auto& d : g_.city().neighbours.pending) if (d.dealType == type) return true;
+    return false;
+  }
+  bool generateOffer(int type) override { return g_.city().neighbours.makeOffer(type, context(type), rng_).has_value(); }
+  void clearOffer(int type) override {
+    auto& p = g_.city().neighbours.pending;
+    p.erase(std::remove_if(p.begin(), p.end(), [&](const Deal& d) { return d.dealType == type; }), p.end());
+  }
+  // Petition ids 0xA5-0xCA are the per-type offer variants of the table in spec 22 s3.13.1; -1 for anything else.
+  static int typeOfPetition(uint32_t id) {
+    static const struct { uint32_t id; int type; } t[] = {
+        {0xB3, 1}, {0xB4, 1}, {0xB5, 1}, {0xAC, 0}, {0xAD, 0}, {0xCA, 0}, {0xB9, 3}, {0xBA, 3}, {0xBB, 3},
+        {0xA5, 2}, {0xA6, 2}, {0xA7, 2}, {0xBF, 5}, {0xC0, 5}, {0xC1, 5}, {0xC4, 4}, {0xC5, 4}, {0xF7, 4}};
+    for (const auto& e : t) if (e.id == id) return e.type;
+    return -1;
+  }
+ private:
+  OfferContext context(int type) {
+    City& c = g_.city();
+    OfferContext x;
+    x.cityPopulation = uint32_t(std::max(0, 2 * c.population()));
+    x.currentYear = c.clock.date().year;
+    x.referenceRate = 0;   // [OPEN] the neighbour's reference rate is not modelled
+    for (const auto& o : g_.world().occupants) if (o.agentType == 12330) { x.hasSeaport = true; break; }
+    const int64_t pc = c.power.stats().produced, pu = c.power.stats().consumed;
+    const int64_t wc = c.water.stats.supply, wu = c.water.stats.used;
+    int64_t avail = 0;
+    if (type == 1) avail = pc - pu; else if (type == 3) avail = wc - wu;
+    x.availableToSell = uint32_t(std::max<int64_t>(0, avail));
+    x.powered = [pc](int, int) { return pc > 0; };
+    x.watered = [wc](int, int) { return wc > 0; };
+    return x;
+  }
+  Game& g_;
+  SimRng rng_{7};
+};
+
 // DisasterWorld adapter over World / City.
 class CityDisasterWorld : public DisasterWorld {
  public:
@@ -107,6 +159,8 @@ void Game::initManagers() {
   sink_->text = textFn;
   advisors_.setSink(sink_.get());
   advisors_.petitioners = &petitioners_;
+  dealHandler_ = std::make_unique<UtilityDeals>(*this);
+  advisors_.deals = dealHandler_.get();
   advisors_.clear();
   petitioners_.setSink(sink_.get());
   petitioners_.clear();
@@ -187,6 +241,15 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
     }
   }
   in.util.waterUsed = c.water.stats.used; in.util.waterCap = c.water.stats.supply;
+  in.util.powerDemand = in.util.powerUsed;   // [INFERRED] demand = consumption actually served
+  {
+    // [INFERRED] garbage capacity GC = what the disposal stages took this month plus what they could still take
+    const auto& ps = c.pollution;
+    in.util.garbageProduced = ps.garbageMonth[0];
+    in.util.garbageCap = ps.garbageMonth[4] + ps.garbageMonth[5] + ps.garbageMonth[6] + ps.disp.wteBudget + ps.disp.incineratorBudget + ps.disp.landfillRoom();
+  }
+  for (const auto& o : world_.occupants)
+    if ((o.state & ~0x200u) == 1 && o.agentType >= 3000 && o.agentType < 10000 && !c.watered(o.x, o.z)) in.util.dryBuildings++;
   in.plan.landValue = c.landValue.cityAverage();
   in.safety.curfewEnacted = c.ordinances.enacted(ord::YouthCurfew);
   in.safety.youthSportsEnacted = c.ordinances.enacted(ord::YouthSports);
@@ -370,6 +433,18 @@ void Game::startScenarioHooks() {
 
 void Game::applyPetitionEffect(const PetitionEffect& e) {
   City& c = city();
+  if (e.kind == PetitionEffect::NeighbourDeal) {   // answers to the utilities advisor's offer petitions (spec 22 s5.5)
+    int type = UtilityDeals::typeOfPetition(e.petition);
+    if (type < 0) return;
+    auto& pend = c.neighbours.pending;
+    for (size_t i = 0; i < pend.size(); i++)
+      if (pend[i].dealType == type) {
+        if (e.accepted) c.neighbours.accept(i); else pend.erase(pend.begin() + long(i));
+        dirty_ = true;
+        break;
+      }
+    return;
+  }
   if (!e.accepted) {
     if (e.kind == PetitionEffect::BusinessDeal) c.business.pendingOffer.reset();   // declined: offers may be raised again
     return;
