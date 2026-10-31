@@ -638,7 +638,7 @@ interpreting it.
 | … | 4 | s32 | sumWater | Running Σ*S_W* after treatment |
 | … | 4 | u32 | totalStanding | Total standing garbage on tiles |
 | … | 4 | u32 | pollutedCount | Running polluted-cell count (+4 per cell) |
-| … | 132 | u32[33] | chart | History chart (12 monthly + 10 yearly + 10 decade + u32 parameter), same as the crime record |
+| … | 132 | u32[33] | chart | History chart (12 monthly + 10 yearly + 10 decade + u32 parameter), same as the crime record. Monthly sample = min(100, (⌊avgWater × 100 ÷ `MaxWaterPolluteForUI`⌋ + ⌊avgAir × 100 ÷ `MaxAirPolluteForUI`⌋) ÷ 2), unsigned integer arithmetic, pushed in the pollution month-end. In January the current value is also pushed as the yearly value, and every 10th year as the decade value [STATIC] |
 | … | 56 | s64[7] | garbageMonth | Current-period values of the 7 counters |
 | … | 672 | s64[12][7] | garbageHistory | 12 periods × the 7 counters, period-major |
 | … | 1 | u8 | – | 0 in all files (OPEN) |
