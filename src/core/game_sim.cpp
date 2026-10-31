@@ -130,7 +130,7 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   int unpowered = 0, needPower = 0;
   for (const auto& o : world_.occupants) {
     totalB++;
-    if (o.state != 1) continue;
+    if ((o.state & ~0x200u) != 1) continue;
     switch (o.agentType) {
       case 13130: in.safety.policeStations++; break;
       case 13002: in.safety.fireStations++; break;

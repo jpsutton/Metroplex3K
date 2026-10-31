@@ -359,7 +359,7 @@ class LandValueAdapter : public growth::LandValueCity {
   int64_t population() const override { return 2 * int64_t(c_.residents_); }
   bool ordinanceEnacted(uint32_t id) const override { return c_.ordinances.enacted(id); }
   void occupants(std::vector<growth::LvOccupant>& out) const override {
-    for (const auto& o : c_.world_->occupants) out.push_back({o.x, o.z, o.sizeX, o.sizeZ, o.agentType, o.state == 1});
+    for (const auto& o : c_.world_->occupants) out.push_back({o.x, o.z, o.sizeX, o.sizeZ, o.agentType, (o.state & ~0x200u) == 1});
   }
 
  private:
@@ -906,7 +906,7 @@ bool City::bulldoze(int x0, int z0, int x1, int z1) {
 std::vector<us::SimOccupant> City::simOccupants(bool operatingOnly) const {
   std::vector<us::SimOccupant> v;
   for (const auto& o : world_->occupants) {
-    if (operatingOnly && o.state != 1) continue;
+    if (operatingOnly && (o.state & ~0x200u) != 1) continue;
     us::SimOccupant s;
     s.id = o.occId; s.agentType = o.agentType; s.group = o.agentType;
     s.x = o.x; s.z = o.z; s.sizeX = o.sizeX; s.sizeZ = o.sizeZ;
@@ -928,7 +928,7 @@ void City::syncFacilities() {
   std::set<std::pair<int, int>> plants, wf, st;
   for (const auto& o : world_->occupants) {
     std::pair<int, int> key{o.x, o.z};
-    if (o.state != 1) continue;
+    if ((o.state & ~0x200u) != 1) continue;
     if (us::powerCategory(o.agentType) >= 0) {
       plants.insert(key);
       if (!plantAt_.count(key)) { int id = power.addPlant(o.x, o.z, o.agentType, now, urng_); if (id >= 0) plantAt_[key] = id; }
@@ -981,7 +981,7 @@ void City::rebuildTraffic() {
     uint32_t k = o.agentType / 1000;
     b.category = k == 3 ? CAT_RES : k == 5 ? CAT_COM : k == 8 ? CAT_IND : -1;
     b.slot = (i++) % 5;
-    b.functional = o.state == 1;
+    b.functional = (o.state & ~0x200u) == 1;
     if (b.makesTrips()) tripBuildings_.push_back(b);
   }
   traffic->rebuildDestinations(tripBuildings_);
@@ -1082,7 +1082,7 @@ std::string City::debugStats() const {
     uint32_t k = oc.agentType / 1000;
     int c = k == 3 ? 0 : k == 5 ? 1 : k == 8 ? 2 : -1;
     if (c < 0) continue;
-    int st = oc.state == 1 ? 0 : oc.state == 2 ? 1 : oc.state == 4 ? 2 : 3;
+    int st = (oc.state & ~0x200u) == 1 ? 0 : (oc.state & ~0x200u) == 2 ? 1 : (oc.state & ~0x200u) == 4 ? 2 : 3;
     cnt[c][st]++;
     if (power.powered(oc.x, oc.z)) poweredN++;
   }
@@ -1104,7 +1104,7 @@ void City::monthlyNeighbours() { neighbours.monthly(clock.date().month, rng_); }
 int City::countResidents() const {
   int residents = 0;
   for (const auto& o : world_->occupants) {
-    if (o.state != 1) continue;
+    if ((o.state & ~0x200u) != 1) continue;
     auto it = cfg_.valve.agentEffects.find(o.agentType);
     if (it != cfg_.valve.agentEffects.end())
       for (const auto& vi : it->second) if (vi.valve == growth::kValveRes) residents += vi.supply * o.sizeX * o.sizeZ;
@@ -1117,7 +1117,7 @@ void City::monthlyValves() {
   for (const auto& o : world_->occupants) {
     growth::ValveBuilding b;
     b.agentType = o.agentType; b.x = o.x; b.z = o.z; b.sizeX = o.sizeX; b.sizeZ = o.sizeZ;
-    b.operating = o.state == 1;
+    b.operating = (o.state & ~0x200u) == 1;
     in.buildings.push_back(b);
   }
   residents_ = countResidents();
@@ -1179,7 +1179,7 @@ void City::monthlyTraffic() {
                   subRail = t.num("SubwayRailStation", "OptimalMonthlyUpkeep", 0), subStn = t.num("SubwayStation", "OptimalMonthlyUpkeep", 0);
     int64_t up = 0;
     for (const auto& o : world_->occupants) {
-      if (o.state != 1) continue;
+      if ((o.state & ~0x200u) != 1) continue;
       switch (o.agentType) { case 12210: up += bus; break; case 12230: up += railStn; break; case 12361: up += subRail; break; case 12360: up += subStn; break; default: break; }
     }
     in.stationUpkeep = int(up);
