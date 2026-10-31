@@ -1117,6 +1117,31 @@ std::optional<size_t> BusinessDeals::weeklyEvaluate(const Inputs& in, SimRng& rn
   return pick;
 }
 
+std::vector<size_t> BusinessDeals::eligibleDeals(const Inputs& in) const {
+  std::vector<size_t> v;
+  if (in.population <= 1000) return v;
+  for (size_t i = 0; i < defs.size(); i++) {
+    const BusinessDealDef& d = defs[i];
+    if (d.year > in.currentYear || !d.enabled) continue;
+    if (in.cityHasBusiness && in.cityHasBusiness(d.buildingType)) continue;
+    if (std::find(inForce.begin(), inForce.end(), d.buildingType) != inForce.end()) continue;
+    if (d.buildingType == 19003 && in.casinoAllowed && !in.casinoAllowed()) continue;
+    v.push_back(i);
+  }
+  return v;
+}
+
+bool BusinessDeals::acceptByMessage(uint32_t messageId) {
+  for (size_t i = 0; i < defs.size(); i++) {
+    if (defs[i].messageId != messageId) continue;
+    if (std::find(inForce.begin(), inForce.end(), defs[i].buildingType) != inForce.end()) return false;
+    inForce.push_back(defs[i].buildingType);
+    if (pendingOffer && *pendingOffer == i) pendingOffer.reset();
+    return true;
+  }
+  return false;
+}
+
 bool BusinessDeals::accept() {
   if (!pendingOffer) return false;
   inForce.push_back(defs[*pendingOffer].buildingType);

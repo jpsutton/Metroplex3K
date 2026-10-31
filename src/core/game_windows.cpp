@@ -161,7 +161,18 @@ void Game::buildPickerEntries(PickerCategory c) {
         for (const auto& o : world_.occupants) if (o.occId == occ) return true;
         return false;
       };
-    pickerEntries_ = collectPickerEntries(data_, PickerFilter::defaults(c), &city.budget, &hier, {}, placed);
+    // Power and water menus list unlocked types only (spec 22 "Building availability", 09 s6.11); nuclear is hidden while
+    // Nuclear Free Zone is enacted. `power to the masses` / `water in the desert` skip the unlock flag.
+    std::function<bool(uint32_t, const OccAttr&)> avail;
+    if (c == PickerCategory::PowerPlants || c == PickerCategory::Water) {
+      const bool all = c == PickerCategory::PowerPlants ? cheats_.active("power to the masses") : cheats_.active("water in the desert");
+      const bool nfz = city.ordinances.enacted(0xE0D0722E);
+      avail = [this, all, nfz](uint32_t, const OccAttr& a) {
+        if (nfz && a.agentType == 12115) return false;
+        return all || advisors_.buildingUnlocked(int(a.agentType));
+      };
+    }
+    pickerEntries_ = collectPickerEntries(data_, PickerFilter::defaults(c), &city.budget, &hier, avail, placed);
   }
   // Second info column (observed: "Power: 6000 MW-h", plain number) from the utility tunables.
   for (auto& e : pickerEntries_) {

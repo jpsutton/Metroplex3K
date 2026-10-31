@@ -184,6 +184,7 @@ void Game::initManagers() {
   petitioners_.clear();
   petShown_.clear();
   petView_.reset();
+  advisors_.initBuildingUnlocks(city().clock.date().year);   // spec 22 "Building availability": unlocked at load
 }
 
 void Game::fillAdvisorInputs(AdvisorInputs& in) {
@@ -311,6 +312,7 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
       if (nb.nRail > 0) in.plan.Kt++;
     }
   }
+  in.util.desalinationAvailable = advisors_.buildingUnlocked(12830);   // spec 22 "Building availability"
   in.dreary = 0;   // dreary rating: no source yet (spec 22 lists it as an advisor input only)
   for (auto z : world_.zone) {
     if (z >= 1 && z <= 3) in.plan.zoned[0]++; else if (z >= 5 && z <= 7) in.plan.zoned[1]++; else if (z >= 9 && z <= 11) in.plan.zoned[2]++;
@@ -335,7 +337,9 @@ void Game::weeklyHook() {
       for (const auto& o : world_.occupants) if (o.agentType == type) return true;
       return false;
     };
-    if (auto offer = c.evaluateBusinessDeals(bi)) petitioners_.request(c.business.defs[*offer].messageId, 0, 48);
+    if (cheats_.active("let's make a deal")) {   // spec 27 s5.3: every eligible deal, all pending together
+      for (size_t i : c.business.eligibleDeals(bi)) petitioners_.request(c.business.defs[i].messageId, 0, 48);
+    } else if (auto offer = c.evaluateBusinessDeals(bi)) petitioners_.request(c.business.defs[*offer].messageId, 0, 48);
   }
   presentPetitions();
 }
@@ -490,6 +494,8 @@ void Game::applyCheat(const CheatResult& r) {
     cy.ordinances.makeAllAvailable(&announced);
   } else if (phrase == "nerdz rool") cy.setCleanIndustryOnly(true);
   else if (phrase == "pay tribute to your king") cheatAllRewards_ = true;
+  else if (phrase == "call cousin vinnie") { if (!vinnieDone_) { petitioners_.request(0xD7, 0, 6); presentPetitions(); } }
+  else if (phrase == "zyxwvu") { if (vinnieRefused_) advisors_.rewards.markAvailable(19999); }
   else if (phrase == "salt off") cy.saltOff = true;
   else if (phrase == "salt on") cy.saltOff = false;
   else if (int delta = terrainCheatDelta(&c)) {
@@ -537,8 +543,10 @@ void Game::applyPetitionEffect(const PetitionEffect& e) {
       }
     return;
   }
+  if (e.petition == 0xD7) vinnieDone_ = true;   // cousin Vinnie: hidden for the rest of the session once answered
   if (!e.accepted) {
     if (e.kind == PetitionEffect::BusinessDeal) c.business.pendingOffer.reset();   // declined: offers may be raised again
+    if (e.kind == PetitionEffect::PlannerFlag && e.petition == 0xD7) vinnieRefused_ = true;
     return;
   }
   switch (e.kind) {
@@ -551,11 +559,8 @@ void Game::applyPetitionEffect(const PetitionEffect& e) {
       break;
     case PetitionEffect::BusinessDeal: {
       BusinessDeals& b = c.business;
-      if (b.pendingOffer && b.defs[*b.pendingOffer].messageId == e.petition) {
-        int type = int(b.defs[*b.pendingOffer].buildingType);
-        if (b.accept()) advisors_.rewards.markAvailable(type);
-        else b.pendingOffer.reset();
-      }
+      for (const auto& d : b.defs)
+        if (d.messageId == e.petition) { if (b.acceptByMessage(e.petition)) advisors_.rewards.markAvailable(int(d.buildingType)); break; }
       break;
     }
     default: break;
@@ -590,6 +595,7 @@ void Game::tickSim(uint32_t dtMs) {
     int month = city().clock.date().month;
     if (month != lastMonth_) {
       lastMonth_ = month; disasters_.monthlyTick(dw, in, out);
+      advisors_.monthlyBuildingUnlock(city().clock.date().year, rng_);
       if (month == 1) {   // city anniversary ticker item (10, 25, 50, 100, ... years since founding)
         NewsKey k = anniversaryNews(city().clock.date().year - world_.info.foundingYear);
         if (k.valid()) postNews(k.table, k.id);

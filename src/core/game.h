@@ -310,6 +310,9 @@ class Game {
   uint32_t pauseFlashMs_ = 0;   // position in the 1500 ms paused-indicator flash cycle (0 when running)
   bool disastersOn_ = true, autoBudget_ = false;
   bool cheatAllRewards_ = false;   // `pay tribute to your king` (spec 27 s5.3)
+  // Cousin Vinnie (spec 22 petition 0xD7, 27 s5.3): answered or expired once per session; refusing sets the flag read by
+  // `zyxwvu`. Neither is saved (whether the original saves the refused flag is OPEN).
+  bool vinnieDone_ = false, vinnieRefused_ = false;
   bool dirty_ = false;
   int pendingAfterLeave_ = 0;   // leave action to run once the Save As screen has saved (0 = none)
 

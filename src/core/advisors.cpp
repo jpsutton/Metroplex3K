@@ -416,6 +416,7 @@ void AdvisorManager::clear() {
   for (auto& e : rewards.entries()) { e.available = false; e.owned = false; }
   rewards.rawEntries.clear();
   announced_.clear();
+  unlocked_.clear(); unlockTopics_.clear();
   for (auto& a : tAnnounced_) a = false;
   garbageStreak_ = 0;
   for (auto& r : ring_) r.clear();
@@ -892,9 +893,29 @@ void AdvisorManager::utilRules(TopicList& L, const AdvisorInputs& in) {
   if (U.nNuclearEnding > 0) L.raise(0xFF);
   if (U.nOldPumps > U.nPumps / 4) L.raise(0x101);
   if (U.nOldIncin > U.nIncin / 2) L.raise(0x102);
+  for (uint32_t t : unlockTopics_) L.raise(t, 0, 120, true, true, true);
+  unlockTopics_.clear();
+}
+
+void AdvisorManager::initBuildingUnlocks(int year) {
+  unlocked_.clear(); unlockTopics_.clear();
+  for (auto* lst : {&thr.power, &thr.water})
+    for (auto& a : *lst) if (a.year <= year) unlocked_.insert(a.buildingId);
+}
+void AdvisorManager::monthlyBuildingUnlock(int year, GameRng& rng) {
+  if (rng.rand(100) >= 10) return;
   for (auto* lst : {&thr.power, &thr.water})
     for (auto& a : *lst)
-      if (a.topic && in.year >= a.year && announced_.insert(a.topic).second) L.raise(a.topic, 0, 120, true, true, true);
+      if (a.year <= year && !unlocked_.count(a.buildingId)) {
+        unlocked_.insert(a.buildingId);
+        if (a.topic) unlockTopics_.push_back(a.topic);
+        return;
+      }
+}
+bool AdvisorManager::buildingUnlocked(int agentType) const {
+  for (auto* lst : {&thr.power, &thr.water})
+    for (auto& a : *lst) if (a.buildingId == agentType) return unlocked_.count(agentType) != 0;
+  return true;
 }
 
 void AdvisorManager::utilDeals(TopicList&, const AdvisorInputs& in) {

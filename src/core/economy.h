@@ -431,6 +431,10 @@ class BusinessDeals {
   };
   // Weekly advisor evaluation. Returns the offered deal index if a new offer was raised.
   std::optional<size_t> weeklyEvaluate(const Inputs& in, SimRng& rng);
+  // Cheat `let's make a deal` (spec 27 s5.3, 22): every currently eligible deal, offered together each cycle.
+  std::vector<size_t> eligibleDeals(const Inputs& in) const;
+  // Accept the deal offered by petition `messageId` (a pending random offer or a cheat offer); false if none.
+  bool acceptByMessage(uint32_t messageId);
   bool accept();                          // pending offer -> in force
   void decline() { pendingOffer.reset(); }
   void remove(uint32_t buildingType);
