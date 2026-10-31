@@ -796,13 +796,32 @@ the map are skipped. Each cell byte holds three independent fields [STATIC]:
 | 6–7 | unused | Always 0 in shipped data [DATA]; preserved by all operations [STATIC] |
 
 The shipped values match this layout: 1, 2 and 3 are flag combinations, and 4–20 are c = 1–5
-[DATA]. The reserve/add operations make sure two features of the same class keep a minimum spacing
-or a maximum local density. **[OPEN]** which features use each field. The zone developer
-(`15-sim-growth.md` §5.5, the seaport pier rule; no other developer rule touches the grid) uses
-*add* on the counter while it auto-places a run of lot decorations along a line, and adds the run only if *add* succeeds [STATIC]. The clients of the two flags were not
-traced. Each client must call *release*/*remove* when its feature is deleted, so the grid stays
-consistent with the city. An engine that does not model these clients should round-trip the grid
-verbatim. A new city starts with all zeros [INFERRED].
+[DATA].
+
+**Clients** [STATIC]. Only the zone developer's airport and seaport rules (`15-sim-growth.md` §5.5)
+and the grid's own removal handler use the grid:
+* *segment flag* = airport runway strips. The runway rule reserves the segment of the runway it
+  is about to lay and builds nothing if the reservation fails. The airport-buildings rule's
+  random placement (its step 3) only places on a tile whose block has the segment flag set. The
+  same rule's frontage scoring tests the flag (`15-sim-growth.md` §5.5).
+* *point flag* = airport building positions. The airport-buildings rule's step 1 reserves a point
+  before placing its building and releases it when placing fails. Its arrangement scoring tests
+  the point flag.
+* *counter* = seaport piers. The pier rule calls *add* at each pier head it is about to extend,
+  and lays the pier body only if *add* succeeds. With the 15 limit, a 5 × 5-block area can take up
+  to 15 overlapping piers, so the spacing between piers is in practice set by the pier rule's own
+  gap counter.
+* After every successful *add* and every *remove*, the grid notifies another city subsystem with
+  the tile position and 1 or 0 [STATIC; INFERRED that it is the automata/boat layer].
+* **Release on removal**: the grid listens for occupant removal of airport/seaport parts (by
+  part index, attribute 0x1F4). Removing a runway part (index 1) removes the rest of its runway
+  line and releases its segment. Removing a part of index 4 releases the point at its anchor.
+  Removing a pier part (index 7–9) walks the connected pier pieces, and at the pier head *removes*
+  one count. No other decay or reset exists. A new city starts with all zeros [INFERRED].
+
+Correction: the previous revision said no developer rule other than the pier touches the grid and
+left the flag clients OPEN. An engine that implements the airport and seaport rules must model the
+grid. Otherwise it should round-trip the grid verbatim.
 
 Both records are consumed exactly in 59/59 shipped files [DATA].
 
