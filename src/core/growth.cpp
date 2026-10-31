@@ -632,7 +632,9 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
       if (r.h() > bmax) { if (n[0] > 0) r.z1 = r.z0 + bmax - 1; else r.z0 = r.z1 - bmax + 1; }
       const int W = r.w(), H = r.h();
       used.assign(size_t(W) * H, 0);
-      const FarmSet& fs = *sets[sets.size() == 1 ? 0 : size_t(rng.rand(int(sets.size())))];   // [INFERRED] family choice
+      // The family bound to the category being developed, first match (spec 15 s5.5) [STATIC]; our lists for this category
+      // hold only its families, taken in ascending family ID.
+      const FarmSet& fs = *sets.front();
       // 5. farmstead strip on the side with the most access tiles
       int s = 0;
       for (int e = 1; e < 4; e++) if (n[e] > n[s]) s = e;
