@@ -243,9 +243,15 @@ Let `rand(N)` be a uniform integer in [0, N). Draw r = rand(100) [STATIC].
 | Other | r < Mixed.a → Residential; otherwise Commercial-or-Industrial weighted |
 
 "Commercial-or-Industrial weighted" asks the city for two non-negative numbers (C, I) and draws
-s = rand(C + I). The destination is Industrial if s > C, otherwise Commercial [STATIC]. C and I
-come from a city statistics provider. They are most likely the commercial and industrial job
-totals [INFERRED, medium].
+s = rand(C + I). The destination is Industrial if s > C, otherwise Commercial [STATIC]. Only the
+low 8 bits of s are compared with C; this matters only if C + I > 256, which the shipped data never
+reaches. C and I are the **economic-phase weights** (*a*, *b*) of `SC3WorldLayer.ini
+EconomicPhases` at the current city population (`15-sim-growth.md` §3.5): the same commercial :
+industrial weights that split the workforce. They are held by the jobs valve (7000) of the world
+layer and saved with it [STATIC]. No scaling is applied. Example: at 800 000 inhabitants
+(between `766:30:10` and `900:32:10`) the weights are about (30, 10), so about 75 % of the
+weighted draws go to commercial destinations. Correction: an earlier revision inferred job
+totals.
 
 ### 4.3 Walking radius and destination bits
 
@@ -970,8 +976,7 @@ occupants (any other argument disables it). It has no simulation effect [STATIC]
 
 1. (Resolved: flag 0x100/0x200 = piece attribute 0x12D bit 0, §3.1.)
 2. (Resolved: the counting test reads the valve-effect map, §4.5.)
-3. Which provider supplies the (C, I) weights of §4.2? Most likely commercial and industrial job
-   totals [INFERRED].
+3. (Resolved: the (C, I) weights of §4.2 are the `EconomicPhases` weights.)
 4. (Resolved: the week-slot is dealt per building type; §4.1.)
 5. (Resolved: piece attribute 0x136 matrix, §5.4.) Still open: the meaning of the city-wide
    boolean *B* and how span flags (0x4000) are restored after a load.
