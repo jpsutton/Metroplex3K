@@ -302,6 +302,7 @@ bool Game::windowOpen(const std::string& n) const {
   if (n == "props") return showProps_;
   if (n == "goals") return showGoals_;
   if (n == "map") return showMap_;
+  if (n == "layers") return showLayers_;
   if (n == "graphs") return showGraphs_;
   if (n == "charts") return showCharts_;
   if (n == "picker") return showPicker_;
@@ -436,6 +437,10 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
       streetSimFrame(dtMs);
       updateAmbience(dtMs);
       ropt_.overlay = (showMap_ && mapWin_.showInCityView) ? mapWin_.activeOverlay() : nullptr;
+      if (!ropt_.overlay && layers_.mode == CityLayers::LayerView) {   // City Layer Views: kept current with the sim
+        if (++layerOverlayAge_ >= 30) refreshLayerOverlay();
+        ropt_.overlay = &layerOverlay_;
+      }
     } else { ropt_.overlay = nullptr; stopAmbience(); }
     costShow_ = false;
     renderer_.setCostTextHook([this](int sx, int sy, const std::string& text, bool ok) { costText_ = text; costX_ = sx; costY_ = sy; costOk_ = ok; costShow_ = true; });

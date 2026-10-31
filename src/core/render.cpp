@@ -956,13 +956,17 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
   };
 
   const bool net = true;
-  auto addNets = [&](const std::vector<NetPiece>& v) {
-    for (const auto& np : v) addOccupant(np.pieceId, net, false, np.x, np.z, np.y, np.rot, 1, 1, true);
+  auto addNets = [&](const std::vector<NetPiece>& v, bool filter) {
+    for (const auto& np : v)
+      if (!filter || !opt.showNet || opt.showNet(np)) addOccupant(np.pieceId, net, false, np.x, np.z, np.y, np.rot, 1, 1, true);
   };
-  if (opt.underground) { addNets(w.pipes); addNets(w.subway); }
-  else {
-    addNets(w.surface);
+  if (opt.underground) {
+    if (opt.pipes) addNets(w.pipes, false);
+    if (opt.subways) addNets(w.subway, false);
+  } else {
+    addNets(w.surface, true);
     for (const auto& o : w.occupants) {
+      if (opt.showOccupant && !opt.showOccupant(o)) continue;
       bool port = o.keyType == T_OCC_ATTR_PORT;
       uint32_t id = o.occId;
       if (opt.constructionSites && o.state != 1 && o.state != 2 && data_) {
@@ -971,7 +975,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
       }
       addOccupant(id, false, port, o.x, o.z, o.y, o.rot, o.sizeX, o.sizeZ, false);
     }
-    for (int x = 0; x < w.W; x++)
+    for (int x = 0; x < w.W && opt.flora; x++)
       for (int zz = 0; zz < w.H; zz++) {
         uint8_t c = w.flora[w.tIdx(x, zz)];
         if (!c) continue;
@@ -981,7 +985,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
   }
 
   // Extra sprites from other modules.
-  if (scene) {
+  if (scene && opt.automata) {
     for (const auto& ss : scene->sprites) {
       uint32_t cat = ss.category, id = ss.spriteId;
       bool dbl = ss.magnify2x;

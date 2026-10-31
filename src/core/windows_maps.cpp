@@ -1,6 +1,7 @@
 // Map / data-view window, graphs and charts (spec 09 section 7).
 #include <algorithm>
 #include <cmath>
+#include "core/skin.h"
 #include "core/windows.h"
 
 namespace m3k {
@@ -178,6 +179,114 @@ WindowResult MapWindow::draw(Ui& ui, const WinEnv& E, const MapSource& src) {
       }
   }
   if (selected >= 0) rebuild(src);   // keep the overlay current with live layer data
+  return R;
+}
+
+// ================================================================ View City Layers (7.2)
+const std::vector<CityLayerView>& cityLayerViews() {
+  static const std::vector<CityLayerView> v = {
+    {DataLayer::Aura, 0x276, "Aura"}, {DataLayer::Crime, 0x277, "Crime"}, {DataLayer::Density, 0x278, "Density"},
+    {DataLayer::Power, 0x279, "Electric Power"}, {DataLayer::Fire, 0x27A, "Flammability"},
+    {DataLayer::LandValue, 0x27B, "Land Value"}, {DataLayer::Pollution, 0x27C, "Pollution"}, {DataLayer::Traffic, 0x27D, "Traffic"}};
+  return v;
+}
+
+// Layout (dialog-relative) measured on the original at 800x600: blue bands behind the three group headers and the
+// button row, header toggles 132x20 with a 3 px drop shadow, check boxes / radios on 18 / 16 px rows, GZBtn captions,
+// the navigator's lattice strip (02F78C6D:22F96E31) as the grid button and the GZBtnDone check mark.
+WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
+  WindowResult R;
+  Rect r = centered(ui, 296, 336);
+  const Skin* sk = ui.skin;
+  const uint32_t ink = rgb(0x31, 0x38, 0x84), grey = rgb(0x9C, 0xA2, 0xBD), white = rgb(255, 255, 255);
+  if (frame(ui, E, r, E.win(0x269, "View City Layers"))) { R.close = true; R.add(Act::Close); }
+  blueBand(ui, {r.x + 4, r.y + 39, 142, 34});
+  blueBand(ui, {r.x + 150, r.y + 39, 142, 34});
+  blueBand(ui, {r.x + 4, r.y + 185, 142, 34});
+  blueBand(ui, {r.x + 4, r.y + 256, 288, 76});
+
+  // Group header: a toggle picking the mode. On = white face with an inset outline (pressed), off = lavender face
+  // with a navy outline and a dark drop shadow.
+  auto header = [&](const std::string& name, int x, int y, const std::string& label, int mode) {
+    Rect f{r.x + x, r.y + y, 132, 20};
+    E.spot(name, f);
+    const bool on = edit.mode == mode, down = ui.hover(f) && ui.in.down;
+    if (on || down) {
+      ui.fill(f, white);
+      ui.frame({f.x + 2, f.y + 2, f.w - 4, f.h - 4}, false);
+      ui.fill({f.x + 2, f.y + 2, f.w - 4, 1}, rgb(0x7B, 0x7D, 0xBD)); ui.fill({f.x + 2, f.y + 2, 1, f.h - 4}, rgb(0x7B, 0x7D, 0xBD));
+      ui.fill({f.x + 2, f.y + f.h - 3, f.w - 4, 1}, rgb(0x7B, 0x7D, 0xBD)); ui.fill({f.x + f.w - 3, f.y + 2, 1, f.h - 4}, rgb(0x7B, 0x7D, 0xBD));
+      ui.fill({f.x + 1, f.y + f.h, f.w, 1}, rgb(0xC6, 0xC7, 0xDE)); ui.fill({f.x + 2, f.y + f.h + 1, f.w, 1}, rgb(0xA5, 0xA6, 0xB5));
+    } else {
+      ui.fill({f.x + 3, f.y + 3, f.w, f.h}, rgb(0x18, 0x20, 0x39));   // drop shadow
+      ui.fill(f, rgb(0xD6, 0xDB, 0xFF));
+      ui.fill({f.x, f.y, f.w, 2}, rgb(0xEF, 0xEB, 0xFF)); ui.fill({f.x, f.y, 2, f.h}, rgb(0xEF, 0xEB, 0xFF));
+      const uint32_t navy = rgb(0x31, 0x38, 0x84);
+      ui.fill({f.x + 2, f.y + 2, f.w - 3, 1}, navy); ui.fill({f.x + 2, f.y + 2, 1, f.h - 3}, navy);
+      ui.fill({f.x + 2, f.y + f.h - 2, f.w - 3, 1}, navy); ui.fill({f.x + f.w - 2, f.y + 2, 1, f.h - 3}, navy);
+    }
+    const int o = on || down ? 1 : 0;
+    ui.textCentered({f.x + o, f.y + o + 1, f.w, f.h}, label, "main10", ink);
+    if (ui.clicked(f)) edit.mode = mode;
+  };
+  // Check box (GZCheckBox) / radio (GZRadioBtn) with a label; greyed out while its group's mode is not selected.
+  const Image* checkArt = sk ? sk->get("check") : nullptr;
+  const Image* radioArt = sk ? sk->get("radio") : nullptr;
+  auto control = [&](const std::string& name, bool radio, int x, int y, const std::string& label, bool value, bool enabled) {
+    const int box = radio ? 12 : 13;
+    Rect hit{r.x + x, r.y + y, box + 4 + ui.textWidth(label, "system9"), box + 2};
+    E.spot(name, hit);
+    const bool hot = enabled && ui.hover(hit);
+    if (!(sk && sk->drawCheck(ui, radio ? radioArt : checkArt, r.x + x, r.y + y, value, enabled, hot, hot && ui.in.down))) {
+      ui.fill({r.x + x, r.y + y, box, box}, enabled ? white : rgb(0xDE, 0xDF, 0xEF));
+      ui.frame({r.x + x, r.y + y, box, box}, false);
+      if (value) ui.fill({r.x + x + 3, r.y + y + 3, box - 6, box - 6}, enabled ? ink : grey);
+    }
+    ui.text(r.x + x + box + 3, r.y + y + (box - ui.fonts->get("system9").height()) / 2, label, "system9", enabled ? ink : grey);
+    return enabled && ui.clicked(hit);
+  };
+
+  // ---- Above Ground
+  header("mode.above", 8, 45, E.win(0x26A, "Above Ground:"), CityLayers::AboveGround);
+  struct Check { const char* name; uint32_t id; const char* fb; bool* v; };
+  const Check checks[6] = {{"transport", 0x26E, "Transportation", &edit.transport}, {"powerLines", 0x26F, "Power Lines", &edit.powerLines},
+                           {"flora", 0x270, "Flora", &edit.flora}, {"zonedBuildings", 0x271, "Zoned Buildings", &edit.zonedBuildings},
+                           {"otherBuildings", 0x272, "Other Buildings", &edit.otherBuildings}, {"zones", 0x273, "Zones", &edit.zones}};
+  const bool above = edit.mode == CityLayers::AboveGround;
+  for (int i = 0; i < 6; i++)
+    if (control(std::string("above.") + checks[i].name, false, 12, 76 + 18 * i, E.win(checks[i].id, checks[i].fb), *checks[i].v, above))
+      *checks[i].v = !*checks[i].v;
+
+  // ---- Underground
+  header("mode.under", 8, 191, E.win(0x280, "Underground:"), CityLayers::Underground);
+  const bool under = edit.mode == CityLayers::Underground;
+  if (control("under.subways", true, 12, 223, E.win(0x274, "Subways"), edit.underground == 0, under)) edit.underground = 0;
+  if (control("under.pipes", true, 12, 239, E.win(0x275, "Water Pipes"), edit.underground == 1, under)) edit.underground = 1;
+
+  // ---- City Layer Views
+  header("mode.layers", 154, 45, E.win(0x26B, "City Layer Views:"), CityLayers::LayerView);
+  const bool layers = edit.mode == CityLayers::LayerView;
+  const auto& views = cityLayerViews();
+  for (size_t i = 0; i < views.size(); i++)
+    if (control("layer." + std::to_string(i), true, 157, 76 + 16 * int(i), E.win(views[i].labelId, views[i].fallback), edit.layer == int(i), layers))
+      edit.layer = int(i);
+
+  // ---- Buttons
+  auto pill = [&](const char* name, Rect b, const std::string& label) { E.spot(name, b); return ui.button(b, label, true, false, "title9"); };
+  if (pill("apply", {r.x + 9, r.y + 262, 102, 33}, E.win(0x26D, "Apply"))) R.add(Act::ApplyLayers);
+  if (pill("default", {r.x + 9, r.y + 295, 102, 33}, E.win(0x26C, "Default View"))) { edit = CityLayers(); R.add(Act::ApplyLayers); }
+  Rect grid{r.x + 248, r.y + 260, 36, 35};
+  E.spot("grid", grid);
+  { bool c = false;
+    std::string tip = E.gui(0x74, "Grid");
+    if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::UiBig, 0x22F96E31), 4, grid, tip, gridOn, true, c))) c = ui.button(grid, "#", true, gridOn);
+    if (c) R.add(Act::ToggleGrid); }
+  Rect done{r.x + 246, r.y + 296, 42, 32};
+  E.spot("ok", done);
+  { bool c = false;
+    if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::Sys, 0xA2DEFD9A), 4, done, "", false, true, c))) c = ui.button(done, E.app(0xB4, "OK"));
+    if (c || ui.in.key[K_ENTER]) { R.add(Act::ApplyLayers); R.add(Act::Done); R.close = true; } }
+  if (ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
   return R;
 }
 

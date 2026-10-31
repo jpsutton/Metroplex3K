@@ -687,6 +687,68 @@ void testMapWindow() {
   h.frame(); CHECK(h.inked() > 1000);
 }
 
+void testCityLayers() {
+  Harness h;
+  CityLayersDialog d;
+  bool grid = true;
+  h.drawFn = [&] { return d.draw(h.ui, h.E, grid); };
+  h.frame(); CHECK(h.inked() > 1000);
+  for (const char* n : {"mode.above", "mode.under", "mode.layers", "above.transport", "above.zones", "under.subways", "under.pipes",
+                        "layer.0", "layer.7", "apply", "default", "grid", "ok", "close"})
+    if (!h.has(n)) { std::fprintf(stderr, "missing %s\n", n); g_failures++; }
+  CHECK(cityLayerViews().size() == 8 && cityLayerViews()[3].layer == DataLayer::Power && cityLayerViews()[4].layer == DataLayer::Fire);
+  // Defaults (observed): above ground, everything shown, water pipes, aura.
+  CHECK(d.edit == CityLayers() && d.edit.mode == CityLayers::AboveGround && d.edit.underground == 1 && d.edit.layer == 0);
+  // Controls of an inactive group are greyed out and ignore clicks.
+  WindowResult r = h.click("layer.3"); CHECK(d.edit.layer == 0 && r.events.empty());
+  r = h.click("above.flora"); CHECK(!d.edit.flora && r.events.empty());   // editing alone applies nothing
+  r = h.click("mode.layers"); CHECK(d.edit.mode == CityLayers::LayerView);
+  r = h.click("layer.3"); CHECK(d.edit.layer == 3);
+  r = h.click("above.zones"); CHECK(d.edit.zones);
+  r = h.click("apply"); CHECK(r.has(Act::ApplyLayers) && !r.close);
+  r = h.click("mode.under"); r = h.click("under.subways"); CHECK(d.edit.mode == CityLayers::Underground && d.edit.underground == 0);
+  r = h.click("grid"); CHECK(r.has(Act::ToggleGrid));
+  r = h.click("default"); CHECK(r.has(Act::ApplyLayers) && d.edit == CityLayers());
+  r = h.click("ok"); CHECK(r.has(Act::ApplyLayers) && r.has(Act::Done) && r.close);
+  r = h.click("close"); CHECK(r.close && !r.has(Act::ApplyLayers));
+}
+
+// Dialogs move with a title-bar drag, keep the offset while open and reopen at home.
+void testDialogDrag() {
+  Harness h;
+  CityLayersDialog d;
+  bool drawn = true;
+  h.drawFn = [&] { return drawn ? d.draw(h.ui, h.E, false) : WindowResult(); };
+  h.frame();
+  Rect home; CHECK(h.find("ok", home));
+  CHECK(h.ui.windowRects.size() == 1);
+  const Rect frame0 = h.ui.windowRects[0];
+  Input in; in.mx = frame0.x + 60; in.my = frame0.y + 15; in.down = in.pressed = true;
+  h.frame(in);
+  in.pressed = false; in.mx += 50; in.my += 30;
+  h.frame(in);
+  CHECK(h.ui.draggingWindow());
+  Rect moved; CHECK(h.find("ok", moved));
+  CHECK(moved.x == home.x + 50 && moved.y == home.y + 30);
+  in.down = false; in.released = true;
+  h.frame(in);
+  CHECK(!h.ui.draggingWindow());
+  h.frame();
+  CHECK(h.find("ok", moved) && moved.x == home.x + 50 && moved.y == home.y + 30);
+  // Press in the body (below the title bar) does not drag.
+  in = Input(); in.mx = moved.x - 100; in.my = moved.y - 100; in.down = in.pressed = true;
+  h.frame(in); in.pressed = false; in.mx += 40; h.frame(in); in.down = false; in.released = true; h.frame(in);
+  Rect still; CHECK(h.find("ok", still) && still.x == moved.x && still.y == moved.y);
+  // Dragging far off-screen keeps the title bar reachable.
+  in = Input(); in.mx = moved.x - 180; in.my = moved.y - 280; in.down = in.pressed = true;
+  h.frame(in); in.pressed = false; in.mx = -5000; in.my = -5000; h.frame(in);
+  CHECK(h.ui.windowRects.size() == 1 && h.ui.windowRects[0].y == 0 && h.ui.windowRects[0].x + h.ui.windowRects[0].w >= 40);
+  in.down = false; in.released = true; h.frame(in);
+  // Closed for a frame: back at home.
+  drawn = false; h.frame(); drawn = true; h.frame();
+  CHECK(h.find("ok", still) && still.x == home.x && still.y == home.y);
+}
+
 void testGraphs() {
   Harness h;
   Chart c1 = Chart::make(0, 100), c2 = Chart::make(50, 100);
@@ -920,6 +982,8 @@ int main() {
   testPicker();
   testQuery();
   testMapWindow();
+  testCityLayers();
+  testDialogDrag();
   testGraphs();
   testCharts();
   testTicker();

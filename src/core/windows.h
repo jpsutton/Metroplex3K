@@ -101,6 +101,8 @@ enum class Act {
   BatAdd,             // Building List Editor "Add": text = .bld path
   BatSelectFile,      // Building List Editor: a .bld row was selected (text = path; the shell fills the preview)
   BatOpenFolder,      // Building List Editor: folder row activated (text = path)
+  ApplyLayers,        // View City Layers Apply / Default View / OK: the shell applies CityLayersDialog::edit
+  ToggleGrid,         // View City Layers grid button
   Done                // OK pressed on a form
 };
 
@@ -127,7 +129,8 @@ struct WindowResult {
 
 // ---- shared drawing helpers (windows_common.cpp) ----------------------------------------------------
 namespace wui {
-Rect centered(const Ui& ui, int w, int h);
+// Centred w x h window, moved by any title-bar drag (Ui::movable); registers the frame in ui.windowRects.
+Rect centered(Ui& ui, int w, int h);
 // Window chrome with title bar and close button. Returns true when the close button was clicked.
 bool frame(Ui& ui, const WinEnv& E, Rect r, const std::string& title);
 // Button that registers a test spot.
@@ -488,6 +491,35 @@ class MapWindow {
   std::vector<uint32_t> mini_;
   int miniW_ = 0, miniH_ = 0;
   void rebuild(const MapSource& src);
+};
+
+// ---- 7.2 View City Layers dialog (navigator layers button) ---------------------------------------------------------------
+// What the city view shows (spec 09 7.2). Three exclusive modes picked by the group header buttons: above-ground object
+// classes (check boxes), one underground network (radio), or one data layer recolouring the ground (radio).
+struct CityLayers {
+  enum Mode { AboveGround = 0, Underground = 1, LayerView = 2 };
+  int mode = AboveGround;
+  bool transport = true, powerLines = true, flora = true, zonedBuildings = true, otherBuildings = true, zones = true;
+  int underground = 1;   // 0 subways, 1 water pipes
+  int layer = 0;         // index into cityLayerViews()
+  bool operator==(const CityLayers& o) const {
+    return mode == o.mode && transport == o.transport && powerLines == o.powerLines && flora == o.flora &&
+           zonedBuildings == o.zonedBuildings && otherBuildings == o.otherBuildings && zones == o.zones &&
+           underground == o.underground && layer == o.layer;
+  }
+  bool operator!=(const CityLayers& o) const { return !(*this == o); }
+};
+// The eight City Layer Views radio entries in dialog order: data layer and caption (029541F4:276..27D).
+struct CityLayerView { DataLayer layer; uint32_t labelId; const char* fallback; };
+const std::vector<CityLayerView>& cityLayerViews();
+
+// 296x336 dialog measured on dialog-shots/hud--minimap-layers-button--view-city-layers.png. The controls edit `edit`;
+// the shell copies it into the view on ApplyLayers. Events: ApplyLayers (Apply; Default View after resetting `edit`;
+// the check mark, followed by Done), ToggleGrid (grid button), Close (close box / Esc, nothing applied).
+class CityLayersDialog {
+ public:
+  CityLayers edit;
+  WindowResult draw(Ui& ui, const WinEnv& E, bool gridOn);
 };
 
 // ---- 7.3 Graphs window -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
