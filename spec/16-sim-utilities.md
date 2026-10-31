@@ -352,10 +352,9 @@ properties saved with the occupant (`10-save-format.md` §6.2.5) are the unaged 
 `r` is saved as the f32 "ratio" of the pollution record (`17-sim-services.md` §7.4).
 Test vectors: `P` = 100 000, two new centres (45 %, 50 000): served 100 000, w = 45 000 →
 `r` = 0.45; one centre → `r` = 0.225. Craterville (`P` = 208 780, three centres): all three
-working → 0.3233; one of them zeroed → 0.2155 (saved 0.2155) [DATA]. The three centres are
-occupied, powered and 73 months old, so the remaining zeroing condition is the failed trip:
-check the saved trip results of the three centre lots (`18-sim-transport.md` §9). Note that a
-facility that failed its trip keeps capacity 0 until its next monthly check.
+working → 0.3233; one of them zeroed → 0.2155. The shipped value 0.2155 is from a month in which
+one centre was zeroed; one day after load the original writes 0.3233, and during a 480-day run
+the ratio is 0.30–0.33 with one month at 0.2005 [OBSERVED, `28-conformance.md` §5.1].
 
 **Per tile** (inside the cell update of `17-sim-services.md` §7.2.4 step 3, non-landfill tiles):
 1. `q` = the tile's share of the cell's garbage; *produced* [0] += `q`.
