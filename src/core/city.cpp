@@ -643,6 +643,57 @@ void City::rebuildIndex() {
   occDirty_ = netDirty_ = true;
 }
 
+void City::applyRoadCondition(int percent) {
+  if (!world_ || percent < 0) return;
+  auto isRoad = [&](const NetPiece& p) {
+    if (!world_->inTiles(p.x, p.z)) return false;
+    return cfg_.haveTiling ? cfg_.tiling.inSet(netKindToTable(NK_ROAD), p.pieceId) : transport_[idx(p.x, p.z)] == 1;
+  };
+  auto potholed = [](uint32_t id) { return id == 15040 || id == 15041 || id == 15042 || id == 9051; };
+  auto& pieces = world_->surface;
+  int64_t N = 0, D = 0;
+  for (const auto& p : pieces) if (isRoad(p)) { N++; if (potholed(p.pieceId)) D++; }
+  const int64_t T = int64_t(double(N) * (double(percent) / 100.0));
+  if (T == D) return;
+  auto gap = [&](int64_t s) { return s < 1 ? int64_t(0) : int64_t(rng_.rand(uint32_t(s))); };
+  auto setId = [](NetPiece& p, uint32_t id, bool damaged) {
+    p.pieceId = id;
+    uint32_t w = p.pieceWord ? p.pieceWord : (0x30000000u | id);
+    w = (w & ~0xFFFFu) | (id & 0xFFFFu);
+    w = damaged ? (w | (1u << 27)) : (w & ~(1u << 27));
+    p.pieceWord = w;
+  };
+  bool changed = false;
+  if (T > D) {   // damage: spaced walk over all road pieces; candidates 29, 35, 11204; stop after k + 1 (original off-by-one)
+    const int64_t k = T - D, s = std::max<int64_t>(0, N / k - 1);
+    int64_t c = 0, g = gap(s), got = 0;
+    std::vector<size_t> picked;
+    for (size_t i = 0; i < pieces.size() && got < k + 1; i++) {
+      if (!isRoad(pieces[i])) continue;
+      if (c < g) { c++; continue; }
+      uint32_t id = pieces[i].pieceId;
+      if (id == 29 || id == 35 || id == 11204) { picked.push_back(i); got++; g = gap(s); c = 0; }
+    }
+    for (size_t i : picked) {
+      NetPiece& p = pieces[i];
+      if (p.pieceId == 29) { setId(p, 15040 + rng_.rand(3), true); changed = true; }
+      else if (p.pieceId == 35) { setId(p, 9051, true); changed = true; }
+      // 11204: collected but not converted (original defect)
+    }
+  } else {       // repair: spaced walk over potholed pieces, divisor D, no limit of k
+    const int64_t k = D - T, s = std::max<int64_t>(0, D / k - 1);
+    int64_t c = 0, g = gap(s);
+    for (auto& p : pieces) {
+      if (!isRoad(p) || !potholed(p.pieceId)) continue;
+      if (c < g) { c++; continue; }
+      setId(p, p.pieceId == 9051 ? 35u : 29u, false);
+      changed = true;
+      g = gap(s); c = 0;
+    }
+  }
+  if (changed) netDirty_ = true;   // rebuild the traffic flags (0x80) and network classification
+}
+
 double City::roadCondition() const {
   if (!world_) return 0.0;
   int64_t roads = 0, damaged = 0;
@@ -1510,6 +1561,7 @@ void City::monthlyTraffic() {
   if (const Department* t = budget.dept(dept::Transit)) traffic->setTransitFunding(t->funding);
   MonthlyOutput out = traffic->monthly(in);
   roadUpkeep_ = out.roadUpkeep; transitUpkeep_ = out.transitUpkeep;
+  if (out.roadConditionPercent >= 0) applyRoadCondition(out.roadConditionPercent);   // spec 18 s8.4 -> 12 s10
 }
 
 void City::monthlyBudget() {

@@ -310,6 +310,14 @@ int main(int argc, char** argv) {
       }
       continue;
     }
+    if (std::getenv("M3K_POTHOLES")) {   // road condition walk (spec 12 s10): underfund roads, then overfund
+      auto count = [&] { int n = 0; for (const auto& p : s.game.world().surface) n += (p.pieceId >= 15040 && p.pieceId <= 15042) || p.pieceId == 9051; return n; };
+      std::printf("   potholes at load %d, condition %.4f\n", count(), c.roadCondition());
+      c.budget.setFunding(dept::Roads, 20);
+      for (int d = 0; d < 120; d++) { s.game.sim().tickDay(); if (d % 30 == 29) std::printf("   roads 20%%: day %d potholes %d condition %.4f\n", d + 1, count(), c.roadCondition()); }
+      c.budget.setFunding(dept::Roads, 200);
+      for (int d = 0; d < 120; d++) { s.game.sim().tickDay(); if (d % 30 == 29) std::printf("   roads 200%%: day %d potholes %d condition %.4f\n", d + 1, count(), c.roadCondition()); }
+    }
     if (std::getenv("M3K_PLANTS")) {   // power plants after the first month start
       for (int d = 0; d < 35; d++) s.game.sim().tickDay();
       int now = 12 * c.clock.date().year + c.clock.date().month;
