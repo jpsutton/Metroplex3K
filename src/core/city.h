@@ -160,6 +160,7 @@ class City {
   void lvCentre(int& cx, int& cz) const;
   std::string lvExplain(int x, int z) const;   // city centre used by the land-value pass (tools)
   void runMonthlyWater() { monthlyWater(); }   // one water update now (tools)
+  us::OrdinanceSet crimeOrdinances() const { return usOrdinances(); }   // tools
   std::vector<us::SimOccupant> powerConsumers() const;   // spec 16 s2.6: per-record attribute 0xC9
   // A building burns (16) or becomes rubble (8): the occupant is replaced, so a lot that counted in the committed demand
   // P (state 1 or 4) leaves it (spec 15 s4 "Committed demand") [INFERRED, medium-high].

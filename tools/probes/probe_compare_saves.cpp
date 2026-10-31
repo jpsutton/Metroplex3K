@@ -94,6 +94,35 @@ int main(int argc, char** argv) {
     std::printf("   valve %d: ours V %d cap %d S %d D %d | theirs V %d cap %d S %d D %d\n", id, a.V, a.capPct, a.Slast, a.Dlast, b.V, b.capPct, b.Slast, b.Dlast);
   }
 
+  {  // Their saved crime vs our crime rule applied to their saved potential and our police coverage of their city.
+    long long n = 0, hi = 0, lo = 0; double sum = 0;
+    auto pol = [&](int x, int z) { return t.police.coverageAt(x, z); };
+    for (int cx = 0; cx < W / 2; cx++)
+      for (int cz = 0; cz < H / 2; cz++) {
+        if (t.crime.potentialAt(cx, cz) <= 0) continue;
+        int saved = t.crime.crimeAt(cx * 2, cz * 2);
+        int mine = t.crime.cellValue(cx, cz, pol, t.crimeOrdinances());
+        n++; sum += mine - saved; if (mine > saved) hi++; else if (mine < saved) lo++;
+      }
+    std::printf("   crime rule on their save: %lld cells with P > 0, mean (ours - saved) %.2f, higher %lld, lower %lld\n", n, n ? sum / n : 0.0, hi, lo);
+    // Implied police term from the saved cells with 0 < C < 255 (no ordinance term): P - 4C (+-3) vs our term P - v.
+    double si = 0, so = 0; long long m = 0; std::map<int, int> ratioHist;
+    for (int cx = 0; cx < W / 2; cx++)
+      for (int cz = 0; cz < H / 2; cz++) {
+        int P = t.crime.potentialAt(cx, cz), C = t.crime.crimeAt(cx * 2, cz * 2);
+        if (P <= 0 || C <= 0 || C >= 255) continue;
+        int mine = t.crime.cellValue(cx, cz, pol, us::OrdinanceSet());
+        double implied = P - 4.0 * C - 1.5, ourTerm = P - 4.0 * mine - 1.5;
+        if (ourTerm <= 0) continue;
+        si += implied; so += ourTerm; m++;
+        ratioHist[int(std::lround(implied / ourTerm * 10))]++;
+      }
+    std::printf("   police: ours striking %d prisoners-unjailed? / theirs striking %d; funding ours %d theirs %d; stations %d/%d\n", c.police.strike.striking ? 1 : 0,
+                t.police.strike.striking ? 1 : 0, c.police.funding(), t.police.funding(), c.police.stationCount(), t.police.stationCount());
+    std::printf("   police term (sum of 4 tiles / PoliceFactor): implied %.1f vs ours %.1f over %lld cells; ratio x10 histogram:", m ? si / m : 0, m ? so / m : 0, m);
+    int shown = 0; for (const auto& kv : ratioHist) if (kv.second > m / 50 && shown++ < 12) std::printf(" %d:%d", kv.first, kv.second);
+    std::printf("\n");
+  }
   // Largest crime and air differences.
   struct D { int d, x, z; };
   for (int which = 0; which < 2; which++) {
