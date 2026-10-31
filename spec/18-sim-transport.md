@@ -280,6 +280,17 @@ On each firing [STATIC]:
    no trip result yet (its trip-tried bit is clear at the lot's first tile). Otherwise do nothing.
 3. Otherwise (r ≤ threshold): route a trip. It is **counted** if the counting test of §4.5 passes.
 
+Firing does **not** depend on the lot state [STATIC]. Buildings under construction (4/516) and
+abandoned (2/514) fire exactly like occupied ones. Their trips are never counted, because the
+counting test needs state bit 0. A lot with no trip result routes a trip on **every** firing
+(step 2 if r > threshold, step 3 otherwise). An established lot routes only with probability
+threshold/100. New buildings, and lots whose bits were cleared when the previous building was
+removed (§11), start without a result. So a city with many recent constructions makes many
+more trip attempts. DATA (W5 runs, day of save s08, R/C/I lots without the trip-tried bit):
+Madrid 1 597 (780 of them under construction), Berlin 316, Moscow 332. Expected attempts per
+monthly cycle ≈ threshold share × tried lots + untried lots: Madrid ≈ 0.21 × 20 074 + 1 597 ≈ 5 800
+against the saved 6 546. Without the untried term it is ≈ 4 200.
+
 ### 4.5 Counting test
 
 This test only applies to buildings that are functional (as in §4.3). Let d be the value (0–255)
