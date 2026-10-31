@@ -58,12 +58,21 @@ evaluated per *tile* and summed into the tile's cell, *A*/16 is the average over
 **What the crime rule reads** [STATIC]: for each of its cell's 4 tiles the crime update (§7.1.3)
 reads *D* of the police cell containing that tile, divides it by `PoliceFactor` (shipped 1) and
 subtracts it, so a crime cell inside one police cell subtracts 4·*D*; the ordinance terms are
-then added before the division by 4. DATA (Berlin day 40, 18 police stations at 100 %
-funding, Neighbourhood Watch −16, Junior Sports −8 and Conservation Corps −8 enacted): in the
-3 711 crime cells with *D* = 0, saved potential − 4 × saved crime − 32 averages 3.8, which is
-within the truncation of the ÷4 plus later potential changes. In covered cells the median of
-(potential − 4·crime − 32) / 4*D* is 1.24. The crime sweep (period 40 days) leaves cells
-older than their potential, which explains the larger residuals.
+then added before the division by 4. DATA (Berlin, 18 police stations, police funding
+**103 %**, so by §2.2 *x'* = 1.2 − 1/(125 × 1.03 − 120) ≈ 1.086 and *R* = 32, *Max* = 86,
+*Min* = 21; Neighbourhood Watch −16, Junior Sports −8 and Conservation Corps −8 enacted):
+computing *D* from the stations with these parameters and **no** `NoJailPenalty` reproduces
+the saved crime. Over the crime cells with 0 < crime < 255, (potential − 4·crime − 32) / 4*D*
+has median 1.000 (10th–90th percentile 1.00–1.07) at days 1, 40, 127, 278 and 480. The mean *D*
+over developed cells is 43.3, against the saved `avgCoverage` 43. Using the base parameters
+(100 % funding) instead gives a median of 1.24. The remaining spread comes from crime cells
+that the 40-day sweep has not rewritten since their potential changed.
+**`NoJailPenalty` is not visible in Berlin** [DATA]: although its 12 jails hold 4 320
+inmates, the 1.2 overcrowding cap, the original's *D* is unpenalised in every save of a
+480-day run. By §3.2 and §3.3 the penalty applies while the unjailed count *P* > 0 [STATIC].
+*P* is not saved and starts at 0 after a load (Persisted state). Why it stays 0 here is
+[OPEN]. Recommended until answered: reproduce §3.2 exactly, and check that Berlin's *P*
+stays 0; if it does not, do not apply the penalty to a loaded city.
 
 ### 2.2 Station parameters and the funding curve
 
