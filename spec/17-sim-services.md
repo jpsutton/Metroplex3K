@@ -502,8 +502,8 @@ is then processed: [STATIC]
    Trash Presort 0x42BF1E18 → *g*; Conservation Corps 0xA2F6E7DA → *w*; Industrial Pollution Fee
    0x02F6E7E2 → *w* and *a*; Lawn Chemical Ban 0x62F6E808 → *w*; Tire Recycling 0xC2F6E81F → *g*.
 2. *n* = the number of the cell's four tiles whose zone type is not 17 (landfill). Any non-landfill
-   tile that still carries the landfill flag loses the flag, and 32767 of landfill capacity is
-   withdrawn from the city garbage store (`16-sim-utilities.md` §4).
+   tile that still carries the landfill flag loses the flag, and 32767 is subtracted from the
+   landfill store's room `D` (`16-sim-utilities.md` §4.4).
 3. Start with *S_A* = *a* and *S_W* = *w*. For each of the four tiles in the order (x, z),
    (x+1, z), (x, z+1), (x+1, z+1), with zone type *zt*:
    * *zt* 1–2: Leaf Burning Ban 0x22BF1E35: *S_A* += trunc(*e*·*a* / (−100·*n*)). Backyard
@@ -517,13 +517,14 @@ is then processed: [STATIC]
    * Traffic *T_t* (0–255, `18-sim-transport.md`): *S_A* += *T_t*·`TrafficAirFactor`. With Car
      Smogging 0xC2BF1E04: *S_A* −= trunc(*e*·*T_t*·`TrafficAirFactor` / 400).
    * Non-landfill tiles only: the garbage share *q* = trunc(*g*/*n*) is added to the "garbage
-     produced" statistic. If *s* > 0 and *q* > 0, a scaled amount *k* = min(*q*, round(*q*·*s*))
-     is removed from *q* and counted separately. For the 2nd and 4th tiles, 0.5 is subtracted before
-     rounding when *q*·*s* > 0.5. Then *q* += *G_t*, the tile's standing garbage is cleared, and *q*
-     goes through the disposal pipeline of `16-sim-utilities.md` §4.3. A remainder *r* > 0 becomes
-     the tile's standing garbage, capped at 32767 with the excess passed to the city garbage store.
-     When the store has spare landfill room (negative balance), part of it is taken first. [STATIC
-     outline; store details OPEN]
+     produced" statistic. If the city **recycling ratio** *r* > 0 and *q* > 0, *k* = min(*q*,
+     round(*q*·*r*)) is removed from *q* and counted as recycled (for the 2nd and 4th tiles, 0.5 is
+     subtracted before rounding when *q*·*r* > 0.5). *r* is computed monthly from the recycling
+     centres (`16-sim-utilities.md` §4.3); it is **not** `GarbageScalingFactor` (correction to
+     earlier drafts). Then *q* += *G_t*, the tile's standing garbage is cleared, and *q* goes
+     through the disposal stages of `16-sim-utilities.md` §4.3; the remainder becomes the tile's
+     standing garbage as specified there (including the backlog exchange with the landfill
+     store). [STATIC]
 4. Water treatment: if *C_T* > 0 and *S_W* > 0, the amount treated is *t* = *C_T* if no history
    exists (last sweep's raw-water total ≤ 0, or last sweep's treated total < *C_T*). Otherwise
    *t* = max(1, round(treatedLast / rawLast · *S_W*)). Then *t* = min(*t*, *S_W*, *C_T*);
@@ -538,8 +539,9 @@ is then processed: [STATIC]
    two lie in the same cell and still hold the old value, so in practice *W* stops at 1 whenever the
    old *W* was > 1 (original behaviour; keep it). [STATIC]
 
-After the whole tick, unused treatment capacity is returned to the plants, and a remaining negative
-garbage-store balance is pushed through disposal again. [STATIC outline]
+After the whole tick, unused treatment capacity is returned to the plants, and a negative
+landfill-store balance (backlog) is pushed through disposal again (`16-sim-utilities.md` §4.3
+step 6). [STATIC]
 
 Pollution does **not diffuse** between cells over time and **does not decay** in any other way. The
 spread is entirely the static stamp kernel of 7.2.3, and the temporal behaviour is the relaxation in
@@ -607,9 +609,9 @@ interpreting it.
 | 0x04 | 4 | u32 | sentinel | 0xDEADBEEF |
 | 0x08 | 4+21 | marker | start marker | **Only if streamVersion ≥ 3:** u32 length 21 + ASCII `Pollution Layer Start` |
 | … | 4·*n*² | u32[] | state | Cell state words (7.2.1). Rows stored last row first. |
-| … | 37 | bytes | garbageStore | City garbage store state (saved, OPEN). Observed as 6 × u32, u8, 3 × u32; fields 2 and 4 are equal. |
+| … | 37 | struct | garbageStore | Landfill store `0xA2C9E821` (`16-sim-utilities.md` §4.4) in the valve layout of `15-sim-growth.md` Persisted state **without** the ID: s32 `Slast`, s32 `Dlast`, s32 `Sacc`, s32 `Dacc`, f32 `f1`, f32 `f2`, u8 `capPct`, s32 `V`, s32 `Sbase`, s32 `Dbase`. `D` = landfill room, `S` = pending garbage; `Dlast` = `Dacc` and `Slast` = `Sacc` in every played city [STATIC][DATA] |
 | … | 2·*T*² | u16[] | standingGarbage | Per tile (7.2.1). Rows stored last row first. |
-| … | 56 | s64[7] | garbageTotals | Seven 64-bit garbage-flow counters. [0] = produced; [3] = scaled-away amount (7.2.4 step 3) [INFERRED]; others OPEN |
+| … | 56 | s64[7] | garbageTotals | Seven 64-bit garbage-flow counters over the last 12 months: [0] produced (incl. imports), [1] imported, [2] exported, [3] recycled, [4] incinerated, [5] waste-to-energy, [6] placed on landfill (`16-sim-utilities.md` §4.5). Each equals the sum of the 12 history entries below [STATIC][DATA: Liverpool, Berlin, Craterville exact] |
 | … | 4 | u32 | avgAir | Last sweep's average air [INFERRED] |
 | … | 4 | u32 | avgWater | Last sweep's average water [INFERRED] |
 | … | 2 | u16 | – | 0 in all files (OPEN) |
@@ -621,9 +623,9 @@ interpreting it.
 | … | 56 | s64[7] | garbageMonth | Current-period values of the 7 counters |
 | … | 672 | s64[12][7] | garbageHistory | 12 periods × the 7 counters, period-major |
 | … | 1 | u8 | – | 0 in all files (OPEN) |
-| … | 4 | u32 | burnCapA | Incinerator burn capacity total [INFERRED] |
-| … | 4 | u32 | burnCapB | WTE burn capacity total [INFERRED] |
-| … | 4 | f32 | – | Real-valued ratio, e.g. 0.43 (OPEN) |
+| … | 4 | u32 | burnCapA | Incinerator burn capacity total [STATIC] |
+| … | 4 | u32 | burnCapB | WTE burn capacity total [STATIC] |
+| … | 4 | f32 | recycleRatio | City recycling ratio *r* (`16-sim-utilities.md` §4.3) [STATIC] |
 | … | 4 | u32 | – | (saved, OPEN) |
 | … | 4 | u32 | cursorX | Next cell, tile x (= 2 × cell x) |
 | … | 4 | u32 | cursorZ | Next cell, tile z |
@@ -869,7 +871,7 @@ Coverage accumulators are not saved; they are rebuilt from the stations on load.
   tiles under networks and parks counted?), and the order of the chart series.
 * Which list holds libraries/museums in the education funding pass (§6.2).
 * Fire strike machine assumed identical to police.
-* Meanings of fields b, c of the police/fire record; the `garbageStore` block of the pollution
+* Meanings of fields b, c of the police/fire record; the (now decoded) `garbageStore` block of the pollution
   record (§7.4).
 * What triggers the crime, pollution, aura and flammability runs, and how often (§1).
 * Whether the agent-type distance of §7.1.2 is the parent-step count.

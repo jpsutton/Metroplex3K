@@ -217,6 +217,17 @@ For each facility, in list order: [STATIC]
    tiles of the 3 × 3 box). If any is fresh (non-salt) water: output = capacity, status "good".
    Otherwise examine the ring at distance 2 (border of the 5 × 5 box): if any is fresh water, output =
    ⌊capacity × `WaterPumpDistanceFactor` / 100⌋, status "far"; else output 0, status "no water".
+   A ring tile qualifies when it is inside the map, is a water tile, and its **salt flag** equals
+   the wanted value (clear for pumps, set for desalination plants) [STATIC]. The salt flag is
+   **not** derived from the shape of the water body: it is the stored sea-water bit, bit 30 of
+   the tile's 2 × 2 pollution cell (`17-sim-services.md` §7.2.1), which the terrain sets when a
+   sea surface is written [INFERRED, medium: the flag source is a per-cell flag of the
+   pollution layer]. Consequences: in the 40 shipped files without the bit set, every water tile
+   is fresh and pumps work on the sea; in the 19 files with the bit, pumps next to sea cells get no
+   water. An implementation must use the saved bit, not a geometric "edge-connected body ≥ 8 wide"
+   rule. [OPEN] Which tiles count as "water tiles" for the ring test (all four corners wet, or any
+   corner). Settling observation: on a flat terrain, place a pump with exactly one corner of one
+   ring tile under fresh water and read the pump's status in the query window.
 4. Desalination plants: examine the border of the box from (x − 1, z − 1) to (x + 3, z + 3) (the ring
    around its 3 × 3 lot anchored at (x, z)); any **salt** water tile → full capacity, else 0.
 5. Water pollution: let *p* be the water-pollution value at the facility tile (0–32767,
@@ -258,14 +269,14 @@ lose water first. [INFERRED]
 | Source | Key | Meaning |
 |---|---|---|
 | `SC3Pollution.ini [AgentIDModifiers]` | 5th field | Garbage produced per building (per 2 × 2 cell share, see 4.2). [STATIC] |
-| `SC3Pollution.ini [TuningParameters]` | `GarbageAbductionAmount` | Garbage that silently vanishes per period, capped cumulatively (4.3). |
-| | `GarbageScalingFactor` | Stored as value × 0.001; scales garbage amounts into the displayed garbage layer. [STATIC use; exact role OPEN] |
+| `SC3Pollution.ini [TuningParameters]` | `GarbageAbductionAmount` | Garbage that may silently vanish per **month** (the counter resets at every month-end, 4.3). |
+| | `GarbageScalingFactor` | Stored as value × 0.001. It is **not** used by production or disposal; the per-tile reduction that earlier drafts attributed to it is the recycling ratio (4.3). [STATIC for disposal; its remaining use OPEN] |
 | | `GarbagePollutedThreshold`, `MaxGarbagePolluteForUI` | Threshold for "garbage-polluted" tile tests and the scale maximum of the garbage map. |
 | | `TrashPresortOrdEffect`, `TireRecyclingOrdEffect`, `BackyardCompostingOrdEffect`, `PaperReductionOrdEffect`, `IndWasteDisposalOrdEffect` | Percent reductions of garbage (4.2). |
-| `SC3Tune.ini [Incinerator]` | `OptimalGarbageCap` | Garbage burned per month at 100 % funding. Stored ×30. [STATIC] |
-| `SC3PowerLayer.ini [WasteToEnergyPowerPlant]` | `OptimalGarbageCap` | Same for the waste-to-energy plant. Stored ×30. [STATIC] |
+| `SC3Tune.ini [Incinerator]` | `OptimalGarbageCap` | Garbage one incinerator burns **per pollution run** (per simulated day with the shipped `UpdatePeriod` 30) at 100 % funding; the monthly capacity is 30 × the value. Held internally as ×30 and divided by 30 per run. [STATIC; DATA: Liverpool, 3 incinerators: current-month counter 135 000 = 3 × 1 500 × 30, 12-month total 1 620 000] |
+| `SC3PowerLayer.ini [WasteToEnergyPowerPlant]` | `OptimalGarbageCap` | Same for the waste-to-energy plant (per run; ×30 per month). [STATIC] |
 | `SC3Tune.ini [Incinerator]`, `[RecyclingCenter]` | `MaxLifespan`, `DeclineAge` | Facility lifetime in months (`SC3Tune.ini` spells `MaxLifespan`). |
-| `SC3Tune.ini [RecyclingCenter]` | `OptimalPopServed`, `OptimalPctReduction` | Population a recycling centre serves and the percent of their garbage it removes. [DATA; formula OPEN] |
+| `SC3Tune.ini [RecyclingCenter]` | `OptimalPopServed`, `OptimalPctReduction` | Population a recycling centre serves and the percent of their garbage it removes; combined into the city recycling ratio of 4.3. [STATIC] |
 | `SC3Tune.ini [LandfillZoneDeveloper]` | `LandfillDecayRate` | Landfill decay (see `15-sim-growth.md`, landfill zone). |
 
 ### 4.2 Garbage production
@@ -285,33 +296,55 @@ field, then reduced by the active ordinances, each as *g* ← *g* − trunc(*g* 
 trunc(*g* × effect / (100 × *n*)) for each qualifying tile, *n* being the number of non-landfill tiles
 in the cell. [STATIC]
 
-### 4.3 Disposal priority
+### 4.3 Disposal pipeline
 
 **Period.** Disposal is not a separate monthly step. It runs inside every update run of the
 pollution layer (`17-sim-services.md` §7.2.4), on the garbage produced by the cells processed in
 that run [STATIC]. One full pollution sweep takes `SC3Pollution.ini UpdatePeriod` runs (shipped
-value: 30). Monthly capacities are stored ×30 at load and divided by 30 when used, so each run may
-use 1/30 of a monthly capacity; imported garbage enters as ⌊amount / 30⌋ per run [STATIC]. With
-the shipped `UpdatePeriod` of 30 and one run per day, the per-month totals equal the monthly key
-values. The run frequency is that of the pollution layer (`17-sim-services.md` §1).
+value: 30), one run per simulated day. Burn capacities are the INI values **per run**; imported
+garbage enters as ⌊amount / 30⌋ per run [STATIC].
 
-In each run the garbage to dispose, *G*, is handled in this fixed order, each stage taking as much
-as it can: [STATIC]
+**Per-run set-up** [STATIC]. At the start of a run: `A` = Σ burn capacity of the waste-to-energy
+plants, `B` = Σ burn capacity of the incinerators (each facility's funded, aged capacity for one
+run; a facility whose trip failed contributes 0, see below). If a garbage **import** deal (deal
+kind 5, `19-sim-economy.md` §10.1) exists, its monthly amount `m` contributes `i = ⌊m / 30⌋`:
+`i` is added to the counters *produced* [0] and *imported* [1] (§4.5), is disposed through the
+stages below, and any part not disposed is added to the landfill store's pending amount `S`
+(§4.4).
 
-1. Waste-to-energy plants: remaining burn capacity this run [INFERRED, high: the first of the two
-   burner lists is the WTE plants];
-2. incinerators: remaining burn capacity;
-3. landfill: remaining landfill capacity (the landfill zone layer; capacity and filling in
-   `15-sim-growth.md`);
-4. a neighbour garbage-export deal (deal kind 4): if one exists, **all** of the remainder is exported;
-5. "abduction": up to `GarbageAbductionAmount` minus the amount already abducted (cumulative counter)
-   disappears;
-6. anything left is **standing garbage**: it is added to the garbage layer and shows as garbage
-   pile-up (affects aura via `StandingGarbageFactor`, land value, and the garbage advisor).
+**Recycling ratio** `r` [STATIC] (recomputed once a month): with `P` = the city population
+(`20-sim-population.md` §2), sort the functioning recycling centres by their reduction percentage
+(descending). Walk them while `served < P`: `served += popServed_c`,
+`w += pct_c × popServed_c / 100`. Then `r = w / P` if `served < P`, else `r = w / served`; `r` = 0
+when there is no centre. `pct_c` and `popServed_c` are the centre's funded `OptimalPctReduction`
+and `OptimalPopServed` (`SC3Tune.ini [RecyclingCenter]`) [INFERRED for the funding scaling]. `r`
+is saved as the f32 "ratio" of the pollution record (`17-sim-services.md` §7.4).
+Test vector: `P` = 100 000, two centres (45 %, 50 000) each: served 100 000, w = 45 000 →
+`r` = 0.45. One centre: served 50 000 < `P` → `r` = 22 500 / 100 000 = 0.225.
 
-Garbage imported from a neighbour (deal kind 5 of `19-sim-economy.md` §10.1, the player is paid)
-enters this same pipeline first, as ⌊amount / 30⌋ per run. Stage 4 uses an export deal (kind 4). Amounts disposed at each stage are accumulated into 64-bit statistics (for budget and
-advisors). [STATIC]
+**Per tile** (inside the cell update of `17-sim-services.md` §7.2.4 step 3, non-landfill tiles):
+1. `q` = the tile's share of the cell's garbage; *produced* [0] += `q`.
+2. Recycling: if `r > 0` and `q > 0`: `k = min(q, round(q × r))` (for the 2nd and 4th tile of the
+   cell 0.5 is subtracted before rounding when `q × r > 0.5`); `q −= k`; *recycled* [3] += `k`.
+3. `q += G_t` (the tile's standing garbage), the tile's standing garbage is cleared.
+4. `q` goes through the **stages**, each taking as much as it can:
+   1. waste-to-energy: `min(q, A)`; `A` and `q` decrease; counter *WTE* [5];
+   2. incinerators: `min(q, B)`; counter *incinerated* [4];
+   3. landfill: if the store's available room `V > 0` (§4.4): `min(q, V)` is added to the store's
+      pending amount `S` (it is placed on landfill tiles later by the landfill developer,
+      `15-sim-growth.md` §7, which counts it in *landfill* [6]);
+   4. export: if a garbage export deal (kind 4) exists, **all** of the remainder; counter
+      *exported* [2];
+   5. abduction: up to `GarbageAbductionAmount` minus the amount already abducted **this month**
+      (the abduction counter resets at every month-end) silently disappears.
+5. A remainder `x > 0` becomes standing garbage:
+   * if `x` < 32 767 and the store's `V < 0` (backlog): the tile also takes back part of the
+     backlog, `t = min(−V, ⌊g / n⌋)` (1 if the cell's garbage is 0), capped so that `x + t` ≤
+     32 767; the store's `S −= t`; standing garbage = `x + t`;
+   * else if `x` < 32 768: standing garbage = `x`;
+   * else standing garbage = 32 767 and `x − 32 767` is added to the store's `S` (backlog).
+6. After the whole run, if the store's `V < 0`, the backlog `−V` is pushed through the stages once
+   more and what they take is removed from `S`.
 
 **Traffic access of garbage facilities** [STATIC]. Once a month each garbage facility checks the
 trip result of its lot (`18-sim-transport.md` §9.1). If the last trip failed, it routes a fresh
@@ -320,6 +353,42 @@ disposal capacity is 0 for the month, so its share falls through to the later st
 
 Incinerators and WTE plants emit air pollution via their `SC3Pollution.ini` entries (12852 and
 12853) like any other source (§7 of `17-sim-services.md`). WTE plants also generate power (§2).
+
+### 4.4 Landfill store
+
+The landfill store is a valve-like accumulator (ID `0xA2C9E821`, saved as the 37-byte
+`garbageStore` block of the pollution record) with **room** `D` = Σ over registered landfill
+tiles of (32 767 − tile garbage), **pending** `S` = garbage routed to landfill and not yet placed,
+and **available** `V` = `D − S` as of the last monthly valve update. Its maintenance (registration,
+filling of tiles, decay credit) is specified in `15-sim-growth.md` §7. [STATIC; DATA: `D`
+reproduced exactly from the saved tiles in Berlin and Mount Herrang]
+
+### 4.5 Monthly garbage balance and statistics
+
+The pollution layer keeps seven 64-bit counters [STATIC; slot labels DATA-checked]:
+
+| Slot | Meaning |
+|---|---|
+| [0] | produced (tile shares, plus imported garbage) |
+| [1] | imported (deal kind 5) |
+| [2] | exported (deal kind 4) |
+| [3] | recycled |
+| [4] | burned by incinerators |
+| [5] | burned by waste-to-energy plants |
+| [6] | placed on landfill tiles |
+
+At each month-end the month's values go to the 12-month history (for slot [0] the value stored is
+produced − abducted), the exported amount is reported to the export deal for billing, and all
+counters, including the abduction counter, restart at 0. Balance over any period:
+
+produced [0] = recycled [3] + incinerated [4] + WTE [5] + exported [2] + abducted
++ (change of standing garbage on tiles) + (change of the store's pending `S`) + placed [6]
+− (pending garbage that was routed earlier and placed in this period).
+
+DATA (12-month block of the record): Craterville produced 2 438 840 = recycled 677 884 +
+incinerated 1 619 638 + landfill 136 128 + 5 190 (abducted or left standing); Berlin produced
+9 373 189 against recycled 3 230 413 + landfill 6 143 765 = 9 374 178 (989 more placed than
+produced: backlog from before the period).
 
 ## 5. Update order
 
@@ -372,8 +441,11 @@ absent, re-derive *Lmax* and *Ld* (§2.3) and start *W* at 0. [STATIC layout][IN
 * The expired-plant variant: which occupant replaces a retired plant, and whether it ever produces.
 * Water: exact row-sweep order of the spreading front; role of `DefaultLeak`; water treatment
   plant behaviour (`OptimalPollutionCap`).
-* Garbage: recycling-centre reduction formula (`OptimalPopServed`, `OptimalPctReduction`); role of
-  `GarbageScalingFactor`; whether the abduction counter ever resets.
+* Garbage: the remaining use of `GarbageScalingFactor` (not disposal); funding scaling of the
+  recycling-centre values. Closed: recycling ratio (4.3), abduction resets monthly (4.3), store
+  (4.4), counter labels (4.5).
+* Pumps: which tiles count as water tiles for the ring test (§3.3 step 3); whether purchased water
+  is included in the saved `supply` statistic.
 * Which ordinance ID is Water Conservation vs Water Meters (§3.4); settle from
   `19-sim-economy.md` §9.5.
 * Whether *m* in §3.3 step 5 is the constant `MaxWaterPolluteForUI` or a running maximum.

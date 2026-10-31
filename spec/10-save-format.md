@@ -590,10 +590,10 @@ and agent type. Each class writes the common fields and then its own properties,
 | 3 030 | bus station 12210, rail station 12230, subway station 12360, subway/rail station 12361 | transport | intProps | `6352CCCF` ∈ {5, 10}; `6352CCD0` ∈ {5, 6, 10, 11, 12} [OPEN] |
 | 2 190 | water pump 12810, water tower 12840, desalination plant 12830 | water | datePair, intProps | `8351FDF3` = two u16 (low, high) e.g. (1500, 1500), (300, 300), (1500, 904) [INFERRED: capacity, current output]; `8351FDF4` = two u16 (low 0–≈1200, high 2 tower / 3 pump) [INFERRED: high = facility type code; low OPEN]; `8351FDF5` ∈ {0, 1, 3} [INFERRED: water-source status of the facility]; `8351FDF6` bool [OPEN] |
 | 521 (+82) | power plants 12111–12118 (and waste-to-energy 12853) | power | datePair, intProps | `2351FAF8` = consecutive overworked months (u16; 0–3); `2351FAF9` = maximum life in months; `2351FAFA` = decline age in months; `2351FAFB` = bool "life expired / plant replaced" [INFERRED from the power-plant model in `16-sim-utilities.md`] |
-| 82 | waste-to-energy 12853 | power + garbage | datePair, intProps | the four power-plant properties plus `A352179A` (0–1 750), `A352179B` (0–52 500), `A352179C` (0–52 500) [OPEN] |
+| 82 | waste-to-energy 12853 | power + garbage | datePair, intProps | the four power-plant properties plus `A352179A` (0–1 750), `A352179B` (0–52 500), `A352179C` (0–52 500) [INFERRED: burn capacity per run (`OptimalGarbageCap` 1 750) and the same × 30 per month, as for the incinerator] |
 | 92 | water treatment 12820 | water | datePair, intProps | `0351D624` ∈ {0, 42 500, 60 000}; `0351D625`, `0351D626` 0–1 800 000; `0351D627` bool [OPEN] |
-| 67 | incinerator 12852 | garbage | datePair, intProps | `E352C57C` (0–1 500), `E352C57D`, `E352C57E` (0–45 000), `E352C57F` bool [OPEN] |
-| 126 | recycling centre 12851 | garbage | datePair, intProps | `4352C330` (45), `4352C331` (50 000), `4352C332` bool [OPEN] |
+| 67 | incinerator 12852 | garbage | datePair, intProps | `E352C57C` (0–1 500), `E352C57D`, `E352C57E` (0–45 000), `E352C57F` bool [INFERRED: `E352C57C` = burn capacity per pollution run (`OptimalGarbageCap`, 1 500), the 0–45 000 values = the same × 30 per month (`16-sim-utilities.md` §4.1); bool OPEN] |
+| 126 | recycling centre 12851 | garbage | datePair, intProps | `4352C330` (45), `4352C331` (50 000), `4352C332` bool [INFERRED: `4352C330` = reduction percent (`OptimalPctReduction`), `4352C331` = population served (`OptimalPopServed`), the two inputs of the recycling ratio, `16-sim-utilities.md` §4.3; bool OPEN] |
 | 386 | fire station 13002 | fire | intProps | `2352C88D` = three bytes (b0, b1, b2) packed in the low 24 bits; `2352C88E` ∈ {30, 50}; `2352C88F` 30–51 [OPEN] |
 | 304 | police station 13130 | police | intProps | `A352C8E8` = three bytes packed as above; `A352C8E9` ∈ {30, 50}; `A352C8EA` 28–60 [OPEN] |
 | 408 | hospital 13310 | health | intProps, floatProps | `A352D404` (1 500), `A352D406` 49–60, `A352D407` 99–117; float `A352D405` (≈0.14) [OPEN] |
@@ -787,8 +787,8 @@ the map are skipped. Each cell byte holds three independent fields [STATIC]:
 The shipped values match this layout: 1, 2 and 3 are flag combinations, and 4–20 are c = 1–5
 [DATA]. The reserve/add operations make sure two features of the same class keep a minimum spacing
 or a maximum local density. **[OPEN]** which features use each field. The zone developer
-(`15-sim-growth.md`) uses *add* on the counter while it auto-places a run of lot decorations along a
-line, and adds the run only if *add* succeeds [STATIC]. The clients of the two flags were not
+(`15-sim-growth.md` §5.5, the seaport pier rule; no other developer rule touches the grid) uses
+*add* on the counter while it auto-places a run of lot decorations along a line, and adds the run only if *add* succeeds [STATIC]. The clients of the two flags were not
 traced. Each client must call *release*/*remove* when its feature is deleted, so the grid stays
 consistent with the city. An engine that does not model these clients should round-trip the grid
 verbatim. A new city starts with all zeros [INFERRED].
@@ -1114,9 +1114,14 @@ with *n* = W/2 (cells per side) and *T* = W (tiles per side):
   (u32 occupant ID, s32 amount, u8 radius). The crime record ignores the marker flag: there are no
   start/end markers, even with streamVersion 3. Size = 203 + 5*n*² + 9*k* (*k* = 42–74).
 * **Pollution** (recVersion 3): hdr; [streamVersion ≥ 3: u32 21 + `Pollution Layer Start`];
-  *n*² u32 cell state (bits 0–14 water, 15–29 air, 30–31 flags); 37-byte garbage-store block
-  (preserve as-is); *T*² u16 standing garbage per tile (bit 15 = landfill flag); 7 s64 garbage
-  totals; u32, u32, u16, s32, s32, u32, u32; chart; 7 s64; 12 × 7 s64 history; u8; u32, u32, f32,
+  *n*² u32 cell state (bits 0–14 water, 15–29 air, 30 sea-water flag, 31 flag); 37-byte
+  landfill store (the §6.11 valve block without its ID: s32 Slast, Dlast, Sacc, Dacc, f32 f1, f2,
+  u8 cap, s32 V, Sbase, Dbase; D = landfill room, S = garbage waiting to be placed;
+  `16-sim-utilities.md` §4.4); *T*² u16 standing garbage per tile (bit 15 = landfill flag); 7 s64
+  garbage totals of the last 12 months ([0] produced incl. imports, [1] imported, [2] exported,
+  [3] recycled, [4] incinerated, [5] waste-to-energy, [6] placed on landfill; each = the sum of the
+  12 history entries); u32, u32, u16, s32, s32, u32, u32; chart; 7 s64 current month; 12 × 7 s64
+  history; u8; u32 incinerator capacity, u32 WTE capacity, f32 recycling ratio,
   u32, u32 cursorX, u32 cursorZ, 4 × s32 water-treatment sums; sweep-order block; u32
   landfillTiles; *n*² s32 water source; *n*² s32 air source; *n*² s16 garbage source; u32 *k*; *k* ×
   18-byte modifier entries (u32 ID, s32 air, s32 water, u8 rA, u8 rW, s32 garbage); four facility
@@ -1144,8 +1149,8 @@ Valve block (41 bytes) [DATA 59/59; semantics in `15-sim-growth.md` §3]:
 | 0x0C | 4 | s32 | supplyAcc | Supply accumulator of the current period |
 | 0x10 | 4 | s32 | demandAcc | Demand accumulator of the current period |
 | 0x14 | 4 | f32 | factor1 | World-cycle factor |
-| 0x18 | 4 | f32 | factor2 | Second factor |
-| 0x1C | 1 | u8 | capPercent | Percent cap (≤ 100) |
+| 0x18 | 4 | f32 | factor2 | Tax effect (`15-sim-growth.md` §3.6) |
+| 0x1C | 1 | u8 | capPercent | Percent cap (≤ 100); set monthly from the amenity valve by the cap rule of `15-sim-growth.md` §3.2 |
 | 0x1D | 4 | s32 | value | Current valve value V |
 | 0x21 | 4 | s32 | supplyBase | |
 | 0x25 | 4 | s32 | demandBase | |
@@ -1196,7 +1201,7 @@ come from the budget record. In new maps, `share`, `EQ`, `HQ` and `LE` hold the 
 of `20-sim-population.md` §3.1, all charts hold 0 with scales 10000/150/89, and every other field
 is 0. [DATA]
 
-### 6.12 Land value `206C6E7C:C0AB8A88:0` — partially decoded
+### 6.12 Land value `206C6E7C:C0AB8A88:0` — decoded (history parameter open)
 
 [DATA 59/59][STATIC]:
 
@@ -1208,9 +1213,9 @@ is 0. [DATA]
 | 4 | u32 | cursorX | Scan position |
 | 4 | u32 | cursorZ | Scan position (z) |
 | 1 | u8 | averageLV | Average land value |
-| 4 | s32 | sumA | [OPEN] |
-| 4 | s32 | sumB | Sum of land values [INFERRED] |
-| 4 | u32 | count | Number of cells summed [INFERRED] |
+| 4 | s32 | prevSum | LV sum of the previous complete pass, copied from `sum` at each pass start [STATIC] (`15-sim-growth.md` §6.3) |
+| 4 | s32 | sum | Sum of tile values `T` of classed tiles accumulated in the current pass [STATIC] |
+| 4 | u32 | count | Number of classed tiles accumulated in the current pass; `averageLV` = max(sum, 0) / count at pass start [STATIC] |
 | 132 | u32 × 33 | history | 32 history entries + final u32 (260 in all files) [INFERRED: graph history, same shape as the aura trailer] |
 
 ### 6.13 World layer `206C6E7C:E11BDDF6:0` — partially decoded
@@ -1224,9 +1229,9 @@ This is the *world layer*: the object that loads `SC3WorldLayer.ini` (`JobToResF
 | Offset | Size | Type | Field | Meaning |
 |---|---|---|---|---|
 | 0x000 | 8 | hdr | header | Version 2 |
-| 0x008 | 4 | s32 | v0 | 0 in terrains [OPEN] |
-| 0x00C | 4 | s32 | v1 | 0 in terrains [OPEN] |
-| 0x010 | 4 | s32 | v2 | 150 in all files [OPEN] |
+| 0x008 | 4 | s32 | jobsSupplyLast | Jobs valve 7000 `Slast`: workers of the last completed cycle (`15-sim-growth.md` §3.4); 0 in terrains [STATIC][DATA 13/13 played cities: equals valve 3000 `Slast` × `w` + 150 within 1.2 %, `20-sim-population.md` §6] |
+| 0x00C | 4 | s32 | jobsDemandLast | Jobs valve 7000 `Dlast`: jobs of the last completed cycle; 0 in terrains [STATIC][DATA: equals the building sum of 7000 demand within 1 %] |
+| 0x010 | 4 | s32 | jobsSupplyBase | Jobs valve 7000 `Sbase` = `SC3WorldLayer.ini ExternalJobDemand` (150 in all files) [STATIC] |
 | 0x014 | 12 | s32[3] | v3–v5 | 0 in all files [OPEN] |
 | 0x020 | 4 | s32 | v6 | −512000 in played cities, 0 in terrains [OPEN; equals −2000 × 256] |
 | 0x024 | 4 | s32 | v7 | 255 or 0 [OPEN] |
@@ -1237,9 +1242,10 @@ This is the *world layer*: the object that loads `SC3WorldLayer.ini` (`JobToResF
 | 0x2D1 | 4 | u32 | last | [OPEN] (close to the newest sample of chart 5) |
 
 The writer emits, in order: the header block (0x000–0x03C), the five charts and the final u32.
-[STATIC for the order; field meanings OPEN] The five charts are, in order: city size, commerce,
-industry, unemployment (percent, scale 100) and national (SimNation) population; see §6.19 for the
-evidence [INFERRED].
+[STATIC for the order; fields 0x014–0x03C and the final u32 OPEN] The five charts are, in order:
+city size, commerce, industry, unemployment (percent, scale 100) and national (SimNation)
+population; see §6.19 for the evidence. The unemployment sample is computed monthly by the rule of
+`20-sim-population.md` §6 [STATIC; DATA: Berlin 8, Craterville 5 reproduced].
 
 ### 6.14 Utilities `206C6E7C:E0AFDF68:0` (power) and `206C6E7C:02BF0033:0` (water) — decoded
 
@@ -1353,7 +1359,7 @@ Location of the 14 series (title string instance IDs, hexadecimal, in table `029
 | 0x16F | land value | Land value `206C6E7C:C0AB8A88` | final 132 bytes (§6.12) |
 
 The mapping of the five world-layer charts is [INFERRED from data]: chart 4 is the only chart with
-scale 100 and holds 0–9 (a percentage, so unemployment; high confidence); chart 5 holds 35–71 million
+scale 100 and holds 0–9 (unemployment; now [STATIC], formula in `20-sim-population.md` §6); chart 5 holds 35–71 million
 and grows slowly in every city (national population; high confidence); chart 1 is the largest
 city-level count (city size); charts 2 and 3 are commerce and industry in that order (medium
 confidence: chart 3 exceeds chart 2 in the industrial and farming cities `Craterville.sc3`,
