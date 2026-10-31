@@ -66,6 +66,67 @@ int main(int argc, char** argv) {
       wt.add(c.water.tileServiced(x, z) ? 1 : 0, t.water.tileServiced(x, z) ? 1 : 0);
     }
   for (const Stat* s : {&lv, &air, &water, &crime, &pw, &wt}) s->print();
+  if (c.traffic && t.traffic) {  // traffic snapshots (what other subsystems read) and trip bitmaps, on tiles with a network in either city
+    Stat ss{"snap surface"}, sh{"snap highway"}, ls{"live surface"}, tok{"trip ok"}, ttr{"trip tried"};
+    const auto &A = c.traffic->rec(), &B = t.traffic->rec();
+    for (int x = 0; x < W; x++)
+      for (int z = 0; z < H; z++) {
+        size_t i = size_t(x) * H + z;
+        uint16_t fa = c.traffic->flags(x, z), fb = t.traffic->flags(x, z);
+        if ((fa | fb) & 0x0015) { ss.add(A.snapSurface[i], B.snapSurface[i]); ls.add(A.liveSurface[i], B.liveSurface[i]); }
+        if ((fa | fb) & 0x0002) sh.add(A.snapHighway[i], B.snapHighway[i]);
+        if (A.tripTried[i] || B.tripTried[i]) { tok.add(A.tripOk[i], B.tripOk[i]); ttr.add(A.tripTried[i], B.tripTried[i]); }
+      }
+    for (const Stat* s : {&ss, &sh, &ls, &tok, &ttr}) s->print();
+    std::printf("   trips attempted/failed ours %u/%u theirs %u/%u; failure ratio ours %.3f theirs %.3f\n", A.tripsAttempted, A.tripsFailed,
+                B.tripsAttempted, B.tripsFailed, A.failureRatio, B.failureRatio);
+    {  // trip generator census of their city: spec 18 4.1 categories by parent chain vs our type/1000 rule
+      const auto& hier = t.agentHierarchy();
+      std::map<int, int> spec, mine, specFunctional;
+      for (const auto& o : theirs.game.world().occupants) {
+        std::vector<uint32_t> chain{o.agentType};
+        uint32_t p = o.agentType;
+        for (int g = 0; g < 32 && hier.parentOf(p, p); g++) chain.push_back(p);
+        int cs = categoryOfTypeChain(chain);
+        uint32_t k = o.agentType / 1000;
+        int cm = k == 3 ? 0 : k == 5 ? 1 : k == 8 ? 2 : -1;
+        spec[cs]++; mine[cm]++;
+        if ((o.state & ~0x200u) == 1) specFunctional[cs]++;
+      }
+      std::printf("   trip generators (their city) by category -1/R/C/I/Other: spec");
+      for (int k = -1; k < 4; k++) std::printf(" %d", spec[k]);
+      std::printf(" (functional");
+      for (int k = -1; k < 4; k++) std::printf(" %d", specFunctional[k]);
+      std::printf(") | ours");
+      for (int k = -1; k < 4; k++) std::printf(" %d", mine[k]);
+      std::printf("; TrafficTripThresholdPercent %d\n", t.traffic->params().tripThresholdPercent);
+    }
+    if (std::getenv("M3K_NETCENSUS")) {  // occupant types with a transport ancestor, and network piece ids, in their city
+      const auto& hier = t.agentHierarchy();
+      std::map<uint32_t, int> occ, surf, sub;
+      for (const auto& o : theirs.game.world().occupants)
+        for (uint32_t a : {16000u, 16001u, 17202u, 17000u, 17400u, 12200u})
+          if (hier.isAncestorOrSelf(o.agentType, a)) { occ[o.agentType]++; break; }
+      for (const auto& p : theirs.game.world().surface) surf[p.pieceId]++;
+      for (const auto& p : theirs.game.world().subway) sub[p.pieceId]++;
+      std::printf("   transport occupants:"); for (auto& kv : occ) std::printf(" %u:%d", kv.first, kv.second);
+      std::printf("\n   surface pieces (%zu kinds):", surf.size()); for (auto& kv : surf) std::printf(" %u:%d", kv.first, kv.second);
+      std::printf("\n   subway pieces:"); for (auto& kv : sub) std::printf(" %u:%d", kv.first, kv.second);
+      for (uint32_t a : {17202u, 16001u, 16000u, 17000u, 17400u}) {
+        std::printf("\n   surface pieces under %u:", a);
+        for (auto& kv : surf) if (hier.isAncestorOrSelf(kv.first, a)) std::printf(" %u:%d", kv.first, kv.second);
+      }
+      { std::printf("\n   chains:"); for (uint32_t id : {73u, 11258u, 15051u, 15098u, 14010u, 15045u, 15046u, 15106u, 29u}) { std::printf(" [%u", id); for (uint32_t c : hier.chain(id)) if (c != id) std::printf("<%u", c); std::printf("]"); } }
+      std::printf("\n   flag census theirs: road %d hwy %d rail %d subway %d station %d access %d span %d propA %d\n", [&] { int n = 0; for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) n += (t.traffic->flags(x, z) & 1) != 0; return n; }(),
+                  [&] { int n = 0; for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) n += (t.traffic->flags(x, z) & 2) != 0; return n; }(),
+                  [&] { int n = 0; for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) n += (t.traffic->flags(x, z) & 4) != 0; return n; }(),
+                  [&] { int n = 0; for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) n += (t.traffic->flags(x, z) & 8) != 0; return n; }(),
+                  [&] { int n = 0; for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) n += (t.traffic->flags(x, z) & 0x10) != 0; return n; }(),
+                  [&] { int n = 0; for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) n += (t.traffic->flags(x, z) & 0x40) != 0; return n; }(),
+                  [&] { int n = 0; for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) n += (t.traffic->flags(x, z) & 0x4000) != 0; return n; }(),
+                  [&] { int n = 0; for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) n += (t.traffic->flags(x, z) & 0x100) != 0; return n; }());
+    }
+  }
 
   auto lots = [](const World& wd) {
     std::map<int, int> m;

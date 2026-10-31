@@ -67,6 +67,14 @@ class AgentHierarchy {
   bool isAncestorOrSelf(uint32_t type, uint32_t anc) const { return distance(type, anc) >= 0; }
   bool parentOf(uint32_t type, uint32_t& parent) const { auto it = parent_.find(type); if (it == parent_.end()) return false; parent = it->second; return true; }
   bool empty() const { return parent_.empty(); }
+  // `type` followed by its ancestors, nearest first (stops at a self-parent or after 64 steps).
+  std::vector<uint32_t> chain(uint32_t type) const {
+    std::vector<uint32_t> c{type};
+    for (int d = 0; d < 64; d++) { auto it = parent_.find(c.back()); if (it == parent_.end() || it->second == c.back()) break; c.push_back(it->second); }
+    return c;
+  }
+  // Every type listed in [AgentTypeHierarchy], ascending ID.
+  std::vector<uint32_t> types() const { std::vector<uint32_t> v; for (const auto& kv : parent_) v.push_back(kv.first); return v; }
  private:
   std::map<uint32_t, uint32_t> parent_;
 };

@@ -1124,6 +1124,15 @@ void City::rebuildTraffic() {
       uint8_t k = transport_[idx(x, z)];
       traffic->flags(x, z) = k == 1 ? TF_ROAD : k == 4 ? TF_HIGHWAY : k == 2 ? TF_RAIL : 0;
     }
+  // Subway pieces and station occupants (spec 18 s3.1) [STATIC]: subway tiles carry 0x0008; bus stops, rail, subway and
+  // subway-rail stations OR their flags into every tile of the footprint.
+  for (const auto& p : world_->subway)
+    if (inMap(p.x, p.z)) traffic->flags(p.x, p.z) |= TF_SUBWAY;
+  for (const auto& o : world_->occupants)
+    if (uint16_t sf = stationFlagsForType(o.agentType))
+      for (int x = o.x; x < o.x + o.sizeX; x++)
+        for (int z = o.z; z < o.z + o.sizeZ; z++)
+          if (inMap(x, z)) traffic->flags(x, z) |= sf;
   // Neighbour connections absorb every trip that reaches them (spec 18 s3 flags 0x0400-0x1000, s5.8) [STATIC].
   // Saved connection sets: rail, road, pipe, power, highway, subway.
   const uint16_t exitFlag[6] = {TF_RAIL_EXIT, TF_ROAD_EXIT, 0, 0, TF_HWY_EXIT, TF_SUBWAY_EXIT};
@@ -1135,13 +1144,21 @@ void City::rebuildTraffic() {
     }
   }
   tripBuildings_.clear();
-  int i = 0;
+  // Generators (spec 18 4.1) [STATIC]: category by the occupant's parent chain; week slot dealt per building *type* from one
+  // counter 0,1,2,3,... over the trip-making types in registry order. INFERRED: registry order = ascending type ID of
+  // CitySim.ini [AgentTypeHierarchy] (the spec does not define it). Before this, category came from type/1000 (missing
+  // ~1/3 of Berlin's generators, and all of category Other) and slots were dealt per building over 0..4.
+  if (tripSlot_.empty()) {
+    int next = 0;
+    for (uint32_t ty : usHier_.types())
+      if (categoryOfTypeChain(usHier_.chain(ty)) >= 0) tripSlot_[ty] = (next++) & 3;
+  }
   for (const auto& o : world_->occupants) {
     TripBuilding b;
     b.x = o.x; b.z = o.z; b.w = o.sizeX; b.h = o.sizeZ;
-    uint32_t k = o.agentType / 1000;
-    b.category = k == 3 ? CAT_RES : k == 5 ? CAT_COM : k == 8 ? CAT_IND : -1;
-    b.slot = (i++) % 5;
+    b.category = categoryOfTypeChain(usHier_.chain(o.agentType));
+    auto it = tripSlot_.find(o.agentType);
+    b.slot = it != tripSlot_.end() ? it->second : 0;
     b.functional = (o.state & ~0x200u) == 1;
     if (b.makesTrips()) tripBuildings_.push_back(b);
   }
