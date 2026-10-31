@@ -593,7 +593,9 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
   else if (nn.r.x0 > cur.r.x1) nn.lastDir = 0;
   else if (nn.r.z1 < cur.r.z1) nn.lastDir = 3;
   else nn.lastDir = 2;
-  nn.alt = alt;
+  // Original defect (spec 18 5.3) [STATIC]: every new node starts with "alternatives exist" set, whatever the scan saw.
+  nn.alt = true;
+  (void)alt;
   for (int x = nn.r.x0; x <= nn.r.x1; x++)
     for (int z = nn.r.z0; z <= nn.r.z1; z++) visit_[size_t(x) * H_ + z] |= uint16_t(bit);
   stack.push_back(nn);
@@ -610,6 +612,7 @@ TripResult TrafficSim::routeTrip(const TripRequest& req) {
   TripNode start;
   start.r = req.origin;
   start.mode = start.prevMode = TM_START;
+  start.alt = true;   // the origin node is created with "alternatives exist" set too (spec 18 5.3)
   for (int x = std::max(0, req.origin.x0); x <= std::min(W_ - 1, req.origin.x1); x++)
     for (int z = std::max(0, req.origin.z0); z <= std::min(H_ - 1, req.origin.z1); z++)
       visit_[size_t(x) * H_ + z] |= uint16_t(1 << modeBit(TM_START));
@@ -623,14 +626,18 @@ TripResult TrafficSim::routeTrip(const TripRequest& req) {
       res.cost = cur.cost;
       return res;
     }
+    // Budget test at the start of the step (spec 18 5.6): a node whose cost exceeds B is not expanded (cost == B is).
     if (cur.cost <= c.budget && nextStep(c, stack, false)) continue;
-    // backtrack: a popped node whose "alternatives" flag is set means its parent's scan saw more than
-    // one candidate (spec 5.1/5.7: the flag sits on the new node); resume the parent when it yields a step.
+    // Backtrack (spec 18 5.7, 5.3 defect) [STATIC]: a node whose step finds no candidate has its "alternatives" flag
+    // cleared and is popped. Every node is created with the flag set, so each parent is retried in turn: its whole step
+    // re-runs (ring rescanned, visit mask as it now is) until one yields a step or the stack empties.
+    stack.back().alt = false;
     bool resumed = false;
     while (stack.size() > 1) {
-      TripNode x = stack.back();
       stack.pop_back();
-      if (x.alt && stack.back().cost <= c.budget && nextStep(c, stack, false)) { resumed = true; break; }
+      TripNode& p = stack.back();
+      if (p.alt && p.cost <= c.budget && nextStep(c, stack, false)) { resumed = true; break; }
+      stack.back().alt = false;
     }
     if (!resumed) break;
   }

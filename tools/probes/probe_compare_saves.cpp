@@ -102,6 +102,18 @@ int main(int argc, char** argv) {
         else if (fb & 0x0014) srail.add(A.snapSurface[i], B.snapSurface[i]);
       }
     for (const Stat* s : {&ss, &sroad, &srail, &sh, &ls, &tok, &ttr}) s->print();
+    if (std::getenv("M3K_DENSBLOCKS")) {  // surface snapshot excess (ours - theirs) summed per 32x32 block
+      std::printf("   surface snapshot excess per 32x32 block (rows z):");
+      for (int bz = 0; bz < H; bz += 32) {
+        std::printf("\n   ");
+        for (int bx = 0; bx < W; bx += 32) {
+          long d = 0;
+          for (int x = bx; x < bx + 32 && x < W; x++) for (int z = bz; z < bz + 32 && z < H; z++) { size_t i = size_t(x) * H + z; d += int(A.snapSurface[i]) - int(B.snapSurface[i]); }
+          std::printf(" %6ld", d);
+        }
+      }
+      std::printf("\n");
+    }
     std::printf("   trips attempted/failed ours %u/%u theirs %u/%u; failure ratio ours %.3f theirs %.3f\n", A.tripsAttempted, A.tripsFailed,
                 B.tripsAttempted, B.tripsFailed, A.failureRatio, B.failureRatio);
     {  // trip generator census of their city: spec 18 4.1 categories by parent chain vs our type/1000 rule
