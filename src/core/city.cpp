@@ -1013,7 +1013,29 @@ void City::syncFacilities() {
     if ((o.state & ~0x200u) != 1) continue;
     if (us::powerCategory(o.agentType) >= 0) {
       plants.insert(key);
-      if (!plantAt_.count(key)) { int id = power.addPlant(o.x, o.z, o.agentType, now, urng_); if (id >= 0) plantAt_[key] = id; }
+      if (!plantAt_.count(key)) {
+        // A loaded plant keeps its build date (date pair) and its saved per-plant properties (spec 10 s6.2.5, 16
+        // persisted state): 2351FAF8 overwork months, 2351FAF9 maximum life, 2351FAFA decline age, 2351FAFB expired.
+        int built = now;
+        if (o.hasDate && o.dateYear > 0) built = std::min(now, 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1);
+        int id = power.addPlant(o.x, o.z, o.agentType, built, urng_);
+        if (id >= 0) {
+          plantAt_[key] = id;
+          for (auto& p : power.plants()) {
+            if (p.id != id) continue;
+            for (const auto& kv : o.intProps) {
+              switch (kv.first) {
+                case 0x2351FAF8: p.overwork = uint16_t(kv.second & 0xFFFF); break;
+                case 0x2351FAF9: if (kv.second > 0) p.lmax = int(kv.second); break;
+                case 0x2351FAFA: if (kv.second > 0) p.ld = int(kv.second); break;
+                case 0x2351FAFB: p.expired = kv.second != 0; break;
+                default: break;
+              }
+            }
+            p.output = int(us::plantOutput(uint32_t(p.capacity), std::max(0, now - built), p.lmax, p.ld));
+          }
+        }
+      }
     } else if (o.agentType == kAgentPump || o.agentType == kAgentTower || o.agentType == kAgentDesal) {
       wf.insert(key);
       if (!waterFacAt_.count(key)) {

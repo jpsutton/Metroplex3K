@@ -294,6 +294,14 @@ int main(int argc, char** argv) {
       }
       continue;
     }
+    if (std::getenv("M3K_PLANTS")) {   // power plants after the first month start
+      for (int d = 0; d < 35; d++) s.game.sim().tickDay();
+      int now = 12 * c.clock.date().year + c.clock.date().month;
+      for (const auto& p : c.power.plants())
+        std::printf("     plant %u at (%d,%d) cap %d output %d age %d lmax %d ld %d expired %d\n", p.agentType, p.x, p.z, p.capacity, p.output, now - p.buildAbsMonth, p.lmax, p.ld, p.expired ? 1 : 0);
+      std::printf("   produced %lld consumed %lld\n", (long long)c.power.stats().produced, (long long)c.power.stats().consumed);
+      continue;
+    }
     if (std::getenv("M3K_PASSES")) {   // result codes of each completed pass over ~250 days, plus population
       auto codes = [](const growth::ZoneManager::ResultMap& m) {
         std::map<int, uint32_t> byCode; for (const auto& kv : m) if (kv.second) byCode[kv.first.first] += kv.second;
