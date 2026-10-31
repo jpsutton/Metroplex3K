@@ -1226,9 +1226,12 @@ families; it places landfill pieces (occupants 10006–10015, agent type 12850) 
   334, at the start and at the end. Why the runway and airport-building rules place nothing on
   these lots is [OPEN]. The placement check inside the rules is not decoded. Recommended until
   answered: for a loaded city, an airport rule call on a lot inside an existing airport places
-  nothing (code 9). The behaviour for a newly zoned airport is untested. Cheapest test: zone a
-  fresh airport next to a road in a new city, then save after a few months and count its
-  parts.
+  nothing (code 9). A partial test of a newly zoned airport [OBSERVED]: 36 airport-zone tiles were zoned on
+  hilly land beside a road and power plants in a small city. Only the flat tiles took the
+  zone, and its largest solid rectangle was 3 × 5. Every tile was reported as code 9 in each
+  pass, and after 18 game months no airport part had been placed. This is consistent with the
+  interim rule, but it does not settle the question for a large flat zone. Remaining test:
+  zone a flat area of at least 10 × 10 by a road and count the parts after a few months.
 
 ## Persisted state
 
