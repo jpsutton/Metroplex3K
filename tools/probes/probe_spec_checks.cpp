@@ -276,6 +276,24 @@ int main(int argc, char** argv) {
       std::printf("   zones:"); for (const auto& kv : zc) if (kv.first) std::printf(" %d:%d", kv.first, kv.second); std::printf("\n");
       continue;
     }
+    if (std::getenv("M3K_PWRTRACE")) {   // power and pump state after every month start for ~120 days
+      int64_t lastCons = -1;
+      for (int d = 1; d <= 130; d++) {
+        s.game.sim().tickDay();
+        const auto& ps = c.power.stats();
+        if (ps.consumed == lastCons) continue;
+        lastCons = ps.consumed;
+        int64_t demand = 0, demandByState[17] = {};
+        for (const auto& o : c.powerConsumers()) { demand += o.powerUse; demandByState[(o.state & ~0x200u) & 15] += o.powerUse; }
+        std::printf("     day %3d total demand %lld (state1 %lld, 2 %lld, 4 %lld)\n", d, (long long)demand, (long long)demandByState[1], (long long)demandByState[2], (long long)demandByState[4]);
+        int zero = 0, pumps = 0; for (const auto& f : c.water.facilities()) if (f.kind == us::WaterKind::Pump) { pumps++; if (f.output == 0) zero++; }
+        int st[17] = {}; for (const auto& o : s.game.world().occupants) if (o.agentType >= 3000 && o.agentType < 10000) st[(o.state & ~0x200u) & 15]++;
+        std::printf("     day %3d pop %7d power produced %lld consumed %lld unpoweredTiles %d | pumps zero %d/%d | water S %lld U %lld | lots 1:%d 2:%d 4:%d\n", d, c.population(),
+                    (long long)ps.produced, (long long)ps.consumed, ps.consumerTiles - ps.poweredConsumerTiles, zero, pumps, (long long)c.water.stats.supply,
+                    (long long)c.water.stats.used, st[1], st[2], st[4]);
+      }
+      continue;
+    }
     if (std::getenv("M3K_PASSES")) {   // result codes of each completed pass over ~250 days, plus population
       auto codes = [](const growth::ZoneManager::ResultMap& m) {
         std::map<int, uint32_t> byCode; for (const auto& kv : m) if (kv.second) byCode[kv.first.first] += kv.second;

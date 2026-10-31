@@ -513,9 +513,7 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
     for (const auto& o : world_->occupants)
       if (o.agentType == d.buildingType) { business.inForce.push_back(d.buildingType); break; }
   if (!power.plants().empty()) {   // loaded city: coverage must be valid before the first month end
-    auto consumers = simOccupants(true);
-    consumers.erase(std::remove_if(consumers.begin(), consumers.end(), [](const us::SimOccupant& o) { return us::powerCategory(o.agentType) >= 0; }), consumers.end());
-    power.rebuildConsumption(consumers);
+    power.rebuildConsumption(powerConsumers());
     std::vector<uint8_t> conductive;
     power.recomputeCoverage(powerEnv(conductive));
   }
@@ -957,6 +955,36 @@ bool City::bulldoze(int x0, int z0, int x1, int z1) {
 
 // ============================================================================ derived layer state
 
+std::vector<us::SimOccupant> City::powerConsumers() const {
+  // Per-tile power consumption (spec 12 s9.1, 16 s2.6) [STATIC]: attribute 0xC9 of the occupant's OWN record (keyed per
+  // record, not per agent type), 0 when absent; no density, lot-size or funding factor. Occupied buildings and
+  // power-line pieces. (The occupant list holds only lot occupants, all of which
+  // descend from 100; records without 0xC9 contribute 0.)
+  std::vector<us::SimOccupant> v;
+  if (!game_) return v;
+  for (const auto& o : world_->occupants) {
+    // Only occupied lots (state 1 / 513) consume [DATA, clean side: Σ 0xC9 over state-1 lots equals the shipped consumed
+    // total in Berlin 158,275 vs 158,254, Craterville 49,344 vs 49,192, London 0.9 x 127,580 vs 114,858, Madison 38,328 vs
+    // 38,303; with abandoned and under-construction lots included every city is 2-12% over].
+    if ((o.state & ~0x200u) != 1) continue;
+    const OccAttr* a = game_->occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT);
+    int use = a && a->powerAttr > 0 ? a->powerAttr : 0;
+    if (use <= 0) continue;
+    us::SimOccupant s;
+    s.id = o.occId; s.agentType = o.agentType; s.x = o.x; s.z = o.z; s.sizeX = o.sizeX; s.sizeZ = o.sizeZ;
+    s.hasState = true; s.state = o.state; s.powerUse = use;
+    v.push_back(s);
+  }
+  for (const auto& p : world_->surface) {
+    if (!isPowerLine(p.x, p.z)) continue;
+    const OccAttr* a = game_->occupant(p.pieceId, true);
+    if (!a || a->powerAttr <= 0) continue;
+    us::SimOccupant s; s.agentType = a->agentType; s.x = p.x; s.z = p.z; s.powerUse = a->powerAttr;
+    v.push_back(s);
+  }
+  return v;
+}
+
 std::vector<us::SimOccupant> City::simOccupants(bool operatingOnly) const {
   std::vector<us::SimOccupant> v;
   for (const auto& o : world_->occupants) {
@@ -1303,13 +1331,16 @@ us::PowerEnv City::powerEnv(std::vector<uint8_t>& conductive) const {
   env.conductive = &conductive;
   env.ordinances = usOrdinances();
   env.nowAbsMonth = absMonthOf(clock);
-  // Neighbour power deals (spec 16 s2.6 step 2) [STATIC]: one slot per neighbour; a buy deal (kind 0) gives its slot
-  // 1,000,000,000 (unlimited) and is seeded at a power-line connection tile to that neighbour (step 6).
+  // Neighbour slots (spec 16 s2.6 step 2, s2.7 steps 3-4) [STATIC]: one per neighbour with a power-line connection,
+  // seeded at a connection tile; a buy deal (kind 0) gives the slot 1,000,000,000 (unlimited), otherwise 0. A component
+  // reaching any connection tile has an active slot and loses the 10% margin, deal or not (Madrid: the main network's
+  // 204,000 capacity is exhausted at the end of row 235, the original's shipped pump cut).
   // [OPEN on our side] sell deals (kind 1) are not modelled by the power layer yet.
-  for (const auto& d : neighbours.active) {
-    if (d.terminated() || d.dealType != 0 || env.deals.size() >= 4) continue;
-    us::PowerDeal pd; pd.amount = us::kPowerBuySlot;
-    connectionTile(3, d.neighbourIndex, pd.tx, pd.tz);
+  for (int n = 0; n < 4; n++) {
+    us::PowerDeal pd;
+    if (!connectionTile(3, n, pd.tx, pd.tz)) continue;
+    for (const auto& d : neighbours.active)
+      if (!d.terminated() && d.dealType == 0 && d.neighbourIndex == n) pd.amount = us::kPowerBuySlot;
     env.deals.push_back(pd);
   }
   return env;
@@ -1327,12 +1358,16 @@ bool City::connectionTile(int setIndex, int neighbour, int& tx, int& tz) const {
 
 void City::monthlyPower() {
   syncFacilities();
-  auto consumers = simOccupants(true);
-  consumers.erase(std::remove_if(consumers.begin(), consumers.end(), [](const us::SimOccupant& o) { return us::powerCategory(o.agentType) >= 0; }), consumers.end());
-  power.rebuildConsumption(consumers);
+  power.rebuildConsumption(powerConsumers());
   std::vector<uint8_t> conductive;
   us::PowerEnv env = powerEnv(conductive);
   auto events = power.monthlyUpdate(env, urng_);
+  {  // The deal entry's first s32 holds the reported draw (spec 19 s10.4, 10 s6.6); units are never overwritten.
+    int64_t drawn = 0;
+    for (const auto& d : power.deals()) if (d.active && d.amount > 0) drawn += std::max<int64_t>(0, d.amount - d.unused);
+    for (auto& d : neighbours.active)
+      if (!d.terminated() && d.dealType == 0) { d.penalty = int32_t(std::min<int64_t>(drawn, INT32_MAX)); break; }
+  }
   // The draw (slot - left) goes to the production table's deal column. The deal's saved units are NOT overwritten:
   // Moscow keeps units 12,600 in every save of a 480-day run of the original (spec 28 s5.1) [OBSERVED].
   for (const auto& e : events) {

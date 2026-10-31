@@ -286,6 +286,9 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
 void PowerLayer::recomputeCoverage(const PowerEnv& env) {
   consPct_ = env.ordinances.active(ord::PowerConservation);
   stairPct_ = env.ordinances.active(ord::StairwellLighting);
+  // Neighbour deals take part as in the monthly update (a loaded Moscow otherwise browns out until the first month start).
+  deals_.clear();
+  for (size_t i = 0; i < env.deals.size() && i < 4; i++) { deals_.push_back(env.deals[i]); deals_.back().reached = false; deals_.back().active = false; deals_.back().unused = 0; }
   stats_ = PowerStats();
   std::fill(powered_.begin(), powered_.end(), 0);
   for (auto c : cons_) if (c) stats_.consumerTiles++;
@@ -295,6 +298,9 @@ void PowerLayer::recomputeCoverage(const PowerEnv& env) {
     if (visited[p.x * H_ + p.z]) continue;
     distribute(p.x, p.z, env, visited, cat);
   }
+  for (auto& d : deals_)
+    if (d.amount != 0 && !d.reached && d.tx >= 0 && d.tz >= 0 && d.tx < W_ && d.tz < H_ && !visited[d.tx * H_ + d.tz])
+      distribute(d.tx, d.tz, env, visited, cat);
   stats_.unpoweredConsumers = std::max(0, stats_.consumerTiles - stats_.poweredConsumerTiles);
 }
 
