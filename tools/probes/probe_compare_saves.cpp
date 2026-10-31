@@ -44,6 +44,11 @@ int main(int argc, char** argv) {
   Session ours;
   if (!ours.open(root) || !ours.load(cities[0])) return 2;
   City& c = ours.game.city();
+  // Cells still holding their loaded value after the run (sweep coverage check): air+water state and land value at load.
+  std::vector<int> air0, water0, lv0;
+  { const auto& w0 = ours.game.world();
+    for (int x = 0; x < w0.W; x += 2) for (int z = 0; z < w0.H; z += 2) {
+      air0.push_back(c.pollution.airAt(x, z)); water0.push_back(c.pollution.waterAt(x, z)); lv0.push_back(c.landValue.landValueAtTile(x, z)); } }
   int days = 0;
   while (absDay(c.clock.date()) < absDay(target) && days < 2000) { ours.game.sim().tickDay(); days++; }
   std::printf("== %s after %d days (date %d-%02d-%02d) vs %s\n", cities[0].filename().string().c_str(), days, c.clock.date().year,
@@ -66,6 +71,15 @@ int main(int argc, char** argv) {
       wt.add(c.water.tileServiced(x, z) ? 1 : 0, t.water.tileServiced(x, z) ? 1 : 0);
     }
   for (const Stat* s : {&lv, &air, &water, &crime, &pw, &wt}) s->print();
+  {
+    int oa = 0, ta = 0, ol = 0, tl = 0; size_t i = 0;
+    for (int x = 0; x < W; x += 2) for (int z = 0; z < H; z += 2, i++) {
+      bool oSame = c.pollution.airAt(x, z) == air0[i] && c.pollution.waterAt(x, z) == water0[i];
+      bool tSame = t.pollution.airAt(x, z) == air0[i] && t.pollution.waterAt(x, z) == water0[i];
+      oa += oSame; ta += tSame; ol += c.landValue.landValueAtTile(x, z) == lv0[i]; tl += t.landValue.landValueAtTile(x, z) == lv0[i];
+    }
+    std::printf("   cells unchanged since load: pollution ours %d theirs %d; land value ours %d theirs %d (of %zu)\n", oa, ta, ol, tl, i);
+  }
   if (c.traffic && t.traffic) {  // traffic snapshots (what other subsystems read) and trip bitmaps, on tiles with a network in either city
     Stat ss{"snap surface"}, sh{"snap highway"}, ls{"live surface"}, tok{"trip ok"}, ttr{"trip tried"};
     const auto &A = c.traffic->rec(), &B = t.traffic->rec();
