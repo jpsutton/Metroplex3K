@@ -588,7 +588,7 @@ and agent type. Each class writes the common fields and then its own properties,
 |---|---|---|---|---|
 | 275 260 | zoned buildings, props, most civic buildings | — | none | — |
 | 3 030 | bus station 12210, rail station 12230, subway station 12360, subway/rail station 12361 | transport | intProps | `6352CCCF` ∈ {5, 10}; `6352CCD0` ∈ {5, 6, 10, 11, 12} [OPEN] |
-| 2 190 | water pump 12810, water tower 12840, desalination plant 12830 | water | datePair, intProps | `8351FDF3` = two u16 (low, high) e.g. (1500, 1500), (300, 300), (1500, 904) [INFERRED: capacity, current output]; `8351FDF4` = two u16 (low 0–≈1200, high 2 tower / 3 pump) [INFERRED: high = facility type code; low OPEN]; `8351FDF5` ∈ {0, 1, 3} [INFERRED: water-source status of the facility]; `8351FDF6` bool [OPEN] |
+| 2 190 | water pump 12810, water tower 12840, desalination plant 12830 | water | datePair, intProps | `8351FDF3` = two u16 (low, high) e.g. (1500, 1500), (300, 300), (1500, 904) [INFERRED: capacity, current output]; `8351FDF4` = two u16 (low 0–≈1200, high 2 tower / 3 pump) [INFERRED: high = facility type code; low = the facility's used share of its component's supply, `16-sim-utilities.md` §3.4 step 7 (INFERRED, high: Madrid day 33, low / output ≈ 0.89 for every facility)]; `8351FDF5` ∈ {0, 1, 3} [INFERRED: water-source status of the facility]; `8351FDF6` bool [OPEN] |
 | 521 (+82) | power plants 12111–12118 (and waste-to-energy 12853) | power | datePair, intProps | `2351FAF8` = consecutive overworked months (u16; 0–3); `2351FAF9` = maximum life in months; `2351FAFA` = decline age in months; `2351FAFB` = bool "life expired / plant replaced" [INFERRED from the power-plant model in `16-sim-utilities.md`] |
 | 82 | waste-to-energy 12853 | power + garbage | datePair, intProps | the four power-plant properties plus `A352179A` (0–1 750), `A352179B` (0–52 500), `A352179C` (0–52 500) [INFERRED: burn capacity per run (`OptimalGarbageCap` 1 750) and the same × 30 per month, as for the incinerator] |
 | 92 | water treatment 12820 | water | datePair, intProps | `0351D624` ∈ {0, 42 500, 60 000}; `0351D625`, `0351D626` 0–1 800 000; `0351D627` bool [OPEN] |
@@ -1277,12 +1277,12 @@ decline age, overwork months) is **not** in this record (see `16-sim-utilities.m
 | 0x0C | 4 | u32 | n | Number of stored words; firstWord + n ≤ W·H/32 |
 | 0x10 | 4·n | u32[n] | bits | Words firstWord … firstWord+n−1 of a W·H-bit per-tile bitmap (32 tiles per word; tile (x, z) is bit number z·W + x, i.e. **z-major**, bit k in word ⌊k/32⌋ at position k mod 32 [DATA: with this order the bitmaps of the 13 played cities leave 0–18 occupied R/C/I lots without water at their anchor tile, except Madrid with 9 399, and the original's own month-later saves leave 0–4 (Berlin) and 1 (Madrid); this is **not** the order of the terrain tile flags]); the writer trims leading and trailing all-zero words (first and last stored word are non-zero; n = 0 when all are zero) [STATIC][DATA]. Bit set = tile has water service [DATA]. Words outside the stored range are 0 |
 | +0 | 132 | chart | waterChart | `water %` graph history (§6.19); fixed scale, max = 100 in all files |
-| +132 | 8 | s64 | supply | Total water produced this month [INFERRED] |
-| +140 | 8 | s64 | used | Water consumed this month [INFERRED] |
+| +132 | 8 | s64 | supply | Σ over the month's pipe components of the component supply *S*, after any neighbour purchase (`16-sim-utilities.md` §3.4 steps 3–4). It exceeds the sum of facility outputs when the 500-pass flood cap makes facilities count twice (Madrid day 33: 228 528 vs 119 437) [STATIC; DATA] |
+| +140 | 8 | s64 | used | `supply` − Σ component leftovers (§3.4 step 7) [STATIC] |
 | +148 | 16 | s64 × 2 | saleDeal | Water delivered to a neighbour sale deal this month, and a second accumulator [STATIC partial; 0 in all files] |
-| +164 | 16 | s64 × 2 | purchaseDeal | Water drawn from a neighbour purchase deal this month, and that amount × deal rate / 1000 [STATIC partial; 0 in all files] |
-| +180 | 4 | u32 | statA | [OPEN] (4 – 12 038 in shipped cities) |
-| +184 | 4 | u32 | statB | [OPEN] (968 – 21 445) |
+| +164 | 16 | s64 × 2 | purchaseDeal | Water drawn from a neighbour purchase deal this month, and that amount × deal rate / 1000 [STATIC partial]. Non-zero only in London (20 752 and 5 167 = ⌊20 752 × 249 / 1000⌋) [DATA]; correction: earlier text said 0 in all files |
+| +180 | 4 | u32 | unwatered | Buildings whose needs-water mark is still set after distribution, i.e. buildings without water (§3.4 "Counts") [STATIC; DATA: equals the number of buildings whose lot centre tile is dry in the saved bitmap: Berlin day 40 17, Madrid day 33 3, Madison 11] (4 – 12 038 in shipped cities) |
+| +184 | 4 | u32 | needWater | Number of buildings with a needs-water mark; set to 100 instead when none is left unwatered [STATIC] (968 – 21 445) |
 | +188 | 4 | u32 | meanPollution | Mean water-pollution value at the facility tiles this month (`16-sim-utilities.md` §3.3 step 5) [STATIC] |
 | +192 | 4 | u32 | ageingCount | Number of facilities past their decline age this month (§3.3 step 6) [STATIC] |
 
