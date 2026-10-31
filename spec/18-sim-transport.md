@@ -402,7 +402,7 @@ of the last move [STATIC]:
 * *M* = the piece record's u32 attribute **0x136** (the road/highway connection matrix; 0x137 and
   0x138 are the rail and subway matrices, used by other callers). A city-wide boolean *B* held by the
   traffic layer, read from the application at start-up, selects the half: *B* true → bits 0–15,
-  *B* false → bits 16–31 [STATIC; what *B* means, possibly the driving side, is INFERRED].
+  *B* false → bits 16–31 [STATIC; what *B* means, possibly the driving side, is INFERRED]. Use *B* = **true** for the shipped game [DATA: an implementation check on Berlin gives a highway-snapshot mean absolute difference of 0.70 at day 40 and 10.7 at day 356 against the original's saves with *B* true, against 3.10 and 28.0 with *B* false; the day-356 mean highway density is 18.0 against the original's 19.2].
 * With *d* = the node's last move direction (0–3) and *r* = the piece's rotation (0–3, from the
   placement word), row *d* + 4*r* of the table below gives four bit numbers (*b*₀, *b*₁, *b*₂, *b*₃).
   Neighbour (x−1) is permitted iff bit *b*₀ of the selected half is set, (y−1) iff *b*₁, (x+1) iff *b*₂,
@@ -502,7 +502,13 @@ Destination test: some tile of the node rectangle has the destination bit of the
 category set. For destination "any" (category 3 trips choose Res/Com/Ind, so "any" only arises from
 internal callers), any of the three bits counts [STATIC].
 
-So **every neighbour connection counts as a valid destination for every trip** that reaches it.
+So **every neighbour connection counts as a valid destination for every trip** that reaches it,
+whatever the trip's origin category or destination [STATIC]. A trip in mode 1 or 0x41 (road,
+bus on road) arrives at a road connection (0x400) or by the destination test. Modes 2/0x42
+(highway), 4 (rail) and 8 (subway) arrive **only** at a connection of their own network; there is
+no destination test while on a highway, rail or subway tile. Rail riders must leave through a
+station (0x14/0x30) to reach a destination inside the city. Industrial freight (rail allowed) can
+therefore end at any rail connection on the map edge.
 This is how neighbour connections absorb commuters (§9.3).
 
 ## 6. Density accumulation and decay
@@ -540,6 +546,12 @@ anything.
 
 Buses therefore put no density on roads; bus riders load only the stops. Mode-3/0x43 road tiles
 (the junction tiles) also receive no density from passing trips.
+Further details [STATIC]: density and fares are added only on a **successful** counted trip; a
+failed trip adds nothing. They are added per tile of each node rectangle, but only for nodes
+whose occupant is a network piece. Every node after the origin is a single tile, so in practice
+"per node" = "per tile". The origin node (the lot rectangle, mode 0x80) and a destination
+building tile receive nothing. A span step moves the 1-tile rectangle by *L* tiles; it does not
+widen it.
 
 ### 6.2 Monthly decay
 
@@ -774,6 +786,19 @@ Computed at each monthly decay [STATIC]:
   tile is a station or rail tile and surface > subway density, else the subway density.
 * **Trip failure ratio** = failed trips ÷ trips attempted this month (single-precision float). It
   is updated only when at least one trip failed. Both counters are reset each month.
+  **What the counters count** [STATIC]: `tripsAttempted` is incremented at the start of **every**
+  routed trip with a destination category 0–3. That includes counted and uncounted generator trips,
+  the garbage facilities' and recycling centres' re-route trips (§9.2), and the "can this
+  facility reach anything" trips of several civic facility classes (destination "any",
+  trip-length factor 255, all modes allowed, uncounted). `tripsFailed` is incremented when the
+  search stack empties. Both are cleared in the monthly decay (§11 step 2.1), which runs on
+  day 1 **after** that day's weekly work. So when day 1 is a Monday, that Monday's generator trips
+  are counted and then immediately cleared; they are missing from the saved month total.
+  DATA (Berlin runs): non-zero counts with no Monday since the month start (70 at 2068-03-04,
+  88 at 2067-08-06 after a day-1 Monday), i.e. about 15–20 non-generator trips per day. A saved
+  total of about 33 % of the generator count per month, against the 21 % that the threshold
+  draw alone predicts, is not fully explained [OPEN]. The saved trip bitmaps show only 4–5 % of
+  occupied lots with no result, so the first-trip path (§4.4 step 2) adds at most a few percent.
 
 The average road traffic is pushed into the transport advisor and graph history monthly. In
 January it is also recorded as the yearly value, and every 10th year as the decade value [STATIC].
