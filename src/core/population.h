@@ -124,6 +124,8 @@ class Population {
   uint8_t qEQ(int lo, int hi) const;          // spec 4.5: unweighted mean over ages with share > 0
   uint8_t cityEQ() const { return qEQ(0, 89); }
   uint8_t cityLifeExpectancy() const;
+  // Unweighted mean life expectancy over ages lo..hi with share > 0 (the advisors read ages 20-65, spec 22 s3.12).
+  uint8_t qLE(int lo, int hi) const;
   // Workforce fraction w = p[20] + ... + p[65] (spec 20 s6) [STATIC]: no normalisation or weighting.
   float workforceFraction() const;
   int32_t workers(int32_t residents) const;   // round(n * w)

@@ -260,6 +260,7 @@ void CoverageLayer::tick(const CoverageTickEnv& env, SimRng& rng) {
   // 1. strike
   uint32_t chance = departmentStrikeChance(strike.striking, !stations_.empty(), funding_,
                                            cp_.minAcceptableFunding, env.averageMetric, cp_.maxAcceptable);
+  lastStrikeChance = chance;
   bool endNow = funding_ >= 100 || stations_.empty();
   bool wasStriking = strike.striking;
   strike.step(rng, chance, endNow, uint32_t(cp_.maxStrikeDuration));

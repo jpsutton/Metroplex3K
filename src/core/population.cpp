@@ -103,6 +103,15 @@ uint8_t Population::qEQ(int lo, int hi) const {
   return uint8_t(std::clamp(std::nearbyint(sum / n), 0.0, 255.0));
 }
 
+uint8_t Population::qLE(int lo, int hi) const {
+  double sum = 0;
+  int n = 0;
+  for (int a = std::max(lo, 0); a <= hi && a < kAges; a++)
+    if (share[a] > 0) { sum += le[a]; n++; }
+  if (!n) return 0;
+  return uint8_t(std::clamp(std::nearbyint(sum / n), 0.0, 255.0));
+}
+
 uint8_t Population::cityLifeExpectancy() const {
   double sum = 0;
   int n = 0;

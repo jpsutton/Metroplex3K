@@ -109,6 +109,7 @@ class CoverageLayer {
   uint8_t phase = 0;
   uint32_t cursorX = 4, cursorZ = 8;
   StrikeMachine strike;
+  uint32_t lastStrikeChance = 0;   // chance of the last tick (0..10000); the safety advisor reads it / 100 (spec 22 s3.9)
   uint32_t avgCoverage = 0, pctCovered = 0;
   Bytes serialize() const;
   void parse(const uint8_t* p, size_t n);               // throws FormatError unless n == 34

@@ -281,11 +281,13 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   in.plan.airPollution = in.env.airPollution; in.plan.waterPollution = in.env.waterPollution;
   in.safety.crime = int(c.crime.avgCrime);
   in.safety.policeStrike = c.police.strike.striking; in.safety.fireStrike = c.fire.strike.striking;
-  in.safety.policeWarn = int(c.police.strike.counter); in.safety.fireWarn = int(c.fire.strike.counter);
+  // Strike warnings = the layers' strike chance per tick / 100 (spec 22 s3.9) [STATIC police; INFERRED fire].
+  in.safety.policeWarn = int(c.police.lastStrikeChance / 100); in.safety.fireWarn = int(c.fire.lastStrikeChance / 100);
   for (const auto& j : c.police.jails()) { in.safety.jailInmates += j.inmates; in.safety.jailCapacity += j.capacity; }
   in.safety.policeCoverage = int(c.police.pctCovered);
-  in.demo.lifeExpectancy = c.pop.cityLifeExpectancy(); in.demo.eq = c.pop.cityEQ();
-  in.plan.lifeExpectancy = c.pop.cityLifeExpectancy(); in.plan.eq = c.pop.cityEQ();
+  // EQ and LE as the advisors read them (spec 22 s3.12, 20 s4.5) [STATIC]: unweighted means over ages 20-65, not Q(0,89).
+  in.demo.lifeExpectancy = c.pop.qLE(20, 65); in.demo.eq = c.pop.qEQ(20, 65);
+  in.plan.lifeExpectancy = c.pop.qLE(20, 65); in.plan.eq = c.pop.qEQ(20, 65);
   if (c.traffic) {
     const auto& tr = c.traffic->rec();
     in.trans.roadTraffic = int(tr.avgRoad); in.trans.railUsage = int(tr.avgTransit);
@@ -358,7 +360,16 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
     in.env.garbageNearCapacity = !in.env.garbageAccumulating && in.env.garbageDemand > in.env.garbageCapacity;
     in.env.garbageSurplusWithinLimit = !in.env.garbageAccumulating && in.env.garbageDemand <= in.env.garbageCapacity;
   }   // spec 22 "Building availability"
-  in.dreary = 0;   // dreary rating: no source yet (spec 22 lists it as an advisor input only)
+  {  // Dreary rating (spec 22 s3.12) [STATIC]: the cap rule (15 s3.2) on residential amenity valve 3001 at the last month end.
+    const auto& v = c.valves.v3001;
+    in.dreary = v.Dlast <= 0 ? 0 : v.Slast < v.Dlast ? 100 : int(std::min<int64_t>(100, int64_t(100) * v.Dlast / v.Slast));
+  }
+  in.safety.policeStrength = in.safety.policeFunding;   // spec 22 s3.9: the "> 105" test reads police funding
+  for (const auto& o : world_.occupants) {
+    if ((o.state & ~0x200u) != 1) continue;
+    if (o.agentType == 14450) in.demo.nZoo++;
+    else if (o.agentType == 14430) in.demo.nMarina++;
+  }
   for (auto z : world_.zone) {
     if (z >= 1 && z <= 3) in.plan.zoned[0]++; else if (z >= 5 && z <= 7) in.plan.zoned[1]++; else if (z >= 9 && z <= 11) in.plan.zoned[2]++;
   }
