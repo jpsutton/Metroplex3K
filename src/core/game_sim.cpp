@@ -313,6 +313,19 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
     }
   }
   in.util.desalinationAvailable = advisors_.buildingUnlocked(12830);
+  {  // Health & education inputs (spec 22 s3.12 metrics) [STATIC]: the residential layer's saved fields. fundClass* are the
+     // 0-4 service ratings; demand = patients / school-age (7-18) / college-age (19-24) population; capacity = beds /
+     // desks; warn = strike risk / 100.
+    const Population& p = c.pop;
+    in.demo.fundClassHealth = p.healthRating; in.demo.fundClassSchool = p.schoolRating; in.demo.fundClassCollege = p.collegeRating;
+    in.demo.demandHealth = p.patients; in.demo.capHealth = p.hospitalBeds;
+    in.demo.demandSchool = p.schoolAgePop; in.demo.capSchool = p.schoolDesks;
+    in.demo.demandCollege = p.collegeAgePop; in.demo.capCollege = p.collegeDesks;
+    in.demo.libraryCap = p.libraryCapacity; in.demo.museumCap = p.museumCapacity;
+    in.demo.warnHealth = int(p.strikeRisk(0, in.demo.healthFunding, in.demo.nHospital > 0) / 100);
+    in.demo.warnSchool = int(p.strikeRisk(1, in.demo.eduFunding, in.demo.nSchool > 0) / 100);
+    in.demo.warnCollege = int(p.strikeRisk(2, in.demo.eduFunding, in.demo.nCollege > 0) / 100);
+  }
   {  // Garbage metrics (spec 22) [STATIC]: previous month's counters (our history is newest first), landfill spare room
      // R = store Dlast, burn capacities per run; A = standing garbage on the map, latched when the last sweep finalised.
     const auto& P = c.pollution;

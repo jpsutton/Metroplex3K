@@ -108,6 +108,17 @@ class Population {
 
   // Monthly step (spec 20 s3.2).
   PopulationResult monthly(const PopulationInput& in);
+  // Strike risk r (0..10000) of spec 20 s5.4 for service 0 health, 1 schools, 2 colleges, evaluated now from the current
+  // rating, the given department funding and whether a facility exists (the advisors read W = r / 100, spec 22 s3.12).
+  uint32_t strikeRisk(int service, int fundingPct, bool facilityExists) const {
+    const bool on = service == 0 ? healthStrike : service == 1 ? schoolStrike : collegeStrike;
+    if (on) return 10000;
+    const uint8_t rating = service == 0 ? healthRating : service == 1 ? schoolRating : collegeRating;
+    const uint8_t minR = service == 0 ? cfg.minAcceptableHealthRating : cfg.minAcceptableEducationRating;
+    const int minF = service == 0 ? cfg.minAcceptableHealthFunding : cfg.minAcceptableEducationFunding;
+    if (rating < minR && fundingPct < minF && facilityExists) { int d = minF - fundingPct; return uint32_t(d * d); }
+    return 0;
+  }
 
   // Statistics.
   uint8_t qEQ(int lo, int hi) const;          // spec 4.5: unweighted mean over ages with share > 0

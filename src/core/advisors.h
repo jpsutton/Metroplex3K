@@ -192,7 +192,8 @@ struct AdvisorInputs {
     int nHospital = 0, nSchool = 0, nCollege = 0, nStadium = 0, nZoo = 0, nMarina = 0;
     bool healthStrike = false, schoolStrike = false, collegeStrike = false;
     int warnHealth = 0, warnSchool = 0, warnCollege = 0;
-    int fundClassHealth = 0, fundClassSchool = 0, fundClassCollege = 0;   // 3 adequate, 4 high
+    int fundClassHealth = 0, fundClassSchool = 0, fundClassCollege = 0;   // service ratings 0..4 (spec 22 s3.12; not funding)
+    // warn* = strike risk / 100 (spec 20 s5.4), not a months counter
     int64_t demandHealth = 0, capHealth = 0, demandSchool = 0, capSchool = 0, demandCollege = 0, capCollege = 0;
     int healthFunding = 100, eduFunding = 100;
     int64_t libraryCap = 0, museumCap = 0;
