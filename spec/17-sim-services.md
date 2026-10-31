@@ -58,12 +58,21 @@ evaluated per *tile* and summed into the tile's cell, *A*/16 is the average over
 **What the crime rule reads** [STATIC]: for each of its cell's 4 tiles the crime update (§7.1.3)
 reads *D* of the police cell containing that tile, divides it by `PoliceFactor` (shipped 1) and
 subtracts it, so a crime cell inside one police cell subtracts 4·*D*; the ordinance terms are
-then added before the division by 4. DATA (Berlin day 40, 18 police stations at 100 %
-funding, Neighbourhood Watch −16, Junior Sports −8 and Conservation Corps −8 enacted): in the
-3 711 crime cells with *D* = 0, saved potential − 4 × saved crime − 32 averages 3.8, which is
-within the truncation of the ÷4 plus later potential changes. In covered cells the median of
-(potential − 4·crime − 32) / 4*D* is 1.24. The crime sweep (period 40 days) leaves cells
-older than their potential, which explains the larger residuals.
+then added before the division by 4. DATA (Berlin, 18 police stations, police funding
+**103 %**, so by §2.2 *x'* = 1.2 − 1/(125 × 1.03 − 120) ≈ 1.086 and *R* = 32, *Max* = 86,
+*Min* = 21; Neighbourhood Watch −16, Junior Sports −8 and Conservation Corps −8 enacted):
+computing *D* from the stations with these parameters and **no** `NoJailPenalty` reproduces
+the saved crime. Over the crime cells with 0 < crime < 255, (potential − 4·crime − 32) / 4*D*
+has median 1.000 (10th–90th percentile 1.00–1.07) at days 1, 40, 127, 278 and 480. The mean *D*
+over developed cells is 43.3, against the saved `avgCoverage` 43. Using the base parameters
+(100 % funding) instead gives a median of 1.24. The remaining spread comes from crime cells
+that the 40-day sweep has not rewritten since their potential changed.
+**`NoJailPenalty` is not visible in Berlin** [DATA]: although its 12 jails hold 4 320
+inmates, the 1.2 overcrowding cap, the original's *D* is unpenalised in every save of a
+480-day run. By §3.2 and §3.3 the penalty applies while the unjailed count *P* > 0 [STATIC].
+*P* is not saved and starts at 0 after a load (Persisted state). Why it stays 0 here is
+[OPEN]. Recommended until answered: reproduce §3.2 exactly, and check that Berlin's *P*
+stays 0; if it does not, do not apply the penalty to a loaded city.
 
 ### 2.2 Station parameters and the funding curve
 
@@ -168,7 +177,8 @@ Per tick:
 2. Jail release (3.2).
 3. For each of the *N* cells: take the accumulator *A*; during a strike *A* ← trunc(`StrikeEfficiency`
    × *A* / 100); while *P* > 0, *A* ← round(*A* × `NoJailPenalty`); write *D* = clamp(trunc(*A*/16), 0,
-   255) to the displayed layer. The cell is "developed" if any of its 16 tiles is non-zero in the
+   255) to the displayed layer. The penalty is also applied when a stamp (§2.3) refreshes a
+   cell's *D*. The crime rule reads this penalised *D* (§2.1). [STATIC] The cell is "developed" if any of its 16 tiles is non-zero in the
    per-tile occupancy layer [INFERRED meaning]. Developed cells add to the sweep statistics (count,
    Σ*D*, count of *D* = 0). If the crime value *c* at the anchor tile and *D* are both non-zero, the
    tick's arrest potential grows by min(*c*, *D*).
@@ -866,13 +876,19 @@ Police / fire layer record (34 bytes, no version/sentinel header): [DATA sizes; 
 | 0x05 | 4 | u32 | cursorZ | Next anchor tile z (multiple of 4) |
 | 0x09 | 1 | u8 | striking | 1 while on strike |
 | 0x0A | 4 | u32 | strikeCounter | Strike tick counter (kept after a strike ends) |
-| 0x0E | 4 | u32 | a | [INFERRED] department upkeep total |
-| 0x12 | 4 | u32 | b | [OPEN] (police: possibly unjailed prisoners) |
-| 0x16 | 4 | u32 | c | [OPEN] |
+| 0x0E | 4 | u32 | sweepCount | Developed cells visited so far in the current sweep (§3.3 statistics) [STATIC for police] |
+| 0x12 | 4 | u32 | sweepSumD | Σ *D* over those cells [STATIC for police] |
+| 0x16 | 4 | u32 | sweepZeros | Number of those cells with *D* = 0 [STATIC for police] |
 | 0x1A | 4 | u32 | avgCoverage | Last full-sweep average coverage (0–255) [INFERRED] |
 | 0x1E | 4 | u32 | pctCovered | Last full-sweep coverage percent (0–100) [INFERRED] |
 
-Coverage accumulators are not saved; they are rebuilt from the stations on load. [INFERRED from size]
+Correction: fields 0x0E–0x16 were earlier read as upkeep, unjailed prisoners and unknown. They are
+the running sweep statistics. DATA, Berlin day 40: 1 945 cells, Σ*D* 84 177 (mean 43.3, matching
+avgCoverage 43); 557 of the cells have *D* = 0. The fire record uses the same layout [INFERRED].
+**Not saved** [STATIC]: the coverage accumulators (rebuilt from the stations on load) and the
+unjailed-prisoner count *P* of §3.2. *P* starts at 0 after a load, so the `NoJailPenalty` of §3.3
+is off until the first redistribution leaves prisoners unjailed. Jail inmates are saved with
+each jail (`10-save-format.md` §6.2.5).
 
 ## Open questions
 
@@ -880,8 +896,8 @@ Coverage accumulators are not saved; they are rebuilt from the stations on load.
   tiles under networks and parks counted?), and the order of the chart series.
 * Which list holds libraries/museums in the education funding pass (§6.2).
 * Fire strike machine assumed identical to police.
-* Meanings of fields b, c of the police/fire record; the (now decoded) `garbageStore` block of the pollution
-  record (§7.4).
+* The (now decoded) `garbageStore` block of the pollution record (§7.4). (Police record fields
+  closed, see Persisted state.)
 * What triggers the crime, pollution, aura and flammability runs, and how often (§1).
 * Whether the agent-type distance of §7.1.2 is the parent-step count.
 * Flammability visiting order within a run (§4).
