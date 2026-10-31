@@ -191,8 +191,24 @@ Rect findLot(const GrowthCity& c, int x, int z, int minLV, uint32_t replaced, in
 }
 
 // ---------------- landfill ----------------
-void LandfillDeveloper::visit(GrowthCity& c, int x, int z) {
-  // Spec 15 s7 [STATIC]: (1) decay, (2) registration, (3) filling from the store's pending garbage.
+int LandfillDeveloper::visit(GrowthCity& c, int x, int z) {
+  // Spec 15 s7 [STATIC]: landfill tile test, then (1) decay, (2) registration, (3) filling from the store's pending
+  // garbage. The tile test: transport within 10 tiles (the s4.2 box with d = 10; a second transport-layer test on the
+  // tile is not traced) else code 16; registration only for a corner of a 2 x 2 square of landfill tiles that each have
+  // transport within 10, else code 9.
+  if (!c.hasAccess(x, z, 10)) return kNdNoAccess;
+  bool square = false;
+  for (int dx : {-1, 1})
+    for (int dz : {-1, 1}) {
+      bool ok = true;
+      for (int ax = 0; ax <= 1 && ok; ax++)
+        for (int az = 0; az <= 1 && ok; az++) {
+          int tx = x + ax * dx, tz = z + az * dz;
+          if (tx < 0 || tz < 0 || tx >= c.mapW() || tz >= c.mapH() || c.zoneAt(tx, tz) != 17 || !c.hasAccess(tx, tz, 10)) ok = false;
+        }
+      if (ok) square = true;
+    }
+  int code = square ? 0 : kNdAirportIdle;   // code 9
   std::vector<std::pair<int, int>> changed;
   auto inList = [&](int tx, int tz) { return std::find(active.begin(), active.end(), std::make_pair(tx, tz)) != active.end(); };
   int g = c.landfillGarbage(x, z);
@@ -208,7 +224,7 @@ void LandfillDeveloper::visit(GrowthCity& c, int x, int z) {
     }
     changed.push_back({x, z});
   }
-  if (c.zoneAt(x, z) == 17 && !c.landfillRegistered(x, z)) c.registerLandfill(x, z);
+  if (square && c.zoneAt(x, z) == 17 && !c.landfillRegistered(x, z)) c.registerLandfill(x, z);
   auto fill = [&](int tx, int tz) {
     int64_t S = c.landfillPending();
     if (S <= 0 || !c.landfillRegistered(tx, tz)) return;
@@ -227,6 +243,7 @@ void LandfillDeveloper::visit(GrowthCity& c, int x, int z) {
     fill(x, z);
   }
   if (!changed.empty()) c.landfillTilesChanged(changed);
+  return code;
 }
 
 // ---------------- zone manager: scan state ----------------
@@ -314,7 +331,7 @@ int ZoneManager::visitTile(GrowthCity& c, SimRand& rng, int x, int z) {
     case kDevCommercial: code = visitRCI(c, rng, x, z, zd, 'C'); break;
     case kDevIndustrial: code = visitRCI(c, rng, x, z, zd, 'I'); break;
     case kDevAirport: case kDevSeaport: code = visitPort(c, rng, x, z, zd); break;
-    case kDevLandfill: landfill.visit(c, x, z); break;
+    case kDevLandfill: code = landfill.visit(c, x, z); break;
     default: return 0;
   }
   record(code, zone);

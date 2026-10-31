@@ -1402,7 +1402,9 @@ us::PowerEnv City::powerEnv(std::vector<uint8_t>& conductive) const {
   // spec 12 section 9.1: every building footprint and power-line piece conducts to anything within 2 tiles.
   const int Wt = world_->W, Ht = world_->H;
   std::vector<uint8_t> src(size_t(Wt) * Ht, 0);
-  for (size_t i = 0; i < src.size(); i++) src[i] = powerLine_[i] || occ_[i] >= 0;
+  // Conductors (spec 12 s9.1) [STATIC]: buildings, power lines and every tile zoned anything but 0 or 17 (landfill),
+  // each expanded by 2 tiles.
+  for (size_t i = 0; i < src.size(); i++) src[i] = powerLine_[i] || occ_[i] >= 0 || (world_->zone[i] != 0 && world_->zone[i] != 17);
   std::vector<uint8_t> dx(src.size(), 0);
   conductive.assign(src.size(), 0);
   for (int x = 0; x < Wt; x++)

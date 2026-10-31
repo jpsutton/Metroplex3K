@@ -185,7 +185,7 @@ class LandfillDeveloper {
  public:
   int decayRate = 490;
   std::vector<std::pair<int, int>> active;  // tiles holding garbage, in fill order
-  void visit(GrowthCity& c, int x, int z);
+  int visit(GrowthCity& c, int x, int z);   // returns a result code (spec 15 s7 landfill tile test) or 0
 };
 
 // Zone manager: scan order, pass statistics, committed demand, developers. Record 206C6E7C:409FF3BA:*.

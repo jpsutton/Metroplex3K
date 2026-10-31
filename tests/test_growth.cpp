@@ -276,7 +276,8 @@ int main() {
   // ---- landfill ----
   {
     Fixture f; ZoneManager zm; zm.setConfig(&f.cfg);
-    TestCity c(16, 16); c.fillZone(10, 5, 12, 5, 17); c.pending = 40000; SimRand rng;
+    // a 3 x 2 landfill with a road beside it: every tile is a corner of a 2 x 2 landfill square with transport in reach
+    TestCity c(16, 16); c.fillZone(10, 5, 12, 6, 17); c.road[c.ix(9, 5)] = 1; c.pending = 40000; SimRand rng;
     zm.visitTile(c, rng, 10, 5);   // registers (+32767 room), appends itself and fills
     CHECK(c.landfillRegistered(10, 5) && c.landfillGarbage(10, 5) == 32767 && c.pending == 7233 && c.placed == 32767 && c.room == 0);
     CHECK(c.landfillPieces.size() == 1);
@@ -288,6 +289,11 @@ int main() {
     // spec 15 s7 test vector: g = 20000 -> d = 980
     c.garbage[{11, 5}] = 20000; int cr = c.credited; zm.visitTile(c, rng, 11, 5);
     CHECK(c.landfillGarbage(11, 5) == 19020 && c.credited - cr == 980);
+    // landfill tile test (spec 15 s7): no transport within 10 -> code 16; not a corner of a 2 x 2 landfill square -> 9
+    TestCity far(32, 32); far.fillZone(20, 20, 21, 21, 17);
+    CHECK(zm.visitTile(far, rng, 20, 20) == kNdNoAccess && !far.landfillRegistered(20, 20));
+    TestCity thin(32, 32); thin.fillZone(20, 20, 22, 20, 17); thin.road[thin.ix(19, 20)] = 1;
+    CHECK(zm.visitTile(thin, rng, 21, 20) == 9 && !thin.landfillRegistered(21, 20));
   }
   // ---- housing projects layout B, row houses (spec 15 s5.5) ----
   {
