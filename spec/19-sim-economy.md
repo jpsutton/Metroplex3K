@@ -621,7 +621,10 @@ creation:
   "land neighbour" flag = 1;
 * the land flag is cleared for the neighbour whose edge-midpoint tile fails the map test the
   manager applies (edge midpoints: `(0, H/2)`, `(W/2, 0)`, `(W−1, H/2)`, `(W/2, H−1)` for
-  neighbours 0–3) [INFERRED: test = "tile is water", i.e. sea edges have no land neighbour];
+  neighbours 0–3). The test is the **sea-water flag** of the pollution cell that contains the tile
+  (`17-sim-services.md` §7.2.1 bit 30). A set flag clears the land flag, so a sea edge has no land
+  neighbour [STATIC]. The Neighbors-window region image applies the same test at the same tiles
+  (`11-world-terrain.md` §9.3);
 * names are drawn from string table `0xC29A6083`: a distinct random instance `0x29 + rand(36)`
   per neighbour, plus a second distinct random instance `2 + rand(36)`.
 

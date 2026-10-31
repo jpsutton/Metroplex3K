@@ -987,7 +987,7 @@ map coordinate, 0…W−1; z the second, 0…H−1). Corner tiles: (0, 0) → 0,
 | var | string | mayorName | Neighbour mayor name (new city: distinct entry of the same table, instances 2–37) |
 | 4 | u32 | population | Neighbour population (new city: 2000 + RandInt(0, 12999), drawn from the neighbour subsystem's own instance of the simulation generator of `14-sim-clock.md` §8 [INFERRED], which is seeded from the clock, so values are not reproducible) |
 | 4 | u32 | populationCap | 4 000 000 in every shipped file and at creation [STATIC: constant; INFERRED: growth ceiling] |
-| 1 | u8 | exists | 1 = a neighbour city exists on this edge. At creation it is cleared when the tile at the middle of that edge fails a terrain test [INFERRED: edge midpoint under water] |
+| 1 | u8 | exists | 1 = a neighbour city exists on this edge. At creation it is cleared when the tile at the middle of that edge carries the sea-water flag (pollution cell bit 30, `17-sim-services.md` §7.2.1) [STATIC] |
 | 4 | u32 | nRoad | Number of road connections to this neighbour |
 | 4 | u32 | nRail | Number of rail connections |
 | 4 | u32 | nPower | Number of power-line connections |

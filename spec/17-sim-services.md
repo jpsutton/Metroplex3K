@@ -437,7 +437,7 @@ which is stored per **tile**. [STATIC]
 
 | Grid | Resolution | Element | Meaning |
 |---|---|---|---|
-| state | cell | u32 | Bits 0–14: **water pollution** (0–32767). Bits 15–29: **air pollution** (0–32767). Bit 30: flag set and cleared by its own accessor [OPEN meaning; set in some shipped cities, including one starter town]. Bit 31: flag (clear in all shipped files) [OPEN]. |
+| state | cell | u32 | Bits 0–14: **water pollution** (0–32767). Bits 15–29: **air pollution** (0–32767). Bit 30: **sea-water (salt) flag** of the cell. It is set by the terrain when a sea-water surface is written at a vertex of any tile in the cell, and cleared only by a whole-terrain reset (`11-world-terrain.md` §5) [STATIC]. The pollution update never changes it. It is read by the water renderer, by the new-city neighbour test (`19-sim-economy.md` §10.6) and by the Neighbors-window region image (`11-world-terrain.md` §9). It is set in 19 shipped files [DATA]. Bit 31: flag (clear in all shipped files) [OPEN]. |
 | air source | cell | s32 | Sum of occupant air stamps (7.2.3) |
 | water source | cell | s32 | Sum of occupant water stamps |
 | garbage source | cell | s16 | Sum of occupant garbage stamps, never negative |
@@ -546,7 +546,7 @@ spread is entirely the static stamp kernel of 7.2.3, and the temporal behaviour 
 step 6. The pollution update reads no terrain-water term: water bodies have no special effect.
 [STATIC: the update reads only the three source grids, zone types, traffic and standing garbage]
 No radiation source appears in `SC3Pollution.ini` or in this update. If radiation exists, it is
-handled elsewhere (`21-disasters.md`). Whether cell bit 30 is a radiation marker is [OPEN].
+handled elsewhere (`21-disasters.md`). Cell bit 30 is not a radiation marker; it is the sea-water flag (7.2.1).
 
 #### 7.2.5 Thresholds and UI
 

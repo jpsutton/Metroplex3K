@@ -689,6 +689,12 @@ you garbage (`145`). Deal offers and terms come from `NeighborDeals.ini` (`19-si
 an offer is presented as a petitioner-style dialog with accept/decline. Breaking a deal early
 incurs the penalty defined there.
 
+The terrain shown in the map diamond (the city in the centre and invented land or sea for the
+four neighbours around it) is rebuilt each time the window is built. It is deterministic: it uses
+a fixed seed and depends only on the city's terrain and its edge sea-water flags. Nothing about
+it is saved. The full algorithm, colour ramp and display orientation are in
+`11-world-terrain.md` §9.
+
 ### 6.8 Preferences dialog [STATIC]
 
 Opened by Options ▸ Preferences (`C3001401`). Title `029541F4:14E`. Groups and options:
@@ -837,9 +843,6 @@ Played from the front end. Background `MAIN.IXF` image `82B9B75C:22729940` (357�
 strings `830CDF29:*` (378 entries) scroll upward in order of string ID. The frame is
 horizontally centred; on screens wider than 600 px it is offset by (width − 600)/2. Scroll rate:
 [OPEN].
-[DATA] Entry layout: ids 1..199 are left-hand entries (role or heading); the name(s) for id N are
-in id N+199 (lines separated by LF). A leading ASCII digit is a style code: `1` heading, `4`
-normal entry, `5` placeholder (not shown); no digit = normal. [OPEN] exact original styling of each code.
 
 ### 6.16 Message boxes and confirmations
 
