@@ -1215,6 +1215,20 @@ families; it places landfill pieces (occupants 10006–10015, agent type 12850) 
   can fill, so the count stays the same from pass to pass (the original's runs show 128 in
   all 16 Madrid passes). An implementation that reports more than this count treats some
   covered tiles as empty.
+  **Airport lot and rule calls** [STATIC]: the lot handed to the airport rules comes from the
+  lot finding of §5.3 step 1, seeded at the visited tile, with transport distance 6, minimum
+  land value 0 and the power test active. Up to `min(5, rules bound to zone 14)` distinct
+  rules are tried in random order; the R/C/I developers try at most 4.
+  **The gaps are not small** [DATA]: the uncovered tiles form 4-connected regions of up to 112
+  tiles (London: one region in a 7 × 16 box; Madrid: one 64-tile region in a 9 × 8 box; Berlin:
+  one 62-tile region in a 7 × 14 box). All are flat and dry. Even so, in 480-day runs of the
+  original no airport part was added in any city: Madrid has 640 parts, London 74 and Berlin
+  334, at the start and at the end. Why the runway and airport-building rules place nothing on
+  these lots is [OPEN]. The placement check inside the rules is not decoded. Recommended until
+  answered: for a loaded city, an airport rule call on a lot inside an existing airport places
+  nothing (code 9). The behaviour for a newly zoned airport is untested. Cheapest test: zone a
+  fresh airport next to a road in a new city, then save after a few months and count its
+  parts.
 
 ## Persisted state
 

@@ -240,6 +240,19 @@ Further observations, round 4 [OBSERVED]:
   day 40 1, day 73 0; Europolis shipped 0.
 * **Moscow power.** The previous-pass result codes contain **no** code 4 (unpowered) in any of the
   16 Moscow saves: no zoned lot was abandoned for lack of power in 480 days.
+* **Berlin pollution and crime are steady over the first 40 days** (round 5; air and water
+  pollution are values of the tile's 2 × 2 cell, crime is the cell value, and traffic is the sum
+  of surface density over the cell's 4 tiles; shipped → day 40):
+
+  | Tile | Air | Water | Crime | Traffic | LV |
+  |---|---|---|---|---|---|
+  | (60, 144) | 2 367 → 2 358 | 401 → 402 | 66 → 66 | 0 → 0 | 24 → 22 |
+  | (20, 223) | 1 133 → 1 148 | 516 → 518 | 51 → 51 | 0 → 0 | 24 → 24 |
+  | (50, 192) | 2 786 → 2 809 | 1 093 → 1 124 | 10 → 13 | 123 → 159 | 30 → 26 |
+  | (11, 216) | 1 112 → 1 167 | 629 → 646 | 59 → 59 | 32 → 28 | 32 → 28 |
+  | (61, 71) | 4 455 → 4 767 | 1 187 → 1 602 | 44 → 44 | 236 → 236 | 27 → 10 |
+
+  The cells at (60, 144) and (20, 223) carry no traffic at all.
 * **Madrid power margin** (round 5). The power-production row stays at 180 000–191 000 per month.
   Building demand (Σ of attribute 0xC9 per building record, `16-sim-utilities.md` §2.6) is
   208 000–218 000. The main network therefore browns out every month, and the cut falls in rows
