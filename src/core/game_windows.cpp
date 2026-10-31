@@ -231,10 +231,12 @@ void Game::buildMapSource(MapSource& src) {
         if (c.valves.effectMap.size() != size_t(W) * H) return nullptr;
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = c.valves.effectMap[size_t(x) * H + z];
         break;
-      case DataLayer::Traffic:   // networks coloured by live load; other tiles keep their terrain colour
+      case DataLayer::Traffic:   // spec 18 s7.1: the snapshot tile value over road, rail, station and highway (no subway);
+                                 // tiles without a requested network keep their terrain colour
+        if (!c.traffic) return nullptr;
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
-          bool net = c.isRoadTile(x, z);
-          at(x, z) = net ? clampB(c.trafficDensityAt(x, z)) : 0xFF;
+          bool net = (c.traffic->flags(x, z) & (TF_ROAD | TF_HIGHWAY | TF_RAIL | TF_STATION | TF_XFER)) != 0;
+          at(x, z) = net ? uint8_t(c.traffic->tileValue(x, z, 0x01 | 0x02 | 0x04 | 0x10 | 0x20)) : 0xFF;
         }
         break;
       default: return nullptr;
@@ -295,7 +297,19 @@ void Game::drawWindows(uint32_t dtMs) {
       for (int i = 0; i < 10; i++) { wc[k].yearly[i] = w[size_t(12 + i)]; wc[k].decade[i] = w[size_t(22 + i)]; }
       wc[k].max = w[32];
     }
+    // Traffic (0x166) = the traffic record's road-traffic history with its graph scale; land value (0x16F) = the land-value
+    // record's final 132 bytes (spec 10 s6.12/s6.13): 12 monthly, 10 yearly, 10 decade samples, then the scale.
+    Chart trafficChart, lvChart;
+    auto fill32 = [](Chart& ch, const uint32_t* h, uint32_t mx) {
+      for (int i = 0; i < 12; i++) ch.monthly[i] = h[i];
+      for (int i = 0; i < 10; i++) { ch.yearly[i] = h[12 + i]; ch.decade[i] = h[22 + i]; }
+      ch.max = mx;
+    };
+    if (city.traffic) fill32(trafficChart, city.traffic->rec().history, city.traffic->rec().graphMax);
+    fill32(lvChart, city.landValue.history.data(), city.landValue.tail);
     if (series.size() >= 14) {
+      series[5].chart = &trafficChart;
+      series[13].chart = &lvChart;
       series[0].chart = &wc[0]; series[2].chart = &wc[1]; series[3].chart = &wc[2];
       series[7].chart = &wc[3]; series[4].chart = &wc[4];
       series[1].chart = &city.pop.popChart;
