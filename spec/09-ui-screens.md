@@ -737,7 +737,17 @@ the per-type unlock flag of the utilities advisor (`22-advisors-news-petitioners
 ordinance (0xE0D0722E) is in force. The cheats `power to the masses` and `water in the desert`
 bypass the unlock flag (`27-platform.md`). Garbage facilities use the same unlock flags of the
 environment advisor (`[GARBAGE_BUILDINGS]`; cheat `garbage in, garbage out` bypasses them).
-For landmarks the condition is [OPEN]; rewards follow the reward manager's earned state. Each entry shows each with picture, name, size (`041F2625:133` "WxH") and cost; landmarks
+**Landmarks have no availability condition** [STATIC]. The city-planner advisor keeps a landmark
+list holding one entry per building exemplar in the loaded catalogue whose agent type is 18000 or
+a descendant (`13-buildings-occupants.md`). It is rebuilt from the catalogue when the city's
+catalogue is set up, and keeps the flags of entries that already exist. Each entry has an
+"available" flag, set to 1 when the entry is created and never cleared for landmarks, and a "placed"
+flag. "Placed" is set to 1 when a building with that exemplar key is added to the city and back to
+0 when one is removed. Every entry is listed. Placed ones are shown greyed and marked `70`, as
+below. They are not otherwise filtered: no population, year, money, scenario or advisor condition
+applies [STATIC]. List order is the landmark list's order, sorted by exemplar key [INFERRED].
+Whether "placed" is saved is [INFERRED: no; it is re-derived from the building-added notifications
+as the city's buildings are re-created on load]. Rewards follow the reward manager's earned state. Each entry shows each with picture, name, size (`041F2625:133` "WxH") and cost; landmarks
 and rewards already placed are greyed and marked `70`. Empty-list messages: landmarks `77`, rewards
 `6E`, power `7A`, waste `79`, water `7B`, other `FFFFFFFF`. Choosing a building arms the plop tool
 (§5.2) for that occupant; the picker closes.
