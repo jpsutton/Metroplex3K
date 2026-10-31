@@ -499,13 +499,20 @@ static void testAdvisorRecords() {
   TextContext tc; tc.city = "Springfield";
   std::vector<TopicArg> args(1); args[0].name = "%X%"; args[0].value = 12;
   CHECK(topicText("In %CITYNAME% at %X%", tc, args) == "In Springfield at 12");
-  // plant announcements are sticky one-shot events
+  // building unlocks (spec 22 "Building availability"): unlocked silently at load when the year has passed; a later
+  // monthly unlock is announced as a sticky one-shot event by the environment advisor
   AdvisorManager s;
   s.thr.garbage.push_back({1, 1950, 0x72});
+  s.thr.garbage.push_back({2, 1955, 0x73});
+  s.initBuildingUnlocks(1952);
+  CHECK(s.buildingUnlocked(1) && !s.buildingUnlocked(2) && s.buildingUnlocked(99));
+  for (int m = 0; m < 400 && !s.buildingUnlocked(2); m++) s.monthlyBuildingUnlock(1960, rng);
+  CHECK(s.buildingUnlocked(2));
   AdvisorInputs ei; ei.population = 500; ei.year = 1960;
   s.evaluate(kAdvEnvironment, ei, rng, out);
-  CHECK(s.list(kAdvEnvironment).listed(0x72));
-  CHECK(s.list(kAdvEnvironment).find(0x72)->sticky == 1);
+  CHECK(!s.list(kAdvEnvironment).listed(0x72));
+  CHECK(s.list(kAdvEnvironment).listed(0x73));
+  CHECK(s.list(kAdvEnvironment).find(0x73)->sticky == 1);
 }
 
 int main() {
