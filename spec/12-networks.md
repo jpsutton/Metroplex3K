@@ -681,17 +681,45 @@ the water, one water crossing per drag) `[STATIC]`.
 
 Tunnels (agent type 16006, cost key 16006) `[STATIC]`:
 
-1. Only road and rail can tunnel, and only along a straight axis-aligned drag (exactly one of the
-   per-step offsets dx, dz is ±1, the other 0).
-2. The entrance tile must lie at the foot of rising ground: the corners of the entrance tile on
-   the far side are higher than its near corner.
-3. The tool walks forward along the drag direction while the terrain stays at or above the
-   entrance height; the walk must cover at least 3 tiles of hill and end on a tile at entrance
-   height (exit portal).
-4. The tunnel price (from cost key 16006) must not exceed the city's funds; the player is then
-   asked to confirm (a yes/no prompt that shows the price) before the portals and the hidden
-   section are built. `[INFERRED]` the price is charged once per tunnel rather than per tile.
+1. Road and rail tunnel with the builder below. Highways also have a tunnel builder (see the end
+   of this list); an earlier revision said only road and rail can tunnel.
+2. The drag must be straight and axis-aligned: exactly one of the per-step offsets dx, dz is ±1
+   and the other is 0. Travel direction d: 0 = −x, 1 = −z, 2 = +x, 3 = +z (the span direction
+   encoding of `18-sim-transport.md` §5.5 and `10-save-format.md` §6.2.6).
+3. The entrance tile E must lie at the foot of rising ground. Let h = the lowest corner height of
+   the entrance tile.
+4. **Walk.** Start with L = 1 and P = E + d. Repeat: step to P + d; if that tile is off the map,
+   stop with **no tunnel**. Otherwise P ← that tile and L ← L + 1, and continue while the lowest
+   corner height of P is ≥ h + 4. The walk ends at the first tile whose lowest corner is below
+   h + 4; that tile is the exit X = E + L·d. If L < 3, no tunnel is built.
+5. **Price** = (L − 1) × the cost of agent type 16006, charged per tunnel tile. Correction: the
+   previous revision guessed once per tunnel. It must not exceed the city's funds, and the player
+   confirms with a yes/no prompt (string table `029541F4`, instance `0x253`, price substituted).
+   If shaping the portal terrain fails after confirmation, message instance `0x284` is shown and
+   nothing is placed.
+6. **Pieces.** Only **two** pieces are placed: one portal at E and one at X. Nothing is placed on
+   the tiles between them. The entrance gets the span record (direction d, length L). The exit
+   gets the span record (direction (d + 2) mod 4, length L). Both pieces therefore point at each
+   other and the length is exactly the tile distance between them. Portal piece (occupant ID,
+   rotation):
 
+   | Network | d = 0 | d = 1 | d = 2 | d = 3 |
+   |---|---|---|---|---|
+   | road | 64, rot 0 | 63, rot 0 | 64, rot 2 | 63, rot 2 |
+   | rail | 18024, rot 0 | 18019, rot 0 | 18024, rot 2 | 18019, rot 2 |
+
+   The exit uses the column for (d + 2) mod 4. DATA: every span pair in the shipped files matches.
+   For example, Mount Herrang has road piece 64 at x 56 (dir 2, len 23) and at x 79 (dir 0,
+   len 23). Trips jump between the portals using the span (`18-sim-transport.md` §5.5).
+7. **Highway tunnels** [STATIC; details partly OPEN]. Same straight-drag and hill rules, checked
+   across the two-tile width, with a minimum count of 3. Price = 2 × count × cost of 16006, using
+   the walk count as its own builder counts it. Each end gets **four** pieces: two without a span
+   (IDs 18088–18091 by direction) and two carrying a span (IDs 18025–18028 by direction). Both span
+   pieces of one end carry the same direction, the travel direction at the entrance end and its
+   opposite at the exit end, with length = walk count + 1 [INFERRED: the portal distance, as for
+   road and rail]. The exact corner checks and piece positions are [OPEN]. No shipped file
+   contains a highway tunnel.
+8. Bridges never carry span records. Their decks are ordinary pieces on every tile (above).
 
 ### 6.5 Demolition
 
