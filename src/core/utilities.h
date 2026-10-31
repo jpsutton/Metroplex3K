@@ -51,6 +51,8 @@ uint32_t plantOutput(uint32_t cap, int age, int lmax, int ld);
 // Lifespan randomisation (spec 2.3). Writes lmax/ld.
 void rollLifespan(const PlantTunables& t, SimRng& rng, int& lmax, int& ld);
 
+constexpr int kPowerBuySlot = 1000000000;   // a buy deal's slot amount: unlimited (spec 16 s2.6 step 2)
+
 struct PowerDeal {          // one neighbour slot (up to 4)
   int tx = -1, tz = -1;     // connection tile; negative = no connection
   int amount = 0;           // purchased amount for the month (0 = no deal)
@@ -198,6 +200,7 @@ class WaterLayer {
   const std::vector<uint8_t>& occupantWatered() const { return watered_; }
   bool tileServiced(int x, int z) const { return x >= 0 && z >= 0 && x < W_ && z < H_ && service_[size_t(x) * H_ + z]; }
   const std::vector<uint8_t>& serviceGrid() const { return service_; }
+  size_t waterBitIndex(int x, int z) const;   // bit of tile (x, z) in the saved service bitmap
   WaterStats stats;
   Chart chart = Chart::fresh(0, 100);
   const WaterParams& params() const { return params_; }

@@ -274,9 +274,11 @@ class GrowthAdapter : public growth::GrowthCity {
     return std::max(1, c_.landValue.landValueAtTile(x, z));
   }
   bool isTransport(int x, int z) const override { return c_.isRoadTile(x, z); }
+  // Access (spec 15 s4.2) [STATIC]: a transport network piece (road, highway, rail; not stops or stations) in the box
+  // [x - d - 1, x + d + 1] x [z - d - 1, z + d + 1] around the visited (anchor) tile, i.e. reach d + 1.
   bool hasAccess(int x, int z, int d) const override {
-    for (int xx = x - d; xx <= x + d; xx++)
-      for (int zz = z - d; zz <= z + d; zz++)
+    for (int xx = x - d - 1; xx <= x + d + 1; xx++)
+      for (int zz = z - d - 1; zz <= z + d + 1; zz++)
         if (c_.isRoadTile(xx, zz)) return true;
     return false;
   }
@@ -1307,11 +1309,12 @@ us::PowerEnv City::powerEnv(std::vector<uint8_t>& conductive) const {
   env.conductive = &conductive;
   env.ordinances = usOrdinances();
   env.nowAbsMonth = absMonthOf(clock);
-  // Neighbour power purchases (deal kind 0, spec 16 s2.6 step 2): one slot per neighbour, seeded at a power-line
-  // connection tile to that neighbour (spec 16 s2.6 step 6).
+  // Neighbour power deals (spec 16 s2.6 step 2) [STATIC]: one slot per neighbour; a buy deal (kind 0) gives its slot
+  // 1,000,000,000 (unlimited) and is seeded at a power-line connection tile to that neighbour (step 6).
+  // [OPEN on our side] sell deals (kind 1) are not modelled by the power layer yet.
   for (const auto& d : neighbours.active) {
     if (d.terminated() || d.dealType != 0 || env.deals.size() >= 4) continue;
-    us::PowerDeal pd; pd.amount = d.quantity;
+    us::PowerDeal pd; pd.amount = us::kPowerBuySlot;
     connectionTile(3, d.neighbourIndex, pd.tx, pd.tz);
     env.deals.push_back(pd);
   }
@@ -1336,6 +1339,12 @@ void City::monthlyPower() {
   std::vector<uint8_t> conductive;
   us::PowerEnv env = powerEnv(conductive);
   auto events = power.monthlyUpdate(env, urng_);
+  {  // Reported draw (spec 16 s2.7 step 9): the buy deal's units follow what was drawn from neighbours (spec 19 s10.4).
+    int64_t drawn = 0;
+    for (const auto& d : power.deals()) if (d.active && d.amount > 0) drawn += std::max<int64_t>(0, d.amount - d.unused);
+    for (auto& d : neighbours.active)
+      if (!d.terminated() && d.dealType == 0) { d.quantity = int32_t(std::min<int64_t>(drawn, INT32_MAX)); break; }
+  }
   for (const auto& e : events) {
     if (e.kind != us::PlantEvent::Explosion) continue;
     int oi = occupantAt(e.x, e.z);
@@ -1387,15 +1396,15 @@ void City::monthlyWater() {
 
 void City::monthlyPollution() {
   cal::Date d = clock.date();
-  // Recycling centres' monthly values (spec 16 s4.3): working = occupied and powered; age from the build date.
-  // [OPEN on our side] the failed-trip condition is not applied (trip results are not modelled per facility).
+  // Recycling centres' monthly values (spec 16 s4.3): working = occupied, powered and the lot's last trip not failed;
+  // age from the build date.
   std::vector<us::PollutionLayer::RecyclingCentre> centres;
   const int now = absMonthOf(clock);
   for (const auto& o : world_->occupants) {
     if (o.agentType != kAgentRecycling) continue;
     int built = now;
     if (o.hasDate && o.dateYear > 0) built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
-    bool working = (o.state & ~0x200u) == 1 && power.powered(o.x, o.z);
+    bool working = (o.state & ~0x200u) == 1 && power.powered(o.x, o.z) && !(traffic && traffic->tripResult(o.x, o.z) == 1);
     centres.push_back(pollution.recyclingCentreValues(working, std::max(0, now - std::min(built, now))));
   }
   pollution.monthEnd(d.month, d.year, residents_, &centres);

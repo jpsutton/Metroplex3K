@@ -166,7 +166,6 @@ void PowerLayer::distribute(int sx, int sz, const PowerEnv& env, std::vector<uin
   if (active.empty()) S = int64_t(1.1 * double(S));
   int64_t D = 0;
   for (auto* d : active) D += d->amount;
-  catProduced[9] += D;
 
   double k = 1.0;
   if (consPct_) k -= params_.savingConservationPct / 100.0;
@@ -180,16 +179,6 @@ void PowerLayer::distribute(int sx, int sz, const PowerEnv& env, std::vector<uin
 
   int64_t demandSum = 0;
   for (int t : K) demandSum += cons_[t];
-  // A buy deal follows the city's actual draw (spec 19 s10.4: the deal's units are overwritten with the reported
-  // quantity), so purchased power covers the component's shortfall [INFERRED: which quantity is reported is OPEN].
-  if (!active.empty() && D > 0) {
-    int64_t need = int64_t(std::ceil(double(demandSum) * k)) - S;
-    if (need > D) {
-      for (auto* d : active) if (d->amount > 0) { d->amount += int(need - D); break; }
-      catProduced[9] += need - D;
-      D = need;
-    }
-  }
 
   int64_t B = k > 0 ? int64_t(double(S + D) / k) : INT64_MAX / 4;
   bool brown = false;
@@ -214,6 +203,7 @@ void PowerLayer::distribute(int sx, int sz, const PowerEnv& env, std::vector<uin
       d->unused += u; rem -= u;
     }
   }
+  for (auto* d : active) catProduced[9] += std::max<int64_t>(0, int64_t(d->amount) - d->unused);   // power drawn from neighbours
 
   // Overwork bookkeeping (load assignment is INFERRED: demand shared in proportion to output).
   int64_t demand = std::max<int64_t>(0, int64_t(double(demandSum) * k) - D);
@@ -553,13 +543,18 @@ void WaterLayer::monthlyUpdate(const WaterEnv& env) {
   chart.max = 100;
 }
 
+// Bit index of tile (x, z) in the saved water-service bitmap: z-major, bit = z * W + x [DATA: with this order Madison's
+// saved bitmap leaves 5 of 5,615 occupied R/C/I lots dry, which equals our own distribution after one month; the
+// earlier (W-1-x) * H + z order left 1,828 dry].
+size_t WaterLayer::waterBitIndex(int x, int z) const { return size_t(z) * size_t(W_) + size_t(x); }
+
 Bytes WaterLayer::serialize() const {
   const size_t total = (size_t(W_) * H_ + 31) / 32;
   std::vector<uint32_t> words(total, 0);
   for (int x = 0; x < W_; x++)
     for (int z = 0; z < H_; z++)
       if (service_[size_t(x) * H_ + z]) {
-        size_t idx = size_t(W_ - 1 - x) * H_ + z;
+        size_t idx = waterBitIndex(x, z);
         words[idx / 32] |= 1u << (idx % 32);
       }
   size_t first = 0, last = total;
@@ -592,7 +587,7 @@ void WaterLayer::parse(const uint8_t* p, size_t len) {
   service_.assign(size_t(W_) * H_, 0);
   for (int x = 0; x < W_; x++)
     for (int z = 0; z < H_; z++) {
-      size_t idx = size_t(W_ - 1 - x) * H_ + z;
+      size_t idx = waterBitIndex(x, z);
       if (words[idx / 32] >> (idx % 32) & 1u) service_[size_t(x) * H_ + z] = 1;
     }
   chart.parse(r);

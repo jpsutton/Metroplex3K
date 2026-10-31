@@ -57,6 +57,55 @@ int main(int argc, char** argv) {
       std::printf("   occupied RCI %d unpowered %d\n", tot, unp);
       continue;
     }
+    if (std::getenv("M3K_TRIPS") && c.traffic) {   // orientation check of the saved trip bitmaps: tried bits on building anchors
+      const auto& rec = c.traffic->rec();
+      const int W = s.game.world().W, H = s.game.world().H;
+      std::vector<uint8_t> anchor(size_t(W) * H, 0);
+      for (const auto& o : s.game.world().occupants) anchor[size_t(o.x) * H + o.z] = 1;
+      int tried = 0; for (auto v : rec.tripTried) tried += v;
+      for (int v = 0; v < 8; v++) {
+        int hit = 0, failed = 0;
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
+          if (!rec.tripTried[size_t(x) * H + z]) continue;
+          int tx = x, tz = z;
+          if (v & 1) tx = W - 1 - tx;
+          if (v & 2) tz = H - 1 - tz;
+          if (v & 4) std::swap(tx, tz);
+          if (anchor[size_t(tx) * H + tz]) { hit++; if (!rec.tripOk[size_t(x) * H + z]) failed++; }
+        }
+        std::printf("     trips variant %d: %d of %d tried bits on anchors (%d failed)\n", v, hit, tried, failed);
+      }
+      continue;
+    }
+    if (std::getenv("M3K_WATER")) {   // watered occupied R/C/I lots: saved bitmap at load vs after our month-start distribution
+      auto dry = [&]() {
+        int n = 0, tot = 0;
+        for (const auto& o : s.game.world().occupants)
+          if (o.agentType >= 3000 && o.agentType < 10000 && (o.state & ~0x200u) == 1) { tot++; if (!c.water.tileServiced(o.x, o.z)) n++; }
+        return std::make_pair(n, tot);
+      };
+      {  // orientation check of the saved bitmap: dry counts under the 8 square symmetries
+        const int W = s.game.world().W, H = s.game.world().H;
+        for (int v = 0; v < 8; v++) {
+          int n = 0;
+          for (const auto& o : s.game.world().occupants) {
+            if (!(o.agentType >= 3000 && o.agentType < 10000 && (o.state & ~0x200u) == 1)) continue;
+            int x = o.x, z = o.z;
+            if (v & 1) x = W - 1 - x;
+            if (v & 2) z = H - 1 - z;
+            if (v & 4) std::swap(x, z);
+            if (!c.water.tileServiced(x, z)) n++;
+          }
+          std::printf("     variant %d dry %d\n", v, n);
+        }
+      }
+      auto a = dry();
+      std::printf("   water at load: dry %d of %d occupied RCI; supply %lld used %lld\n", a.first, a.second, (long long)c.water.stats.supply, (long long)c.water.stats.used);
+      for (int d = 0; d < 35; d++) s.game.sim().tickDay();
+      auto b = dry();
+      std::printf("   water after month: dry %d of %d; supply %lld used %lld\n", b.first, b.second, (long long)c.water.stats.supply, (long long)c.water.stats.used);
+      continue;
+    }
     if (std::getenv("M3K_RESULTS")) {   // zone-manager result codes: saved previous pass vs our first full pass (10 s6.4)
       auto dump = [](const char* nm, const growth::ZoneManager::ResultMap& m) {
         std::map<int, uint32_t> byCode;
@@ -66,8 +115,16 @@ int main(int argc, char** argv) {
         std::printf("\n");
       };
       dump("saved prev", c.zones.resultPrev);
+      const auto savedRes = c.zones.resultPrev;
+      const int savedV[3] = {c.valves.v3000.V, c.valves.v5000.V, c.valves.v8000.V};
       for (int d = 0; d < 62; d++) s.game.sim().tickDay();
       dump("ours prev", c.zones.resultPrev);
+      std::printf("     code 3 by zone (saved -> ours):");
+      std::map<int, std::pair<uint32_t, uint32_t>> z3;
+      for (const auto& kv : savedRes) if (kv.first.first == 3) z3[kv.first.second].first += kv.second;
+      for (const auto& kv : c.zones.resultPrev) if (kv.first.first == 3) z3[kv.first.second].second += kv.second;
+      for (const auto& kv : z3) if (kv.second.first || kv.second.second) std::printf(" z%d %u->%u", kv.first, kv.second.first, kv.second.second);
+      std::printf("\n     valves after: R V %d C V %d I V %d (saved R %d C %d I %d)\n", c.valves.v3000.V, c.valves.v5000.V, c.valves.v8000.V, savedV[0], savedV[1], savedV[2]);
       continue;
     }
     // Saved values before anything runs.
@@ -102,7 +159,9 @@ int main(int argc, char** argv) {
         int built = o.hasDate && o.dateYear > 0 ? 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1 : now;
         bool powered = c.power.powered(o.x, o.z), occ = (o.state & ~0x200u) == 1;
         cs.push_back(c.pollution.recyclingCentreValues(occ && powered, std::max(0, now - built)));
-        char b[80]; std::snprintf(b, sizeof b, " [age %d%s%s]", now - built, powered ? "" : " unpowered", occ ? "" : " not-occupied"); detail += b;
+        int trip = c.traffic ? c.traffic->tripResult(o.x, o.z) : -1, tripAny = -1;
+        if (c.traffic) { TripRect tr{o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1}; tripAny = c.traffic->tripResultArea(tr); }
+        char b[120]; std::snprintf(b, sizeof b, " [age %d%s%s trip %d/%d]", now - built, powered ? "" : " unpowered", occ ? "" : " not-occupied", trip, tripAny); detail += b;
       }
       std::printf("   recycling: %zu centres, saved ratio %.4f, rule %.4f%s\n", cs.size(), c.pollution.ratio,
                   us::PollutionLayer::recyclingRatio(cs, c.valves.v3000.Slast), detail.c_str());

@@ -147,7 +147,18 @@ static void testPowerNeighbourDeal() {
   CHECK(f.L.powered(3, 1));
   CHECK(f.L.stats().consumed == 130);
   CHECK(f.L.deals()[0].unused == 20);
-  CHECK(f.L.production[f.L.monthIndex][9] == 50);
+  CHECK(f.L.production[f.L.monthIndex][9] == 30);   // the deal column holds what was drawn (50 - 20 unused)
+  {  // Buy deal slot = 1,000,000,000 (spec 16 s2.6 step 2): never browns out; reported draw = slot - left
+    PowerFixture b;
+    b.line(0, 6, 1);
+    b.L.addPlant(0, 1, 12111, 0, b.rng);
+    b.L.setConsumption(3, 1, 130);
+    PowerEnv eb; eb.conductive = &b.cond; eb.nowAbsMonth = 1;
+    PowerDeal bd; bd.tx = 6; bd.tz = 1; bd.amount = kPowerBuySlot; eb.deals.push_back(bd);
+    b.L.monthlyUpdate(eb, b.rng);
+    CHECK(b.L.powered(3, 1) && b.L.stats().consumed == 130);
+    CHECK(b.L.deals()[0].amount - b.L.deals()[0].unused == 30 && b.L.production[b.L.monthIndex][9] == 30);
+  }
   // Unconnected deal slot with amount but separate network: distribution seeded at connection.
   PowerFixture g;
   g.line(0, 3, 1);

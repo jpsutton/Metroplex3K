@@ -652,30 +652,44 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
       std::map<int, std::vector<BuildingChoice>> sets;
       for (const auto* v : {&L.filler, &L.small, &L.large})
         for (const auto& m : *v) if (m.sizeX == 1 && m.sizeZ == 1) sets[m.family].push_back(m);
-      if (sets.empty()) return 0;
-      auto sit = sets.begin();
-      std::advance(sit, rng.rand(int(sets.size())));
-      const BuildingChoice* S[10] = {};
-      std::vector<const BuildingChoice*> F;
-      for (const auto& m : sit->second) {
-        const uint32_t f = m.flagWord;
-        const bool caps = (f & 0xF0) != 0;
-        if (m.line == 1) {
-          if ((f & 0x800) && !caps) S[0] = &m;
-          if ((f & 0x400) && !caps) S[1] = &m;
-          if (f & 0x20) S[2] = &m;
-          if (f & 0x10) S[3] = &m;
-          if (f & 0x80) S[4] = &m;
-          if (f & 0x40) S[5] = &m;
-        } else if (m.line == 2) {
-          if (f & 0x800) S[6] = &m;
-          if (f & 0x400) S[7] = &m;
-        } else if (m.line == 3) {
-          if (f & 0x800) S[8] = &m;
-          if (f & 0x400) S[9] = &m;
+      struct RunwaySet { const BuildingChoice* S[10] = {}; std::vector<const BuildingChoice*> F; };
+      std::vector<RunwaySet> valid;
+      for (const auto& fam : sets) {
+        RunwaySet rs;
+        const BuildingChoice** S = rs.S;
+        std::vector<const BuildingChoice*>& F = rs.F;
+        for (const auto& m : fam.second) {
+          const uint32_t f = m.flagWord;
+          const bool caps = (f & 0xF0) != 0;
+          if (m.line == 1) {
+            if ((f & 0x800) && !caps) S[0] = &m;
+            if ((f & 0x400) && !caps) S[1] = &m;
+            if (f & 0x20) S[2] = &m;
+            if (f & 0x10) S[3] = &m;
+            if (f & 0x80) S[4] = &m;
+            if (f & 0x40) S[5] = &m;
+          } else if (m.line == 2) {
+            if (f & 0x800) S[6] = &m;
+            if (f & 0x400) S[7] = &m;
+          } else if (m.line == 3) {
+            if (f & 0x800) S[8] = &m;
+            if (f & 0x400) S[9] = &m;
+          }
+          if (f & 0x100) F.push_back(&m);
         }
-        if (f & 0x100) F.push_back(&m);
+        // Set validation: in each pair one empty slot needs a filled partner flagged 0x200, else the family is no set.
+        bool ok = true;
+        for (int pr = 0; pr < 10; pr += 2) {
+          const BuildingChoice *a = S[pr], *b = S[pr + 1];
+          if (!a && !b) ok = false;
+          else if (!a || !b) { const BuildingChoice* f = a ? a : b; if (!(f->flagWord & 0x200)) ok = false; }
+        }
+        if (ok) valid.push_back(rs);
       }
+      if (valid.empty()) return 0;
+      const RunwaySet& chosen = valid[size_t(rng.rand(int(valid.size())))];
+      const BuildingChoice* const* S = chosen.S;
+      const std::vector<const BuildingChoice*>& F = chosen.F;
       // Lot frame of side s (Frontage numbering): `a` along the side, `d` inward from it.
       auto toXZ = [&](int a, int d, int& x, int& z) {
         switch (side) {
