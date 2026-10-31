@@ -240,6 +240,17 @@ Further observations, round 4 [OBSERVED]:
   day 40 1, day 73 0; Europolis shipped 0.
 * **Moscow power.** The previous-pass result codes contain **no** code 4 (unpowered) in any of the
   16 Moscow saves: no zoned lot was abandoned for lack of power in 480 days.
+* **Madrid power margin** (round 5). The power-production row stays at 180 000–191 000 per month.
+  Building demand (Σ of attribute 0xC9 per building record, `16-sim-utilities.md` §2.6) is
+  208 000–218 000. The main network therefore browns out every month, and the cut falls in rows
+  z ≈ 236–255, where the edge pumps are. Zero pumps per save:
+  * day 96: none;
+  * day 127: 6 (z ≥ 253);
+  * day 218: 29 (z ≥ 246);
+  * days 278 and 472: none.
+
+  Small changes in demand move the cut across the pump rows, so the pumps toggle. Reproduce the
+  band, not exact rows.
 
 #### Madison, WI
 
