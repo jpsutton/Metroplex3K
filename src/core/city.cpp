@@ -1209,6 +1209,23 @@ void City::dailyZoneDev() { zones.tick(*growthView_, zoneRng_, zoneCrt_); }
 void City::dailyPollution() {
   us::PollutionEnv env;
   env.zone = &world_->zone;
+  // Traffic air term (spec 17 7.2.4 step 3). INFERRED from DATA, pending the spec: T_t = max(surface snapshot if the tile
+  // has the road flag 0x01, highway snapshot if it has the highway flag 0x02). On Berlin's saves (days 40, 145, 318) this
+  // input leaves the original's saved air nearly fixed over two sweeps (mean |d| 12-21). With no traffic the air falls by
+  // ~95 on average; counting the surface layer on rail and station tiles too (spec 18 7.1 tile value) raises it by +8..+15.
+  std::vector<uint8_t> airTraffic;
+  if (traffic) {
+    const int W = world_->W, H = world_->H;
+    airTraffic.assign(size_t(W) * H, 0);
+    for (int x = 0; x < W; x++)
+      for (int z = 0; z < H; z++) {
+        uint16_t f = traffic->flags(x, z);
+        int v = (f & 0x0001) ? int(traffic->snapSurface(x, z)) : 0;
+        if (f & 0x0002) v = std::max(v, int(traffic->snapHighway(x, z)));
+        airTraffic[size_t(x) * H + z] = uint8_t(v);
+      }
+    env.traffic = &airTraffic;
+  }
   env.ordinances = usOrdinances();
   env.exportDeal = neighbours.dealOfType(4);   // garbage export deal: the whole remainder leaves the city
   for (const auto& d : neighbours.active)      // garbage import deal (the player is paid): enters the pipeline first

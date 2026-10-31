@@ -274,6 +274,7 @@ class PollutionLayer {
   int standingGarbageAt(int x, int z) const { return standing[size_t(x) * H_ + z] & 0x7FFF; }
   void setStandingGarbage(int x, int z, int g) { uint16_t& w = standing[size_t(x) * H_ + z]; w = uint16_t((w & 0x8000) | (g & 0x7FFF)); }
   bool airPolluted(int x, int z) const { return airAt(x, z) >= params_.airThreshold; }
+  const PollutionParams& params() const { return params_; }
   bool waterPolluted(int x, int z) const { return waterAt(x, z) >= params_.waterThreshold; }
   bool garbagePolluted(int x, int z) const { return standingGarbageAt(x, z) >= params_.garbageThreshold; }
   // Recycling ratio r (spec 16 s4.3) [STATIC]: centres sorted by reduction percent, walked while served < P.

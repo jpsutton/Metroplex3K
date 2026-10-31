@@ -146,6 +146,60 @@ int main(int argc, char** argv) {
     int shown = 0; for (const auto& kv : ratioHist) if (kv.second > m / 50 && shown++ < 12) std::printf(" %d:%d", kv.first, kv.second);
     std::printf("\n");
   }
+  if (t.traffic && std::getenv("M3K_AIRFP")) {  // Air fixed-point test on their save: run their pollution layer for two sweep periods with each candidate
+                    // traffic input (spec 17 7.2.4 step 3) and measure how far their saved air moves. The right input moves it least.
+    const auto& R = t.traffic->rec();
+    const size_t G = size_t(W) * H;
+    auto pick = [&](int k) {
+      std::vector<uint8_t> v(G, 0);
+      for (size_t i = 0; i < G; i++) {
+        switch (k) {
+          case 1: v[i] = R.snapSurface[i]; break;
+          case 2: v[i] = std::max({R.snapSurface[i], R.snapHighway[i], R.snapSubway[i]}); break;
+          case 3: v[i] = uint8_t(std::min(255, R.snapSurface[i] + R.snapHighway[i])); break;
+          case 4: v[i] = R.liveSurface[i]; break;
+          case 5: v[i] = std::max({R.liveSurface[i], R.liveHighway[i], R.liveSubway[i]}); break;
+          case 6: case 7: {  // surface on road (not rail / station) tiles, + highway for 7
+            int x = int(i / H), z = int(i % H);
+            uint16_t f = t.traffic->flags(x, z);
+            int s = ((f & 0x0001) && !(f & 0x0014)) ? R.snapSurface[i] : 0;
+            v[i] = uint8_t(std::min(255, s + (k == 7 ? R.snapHighway[i] : 0)));
+            break;
+          }
+          case 8: case 9: {  // spec 18 7.1 tile value, mask road 0x01 (+ highway 0x02 for 9): max over the requested layers
+            int x = int(i / H), z = int(i % H);
+            uint16_t f = t.traffic->flags(x, z);
+            int s = (f & 0x0001) ? R.snapSurface[i] : 0;
+            if (k == 9 && (f & 0x0002)) s = std::max<int>(s, R.snapHighway[i]);
+            v[i] = uint8_t(s);
+            break;
+          }
+          default: break;
+        }
+      }
+      return v;
+    };
+    static const char* names[] = {"none", "snap surface", "snap max(s,h,sub)", "snap s+h", "live surface", "live max", "snap road", "snap road+h", "tile(0x01)", "tile(0x03)"};
+    std::printf("   air fixed point on their save (TrafficAirFactor %d, UpdatePeriod %d):", t.pollution.params().trafficAirFactor,
+                t.pollution.params().updatePeriod);
+    for (int k = 0; k < 10; k++) {
+      us::PollutionLayer p = t.pollution;
+      std::vector<uint8_t> tr = pick(k);
+      us::PollutionEnv env; env.zone = &theirs.game.world().zone; env.traffic = &tr; env.ordinances = t.crimeOrdinances();
+      for (int d = 0; d < 2 * std::max(1, t.pollution.params().updatePeriod); d++) p.run(env);
+      double s = 0, sd = 0; long long n = 0;
+      double sdNo = 0, sdHw = 0, sdSf = 0; long long nNo = 0, nHw = 0, nSf = 0;
+      for (int x = 0; x < W; x += 2) for (int z = 0; z < H; z += 2) {
+        int a = p.airAt(x, z), b = t.pollution.airAt(x, z); s += std::abs(a - b); sd += a - b; n++;
+        int sf = 0, hw = 0;
+        for (int dx = 0; dx < 2; dx++) for (int dz = 0; dz < 2; dz++) { size_t i = size_t(x + dx) * H + z + dz; sf += R.snapSurface[i]; hw += R.snapHighway[i] + R.snapSubway[i]; }
+        if (!sf && !hw) { sdNo += a - b; nNo++; } else if (!sf) { sdHw += a - b; nHw++; } else if (!hw) { sdSf += a - b; nSf++; }
+      }
+      std::printf(" %s |d| %.1f mean %+.1f [no traffic %+.1f /%lld, highway/subway only %+.1f /%lld, surface only %+.1f /%lld];", names[k], s / n,
+                  sd / n, nNo ? sdNo / nNo : 0, nNo, nHw ? sdHw / nHw : 0, nHw, nSf ? sdSf / nSf : 0, nSf);
+    }
+    std::printf("\n");
+  }
   // Largest crime and air differences.
   struct D { int d, x, z; };
   for (int which = 0; which < 2; which++) {
