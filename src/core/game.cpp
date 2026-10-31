@@ -525,7 +525,16 @@ bool Game::drawSkinnedToolMenu() {
   if (ui_.hover(col)) uiHit_ = true;
   for (int n = 1; n <= int(rb.size()) && n <= 9; n++) {
     const MenuButton& b = menu_.buttons[rb[n - 1]];
-    if (ui_.clicked(skin_.rootButtonRect(n, ox, oy))) { openRoot_ = (openRoot_ == b.sub) ? 0 : b.sub; openFly_ = 0; }
+    if (ui_.clicked(skin_.rootButtonRect(n, ox, oy))) {
+      // Root buttons without a submenu (Meet, item 0x10001006) run their own item directly.
+      if (!b.sub) { openRoot_ = 0; openFly_ = 0; if (b.item) execute(b.item); continue; }
+      auto sub = menu_.menus.find(b.sub);
+      if (sub != menu_.menus.end() && sub->second.buttons.size() == 1 && skin_.subButtonRect(n, 0, ox, oy).w == 0) {
+        const MenuButton& only = menu_.buttons[sub->second.buttons[0]];
+        if (!only.sub) { openRoot_ = 0; openFly_ = 0; execute(only.item); continue; }
+      }
+      openRoot_ = (openRoot_ == b.sub) ? 0 : b.sub; openFly_ = 0;
+    }
   }
   if (!openRoot_) return true;
   int sel = 0;
