@@ -366,7 +366,7 @@ static void testAdvisors() {
   in.env.garbageAccumulating = true;
   am.evaluate(kAdvEnvironment, in, rng, out);
   const TopicList& E = am.list(kAdvEnvironment);
-  CHECK(E.listed(0x7C) && E.listed(0x7F) && E.listed(0xF1));
+  CHECK(E.listed(0x7C) && E.listed(0x7F) && E.listed(0xF2));   // recycling not gated here (no [GARBAGE_BUILDINGS]) -> 0xF2
   in.env.waterPollution = 10;
   am.evaluate(kAdvEnvironment, in, rng, out);
   CHECK(E.listed(0xF4) && !E.listed(0x7C));
@@ -513,6 +513,16 @@ static void testAdvisorRecords() {
   CHECK(!s.list(kAdvEnvironment).listed(0x72));
   CHECK(s.list(kAdvEnvironment).listed(0x73));
   CHECK(s.list(kAdvEnvironment).find(0x73)->sticky == 1);
+  {  // garbage metrics (spec 22): near capacity -> 0x77 with WTE unlocked, else 0xF8
+    AdvisorManager g;
+    g.thr.garbage.push_back({12853, 2000, 0});
+    g.initBuildingUnlocks(1990);
+    AdvisorInputs gi; gi.population = 500; gi.year = 1990;
+    gi.env.garbageAccumulating = false; gi.env.garbageDemand = 200; gi.env.garbageCapacity = 100;
+    gi.env.garbageNearCapacity = true; gi.env.garbageSurplusWithinLimit = false;
+    g.evaluate(kAdvEnvironment, gi, rng, out);
+    CHECK(g.list(kAdvEnvironment).listed(0xF8) && !g.list(kAdvEnvironment).listed(0x77));
+  }
 }
 
 int main() {

@@ -522,15 +522,20 @@ void AdvisorManager::envRules(TopicList& L, const AdvisorInputs& in) {
   else if (L.listed(0x7E) || L.listed(0x7F)) L.raise(0x80, 0x22A497FB, 6, true, true);
   if (!E.trashExportDealActive) {
     if (!E.garbageAccumulating) {
-      if (E.garbageNearCapacity) L.raise(E.trashImportDealExists ? 0xF8 : 0x77, 0xC2F8060C);
+      if (E.garbageNearCapacity) L.raise(buildingUnlocked(12853) ? 0x77 : 0xF8, 0xC2F8060C);   // WTE unlocked
       else if (E.garbageSurplusWithinLimit) L.raise(0x78, 0xC2F8060C);
     } else if (in.year < 1920) L.raise(0x76, 0xC2F8060C);
     else if (in.year < 1970) L.raise(0xEF, 0xC2F8060C);
     else if (in.year <= 1982) L.raise(0xF0, 0xC2F8060C);
-    else L.raise(E.trashImportDealExists ? 0xF2 : 0xF1, 0xC2F8060C);
+    else L.raise(buildingUnlocked(12851) ? 0xF2 : 0xF1, 0xC2F8060C);   // recycling unlocked
   }
+  // Accumulation counter (spec 22 "Garbage metrics") [STATIC]: +1 with A, -1 without (not below 0); "problem solved"
+  // when the counter is > 6 and A is clear, and without an export deal also 10 GD < 7 GC.
   if (E.garbageAccumulating) ++garbageStreak_;
-  else { if (garbageStreak_ >= 7) L.raise(0xF3, 0, 60, true, true); garbageStreak_ = 0; }
+  else {
+    if (garbageStreak_ > 6 && (E.trashExportDealActive || 10 * E.garbageDemand < 7 * E.garbageCapacity)) L.raise(0xF3, 0, 60, true, true);
+    if (garbageStreak_ > 0) --garbageStreak_;
+  }
   if (E.garbageAccumulating && garbageStreak_ >= 7 && !E.trashExportDealActive) {
     if (in.neighbourConnections < 4 && !E.hasSeaport) L.raise(0x70, 0x03387EA5);
     else if (in.neighbourConnections >= 1 && !E.anyTrashDeal) L.raise(0x6F, 0x03387EA5);

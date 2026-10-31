@@ -137,6 +137,7 @@ struct AdvisorInputs {
     int waterPollution = 0, airPollution = 0;
     bool hasWaterSystem = false;
     bool garbageAccumulating = false, garbageNearCapacity = false, garbageSurplusWithinLimit = true;
+    int64_t garbageDemand = 0, garbageCapacity = 0;   // GD, GC of spec 22 "Garbage metrics"
     bool trashExportDealActive = false, trashImportDealExists = false, anyTrashDeal = false;
     bool hasSeaport = false;
   } env;

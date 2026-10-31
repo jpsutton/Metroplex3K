@@ -312,7 +312,18 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
       if (nb.nRail > 0) in.plan.Kt++;
     }
   }
-  in.util.desalinationAvailable = advisors_.buildingUnlocked(12830);   // spec 22 "Building availability"
+  in.util.desalinationAvailable = advisors_.buildingUnlocked(12830);
+  {  // Garbage metrics (spec 22) [STATIC]: previous month's counters (our history is newest first), landfill spare room
+     // R = store Dlast, burn capacities per run; A = standing garbage on the map at the end of the last pollution run
+     // (the spec reads it at the end of the last completed sweep; per-run is our nearest).
+    const auto& P = c.pollution;
+    const int64_t* G = P.disp.history[0];
+    in.env.garbageDemand = G[0] + G[1];
+    in.env.garbageCapacity = int64_t(P.disp.store.Dlast) / 12 + 30 * (int64_t(P.burnCapA) + int64_t(P.burnCapB)) + G[3];
+    in.env.garbageAccumulating = P.totalStanding != 0;
+    in.env.garbageNearCapacity = !in.env.garbageAccumulating && in.env.garbageDemand > in.env.garbageCapacity;
+    in.env.garbageSurplusWithinLimit = !in.env.garbageAccumulating && in.env.garbageDemand <= in.env.garbageCapacity;
+  }   // spec 22 "Building availability"
   in.dreary = 0;   // dreary rating: no source yet (spec 22 lists it as an advisor input only)
   for (auto z : world_.zone) {
     if (z >= 1 && z <= 3) in.plan.zoned[0]++; else if (z >= 5 && z <= 7) in.plan.zoned[1]++; else if (z >= 9 && z <= 11) in.plan.zoned[2]++;
