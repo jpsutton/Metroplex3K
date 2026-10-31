@@ -798,9 +798,7 @@ stops when nothing changes or after a fixed maximum number of iterations: **600*
    So buildings and lines conduct to anything within 2 tiles of their footprint `[STATIC]`.
 2. **Demand grid.** A per-tile byte grid. Each conducting occupant writes its power consumption
    (one byte, 0–255) into the cell of its **anchor tile only**; the other tiles of its footprint keep
-   0 `[STATIC]`. Which occupant data supplies the byte is `[OPEN]`: it is not one of the INI tables
-   listed in `13-buildings-occupants.md` §3.2; apart from flammability (0x6E), the u8 attribute 0xC9 is
-   the only per-building byte attribute and is the leading candidate `[INFERRED, low confidence]`. `16-sim-utilities.md` §2.6
+   0 `[STATIC]`. The byte is the occupant's **own building record** (the occupant-attribute record whose key the occupant entry stores, `10-save-format.md` §6.2), u8 attribute **0xC9**; 0 when the record has no 0xC9 `[STATIC]`; see `16-sim-utilities.md` §2.6 for the data check. `16-sim-utilities.md` §2.6
    uses this anchor-only grid.
 3. For each power plant not yet visited this cycle: flood-fill from the plant's tile; every plant
    whose tile lies in the reached set is marked visited and its capacity added to the network's
@@ -925,5 +923,5 @@ recomputed after load `[INFERRED]`.
    edge exists, see `19-sim-economy.md`).
 5. Water: whether a facility must sit on/next to a pipe tile to seed the flood, and the sweep
    tie-breaking of the allocation front.
-6. Power: the data source of the per-occupant consumption byte (§9.1 step 2).
+6. Closed: the per-occupant power consumption byte is attribute 0xC9 (§9.1 step 2).
 7. Collapse groups: exact trigger (demolition vs. disaster damage) and neighbourhood searched.

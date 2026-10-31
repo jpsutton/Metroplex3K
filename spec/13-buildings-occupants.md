@@ -101,7 +101,7 @@ Presence counts are out of 1108 records.
 | 0x76–0x7A | key ×1 | 1108 | Always zero (reserved appearance slots). | [DATA] |
 | 0x7B | key ×1 | 175 non-zero | Instance-only key; a hashed ID used by the building's help/query text. | [OPEN] |
 | 0x7C | key ×1 | 1108 | Description/help string key: `2026960B:62E69238:n`; Instance `FFFFFFFF` = none. | [DATA] |
-| 0xC9 | u8 ×1 | 684 | Per-building simulation byte (values 0–255). Hypothesis: garbage/pollution generation weight. | [OPEN] |
+| 0xC9 | u8 ×1 | 684 | Monthly power consumption of the building (`16-sim-utilities.md` §2.6); absent → 0 | [STATIC] |
 | 0xCA | u32 ×1 | 684 | Building flag word. Bit `0x100` = **filler lot** (garden, pool, parking, vacant lot…): such members of a building family go to the filler list used by the zone developer (`15-sim-growth.md` §5.2). Bit `0x400` together with `0x100` on a building of agent type 9300 (farm) marks a **farm field** piece, which the industrial developer removes instead of abandoning (`15-sim-growth.md` §4.3.2) [STATIC]. Other bits (values such as 0x20, 0x80, 0xA00 on airport/seaport pieces) [OPEN]. | [DATA]/[STATIC] for bits 0x100, 0x400 |
 | 0x12D | u32 ×1 | 395 | Network piece: network kind (0–3). | [INFERRED] |
 | 0x136, 0x137, 0x138 | u32 ×1 | 395 | Network piece: packed connectivity masks for up to three layers. See `12-networks.md`. | [INFERRED] |
@@ -133,7 +133,7 @@ to the nearest listed ancestor (section 4.1).
 | Crime, pollution and garbage, aura effects | `SC3Crime.ini`, `SC3Pollution.ini`, `SC3Aura.ini` `[AgentIDModifiers]` (see `16-sim-utilities.md`, `17-sim-services.md`) |
 | Water use | `SC3WaterLayer.ini` `[AgentIDModifiers]` (see `16-sim-utilities.md` §3) |
 | Power plant output | `SC3PowerLayer.ini` `[PowerPlantCapacities]` (see `16-sim-utilities.md` §2) |
-| Power use | A one-byte consumption value per occupant, recorded on its anchor tile (`12-networks.md` §9.1). It is **not** in any INI table. Its source is `[OPEN]`; attribute 0xC9 is the leading candidate `[INFERRED, low]` |
+| Power use | A one-byte consumption value per occupant, recorded on its anchor tile (`12-networks.md` §9.1). It is **not** in any INI table. It is attribute 0xC9 of the building's own record `[STATIC]` |
 | Agent type names and hierarchy | `CitySim.ini` `[AgentTypes]`, `[AgentTypeHierarchy]` |
 
 ## 4. ID scheme
@@ -349,7 +349,7 @@ The occupant manager saves occupant instances, not this subsystem. The full byte
 
 ## Open questions
 
-* Bits of attribute 0x72; meanings of 0xC9, 0x7B and of the 0xCA bits other than 0x100.
+* Bits of attribute 0x72; meanings of 0x7B and of the 0xCA bits other than 0x100.
 * Exact override order when an occupant ID is defined by more than one file.
 * CSATTRIB record layout beyond the common header and image entries.
 

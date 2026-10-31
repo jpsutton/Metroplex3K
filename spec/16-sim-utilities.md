@@ -117,7 +117,7 @@ is in `22-advisors-news-petitioners.md`/`09-ui-screens.md`]
 The power layer holds a per-tile **powered bit** (1 bit per tile, row-major, 32 tiles per word) and a
 per-tile **consumption byte** (power units/month; each conducting occupant writes its whole
 consumption into the cell of its anchor tile only, all other cells stay 0, `12-networks.md` §9.1).
-[STATIC] Which building supplies the consumption value is [OPEN] (see Open questions).
+[STATIC] The consumption value is the occupant's **own building record** (the occupant-attribute record whose key the occupant entry stores, `10-save-format.md` §6.2), u8 attribute **0xC9**; 0 when the record has no 0xC9 [STATIC]. It is looked up per building record, **not** per agent type: many records share one agent type (e.g. 3100) with different 0xC9 values, so a per-type table is wrong. It is written when the occupant is added, for every occupant whose agent type descends from 100 (buildings, any lot state, including abandoned and under construction) or 17100 (power lines), except damaged ones (15400). No density, lot-size or funding factor is applied. DATA: Σ 0xC9 over all buildings vs the month's consumed power (the current row of the production table, `10-save-format.md` §6.14): Madison 39 366 vs 38 303; Berlin 165 862 vs 158 254; Craterville 51 610 vs 49 192; Moscow 176 518 × 0.9 (Power Conservation) = 158 866 vs 149 793; London 141 310 × 0.9 = 127 179 vs 114 858. Keyed by agent type instead, the totals are 1.6–3.4× too high (Moscow 503 335). In Madrid (no power ordinance, plants' capacity 204 000 in the main network) the demand summed in scan order reaches 204 116 at the end of row z = 235, matching the observed pump cut at z ≥ 236 (§3.3) [DATA; INFERRED that the budget there is close to capacity].
 Connectivity of power lines, conductive buildings and zones is defined in `12-networks.md`; the
 power layer computes a connected component by repeated row-wise flood expansion, capped at 600
 expansion passes. [STATIC]
@@ -176,8 +176,9 @@ Given a seed tile: [STATIC]
    kind 0, Σ over buy slots of (slot amount − amount left in the slot), i.e. the power actually
    drawn from neighbours (`19-sim-economy.md` §10.4). [OBSERVED] In a 480-day run of Moscow the
    saved buy deals kept `units` 12 600 (power) and 5 100 (water) and the same monthly amount in
-   every save, so the reported draw does **not** visibly change the saved deal; how the report is
-   used is [OPEN]. Bill the deal by its saved monthly amount. For kind 1 it reports the amount actually sold; a sell slot
+   every save, so the reported draw does **not** change `units`; it is stored in the deal's first numeric field
+   (`10-save-format.md` §6.6, deal entry `reportedQuantity`) [DATA: Moscow, equal to the power
+   table's neighbour column every save]. Bill the deal by its saved monthly amount. For kind 1 it reports the amount actually sold; a sell slot
    with power left undelivered terminates the sell deal. Test (Moscow, saved month): produced
    128 000, consumed 140 800 → drawn ≈ 12 800 (deal `units` saved 12 600 from the previous
    month). The leftover is
@@ -551,9 +552,7 @@ absent, re-derive *Lmax* and *Ld* (§2.3) and start *W* at 0. [STATIC layout][IN
 
 ## Open questions
 
-* Source of the per-tile power consumption byte (§2.6; `12-networks.md` §9.1 names occupant
-  attribute 0xC9 as the leading candidate, low confidence). Recommended until answered: use
-  attribute 0xC9 when present, else 0. [OPEN]
+* Closed: the per-tile power consumption byte is the building record's attribute 0xC9 (§2.6).
 * The expired-plant variant: which occupant replaces a retired plant, and whether it ever produces.
 * Water: exact row-sweep order of the spreading front; role of `DefaultLeak`; water treatment
   plant behaviour (`OptimalPollutionCap`).
