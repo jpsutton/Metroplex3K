@@ -366,7 +366,7 @@ static void testAdvisors() {
   in.env.garbageAccumulating = true;
   am.evaluate(kAdvEnvironment, in, rng, out);
   const TopicList& E = am.list(kAdvEnvironment);
-  CHECK(E.listed(0x7C) && E.listed(0x7F) && E.listed(0xF2));   // recycling not gated here (no [GARBAGE_BUILDINGS]) -> 0xF2
+  CHECK(E.listed(0x7C) && E.listed(0x7F) && E.listed(0xF1));   // recycling absent from [GARBAGE_BUILDINGS] counts as locked
   in.env.waterPollution = 10;
   am.evaluate(kAdvEnvironment, in, rng, out);
   CHECK(E.listed(0xF4) && !E.listed(0x7C));

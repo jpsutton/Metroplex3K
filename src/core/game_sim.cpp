@@ -314,13 +314,12 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   }
   in.util.desalinationAvailable = advisors_.buildingUnlocked(12830);
   {  // Garbage metrics (spec 22) [STATIC]: previous month's counters (our history is newest first), landfill spare room
-     // R = store Dlast, burn capacities per run; A = standing garbage on the map at the end of the last pollution run
-     // (the spec reads it at the end of the last completed sweep; per-run is our nearest).
+     // R = store Dlast, burn capacities per run; A = standing garbage on the map, latched when the last sweep finalised.
     const auto& P = c.pollution;
     const int64_t* G = P.disp.history[0];
     in.env.garbageDemand = G[0] + G[1];
     in.env.garbageCapacity = int64_t(P.disp.store.Dlast) / 12 + 30 * (int64_t(P.burnCapA) + int64_t(P.burnCapB)) + G[3];
-    in.env.garbageAccumulating = P.totalStanding != 0;
+    in.env.garbageAccumulating = P.standingAtSweepEnd;
     in.env.garbageNearCapacity = !in.env.garbageAccumulating && in.env.garbageDemand > in.env.garbageCapacity;
     in.env.garbageSurplusWithinLimit = !in.env.garbageAccumulating && in.env.garbageDemand <= in.env.garbageCapacity;
   }   // spec 22 "Building availability"

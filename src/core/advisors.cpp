@@ -522,12 +522,12 @@ void AdvisorManager::envRules(TopicList& L, const AdvisorInputs& in) {
   else if (L.listed(0x7E) || L.listed(0x7F)) L.raise(0x80, 0x22A497FB, 6, true, true);
   if (!E.trashExportDealActive) {
     if (!E.garbageAccumulating) {
-      if (E.garbageNearCapacity) L.raise(buildingUnlocked(12853) ? 0x77 : 0xF8, 0xC2F8060C);   // WTE unlocked
+      if (E.garbageNearCapacity) L.raise(garbageBuildingAvailable(12853) ? 0x77 : 0xF8, 0xC2F8060C);   // WTE unlocked
       else if (E.garbageSurplusWithinLimit) L.raise(0x78, 0xC2F8060C);
     } else if (in.year < 1920) L.raise(0x76, 0xC2F8060C);
     else if (in.year < 1970) L.raise(0xEF, 0xC2F8060C);
     else if (in.year <= 1982) L.raise(0xF0, 0xC2F8060C);
-    else L.raise(buildingUnlocked(12851) ? 0xF2 : 0xF1, 0xC2F8060C);   // recycling unlocked
+    else L.raise(garbageBuildingAvailable(12851) ? 0xF2 : 0xF1, 0xC2F8060C);   // recycling unlocked
   }
   // Accumulation counter (spec 22 "Garbage metrics") [STATIC]: +1 with A, -1 without (not below 0); "problem solved"
   // when the counter is > 6 and A is clear, and without an export deal also 10 GD < 7 GC.
@@ -916,6 +916,10 @@ void AdvisorManager::monthlyBuildingUnlock(int year, GameRng& rng) {
         if (a.topic) (lst == &thr.garbage ? unlockTopicsEnv_ : unlockTopics_).push_back(a.topic);
         return;
       }
+}
+bool AdvisorManager::garbageBuildingAvailable(int agentType) const {
+  for (auto& a : thr.garbage) if (a.buildingId == agentType) return unlocked_.count(agentType) != 0;
+  return false;
 }
 bool AdvisorManager::buildingUnlocked(int agentType) const {
   for (auto* lst : {&thr.power, &thr.water, &thr.garbage})

@@ -317,6 +317,9 @@ class AdvisorManager {
   void initBuildingUnlocks(int year);
   void monthlyBuildingUnlock(int year, GameRng& rng);
   bool buildingUnlocked(int agentType) const;
+  // The environment advisor's own availability query (spec 22 "Garbage metrics" C): a type absent from
+  // [GARBAGE_BUILDINGS] counts as not available.
+  bool garbageBuildingAvailable(int agentType) const;
 
  private:
   std::vector<TopicList> lists_;

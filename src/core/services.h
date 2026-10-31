@@ -314,6 +314,9 @@ class PollutionLayer {
   uint16_t unk16 = 0;
   int32_t sumAir = 0, sumWater = 0;
   uint32_t totalStanding = 0, pollutedCount = 0;
+  // Standing garbage on the map latched when the last sweep finalised (spec 22 "Garbage metrics": the environment
+  // advisor's accumulating flag A). Not saved: after a load it starts as the loaded total.
+  bool standingAtSweepEnd = false;
   Chart chart = Chart::fresh(0, 260);
   uint8_t unk8 = 0;
   uint32_t burnCapA = 0, burnCapB = 0;

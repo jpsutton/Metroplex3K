@@ -686,6 +686,7 @@ void PollutionLayer::finaliseSweep() {
   avgAir = cells ? uint32_t(std::max<int64_t>(0, sumAir) / (4 * cells)) : 0;
   avgWater = cells ? uint32_t(std::max<int64_t>(0, sumWater) / (4 * cells)) : 0;
   rawWaterLast = rawWaterSum; treatedLast = treatedSum;
+  { bool any = false; for (auto v : standing) if (v & 0x7FFF) { any = true; break; } standingAtSweepEnd = any; }
   sumAir = sumWater = 0; rawWaterSum = treatedSum = 0; pollutedCount = 0;
 }
 
@@ -946,6 +947,7 @@ void PollutionLayer::parse(const uint8_t* p, size_t n, int W, int H) {
   for (int i = 0; i < 7; i++) disp.totals[i] = rd64(r);
   avgAir = r.u32(); avgWater = r.u32(); unk16 = r.u16();
   sumAir = r.s32(); sumWater = r.s32(); totalStanding = r.u32(); pollutedCount = r.u32();
+  standingAtSweepEnd = totalStanding != 0;
   chart.parse(r);
   for (int i = 0; i < 7; i++) disp.month[i] = rd64(r);
   for (int m = 0; m < 12; m++) for (int i = 0; i < 7; i++) disp.history[m][i] = rd64(r);
