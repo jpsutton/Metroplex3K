@@ -735,8 +735,9 @@ category whose availability conditions hold. For power plants and water structur
 the per-type unlock flag of the utilities advisor (`22-advisors-news-petitioners.md`, section
 "Building availability"); the nuclear plant (12115) is also hidden while the Nuclear Free Zone
 ordinance (0xE0D0722E) is in force. The cheats `power to the masses` and `water in the desert`
-bypass the unlock flag (`27-platform.md`). For garbage facilities and landmarks the condition is
-[OPEN]; rewards follow the reward manager's earned state. Each entry shows each with picture, name, size (`041F2625:133` "WxH") and cost; landmarks
+bypass the unlock flag (`27-platform.md`). Garbage facilities use the same unlock flags of the
+environment advisor (`[GARBAGE_BUILDINGS]`; cheat `garbage in, garbage out` bypasses them).
+For landmarks the condition is [OPEN]; rewards follow the reward manager's earned state. Each entry shows each with picture, name, size (`041F2625:133` "WxH") and cost; landmarks
 and rewards already placed are greyed and marked `70`. Empty-list messages: landmarks `77`, rewards
 `6E`, power `7A`, waste `79`, water `7B`, other `FFFFFFFF`. Choosing a building arms the plop tool
 (§5.2) for that occupant; the picker closes.

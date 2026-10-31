@@ -1351,5 +1351,8 @@ entry has an unlock flag, which is not saved:
 * Each month, with probability 10 % (rand(100) < 10), the first locked entry whose year ≤ the
   current year is unlocked: power list first, then water. The advisor announces it with the
   entry's topic number.
-A type absent from both lists (e.g. waste-to-energy 12853) is not gated by this mechanism.
+The environment advisor keeps the same kind of list for `Advisor-Environment.ini
+[GARBAGE_BUILDINGS]` (recycling 12851 in 1970, incinerator 12852 in 1920, waste-to-energy 12853
+in 2000). It has the same load-time and monthly 10 % unlock rules, and the garbage picker lists
+only unlocked entries (cheat `garbage in, garbage out` bypasses this) [STATIC].
 `desalinationAvailable` in the advisor rules is the unlock flag of type 12830.
