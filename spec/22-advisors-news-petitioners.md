@@ -309,41 +309,46 @@ indices WP and AP (same scale as the pollution graphs, `17-sim-services.md`).
 | | AM < AP ≤ AH | `0x7F` (`0x22A497FB`) |
 | | AP ≤ AM and `0x7E` or `0x7F` currently listed | event `0x80`, L = 6 (`0x22A497FB`) |
 | Garbage (no trash-export deal active) | garbage not accumulating, surplus capacity within limit | `0x78` (`0xC2F8060C`) |
-| | not accumulating but near capacity | `0x77` if *C*, else `0xF8` (see Garbage metrics) |
+| | not accumulating but near capacity | `0x77` if waste-to-energy is unlocked, else `0xF8` (see Garbage metrics) |
 | | accumulating, year < 1920 | `0x76` |
 | | accumulating, 1920 ≤ year < 1970 | `0xEF` |
 | | accumulating, 1970 ≤ year ≤ 1982 | `0xF0` |
-| | accumulating, year > 1982 | `0xF2` if *C*, else `0xF1` |
+| | accumulating, year > 1982 | `0xF2` if recycling is unlocked, else `0xF1` |
 | Trash export hint | accumulating ≥ 7 cycles, no export deal: < 4 neighbour connections and no seaport | `0x70` (`0x03387EA5`) |
 | | otherwise with ≥ 1 connection and no existing deal | `0x6F` (`0x03387EA5`) |
 | Problem solved | accumulation streak ended after ≥ 7 cycles | `0xF3`, L = 60 |
 
 The hard-coded years 1920/1970/1982 select which garbage-solution advice text applies.
 
-**Garbage metrics** [STATIC for the advisor-side formulas; the identity of the pollution-layer
-values is INFERRED as marked]. Each cycle the environment advisor reads from the pollution layer
+**Garbage metrics** [STATIC]. Each cycle the environment advisor reads from the pollution layer
 (`17-sim-services.md` §7.4, `16-sim-utilities.md` §4.5):
-* six 64-bit garbage statistics: produced *G0*, imported *G1*, exported *G2*, recycled *G3*,
-  incinerated *G4* and landfilled *G6* (the waste-to-energy amount *G5* is not read)
-  [INFERRED: the last completed month's counters, in counter order];
-* the two burn capacities per pollution run, *Bi* (incinerators) and *Bw* (waste-to-energy);
-* two further values *X* and *Y* [OPEN], and a factor *f* from the landfill developer [OPEN];
-* a garbage-accumulating flag *A* [OPEN: which pollution-layer test].
+* the **previous month's** history entries of the garbage counters: produced *G0*, imported
+  *G1*, exported *G2*, recycled *G3*, incinerated *G4*, landfilled *G6* (*G5*, waste-to-energy,
+  is read but not used). "Previous month" is the entry before the current month, wrapping from
+  January to December;
+* the burn capacities per pollution run of the incinerators *Bi* and waste-to-energy plants *Bw*;
+* the landfill store's `Dlast`, *R* (spare room on registered landfill tiles);
+* the accumulating flag *A* = the map's total standing garbage was non-zero at the end of the
+  last completed pollution sweep. The total is a running sum, kept as garbage is set on or
+  taken off tiles during the sweep.
 
 From these:
-* demand *GD* = *G0* + *G1* (64-bit);
-* capacity *GC* = ⌊*X*/12⌋ + 30·(*Bi* + *Bw*) + *G3* + round((max(*Y*, *X*) − *X*) · *f*);
+* demand *GD* = *G0* + *G1* (64-bit; imports are thus counted twice, since *G0* already
+  includes them; reproduce);
+* capacity *GC* = ⌊*R* / 12⌋ + 30·(*Bi* + *Bw*) + *G3*. The advisor also has a term for landfill
+  decay, but it asks the landfill developer for an interface that nothing implements, so the
+  factor is always 0 and the term vanishes (original defect; reproduce);
 * "not accumulating, surplus within limit" (topic `0x78`) = not *A* and *GD* ≤ *GC*;
-* "not accumulating but near capacity" = not *A* and *GD* > *GC*. Topic `0x77` if a further
-  advisor condition *C* holds, else `0xF8` [*C* OPEN; possibly a garbage deal, which would make the
-  earlier reading that `0xF8` means "trash-import deal" the wrong way round];
+* "not accumulating but near capacity" = not *A* and *GD* > *GC*: topic `0x77` if the
+  waste-to-energy plant (12853) is unlocked (section "Building availability"), else `0xF8`.
+  Correction: the earlier reading tied this to a trash-import deal;
 * "accumulating" = *A*. The accumulation counter rises by 1 each cycle with *A* and falls by 1
   (not below 0) without it;
-* the "problem solved" event `0xF3` fires when the counter is > 6 and *A* is clear. Without an
-  export deal it also needs 10·*GD* < 7·*GC*.
+* the "problem solved" event `0xF3` (L = 60) fires when the counter is > 6 and *A* is clear.
+  Without an export deal it also needs 10·*GD* < 7·*GC*.
 
-The year bands of the accumulating case are compared with the city year: < 1920 → `0x76`;
-< 1970 → `0xEF`; ≤ 1982 → `0xF0`; later → `0xF2` if *C* holds, else `0xF1`.
+The year bands of the accumulating case use the city year: < 1920 → `0x76`; < 1970 → `0xEF`;
+≤ 1982 → `0xF0`; later → `0xF2` if the recycling centre (12851) is unlocked, else `0xF1`.
 
 ### 3.9 Public-safety advisor rules [STATIC; metric identity INFERRED]
 
