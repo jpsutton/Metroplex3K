@@ -132,9 +132,14 @@ void Game::buildBudgetView(BudgetView& v) {
   in.fares = c.traffic ? double(c.traffic->rec().faresLastMonth) : 0.0;
   IndicatorData& ind = v.ind;
   ind.citySize = std::min(100, int(in.population / 5000));
-  uint64_t np = 0;
-  for (const auto& n : c.neighbours.neighbours) np += n.population;
-  ind.nationalPop = uint32_t(np);
+  // SimNation population = newest sample of the world layer's fifth chart (spec 10 s6.13; Berlin 41,000,660), as in the
+  // Neighbors window; before the first world cycle of a new city, the city plus its neighbours.
+  uint64_t np = c.valves.world.charts[4].w[0];
+  if (np == 0) {
+    np = uint64_t(std::max(0, c.population()));
+    for (const auto& n : c.neighbours.neighbours) np += n.population;
+  }
+  ind.nationalPop = uint32_t(std::min<uint64_t>(np, 0xFFFFFFFFu));
   ind.unemployment = std::max(0, std::min(100, c.valves.unemploymentPct()));
   ind.pollution = std::min(100, int(c.pollution.avgAir) * 100 / 255);
   ind.commerce = std::min(100, int(in.zoneTotals[1] / 50));

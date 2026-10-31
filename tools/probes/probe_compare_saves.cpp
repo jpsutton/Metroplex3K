@@ -271,6 +271,8 @@ int main(int argc, char** argv) {
     }
     std::printf("   our connection sets (rail, road, pipe, power, highway, subway):");
     for (int k = 0; k < 6; k++) std::printf(" %zu", c.neighbours.conn[k].size());
+    std::printf("\n   neighbours (name pop exists):");
+    for (const auto& n : c.neighbours.neighbours) std::printf(" [%s %u %d]", n.cityName.c_str(), n.population, n.exists ? 1 : 0);
     std::printf("\n   neighbour counts nRoad/nRail/nHighway/nSubway:");
     for (const auto& n : c.neighbours.neighbours) std::printf(" [%u %u %u %u]", n.nRoad, n.nRail, n.nHighway, n.nSubway);
     std::printf("\n   initial connection supply com %d ind %d\n", tune.comInitialConnection, tune.indInitialConnection);
@@ -408,16 +410,17 @@ int main(int argc, char** argv) {
   }
   // Largest crime and air differences.
   struct D { int d, x, z; };
-  for (int which = 0; which < 2; which++) {
+  for (int which = 0; which < 3; which++) {
     std::vector<D> v;
     for (int x = 0; x < W; x += 2)
       for (int z = 0; z < H; z += 2) {
-        int a = which ? c.crime.crimeAt(x, z) : c.pollution.airAt(x, z), b = which ? t.crime.crimeAt(x, z) : t.pollution.airAt(x, z);
+        int a = which == 2 ? c.landValue.landValueAtTile(x, z) : which ? c.crime.crimeAt(x, z) : c.pollution.airAt(x, z);
+        int b = which == 2 ? t.landValue.landValueAtTile(x, z) : which ? t.crime.crimeAt(x, z) : t.pollution.airAt(x, z);
         v.push_back({a - b, x, z});
       }
     std::sort(v.begin(), v.end(), [](const D& a, const D& b) { return std::abs(a.d) > std::abs(b.d); });
-    std::printf("   largest %s differences (ours - theirs):", which ? "crime" : "air");
-    for (int i = 0; i < 6 && i < int(v.size()); i++) std::printf(" (%d,%d) %+d", v[size_t(i)].x, v[size_t(i)].z, v[size_t(i)].d);
+    std::printf("   largest %s differences (ours - theirs):", which == 2 ? "land value" : which ? "crime" : "air");
+    for (int i = 0; i < (which == 2 ? 12 : 6) && i < int(v.size()); i++) std::printf(" (%d,%d) %+d", v[size_t(i)].x, v[size_t(i)].z, v[size_t(i)].d);
     std::printf("\n");
   }
   for (int i = 3 + used; i < argc; i++) {
@@ -429,6 +432,13 @@ int main(int argc, char** argv) {
                 c.pollution.waterAt(x, z), t.pollution.waterAt(x, z), c.crime.crimeAt(x, z), t.crime.crimeAt(x, z),
                 c.police.coverageAt(x, z), t.police.coverageAt(x, z), c.power.powered(x, z), t.power.powered(x, z),
                 c.water.tileServiced(x, z), t.water.tileServiced(x, z));
+    if (std::getenv("M3K_LVX")) {
+      std::printf("   ours LV explain: %s\n", c.lvExplain(x, z).c_str());
+      std::printf("   their-state LV explain (our rule on their save): %s\n", t.lvExplain(x, z).c_str());
+      int ox = c.occupantAt(x, z), tx = t.occupantAt(x, z);
+      std::printf("   occupant ours %s theirs %s\n", ox >= 0 ? std::to_string(w.occupants[size_t(ox)].agentType).c_str() : "-",
+                  tx >= 0 ? std::to_string(theirs.game.world().occupants[size_t(tx)].agentType).c_str() : "-");
+    }
   }
   return 0;
 }
