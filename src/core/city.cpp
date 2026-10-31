@@ -370,23 +370,6 @@ class LandValueAdapter : public growth::LandValueCity {
         if (c_.world_->waterAt(x + dx, z + dz) >= c_.world_->altAt(x + dx, z + dz)) return true;
     return false;
   }
-  // Interim for high saved values on all-zone-0 blocks (spec 15 s6.3 step 6g note, [OPEN]): such a block keeps its saved
-  // byte until the zone or occupant of one of its tiles changes; this signature detects the change.
-  uint32_t blockSignature(int x, int z) const override {
-    uint32_t h = 2166136261u;
-    for (int dx = 0; dx < 2; dx++)
-      for (int dz = 0; dz < 2; dz++) {
-        int tx = x + dx, tz = z + dz;
-        uint32_t v = 0;
-        if (c_.world_->inTiles(tx, tz)) {
-          v = c_.world_->zone[c_.idx(tx, tz)];
-          int oi = c_.occupantAt(tx, tz);
-          if (oi >= 0) v ^= (c_.world_->occupants[size_t(oi)].uid << 8) ^ c_.world_->occupants[size_t(oi)].occId;
-        }
-        h = (h ^ v) * 16777619u;
-      }
-    return h;
-  }
   // Curves are read at valve 3000 Slast (spec 15 s6.3 cycle start step 1) [STATIC]; no factor 2.
   int64_t population() const override { return c_.valves.v3000.Slast; }
   bool ordinanceEnacted(uint32_t id) const override { return c_.ordinances.enacted(id); }
@@ -506,7 +489,6 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
       for (int z = 0; z <= H; z++)
         if (w->seaVertex[size_t(w->vIdx(x, z))]) pollution.markSeaVertex(x, z);
   if (!haveLv) landValue.recomputeAll(*lvView_);
-  else landValue.pinUnzonedBlocks(*lvView_);
   wire();
   refresh(true);
   // City population = valve 3000 Slast (spec 20 s2) [DATA]; a city without a completed valve cycle counts its buildings.
@@ -1339,12 +1321,8 @@ void City::monthlyPower() {
   std::vector<uint8_t> conductive;
   us::PowerEnv env = powerEnv(conductive);
   auto events = power.monthlyUpdate(env, urng_);
-  {  // Reported draw (spec 16 s2.7 step 9): the buy deal's units follow what was drawn from neighbours (spec 19 s10.4).
-    int64_t drawn = 0;
-    for (const auto& d : power.deals()) if (d.active && d.amount > 0) drawn += std::max<int64_t>(0, d.amount - d.unused);
-    for (auto& d : neighbours.active)
-      if (!d.terminated() && d.dealType == 0) { d.quantity = int32_t(std::min<int64_t>(drawn, INT32_MAX)); break; }
-  }
+  // The draw (slot - left) goes to the production table's deal column. The deal's saved units are NOT overwritten:
+  // Moscow keeps units 12,600 in every save of a 480-day run of the original (spec 28 s5.1) [OBSERVED].
   for (const auto& e : events) {
     if (e.kind != us::PlantEvent::Explosion) continue;
     int oi = occupantAt(e.x, e.z);

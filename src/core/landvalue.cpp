@@ -211,28 +211,8 @@ void LandValueLayer::cycleStart(const LandValueCity& c, bool rollStats) {
   derivedValid_ = true;
 }
 
-void LandValueLayer::pinUnzonedBlocks(const LandValueCity& c) {
-  pinned_.clear();
-  int bh = H / 2;
-  for (int x = 0; x + 1 < W; x += 2)
-    for (int y = 0; y + 1 < H; y += 2) {
-      size_t bi = size_t(x / 2) * bh + y / 2;
-      if (bi >= lv.size() || lv[bi] <= kUnzonedMax) continue;
-      bool unzoned = true;
-      for (int dx = 0; dx < 2 && unzoned; dx++) for (int dz = 0; dz < 2; dz++) if (c.zoneAt(x + dx, y + dz) != 0) { unzoned = false; break; }
-      if (unzoned) pinned_[uint32_t(bi)] = c.blockSignature(x, y);
-    }
-}
-
 void LandValueLayer::computeBlock(const LandValueCity& c, int x, int y, int cx, int cy, std::string* dbg) {
   int bh = H / 2;
-  if (!dbg && !pinned_.empty()) {
-    auto it = pinned_.find(uint32_t(size_t(x / 2) * bh + y / 2));
-    if (it != pinned_.end()) {
-      if (c.blockSignature(x, y) == it->second) return;   // keep the saved byte
-      pinned_.erase(it);
-    }
-  }
   int rw = tune_.waterRadiusBlocks;
   // 1 water bonus
   int dist = waterDist_.empty() ? 255 : waterDist_[size_t(x / 2) * bh + y / 2];

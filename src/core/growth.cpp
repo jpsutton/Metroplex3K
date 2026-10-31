@@ -962,7 +962,13 @@ int ZoneManager::visitRCI(GrowthCity& c, SimRand& rng, int x, int z, const ZoneD
   // occupied
   auto abandon = [&](int code) {
     if (field) { if (lot.removable && !lot.flagged()) removeLot(c, lot); }
-    else c.setLotState(lot, 2 | keep);
+    else {
+      // Abandoning an occupied lot takes its supply out of the committed demand P, as removal does [INFERRED from the
+      // shipped saves' result counts: with it, Berlin's first pass gives 54 negative-demand abandonments (saved 58, by
+      // zone 33/12/9 vs 38/13/7); without it, 399. Spec 15 s4 "Committed demand" only names additions and removals.]
+      c.setLotState(lot, 2 | keep);
+      buildingRemoved(lot.agentType, lot.sizeX, lot.sizeZ, 1);
+    }
     return code;
   };
   if (blocked) return abandon(kAbRadioactive);

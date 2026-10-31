@@ -1,6 +1,8 @@
 // Loads saved cities and runs them 450 days. A shipped city is a snapshot of a settled game, so population should
 // stay roughly flat; a large drop means a rule differs from the original (issue #78).
 //   probe_city_decline [GAME_DIR] [city-name-substring ...]
+#include <algorithm>
+#include <cstdint>
 #include <map>
 #include "probe_common.h"
 using namespace probe;
@@ -32,7 +34,14 @@ int main(int argc, char** argv) {
     Pair before[3];
     for (int i = 0; i < 3; i++) before[i] = {vs[i]->Slast, vs[i]->Dlast};
     std::printf("== %s\n", path.filename().string().c_str());
-    for (int day = 0; day <= 450; day++) {
+    // Population band over the run, sampled every 30 days, for comparison with the original's reference trajectories
+    // (spec 28 s5.1: shipped / min / max / last over ~480 days).
+    int popMin = INT32_MAX, popMax = 0, popLast = 0;
+    for (int day = 0; day <= 480; day++) {
+      if (day % 30 == 0 || day == 480) {
+        int p = s.game.sim().population();
+        popMin = std::min(popMin, p); popMax = std::max(popMax, p); popLast = p;
+      }
       if (day == 45) {
         std::printf("   first month, recomputed/saved:");
         const char* nm[3] = {"R", "C", "I"};
@@ -49,6 +58,7 @@ int main(int argc, char** argv) {
       }
       s.game.sim().tickDay();
     }
+    std::printf("   band (0..480, every 30 days): min %d max %d last %d\n", popMin, popMax, popLast);
   }
   return 0;
 }

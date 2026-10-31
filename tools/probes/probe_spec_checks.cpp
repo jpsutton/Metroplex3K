@@ -114,10 +114,16 @@ int main(int argc, char** argv) {
         for (const auto& kv : byCode) std::printf(" %d:%u", kv.first, kv.second);
         std::printf("\n");
       };
+      std::printf("     committed P: 3000 %d 5000 %d 8000 %d\n", c.zones.committed(3000), c.zones.committed(5000), c.zones.committed(8000));
       dump("saved prev", c.zones.resultPrev);
       const auto savedRes = c.zones.resultPrev;
       const int savedV[3] = {c.valves.v3000.V, c.valves.v5000.V, c.valves.v8000.V};
-      for (int d = 0; d < 62; d++) s.game.sim().tickDay();
+      for (int d = 0; d < 62; d++) {
+        s.game.sim().tickDay();
+        if (d % 10 == 9)
+          std::printf("     day %2d: I V %5d P %6d  (V-P %6d)  C V %5d P %6d  R V %5d P %6d\n", d + 1, c.valves.v8000.V, c.zones.committed(8000),
+                      c.valves.v8000.V - c.zones.committed(8000), c.valves.v5000.V, c.zones.committed(5000), c.valves.v3000.V, c.zones.committed(3000));
+      }
       dump("ours prev", c.zones.resultPrev);
       std::printf("     code 3 by zone (saved -> ours):");
       std::map<int, std::pair<uint32_t, uint32_t>> z3;
