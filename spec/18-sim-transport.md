@@ -567,7 +567,11 @@ Three query forms exist [STATIC]:
 
 * **tile value**: the value above for one tile and a caller-supplied network mask (bits 0x01,
   0x04, 0x10 and 0x20 select the surface layer, 0x02 the highway layer, 0x08 the subway layer).
-  Tiles with none of the requested networks return 0.
+  Tiles with none of the requested networks return 0. The surface value is taken only when
+  the tile has a flag that is **also in the mask**, checked bit by bit (0x01 road, 0x04 rail,
+  0x10/0x20 station kinds). So the pollution layer, which asks with mask 0x03, reads surface
+  density only on **road** tiles and highway density on highway tiles (the larger if both);
+  rail, station and subway tiles add nothing to air pollution [STATIC].
 * **area average**: Σ(tile value over the rectangle) ÷ (number of tiles in the rectangle, *all*
   tiles, including those without a network), using integer division and an 8-bit result. Original
   defect: in this form, the subway layer replaces the running value whenever it exceeds the
