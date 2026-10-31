@@ -309,6 +309,7 @@ class Game {
   uint32_t frameDt_ = 0;   // dt of the current frame (ticker scrolling)
   uint32_t pauseFlashMs_ = 0;   // position in the 1500 ms paused-indicator flash cycle (0 when running)
   bool disastersOn_ = true, autoBudget_ = false;
+  bool cheatAllRewards_ = false;   // `pay tribute to your king` (spec 27 s5.3)
   bool dirty_ = false;
   int pendingAfterLeave_ = 0;   // leave action to run once the Save As screen has saved (0 = none)
 

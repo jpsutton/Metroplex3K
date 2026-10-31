@@ -427,11 +427,11 @@ std::vector<PickerEntry> collectPickerEntries(GameData& data, const PickerFilter
   return uniq;
 }
 
-std::vector<PickerEntry> rewardPickerEntries(const RewardTable& t, const Budget* budget, const AgentHierarchy* hier) {
+std::vector<PickerEntry> rewardPickerEntries(const RewardTable& t, const Budget* budget, const AgentHierarchy* hier, bool allUnbuilt) {
   std::vector<PickerEntry> out;
   AgentHierarchy empty;
   for (auto& r : t.entries()) {
-    if (!r.available) continue;
+    if (allUnbuilt ? (r.owned || r.isDeal) : !r.available) continue;
     PickerEntry e;
     e.buildingType = r.buildingType;
     e.name = r.name.empty() ? "Reward " + std::to_string(r.buildingType) : r.name;

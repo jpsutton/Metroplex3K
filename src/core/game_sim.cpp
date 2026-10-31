@@ -488,7 +488,9 @@ void Game::applyCheat(const CheatResult& r) {
   else if (phrase == "i love red tape") {
     std::vector<uint32_t> announced;
     cy.ordinances.makeAllAvailable(&announced);
-  } else if (phrase == "salt off") cy.saltOff = true;
+  } else if (phrase == "nerdz rool") cy.setCleanIndustryOnly(true);
+  else if (phrase == "pay tribute to your king") cheatAllRewards_ = true;
+  else if (phrase == "salt off") cy.saltOff = true;
   else if (phrase == "salt on") cy.saltOff = false;
   else if (int delta = terrainCheatDelta(&c)) {
     World& w = world_;

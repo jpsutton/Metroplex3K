@@ -153,7 +153,7 @@ void Game::buildPickerEntries(PickerCategory c) {
   AgentHierarchy hier = hierarchyOf(city);
   pickerEntries_.clear();
   if (c == PickerCategory::Rewards) {
-    pickerEntries_ = rewardPickerEntries(advisors_.rewards, &city.budget, &hier);
+    pickerEntries_ = rewardPickerEntries(advisors_.rewards, &city.budget, &hier, cheatAllRewards_);
   } else if (haveData_) {
     std::function<bool(uint32_t, const OccAttr&)> placed;
     if (c == PickerCategory::Landmarks)

@@ -391,7 +391,9 @@ std::vector<PickerEntry> collectPickerEntries(GameData& data, const PickerFilter
                                               const std::function<bool(uint32_t occ, const OccAttr&)>& isAvailable = {},
                                               const std::function<bool(uint32_t occ, const OccAttr&)>& isPlaced = {});
 // Reward-table backed list (reward buildings: availability from the table, owned = placed).
-std::vector<PickerEntry> rewardPickerEntries(const RewardTable& t, const Budget* budget, const AgentHierarchy* hier);
+// `allUnbuilt` (cheat `pay tribute to your king`): every reward not yet built and not a business-deal building.
+std::vector<PickerEntry> rewardPickerEntries(const RewardTable& t, const Budget* budget, const AgentHierarchy* hier,
+                                             bool allUnbuilt = false);
 
 class BuildingPicker {
  public:

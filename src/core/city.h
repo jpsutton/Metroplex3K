@@ -142,6 +142,8 @@ class City {
   growth::ValveLayer valves;
   growth::LandValueLayer landValue;
   bool saltOff = false;   // cheat `Salt off`: every water body counts as fresh
+  // Cheat `nerdz rool` (spec 27 s5.3): new industry is always clean/high-tech after the agriculture check.
+  void setCleanIndustryOnly(bool on) { cfg_.growth.cleanIndustryOnly = on; }
   growth::ZoneManager zones;
   us::PowerLayer power;
   us::WaterLayer water;
