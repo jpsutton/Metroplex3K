@@ -1,5 +1,6 @@
 #include "core/growth.h"
 #include <algorithm>
+#include <iterator>
 #include <cmath>
 #include <cstdlib>
 #include "core/records.h"
@@ -646,7 +647,69 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
         else if (score == best && rng.rand(100) > 49) side = s;
       }
       if (best < 0 && ((r.w() == 5 && r.h() == 3) || (r.w() == 3 && r.h() == 5))) return 0;
-      return c.layRunway(r, side);
+      // Runway piece sequence (spec 15 s5.5) [STATIC]: one runway set per family, chosen at random; slots by flag word
+      // and line number (attribute 0x1F4 [INFERRED]); a slot holds the last matching 1 x 1 member.
+      std::map<int, std::vector<BuildingChoice>> sets;
+      for (const auto* v : {&L.filler, &L.small, &L.large})
+        for (const auto& m : *v) if (m.sizeX == 1 && m.sizeZ == 1) sets[m.family].push_back(m);
+      if (sets.empty()) return 0;
+      auto sit = sets.begin();
+      std::advance(sit, rng.rand(int(sets.size())));
+      const BuildingChoice* S[10] = {};
+      std::vector<const BuildingChoice*> F;
+      for (const auto& m : sit->second) {
+        const uint32_t f = m.flagWord;
+        const bool caps = (f & 0xF0) != 0;
+        if (m.line == 1) {
+          if ((f & 0x800) && !caps) S[0] = &m;
+          if ((f & 0x400) && !caps) S[1] = &m;
+          if (f & 0x20) S[2] = &m;
+          if (f & 0x10) S[3] = &m;
+          if (f & 0x80) S[4] = &m;
+          if (f & 0x40) S[5] = &m;
+        } else if (m.line == 2) {
+          if (f & 0x800) S[6] = &m;
+          if (f & 0x400) S[7] = &m;
+        } else if (m.line == 3) {
+          if (f & 0x800) S[8] = &m;
+          if (f & 0x400) S[9] = &m;
+        }
+        if (f & 0x100) F.push_back(&m);
+      }
+      // Lot frame of side s (Frontage numbering): `a` along the side, `d` inward from it.
+      auto toXZ = [&](int a, int d, int& x, int& z) {
+        switch (side) {
+          case 0: x = r.x0 + d; z = r.z0 + a; break;
+          case 1: x = r.x0 + a; z = r.z1 - d; break;
+          case 2: x = r.x1 - d; z = r.z0 + a; break;
+          default: x = r.x0 + a; z = r.z0 + d; break;
+        }
+      };
+      const int along = (side & 1) ? r.w() : r.h(), D = (side & 1) ? r.h() : r.w();
+      const int Ln = std::min(10, along);
+      used.assign(size_t(r.w()) * r.h(), 0);
+      auto lay = [&](const BuildingChoice* m, int rot, int a, int d) {
+        if (!m) return;
+        BuildingChoice b = *m; b.rot = rot;
+        int x, z; toXZ(a, d, x, z);
+        if (canAt(b, x, z)) placed += putAt(b, x, z);
+      };
+      using Pick = std::pair<const BuildingChoice*, int>;
+      auto orAlt = [&](int main, int alt, int rot) -> Pick { return S[main] ? Pick{S[main], 0} : Pick{S[alt], rot}; };
+      const Pick l3 = orAlt(8, 9, 3), l2 = orAlt(6, 7, 3);
+      for (int a = 0; a < Ln; a++) {
+        const bool first = a == 0, last = a == Ln - 1 && Ln > 1;
+        Pick pa = first ? orAlt(3, 2, 3) : last ? orAlt(4, 5, 3) : orAlt(0, 1, 1);
+        lay(pa.first, pa.second, a, 0);
+        int row = 1;
+        if (D >= 3) {
+          if (first || last) lay(l3.first, l3.second, a, row);
+          else lay(F.empty() ? nullptr : F.front(), 0, a, row);
+          row++;
+        }
+        if (D >= 2) lay(l2.first, l2.second, a, row);
+      }
+      return placed;
     }
     case 0x2207D9EE: {  // airport buildings (arrangement step [OPEN] omitted)
       if (uncommitted <= 0) return 0;
@@ -675,8 +738,84 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
       if (b3 && canAt(*b3, rx, rz)) return putAt(*b3, rx, rz);
       return 0;
     }
-    case 0xC2D3FD7E: case 0xE22F4A83:
-      return 0;  // seaport pier (piece order [OPEN]) and estates (member-list flag bits [OPEN], spec 15 s5.5)
+    case 0xE22F4A83: {  // estates (spec 15 s5.5) [STATIC]
+      if (uncommitted * 10 / std::max(1, Max) < 1) return 0;
+      if (r.w() < 4 || r.h() < 4) return 0;
+      if (r.w() > 6) r.x1 = r.x0 + 5;
+      if (r.h() > 6) r.z1 = r.z0 + 5;
+      // Member lists by flag word; K corners, W walls, G gates indexed X0, X1, Z0, Z1.
+      enum { X0 = 0, X1 = 1, Z0 = 2, Z1 = 3 };
+      std::vector<BuildingChoice> K[4], Wl[4], Gt[4], lawn, feature, mansion;
+      for (const auto* v : {&L.filler, &L.small, &L.large})
+        for (const auto& m : *v) {
+          const uint32_t f = m.flagWord;
+          const int e = std::max(m.sizeX, m.sizeZ);
+          if (e == 1 && (f & 0xF)) {
+            if (f & 0x1) K[0].push_back(m);
+            if (f & 0x2) K[1].push_back(m);
+            if (f & 0x4) K[2].push_back(m);
+            if (f & 0x8) K[3].push_back(m);
+          } else if (f & 0x100) (f & 0x400 ? lawn : feature).push_back(m);
+          else if (!(f & 0xF0) && e < 4) mansion.push_back(m);
+          else if (e == 1) {
+            if (f & 0x20) (f & 0x800 ? Wl[X0] : Gt[X0]).push_back(m);
+            if (f & 0x40) (f & 0x800 ? Wl[X1] : Gt[X1]).push_back(m);
+            if (f & 0x10) (f & 0x400 ? Wl[Z0] : Gt[Z0]).push_back(m);
+            if (f & 0x80) (f & 0x400 ? Wl[Z1] : Gt[Z1]).push_back(m);
+          }
+        }
+      // Mirroring: an empty list takes the opposite list's members, placed rotated 180 degrees.
+      auto mirror = [&](std::vector<BuildingChoice>& a, std::vector<BuildingChoice>& b) {
+        if (a.empty() == b.empty()) return !a.empty();
+        std::vector<BuildingChoice>& dst = a.empty() ? a : b;
+        dst = a.empty() ? b : a;
+        for (auto& m : dst) m.rot = 2;
+        return true;
+      };
+      bool ok = mirror(K[0], K[1]) & mirror(K[2], K[3]) & mirror(Wl[X0], Wl[X1]) & mirror(Gt[X0], Gt[X1]) &
+                mirror(Wl[Z0], Wl[Z1]) & mirror(Gt[Z0], Gt[Z1]);
+      if (!ok || mansion.empty() || lawn.empty() || feature.empty()) return 0;
+      auto norm = [](std::vector<BuildingChoice>& v) { for (auto& m : v) if (m.rot < 0) m.rot = 0; };
+      for (int i = 0; i < 4; i++) { norm(K[i]); norm(Wl[i]); norm(Gt[i]); }
+      norm(lawn); norm(feature); norm(mansion);
+      used.assign(size_t(r.w()) * r.h(), 0);
+      const int x0 = r.x0, x1 = r.x1, z0 = r.z0, z1 = r.z1, W = r.w(), H = r.h();
+      auto put = [&](const std::vector<BuildingChoice>& lst, int x, int z) {
+        const BuildingChoice* m = pickFrom(lst);
+        if (m && canAt(*m, x, z)) placed += putAt(*m, x, z);
+      };
+      {  // 1. mansion inside the one-tile ring
+        const BuildingChoice* m = pickFrom(mansion);
+        int e = std::max(m->sizeX, m->sizeZ);
+        int mx = x0 + 1 + rng.rand(W - e - 1), mz = z0 + 1 + rng.rand(H - e - 1);
+        if (canAt(*m, mx, mz)) placed += putAt(*m, mx, mz);
+      }
+      // 2. corners that pass the frontage test
+      const int cx[4] = {x0, x1, x0, x1}, cz[4] = {z0, z1, z1, z0};
+      for (int k = 0; k < 4; k++) if (nearTransport(c, cx[k], cz[k])) put(K[k], cx[k], cz[k]);
+      // 3. walls, at most one gate per side
+      auto side = [&](int which, bool alongZ, int fixed, int lo, int hi) {
+        bool gate = false;
+        for (int t = lo + 1; t < hi; t++) {
+          int x = alongZ ? fixed : t, z = alongZ ? t : fixed;
+          if (!gate && rng.rand(100) < 20) { gate = true; put(Gt[which], x, z); }
+          else put(Wl[which], x, z);
+        }
+      };
+      side(X0, true, x0, z0, z1);
+      side(Z0, false, z0, x0, x1);
+      side(Z1, false, z1, x0, x1);
+      side(X1, true, x1, z0, z1);
+      // 4. interior: feature 5 %, else lawn
+      for (int x = x0 + 1; x < x1; x++)
+        for (int z = z0 + 1; z < z1; z++) {
+          if (used[idx(x, z)]) continue;
+          put(rng.rand(100) < 5 ? feature : lawn, x, z);
+        }
+      return placed;
+    }
+    case 0xC2D3FD7E:
+      return 0;  // seaport pier: piece order [OPEN] (spec 15 s5.5)
     default: break;
   }
   // Scatter rules (section 5.4)

@@ -160,6 +160,8 @@ class City {
   void lvCentre(int& cx, int& cz) const;
   std::string lvExplain(int x, int z) const;   // city centre used by the land-value pass (tools)
   void runMonthlyWater() { monthlyWater(); }   // one water update now (tools)
+  // A connection tile of saved set `setIndex` (rail, road, pipe, power, highway, subway) to neighbour `neighbour`.
+  bool connectionTile(int setIndex, int neighbour, int& tx, int& tz) const;
   std::optional<size_t> evaluateBusinessDeals(const BusinessDeals::Inputs& in) { return business.weeklyEvaluate(in, rng_); }
   // Fall-out marks (disaster MarkRadiation): the tile blocks development and lowers land value. Session-only, not saved.
   void markRadiation(int x, int z) { if (inMap(x, z)) radiation_[idx(x, z)] = 1; }

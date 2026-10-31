@@ -229,6 +229,7 @@ struct PollutionParams {
   int wteCap = 0;                 // SC3PowerLayer [WasteToEnergyPowerPlant] OptimalGarbageCap
   // SC3Tune [RecyclingCenter] OptimalPctReduction / OptimalPopServed: inputs of the recycling ratio (spec 16 s4.3).
   int recyclingPct = 0, recyclingPopServed = 0;
+  int recyclingMaxLifespan = 0, recyclingDeclineAge = 0;   // months
   std::map<uint32_t, PollutionEntry> table;
   // pollution = SC3Pollution.ini; tune = SC3Tune.ini; power = SC3PowerLayer.ini (any may be null)
   static PollutionParams fromIni(const IniFile& pollution, const IniFile* tune = nullptr, const IniFile* power = nullptr);
@@ -259,11 +260,14 @@ class PollutionLayer {
   bool airPolluted(int x, int z) const { return airAt(x, z) >= params_.airThreshold; }
   bool waterPolluted(int x, int z) const { return waterAt(x, z) >= params_.waterThreshold; }
   bool garbagePolluted(int x, int z) const { return standingGarbageAt(x, z) >= params_.garbageThreshold; }
-  // Month end: chart, garbage counters and history (spec 16 s4.5), landfill store update (s4.4) and the recycling
-  // ratio for `population` (s4.3). `recyclingFunding` in percent.
-  void monthEnd(int month, int year, int64_t population = 0, int recyclingFunding = 100);
   // Recycling ratio r (spec 16 s4.3) [STATIC]: centres sorted by reduction percent, walked while served < P.
   struct RecyclingCentre { int64_t pct = 0, popServed = 0; };
+  // A centre's monthly values (spec 16 s4.3) [STATIC]: 0 when not working (expired, age >= MaxLifespan, unpowered, lot
+  // state not 1, failed trips), else the INI values reduced linearly after DeclineAge. No funding scaling.
+  RecyclingCentre recyclingCentreValues(bool working, int ageMonths) const;
+  // Month end: chart, garbage counters and history (spec 16 s4.5), landfill store update (s4.4) and the recycling
+  // ratio for `population` (s4.3) from `centres` (null: every listed centre new and working).
+  void monthEnd(int month, int year, int64_t population = 0, const std::vector<RecyclingCentre>* centres = nullptr);
   static float recyclingRatio(std::vector<RecyclingCentre> centres, int64_t population);
   // Landfill registration (spec 15 s7, spec 17 s7.2.5): sets bit 15 of the standing word, adds 32767 - g of room.
   // Sea-water (salt) flag of the tile's 2 x 2 cell: bit 30 of the cell state (spec 17 s7.2.1) [STATIC].

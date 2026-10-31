@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "core/bytes.h"
 #include "core/ini.h"
@@ -58,7 +59,8 @@ class LandValueCity {
   virtual int altitude(int x, int z) const = 0;              // terrain altitude of vertex (x, z), 0..W x 0..H
   virtual int waterSurface(int x, int z) const { return seaLevel(); }   // water-surface altitude of vertex (x, z)
   virtual int seaLevel() const = 0;                          // base (water) level
-  virtual bool hasWater(int x, int z) const = 0;             // tile has water
+  virtual bool hasWater(int x, int z) const = 0;             // water tile (spec 15 s6.3 step 1)
+  virtual uint32_t blockSignature(int, int) const { return 0; }   // zone/occupant signature of a block's 4 tiles
   virtual int64_t population() const { return 0; }
   virtual bool ordinanceEnacted(uint32_t) const { return false; }
   virtual void occupants(std::vector<LvOccupant>&) const {}
@@ -89,6 +91,9 @@ class LandValueLayer {
 
   // One update call: processes (W*H)/(UpdatePeriod*4) blocks (section 6.1).
   void update(const LandValueCity& city);
+  // Loaded city: blocks whose four tiles are zone 0 but hold a saved value above what the rule can give keep that byte
+  // until a tile's zone or occupant changes (spec 15 s6.3 step 6g note, interim) [OPEN]. Not saved.
+  void pinUnzonedBlocks(const LandValueCity& city);
   // Compute every block now (initial fill / tests). Does not touch scan position or statistics.
   void recomputeAll(const LandValueCity& city);
   // Run the cycle-start recomputation (curves, agent maps, Href, statistics roll-over).
@@ -109,6 +114,8 @@ class LandValueLayer {
   Bytes write() const;
 
   static const int kPhaseOffsets[16][2];
+  // An unclassed block cannot exceed about 6 by the rule (spec 15 s6.3 step 6g note); saved bytes above this are pinned.
+  static constexpr int kUnzonedMax = 6;
   int hillRef() const { return href_; }
   // Diagnostic: the inputs of one block's computation (tools).
   std::string explainBlock(const LandValueCity& c, int x, int y) const;
@@ -121,6 +128,7 @@ class LandValueLayer {
   LandValueTuning tune_;
   bool derivedValid_ = false;
   int cr_ = 0, cc_ = 0, ci_ = 0, href_ = 0;
+  std::unordered_map<uint32_t, uint32_t> pinned_;   // block index -> signature at load
   std::vector<uint8_t> waterDist_;     // per block, Chebyshev distance capped at 255
   std::vector<int16_t> modAll_, modR_, modC_, modI_;  // (W/4)*(H/4)
 };

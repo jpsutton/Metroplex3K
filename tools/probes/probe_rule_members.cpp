@@ -24,12 +24,13 @@ int main(int argc, char** argv) {
         if (r.id != id) continue;
         std::printf("== rule %08X zone %d params %d,%d,%d,%d\n", r.id, zr.first, r.a, r.b, r.c, r.d);
         for (const auto& kv : r.lists) {
-          std::map<std::tuple<uint32_t, int, int, uint32_t>, int> seen;
+          std::map<std::tuple<uint32_t, int, int, uint32_t, int, int>, int> seen;
           for (const auto* v : {&kv.second.filler, &kv.second.small, &kv.second.large})
-            for (const auto& b : *v) seen[{b.occId, b.sizeX, b.sizeZ, b.flagWord}]++;
+            for (const auto& b : *v) seen[{b.occId, b.sizeX, b.sizeZ, b.flagWord, b.line, b.family}]++;
           std::printf("   category %u: %zu distinct members\n", kv.first, seen.size());
           for (const auto& m : seen)
-            std::printf("     occ %08X %dx%d flags %04X x%d\n", std::get<0>(m.first), std::get<1>(m.first), std::get<2>(m.first), std::get<3>(m.first), m.second);
+            std::printf("     occ %08X %dx%d flags %04X part %d family %d x%d\n", std::get<0>(m.first), std::get<1>(m.first), std::get<2>(m.first),
+                        std::get<3>(m.first), std::get<4>(m.first), std::get<5>(m.first), m.second);
         }
       }
   }

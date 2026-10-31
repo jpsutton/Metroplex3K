@@ -35,7 +35,7 @@ const ResKey kPoliceKey{0x206C6E7C, 0x00ABF2EC, 0};
 const ResKey kFireKey{0x206C6E7C, 0xA0F42214, 0};
 
 constexpr uint32_t kAgentPolice = 13130, kAgentFire = 13002, kAgentJail = 13881;
-constexpr uint32_t kAgentPump = 12810, kAgentTower = 12840, kAgentDesal = 12830;
+constexpr uint32_t kAgentPump = 12810, kAgentTower = 12840, kAgentDesal = 12830, kAgentRecycling = 12851;
 
 int absMonthOf(const Clock& c) { cal::Date d = c.date(); return 12 * d.year + d.month; }
 
@@ -105,8 +105,9 @@ void CityConfig::bindFamilies(const std::vector<growth::RuleBinding>& b, GameDat
         if (g) {
           const OccAttr* a = g->occupant(m.instance, false, m.type == T_OCC_ATTR_PORT);
           if (!a) continue;
-          bc.sizeX = int(a->sizeX); bc.sizeZ = int(a->sizeZ); bc.flagWord = a->buildingFlags;
+          bc.sizeX = int(a->sizeX); bc.sizeZ = int(a->sizeZ); bc.flagWord = a->buildingFlags; bc.line = a->partIndex;
         }
+        bc.family = fid; bc.port = m.type == T_OCC_ATTR_PORT;
         r.addMember(fi->second.landUse, bc, m.weight);
       }
     }
@@ -319,8 +320,8 @@ class GrowthAdapter : public growth::GrowthCity {
   }
   void placeBuilding(const growth::BuildingChoice& b, int x, int z) override {
     Occupant o;
-    o.x = x; o.z = z; o.y = c_.world_->altAt(x, z); o.rot = int(c_.urng_.rand(4));
-    o.sizeX = b.sizeX; o.sizeZ = b.sizeZ; o.occId = b.occId; o.keyType = T_OCC_ATTR;
+    o.x = x; o.z = z; o.y = c_.world_->altAt(x, z); o.rot = b.rot >= 0 ? (b.rot & 3) : int(c_.urng_.rand(4));
+    o.sizeX = b.sizeX; o.sizeZ = b.sizeZ; o.occId = b.occId; o.keyType = b.port ? T_OCC_ATTR_PORT : T_OCC_ATTR;
     o.agentType = b.agentType; o.state = 4;
     c_.addOccupant(o);
   }
@@ -358,9 +359,31 @@ class LandValueAdapter : public growth::LandValueCity {
   int waterSurface(int x, int z) const override { return c_.world_->waterAt(std::min(x, c_.world_->W), std::min(z, c_.world_->H)); }
   int seaLevel() const override { return c_.world_->seaLevel; }
   bool radioactive(int x, int z) const override { return c_.radioactiveAt(x, z); }
+  // Water tile (spec 15 s6.3 step 1) [STATIC]: at any of the four corner vertices the water surface is >= the ground, so
+  // dry land exactly at the sea level counts as water.
   bool hasWater(int x, int z) const override {
     if (!c_.world_->inTiles(x, z)) return false;
-    return c_.world_->waterAt(x, z) > c_.world_->altAt(x, z);
+    for (int dx = 0; dx <= 1; dx++)
+      for (int dz = 0; dz <= 1; dz++)
+        if (c_.world_->waterAt(x + dx, z + dz) >= c_.world_->altAt(x + dx, z + dz)) return true;
+    return false;
+  }
+  // Interim for high saved values on all-zone-0 blocks (spec 15 s6.3 step 6g note, [OPEN]): such a block keeps its saved
+  // byte until the zone or occupant of one of its tiles changes; this signature detects the change.
+  uint32_t blockSignature(int x, int z) const override {
+    uint32_t h = 2166136261u;
+    for (int dx = 0; dx < 2; dx++)
+      for (int dz = 0; dz < 2; dz++) {
+        int tx = x + dx, tz = z + dz;
+        uint32_t v = 0;
+        if (c_.world_->inTiles(tx, tz)) {
+          v = c_.world_->zone[c_.idx(tx, tz)];
+          int oi = c_.occupantAt(tx, tz);
+          if (oi >= 0) v ^= (c_.world_->occupants[size_t(oi)].uid << 8) ^ c_.world_->occupants[size_t(oi)].occId;
+        }
+        h = (h ^ v) * 16777619u;
+      }
+    return h;
   }
   // Curves are read at valve 3000 Slast (spec 15 s6.3 cycle start step 1) [STATIC]; no factor 2.
   int64_t population() const override { return c_.valves.v3000.Slast; }
@@ -481,6 +504,7 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
       for (int z = 0; z <= H; z++)
         if (w->seaVertex[size_t(w->vIdx(x, z))]) pollution.markSeaVertex(x, z);
   if (!haveLv) landValue.recomputeAll(*lvView_);
+  else landValue.pinUnzonedBlocks(*lvView_);
   wire();
   refresh(true);
   // City population = valve 3000 Slast (spec 20 s2) [DATA]; a city without a completed valve cycle counts its buildings.
@@ -1283,7 +1307,25 @@ us::PowerEnv City::powerEnv(std::vector<uint8_t>& conductive) const {
   env.conductive = &conductive;
   env.ordinances = usOrdinances();
   env.nowAbsMonth = absMonthOf(clock);
+  // Neighbour power purchases (deal kind 0, spec 16 s2.6 step 2): one slot per neighbour, seeded at a power-line
+  // connection tile to that neighbour (spec 16 s2.6 step 6).
+  for (const auto& d : neighbours.active) {
+    if (d.terminated() || d.dealType != 0 || env.deals.size() >= 4) continue;
+    us::PowerDeal pd; pd.amount = d.quantity;
+    connectionTile(3, d.neighbourIndex, pd.tx, pd.tz);
+    env.deals.push_back(pd);
+  }
   return env;
+}
+
+bool City::connectionTile(int setIndex, int neighbour, int& tx, int& tz) const {
+  tx = tz = -1;
+  if (setIndex < 0 || setIndex >= 6) return false;
+  for (uint32_t p : neighbours.conn[setIndex]) {
+    int x = int(p >> 16), z = int(p & 0xFFFF);
+    if (NeighbourDeals::edgeNeighbour(x, z, world_->W, world_->H) == neighbour) { tx = x; tz = z; return true; }
+  }
+  return false;
 }
 
 void City::monthlyPower() {
@@ -1334,12 +1376,29 @@ void City::monthlyWater() {
   env.waterPollutionAt = [this](int x, int z) { return pollution.waterAt(x, z); };
   env.ordinances = usOrdinances();
   env.consumers = &consumers;
+  // Neighbour water deals (kinds 2 buy, 3 sell; spec 16 s3.4 step 4) at a pipe connection tile to that neighbour.
+  for (const auto& d : neighbours.active) {
+    if (d.terminated() || (d.dealType != 2 && d.dealType != 3)) continue;
+    us::WaterDeal wd; wd.purchase = d.dealType == 2; wd.amount = d.quantity;
+    if (connectionTile(2, d.neighbourIndex, wd.tx, wd.tz)) env.deals.push_back(wd);
+  }
   water.monthlyUpdate(env);
 }
 
 void City::monthlyPollution() {
   cal::Date d = clock.date();
-  pollution.monthEnd(d.month, d.year, residents_);
+  // Recycling centres' monthly values (spec 16 s4.3): working = occupied and powered; age from the build date.
+  // [OPEN on our side] the failed-trip condition is not applied (trip results are not modelled per facility).
+  std::vector<us::PollutionLayer::RecyclingCentre> centres;
+  const int now = absMonthOf(clock);
+  for (const auto& o : world_->occupants) {
+    if (o.agentType != kAgentRecycling) continue;
+    int built = now;
+    if (o.hasDate && o.dateYear > 0) built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
+    bool working = (o.state & ~0x200u) == 1 && power.powered(o.x, o.z);
+    centres.push_back(pollution.recyclingCentreValues(working, std::max(0, now - std::min(built, now))));
+  }
+  pollution.monthEnd(d.month, d.year, residents_, &centres);
 }
 void City::monthlyCrime() {
   cal::Date d = clock.date();

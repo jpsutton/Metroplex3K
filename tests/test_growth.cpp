@@ -53,7 +53,6 @@ struct TestCity : GrowthCity {
     lots.erase(std::remove_if(lots.begin(), lots.end(), [&](const LotInfo& l) { return l.ax == lot.ax && l.az == lot.az; }), lots.end());
   }
   void setLotState(const LotInfo& lot, uint32_t s) override { for (auto& l : lots) if (l.ax == lot.ax && l.az == lot.az) l.state = s; }
-  int layRunway(const Rect&, int side) override { runwaySide = side; runwayCalls++; return 1; }
   int landfillGarbage(int x, int z) const override { auto it = garbage.find({x, z}); return it == garbage.end() ? 0 : it->second; }
   void setLandfillGarbage(int x, int z, int g) override { garbage[{x, z}] = g; }
   void placeLandfillPiece(int x, int z) override { landfillPieces.push_back({x, z}); }
@@ -90,6 +89,11 @@ struct Fixture {
     DevRule& r9 = cfg.ruleFor(9, 0x422B55F2); r9.a = 1; r9.b = 10; r9.c = 0; r9.d = 0; r9.hasParams = true;
     r9.addMember(8100, bc(10, 8100), 1); r9.addMember(8200, bc(11, 8200), 1); r9.addMember(9300, bc(12, 9300), 1);
     DevRule& rA = cfg.ruleFor(14, 0x81FFC3CE); rA.a = 1; rA.b = 10; rA.addMember(12310, bc(20, 12310, 1, 1, 0x100), 1);
+    {  // runway set as shipped (category 12310): flag word and line number (attribute 0x1F4)
+      const std::pair<uint32_t, int> parts[] = {{0xA10, 1}, {0xA00, 1}, {0xA80, 1}, {0x600, 2}, {0xC00, 3}};
+      uint32_t occ = 30;
+      for (auto [fw, line] : parts) { BuildingChoice b = bc(occ++, 12310, 1, 1, fw); b.line = line; rA.addMember(12310, b, 1); }
+    }
   }
 };
 
@@ -327,17 +331,48 @@ int main() {
     TestCity odd(32, 32);
     CHECK(zm.runRule(odd, rng, rh, Rect{10, 10, 16, 15}, k2, 2000, 0, 2000, 3) == 0);   // odd width
   }
+  // ---- estates (spec 15 s5.5): shipped category 3500 filing, mirroring, 6 x 6 lot ----
+  {
+    Fixture f; ZoneManager zm; zm.setConfig(&f.cfg);
+    DevRule es; es.id = 0xE22F4A83;
+    uint32_t occ = 100;
+    for (uint32_t fw : {0x102u, 0x108u, 0x240u, 0x640u, 0x280u, 0xA80u, 0x680u, 0xA40u, 0xD00u, 0x100u, 0x100u, 0x000u, 0x000u})
+      es.lists[3500].filler.push_back(bc(occ++, 3500, 1, 1, fw));
+    es.lists[3500].large.push_back(bc(occ++, 3500, 3, 3, 0));
+    Category k; k.agentType = 3500;
+    TestCity c(32, 32);
+    for (int x = 9; x <= 16; x++) { c.road[c.ix(x, 9)] = 1; c.road[c.ix(x, 16)] = 1; }
+    for (int z = 9; z <= 16; z++) { c.road[c.ix(9, z)] = 1; c.road[c.ix(16, z)] = 1; }
+    SimRand rng(9);
+    int n = zm.runRule(c, rng, es, Rect{10, 10, 17, 17}, k, 2000, 0, 2000, 3);   // cut to 6 x 6
+    CHECK(n == int(c.lots.size()));
+    int ring = 0, inner = 0;
+    for (const auto& l : c.lots) {
+      CHECK(l.ax >= 10 && l.ax <= 15 && l.az >= 10 && l.az <= 15);
+      if (l.ax == 10 || l.ax == 15 || l.az == 10 || l.az == 15) ring++; else inner++;
+    }
+    CHECK(ring == 20);   // 4 corners + 16 wall or gate tiles
+    // mansion (1 x 1 or 3 x 3) plus lawn/feature fill the 16 interior tiles
+    int innerTiles = 0; for (const auto& l : c.lots) if (!(l.ax == 10 || l.ax == 15 || l.az == 10 || l.az == 15)) innerTiles += l.sizeX * l.sizeZ;
+    CHECK(innerTiles == 16 && inner >= 1);
+    DevRule none; none.id = 0xE22F4A83; none.lists[3500].filler.push_back(bc(1, 3500, 1, 1, 0xD00));
+    TestCity d(32, 32);
+    CHECK(zm.runRule(d, rng, none, Rect{10, 10, 15, 15}, k, 2000, 0, 2000, 3) == 0);   // empty pair / mansion list: not registered
+  }
   // ---- airport runway ----
   {
     Fixture f; ZoneManager zm; zm.setConfig(&f.cfg); SimRand rng(5);
     TestCity c = makeRes(); c.fillZone(10, 10, 14, 12, 14); for (int x = 9; x <= 15; x++) c.road[c.ix(x, 9)] = 1; c.valves[5001].V = 100;
     zm.visitTile(c, rng, 10, 10);
-    CHECK(c.runwayCalls == 1 && (c.runwaySide == 1 || c.runwaySide == 3));   // runway along an edge of length 5
+    // runway along the edge of length 5, three rows deep (A, line 3, line 2): 5 x 3 = 15 pieces
+    CHECK(c.lots.size() == 15);
+    std::set<uint32_t> occs; for (const auto& l : c.lots) occs.insert(l.agentType);
+    CHECK(occs == std::set<uint32_t>{12310});
     // negative score on a 5x3 lot: nothing is built (an adjoining 'other' building strip)
     TestCity d = makeRes(); d.fillZone(10, 10, 14, 12, 14); for (int x = 9; x <= 15; x++) d.road[d.ix(x, 9)] = 1; d.valves[5001].V = 100;
     for (int x = 10; x <= 14; x++) { LotInfo l; l.present = true; l.ax = x; l.az = 13; l.state = 1; l.agentType = 4242; d.lots.push_back(l); }
     for (int x = 10; x <= 14; x++) { LotInfo l; l.present = true; l.ax = x; l.az = 9; l.state = 1; l.agentType = 4242; d.lots.push_back(l); }
-    zm.visitTile(d, rng, 10, 10); CHECK(d.runwayCalls == 0);
+    zm.visitTile(d, rng, 10, 10); CHECK(d.lots.size() == 10);
   }
   // ---- config parsing ----
   {

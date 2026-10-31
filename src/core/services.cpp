@@ -582,6 +582,8 @@ PollutionParams PollutionParams::fromIni(const IniFile& f, const IniFile* tune, 
     p.incineratorCap = int(t.num("Incinerator", "OptimalGarbageCap", 0));
     p.recyclingPct = int(t.num("RecyclingCenter", "OptimalPctReduction", 0));
     p.recyclingPopServed = int(t.num("RecyclingCenter", "OptimalPopServed", 0));
+    p.recyclingMaxLifespan = int(t.num("RecyclingCenter", "MaxLifespan", 0));
+    p.recyclingDeclineAge = int(t.num("RecyclingCenter", "DeclineAge", 0));
   }
   if (power) {
     IniReader t{power};
@@ -853,14 +855,22 @@ float PollutionLayer::recyclingRatio(std::vector<RecyclingCentre> cs, int64_t P)
   return float(served < double(P) ? w / double(P) : w / served);
 }
 
-void PollutionLayer::monthEnd(int month, int year, int64_t population, int recyclingFunding) {
+PollutionLayer::RecyclingCentre PollutionLayer::recyclingCentreValues(bool working, int age) const {
+  const PollutionParams& P = params_;
+  if (!working || (P.recyclingMaxLifespan > 0 && age >= P.recyclingMaxLifespan)) return {0, 0};
+  auto aged = [&](int64_t v) {
+    if (age <= P.recyclingDeclineAge || P.recyclingMaxLifespan <= P.recyclingDeclineAge) return v;
+    return v - int64_t(age - P.recyclingDeclineAge) * v / (P.recyclingMaxLifespan - P.recyclingDeclineAge);
+  };
+  return {aged(P.recyclingPct), aged(P.recyclingPopServed)};
+}
+
+void PollutionLayer::monthEnd(int month, int year, int64_t population, const std::vector<RecyclingCentre>* centres) {
   chartMonthEnd(chart, uint32_t(avgAir), month, year);
   disp.monthEnd();
   disp.store.monthly();
-  // [INFERRED] funding scales both centre values (spec 16 s4.3).
-  std::vector<RecyclingCentre> cs(recyclingCentres.size(),
-                                  {int64_t(params_.recyclingPct) * recyclingFunding / 100, int64_t(params_.recyclingPopServed) * recyclingFunding / 100});
-  ratio = recyclingRatio(cs, population);
+  if (centres) ratio = recyclingRatio(*centres, population);
+  else ratio = recyclingRatio(std::vector<RecyclingCentre>(recyclingCentres.size(), recyclingCentreValues(true, 0)), population);
 }
 
 Bytes PollutionLayer::serialize() const {

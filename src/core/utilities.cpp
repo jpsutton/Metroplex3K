@@ -180,6 +180,16 @@ void PowerLayer::distribute(int sx, int sz, const PowerEnv& env, std::vector<uin
 
   int64_t demandSum = 0;
   for (int t : K) demandSum += cons_[t];
+  // A buy deal follows the city's actual draw (spec 19 s10.4: the deal's units are overwritten with the reported
+  // quantity), so purchased power covers the component's shortfall [INFERRED: which quantity is reported is OPEN].
+  if (!active.empty() && D > 0) {
+    int64_t need = int64_t(std::ceil(double(demandSum) * k)) - S;
+    if (need > D) {
+      for (auto* d : active) if (d->amount > 0) { d->amount += int(need - D); break; }
+      catProduced[9] += need - D;
+      D = need;
+    }
+  }
 
   int64_t B = k > 0 ? int64_t(double(S + D) / k) : INT64_MAX / 4;
   bool brown = false;

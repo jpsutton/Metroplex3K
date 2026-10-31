@@ -40,6 +40,36 @@ int main(int argc, char** argv) {
                     out.size(), rec->data.size(), nd, first == SIZE_MAX ? ssize_t(-1) : ssize_t(first));
       }
     }
+    for (const auto& d : c.neighbours.active)
+      std::printf("   deal: type %d neighbour %d quantity %d monthly %d %s\n", d.dealType, d.neighbourIndex, d.quantity, d.monthlyAmount,
+                  d.terminated() ? "terminated" : "");
+    if (std::getenv("M3K_POWER")) {
+      int tx, tz; bool ok = c.connectionTile(3, 0, tx, tz);
+      std::printf("   power conn to neighbour 0: %d (%d,%d); conn sets sizes power %zu pipe %zu\n", ok, tx, tz, c.neighbours.conn[3].size(), c.neighbours.conn[2].size());
+      const auto& ps = c.power.stats();
+      std::printf("   power before: produced %lld consumed %lld\n", (long long)ps.produced, (long long)ps.consumed);
+      for (int d = 0; d < 35; d++) s.game.sim().tickDay();
+      const auto& p2 = c.power.stats();
+      std::printf("   power after month: produced %lld consumed %lld\n", (long long)p2.produced, (long long)p2.consumed);
+      for (const auto& d : c.power.deals()) std::printf("   deal slot (%d,%d) amount %d reached %d active %d unused %lld\n", d.tx, d.tz, d.amount, d.reached, d.active, (long long)d.unused);
+      int unp = 0, tot = 0;
+      for (const auto& o : s.game.world().occupants) if (o.agentType >= 3000 && o.agentType < 10000 && (o.state & ~0x200u) == 1) { tot++; if (!c.power.powered(o.x, o.z)) unp++; }
+      std::printf("   occupied RCI %d unpowered %d\n", tot, unp);
+      continue;
+    }
+    if (std::getenv("M3K_RESULTS")) {   // zone-manager result codes: saved previous pass vs our first full pass (10 s6.4)
+      auto dump = [](const char* nm, const growth::ZoneManager::ResultMap& m) {
+        std::map<int, uint32_t> byCode;
+        for (const auto& kv : m) byCode[kv.first.first] += kv.second;
+        std::printf("     %-12s", nm);
+        for (const auto& kv : byCode) std::printf(" %d:%u", kv.first, kv.second);
+        std::printf("\n");
+      };
+      dump("saved prev", c.zones.resultPrev);
+      for (int d = 0; d < 62; d++) s.game.sim().tickDay();
+      dump("ours prev", c.zones.resultPrev);
+      continue;
+    }
     // Saved values before anything runs.
     std::vector<uint8_t> saved = c.landValue.lv;
     uint8_t capSaved[3] = {c.valves.v3000.capPct, c.valves.v5000.capPct, c.valves.v8000.capPct};
@@ -62,12 +92,20 @@ int main(int argc, char** argv) {
       int bit30 = 0; for (uint32_t v : P.state) if (v & 0x40000000u) bit30++;
       std::printf("     cells with sea flag %d\n", bit30);
     }
-    {  // recycling ratio rule (spec 16 s4.3) at 100% funding vs the saved ratio
+    {  // recycling ratio rule (spec 16 s4.3): per-centre working state and age vs the saved ratio
       us::IniReader t{&c.config().ini.tune};
-      int64_t pct = t.num("RecyclingCenter", "OptimalPctReduction", 0), served = t.num("RecyclingCenter", "OptimalPopServed", 0);
-      std::vector<us::PollutionLayer::RecyclingCentre> cs(c.pollution.recyclingCentres.size(), {pct, served});
-      std::printf("   recycling: %zu centres, saved ratio %.4f, rule %.4f\n", cs.size(), c.pollution.ratio,
-                  us::PollutionLayer::recyclingRatio(cs, c.valves.v3000.Slast));
+      std::vector<us::PollutionLayer::RecyclingCentre> cs;
+      int now = 12 * c.clock.date().year + c.clock.date().month;
+      std::string detail;
+      for (const auto& o : s.game.world().occupants) {
+        if (o.agentType != 12851) continue;
+        int built = o.hasDate && o.dateYear > 0 ? 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1 : now;
+        bool powered = c.power.powered(o.x, o.z), occ = (o.state & ~0x200u) == 1;
+        cs.push_back(c.pollution.recyclingCentreValues(occ && powered, std::max(0, now - built)));
+        char b[80]; std::snprintf(b, sizeof b, " [age %d%s%s]", now - built, powered ? "" : " unpowered", occ ? "" : " not-occupied"); detail += b;
+      }
+      std::printf("   recycling: %zu centres, saved ratio %.4f, rule %.4f%s\n", cs.size(), c.pollution.ratio,
+                  us::PollutionLayer::recyclingRatio(cs, c.valves.v3000.Slast), detail.c_str());
     }
     // Land value.
     c.recomputeLandValue();
@@ -114,6 +152,23 @@ int main(int argc, char** argv) {
       if (std::abs(it->second - f.output) <= 5) match++;
       if (f.output == 0) zeroOurs++;
       if (it->second == 0) zeroSaved++;
+    }
+    if (std::getenv("M3K_PUMPS")) {
+      int shown = 0;
+      for (const auto& f : c.water.facilities()) {
+        if (f.kind != us::WaterKind::Pump) continue;
+        auto it = savedOut.find({f.x, f.z});
+        if (it == savedOut.end() || shown++ >= 12) continue;
+        int st = -1, built = 0; std::string props;
+        for (const auto& o : s.game.world().occupants)
+          if (o.x == f.x && o.z == f.z) {
+            st = int(o.state); built = o.dateYear;
+            for (const auto& kv : o.intProps) { char b[40]; std::snprintf(b, sizeof b, " %08X=%08X", kv.first, kv.second); props += b; }
+          }
+        std::printf("     pump (%d,%d) saved %d ours %d: powered %d waterPol %d state %d built %d props%s trip %d\n", f.x, f.z, it->second, f.output,
+                    c.power.powered(f.x, f.z) ? 1 : 0, c.pollution.waterAt(f.x, f.z), st, built, props.c_str(),
+                    c.traffic ? c.traffic->tripResult(f.x, f.z) : -9);
+      }
     }
     std::printf("   pumps %d: output within 5 of saved %d; zero output ours %d saved %d; supply ours %lld saved stat %lld\n", pumps, match,
                 zeroOurs, zeroSaved, (long long)c.water.stats.supply, savedSupply);

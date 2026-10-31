@@ -56,6 +56,10 @@ struct BuildingChoice {  // a member of a family list (weight = duplicates in th
   int sizeX = 1, sizeZ = 1;
   uint32_t agentType = 0;
   uint32_t flagWord = 0;  // attribute 0xCA (0x100 filler, 0x400 farm field)
+  int line = 0;           // attribute 0x1F4 (puzzle-part index; runway line number, spec 15 s5.5)
+  int family = 0;         // family the member came from (runway sets, spec 15 s5.5)
+  bool port = false;      // part occupant of the airport/seaport key group
+  int rot = -1;           // placement rotation 0..3 (quarter turns); -1 = random
   bool isFiller() const { return (flagWord & 0x100) != 0; }
 };
 struct CategoryLists { std::vector<BuildingChoice> filler, small, large; };
@@ -143,7 +147,6 @@ class GrowthCity {
   virtual void placeBuilding(const BuildingChoice& b, int x, int z) = 0;  // new lot in state 4; manager already removed overlaps
   virtual void removeBuilding(const LotInfo& lot) = 0;
   virtual void setLotState(const LotInfo& lot, uint32_t newState) = 0;
-  virtual int layRunway(const Rect&, int /*side*/) { return 0; }  // piece sequence [OPEN]
   // Landfill support (spec 15 section 7)
   virtual int landfillGarbage(int, int) const { return 0; }
   virtual void setLandfillGarbage(int, int, int) {}
