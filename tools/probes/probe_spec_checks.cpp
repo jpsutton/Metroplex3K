@@ -274,6 +274,10 @@ int main(int argc, char** argv) {
       std::map<int, int> zc; const auto& w = s.game.world();
       for (uint8_t z : w.zone) zc[z]++;
       std::printf("   zones:"); for (const auto& kv : zc) if (kv.first) std::printf(" %d:%d", kv.first, kv.second); std::printf("\n");
+      int uncovered = 0;
+      for (int x = 0; x < w.W; x++) for (int z = 0; z < w.H; z++) if (w.zone[size_t(w.tIdx(x, z))] == 14 && c.occupantAt(x, z) < 0) { if (uncovered++ < 6) std::printf("     uncovered airport tile (%d,%d)\n", x, z); }
+      std::printf("   uncovered zone-14 tiles: %d\n", uncovered);
+      for (const auto& o : w.occupants) if (o.agentType == 12310 && (o.sizeX > 1 || o.sizeZ > 1)) std::printf("     multi-tile airport part (%d,%d) %dx%d occ %08X key %08X\n", o.x, o.z, o.sizeX, o.sizeZ, o.occId, o.keyType);
       continue;
     }
     if (std::getenv("M3K_PWRTRACE")) {   // power and pump state after every month start for ~120 days
@@ -300,6 +304,18 @@ int main(int argc, char** argv) {
       for (const auto& p : c.power.plants())
         std::printf("     plant %u at (%d,%d) cap %d output %d age %d lmax %d ld %d expired %d\n", p.agentType, p.x, p.z, p.capacity, p.output, now - p.buildAbsMonth, p.lmax, p.ld, p.expired ? 1 : 0);
       std::printf("   produced %lld consumed %lld\n", (long long)c.power.stats().produced, (long long)c.power.stats().consumed);
+      continue;
+    }
+    if (const char* tl = std::getenv("M3K_LVTILES")) {   // land value at "x,z;x,z;..." after N days (M3K_LVDAYS, default 40)
+      int days = std::getenv("M3K_LVDAYS") ? std::atoi(std::getenv("M3K_LVDAYS")) : 40;
+      for (int d = 0; d < days; d++) s.game.sim().tickDay();
+      std::string t = tl; size_t pos = 0;
+      while (pos < t.size()) {
+        size_t e = t.find(';', pos); if (e == std::string::npos) e = t.size();
+        int x, z; if (std::sscanf(t.substr(pos, e - pos).c_str(), "%d,%d", &x, &z) == 2)
+          std::printf("     LV (%d,%d) = %d   %s\n", x, z, c.landValue.landValueAtTile(x, z), c.lvExplain(x & ~1, z & ~1).c_str());
+        pos = e + 1;
+      }
       continue;
     }
     if (std::getenv("M3K_PASSES")) {   // result codes of each completed pass over ~250 days, plus population
