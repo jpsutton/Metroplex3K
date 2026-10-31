@@ -53,7 +53,7 @@ struct CityConfig {
   TilingRuleSet tiling;                  // network tiling rules (Res/TilingRules)
   bool haveTiling = false;
   bool synthetic = true;                 // true until load() found game data
-  bool useTripFailure = false;           // feed TrafficSim trip results into the developers ("unfit")
+  bool useTripFailure = true;            // feed TrafficSim trip results into the developers ("unfit", spec 18 s9.2)
 
   CityConfig();
   // Reads all INIs, zone/family data, tiling rules. Returns true if zone data was found.

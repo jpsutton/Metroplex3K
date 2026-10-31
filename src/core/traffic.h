@@ -71,7 +71,8 @@ struct TrafficOrdinances {
        touristPromotion = false, shuttleService = false, subsidizedTransit = false;
 };
 constexpr uint32_t kOrdParkingFines = 0x015B4D1E, kOrdAlternateDay = 0xE2BF1E2A, kOrdCarpool = 0xA2BF1DDC,
-                   kOrdCrossingGuards = 0xC2BF1DEF, kOrdTourist = 0x62F6E7CF, kOrdSubsidizedTransit = 0xC2D1B025;
+                   kOrdCrossingGuards = 0xC2BF1DEF, kOrdTourist = 0x62F6E7CF, kOrdSubsidizedTransit = 0xC2D1B025,
+                   kOrdShuttle = 0xA2BF1DE5;
 
 // Efficiency curve of section 8.2. fundingPercent F (0..255), maxEff M percent, k = Mystical constant.
 float efficiencyCurve(int fundingPercent, int maxEffPercent, float mystical);
@@ -206,6 +207,11 @@ class TrafficSim {
   // Garbage-facility access retry (spec 18 s9.2, 16 s4.3) [STATIC]: an uncounted trip from the lot with destination
   // "any", budget 255 x TripCellCostBaseRoad, cars and rail only. Writes the lot's result; returns success.
   bool routeFacilityTrip(const TripRect& lot);
+  // Tile-origin trip (spec 18 s9.2, landfill developer): no occupant, 1 x 1 origin, default walking radius, destination
+  // "any", uncounted, length factor = map size, cars and rail. Writes the tile's result; returns success.
+  bool routeTileTrip(int x, int z);
+  // Origins whose trips count as successful without routing (spec 18 s9.2 interim: landfill tiles and pieces).
+  std::function<bool(int x, int z)> alwaysReaches;
   // Weekly Monday run: slot fires iff floor(day/7)==slot. Day is 1-based.
   int runWeekly(int dayOfMonth, const std::vector<TripBuilding>& buildings);
   static bool slotFires(int slot, int dayOfMonth) { return dayOfMonth / 7 == slot; }

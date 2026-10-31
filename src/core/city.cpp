@@ -277,6 +277,7 @@ class GrowthAdapter : public growth::GrowthCity {
     return std::max(1, c_.landValue.landValueAtTile(x, z));
   }
   bool isTransport(int x, int z) const override { return c_.isRoadTile(x, z); }
+  bool tileTrip(int x, int z) override { return !c_.traffic || c_.traffic->routeTileTrip(x, z); }
   // Access (spec 15 s4.2) [STATIC]: a transport network piece (road, highway, rail; not stops or stations) in the box
   // [x - d - 1, x + d + 1] x [z - d - 1, z + d + 1] around the visited (anchor) tile, i.e. reach d + 1.
   bool hasAccess(int x, int z, int d) const override {
@@ -301,10 +302,13 @@ class GrowthAdapter : public growth::GrowthCity {
     return growth::ValveReading{v.V, v.Max, v.Min};
   }
   bool tripFailed(int x, int z) const override {
-    // Off by default. With neighbour connections absorbing trips, feeding "unfit" from our traffic model gives code-6
-    // counts close to the original's (London 26-66 per pass vs 27-48, Madrid 65-95 vs 85-170) but Madison (2-13 vs 0-1)
-    // and Moscow still lose population and leave their reference bands (spec 28 s5.1).
-    return c_.cfg_.useTripFailure && c_.traffic && c_.traffic->tripResult(x, z) == 1;
+    // Trip result 1 is the developers' "unfit" input (spec 18 s9.2, 15 s4.2) [STATIC]. On by default since the traffic
+    // model matches the original's saves: failure ratios at day ~480 ours/theirs Berlin 0.004/0.008, Moscow 0.001/0.001,
+    // London 0.033/0.032, Madison 0.016/0.016, and all six reference cities stay in their 480-day bands (spec 28 s5.1).
+    // M3K_TRIPFAIL=0 turns it off for comparison.
+    static const char* env = std::getenv("M3K_TRIPFAIL");
+    static const bool envOff = env && env[0] == '0';
+    return c_.cfg_.useTripFailure && !envOff && c_.traffic && c_.traffic->tripResult(x, z) == 1;
   }
   int airPollution(int x, int z) const override { return c_.pollution.airAt(x, z); }
   int waterPollution(int x, int z) const override { return c_.pollution.waterAt(x, z); }
@@ -1179,10 +1183,21 @@ void City::rebuildTraffic() {
   }
   // Counting-test density d (spec 18 s4.5) [STATIC]: the RCI development layer's valve-effect map (layer 0x80F1E6D3,
   // last completed cycle) at the lot's first tile.
+  // Trips from landfill tiles and pieces succeed (spec 18 s9.2 interim [INFERRED from DATA]: every Berlin landfill tile is
+  // "ok" in every save of the original, including tiles with no road in reach).
+  traffic->alwaysReaches = [this](int x, int z) { return inMap(x, z) && world_->zone[idx(x, z)] == 17; };
   traffic->lotDensity = [this, H](int x, int z) -> int {
     size_t i = size_t(x) * H + z;
     return i < valves.effectMap.size() ? int(valves.effectMap[i]) : 0;
   };
+  {  // walking radii follow the enacted ordinances from load on, not from the first month end (spec 18 s4.3, s11)
+    TrafficOrdinances o;
+    o.parkingFines = ordinances.enacted(kOrdParkingFines); o.alternateDayDriving = ordinances.enacted(kOrdAlternateDay);
+    o.carpool = ordinances.enacted(kOrdCarpool); o.crossingGuards = ordinances.enacted(kOrdCrossingGuards);
+    o.touristPromotion = ordinances.enacted(kOrdTourist); o.subsidizedTransit = ordinances.enacted(kOrdSubsidizedTransit);
+    o.shuttleService = ordinances.enacted(kOrdShuttle);
+    traffic->applyOrdinances(o);
+  }
   // Station occupants (spec 18 s3.1) [STATIC]: bus stops, rail, subway and subway-rail stations OR their flags into every
   // tile of the footprint.
   for (const auto& o : world_->occupants)
@@ -1439,6 +1454,7 @@ void City::monthlyTraffic() {
   in.ord.crossingGuards = ordinances.enacted(kOrdCrossingGuards);
   in.ord.touristPromotion = ordinances.enacted(kOrdTourist);
   in.ord.subsidizedTransit = ordinances.enacted(kOrdSubsidizedTransit);
+  in.ord.shuttleService = ordinances.enacted(kOrdShuttle);   // walking radii + ShuttleServiceDistanceToRoadAdd (spec 18 s4.3)
   in.roadTiles = roads; in.highwayTiles = hwy; in.railTiles = rail;
   {  // transit upkeep (spec 18 s8): station buildings' OptimalMonthlyUpkeep plus subway tiles (saved Transit charges: Berlin 1,351)
     std::set<std::pair<int, int>> subTiles;

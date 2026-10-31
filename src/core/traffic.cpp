@@ -730,6 +730,7 @@ bool TrafficSim::fireBuilding(const TripBuilding& b) {
     bool allowed = firstTimePath ? m < massChance_ : m <= massChance_;
     if (!allowed) req.rail = req.bus = req.subway = false;
   }
+  if (alwaysReaches && alwaysReaches(b.x, b.z)) { rec_.tripsAttempted++; writeResult(origin, true); return true; }
   TripResult tr = routeTrip(req);
   rec_.tripsAttempted++;
   if (!tr.success) rec_.tripsFailed++;
@@ -738,8 +739,25 @@ bool TrafficSim::fireBuilding(const TripBuilding& b) {
   return true;
 }
 
+bool TrafficSim::routeTileTrip(int x, int z) {
+  if (x < 0 || z < 0 || x >= W_ || z >= H_) return false;
+  TripRect lot{x, z, x, z};
+  rec_.tripsAttempted++;
+  if (alwaysReaches && alwaysReaches(x, z)) { writeResult(lot, true); return true; }
+  TripRequest req;
+  req.origin = lot;
+  req.originCategory = CAT_OTHER;   // default radius
+  req.dest = CAT_ANY;
+  req.rail = true; req.bus = req.subway = false;
+  TripResult tr = routeTrip(req);
+  if (!tr.success) rec_.tripsFailed++;
+  writeResult(lot, tr.success);
+  return tr.success;
+}
+
 bool TrafficSim::routeFacilityTrip(const TripRect& lot) {
   if (lot.x0 < 0 || lot.z0 < 0 || lot.x0 >= W_ || lot.z0 >= H_) return false;
+  if (alwaysReaches && alwaysReaches(lot.x0, lot.z0)) { rec_.tripsAttempted++; writeResult(lot, true); return true; }
   TripRequest req;
   req.origin = lot;
   req.originCategory = CAT_OTHER;

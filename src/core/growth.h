@@ -134,6 +134,8 @@ class GrowthCity {
   virtual LotInfo lotAt(int x, int z) const = 0;                 // lot covering the tile (present=false when empty)
   virtual ValveReading valve(int id) const = 0;
   virtual bool radioactive(int, int) const { return false; }
+  // Tile-origin trip of the landfill developer (spec 15 s7, 18 s9.2): writes the tile's trip result; false = failed.
+  virtual bool tileTrip(int, int) { return true; }
   virtual bool tripFailed(int, int) const { return false; }
   virtual int airPollution(int, int) const { return 0; }
   virtual int waterPollution(int, int) const { return 0; }

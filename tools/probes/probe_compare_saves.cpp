@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
       for (int k = -1; k < 4; k++) std::printf(" %d", specFunctional[k]);
       std::printf(") | ours");
       for (int k = -1; k < 4; k++) std::printf(" %d", mine[k]);
-      std::printf("; TrafficTripThresholdPercent %d\n", t.traffic->params().tripThresholdPercent);
+      std::printf("; TrafficTripThresholdPercent %d; radii R/C/I/D %d/%d/%d/%d\n", t.traffic->params().tripThresholdPercent, t.traffic->radius(0), t.traffic->radius(1), t.traffic->radius(2), t.traffic->radius(3));
     }
     if (std::getenv("M3K_NETCENSUS")) {  // occupant types with a transport ancestor, and network piece ids, in their city
       const auto& hier = t.agentHierarchy();

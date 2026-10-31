@@ -194,9 +194,10 @@ Rect findLot(const GrowthCity& c, int x, int z, int minLV, uint32_t replaced, in
 int LandfillDeveloper::visit(GrowthCity& c, int x, int z) {
   // Spec 15 s7 [STATIC]: landfill tile test, then (1) decay, (2) registration, (3) filling from the store's pending
   // garbage. The tile test: transport within 10 tiles (the s4.2 box with d = 10; a second transport-layer test on the
-  // tile is not traced) else code 16; registration only for a corner of a 2 x 2 square of landfill tiles that each have
+  // tile is not traced) else code 16; then a tile-origin trip (spec 18 s9.2), failure also code 16; registration only for a corner of a 2 x 2 square of landfill tiles that each have
   // transport within 10, else code 9.
   if (!c.hasAccess(x, z, 10)) return kNdNoAccess;
+  if (!c.tileTrip(x, z)) return kNdNoAccess;   // tile-origin trip failed: code 16 (spec 15 s7)
   bool square = false;
   for (int dx : {-1, 1})
     for (int dz : {-1, 1}) {
