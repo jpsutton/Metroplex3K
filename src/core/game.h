@@ -91,6 +91,7 @@ class Game {
   // Run a MenuItem.INI command class id directly (tools, windows, ...). For tools/tests.
   void runCommand(uint32_t target, uint32_t arg1 = 0) { runTarget(target, arg1); }
   void startDisaster(DisasterType t);
+  void setDisastersOn(bool on) { disastersOn_ = on; disasters_.setDisastersEnabled(on); }   // city flag; probes and scripts
   bool disasterActive() const { return disasters_.anyActiveNonParade(); }
   void typeCheat(const std::string& s);
   void setPaused(bool p) { paused_ = p; }
