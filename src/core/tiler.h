@@ -71,6 +71,8 @@ class INetworkMap {
   // May a terrain corner change? (no building / network piece on any of the up to 4 tiles)
   virtual bool canChangeCorner(int vx, int vz) const { (void)vx; (void)vz; return true; }
   virtual void setPierFlag(int x, int z, bool on) { (void)x; (void)z; (void)on; }
+  // Span record of the piece at (x,z) (spec 10 s6.2.6 piece-word bits 16-26): dir 0 -x, 1 -z, 2 +x, 3 +z; length in tiles.
+  virtual void setPieceSpan(int x, int z, NetLayer layer, int dir, int len) { (void)x; (void)z; (void)layer; (void)dir; (void)len; }
   // All pieces of a layer in map order (x ascending, then z).
   virtual std::vector<PlacedPiece> pieces(NetLayer layer) const = 0;
 

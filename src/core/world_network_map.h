@@ -84,6 +84,12 @@ class WorldNetworkMap : public INetworkMap {
     if (it != idx_[layer].end()) v[it->second] = np;
     else { idx_[layer][key(x, z)] = v.size(); v.push_back(np); }
   }
+  void setPieceSpan(int x, int z, NetLayer layer, int dir, int len) override {
+    auto it = idx_[layer].find(key(x, z));
+    if (it == idx_[layer].end()) return;
+    NetPiece& p = vec(layer)[it->second];
+    p.pieceWord = (p.pieceWord & ~(0x7FFu << 16)) | (1u << 16) | (uint32_t(dir & 3) << 17) | (uint32_t(len & 0xFF) << 19);
+  }
   void removePiece(int x, int z, NetLayer layer) override {
     auto& v = vec(layer);
     auto it = idx_[layer].find(key(x, z));

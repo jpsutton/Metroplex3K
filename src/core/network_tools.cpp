@@ -357,6 +357,7 @@ bool applyBridge(INetworkMap& m, BridgePlan& pl) {
 
 // ======================= tunnels =======================
 TunnelPlan planTunnel(const INetworkMap& m, int kind, const std::vector<PathTile>& path, const PlacementCosts& costs) {
+  // Spec 12 s6.4 tunnels (road and rail) [STATIC]. Highway tunnels are partly OPEN and not built.
   TunnelPlan tp;
   if (!(kind == NK_ROAD || kind == NK_RAIL) || path.size() < 2) return tp;
   int dx = path[1].x - path[0].x, dz = path[1].z - path[0].z;
@@ -364,6 +365,8 @@ TunnelPlan planTunnel(const INetworkMap& m, int kind, const std::vector<PathTile
   for (size_t i = 1; i < path.size(); i++)
     if (path[i].x - path[i - 1].x != dx || path[i].z - path[i - 1].z != dz) return tp;
   tp.dx = dx; tp.dz = dz;
+  tp.dir = dx < 0 ? 0 : dz < 0 ? 1 : dx > 0 ? 2 : 3;
+  auto lowest = [&](int x, int z) { int c[4]; m.tileCorners(x, z, c); return *std::min_element(c, c + 4); };
   auto nearFar = [&](int x, int z, int& n0, int& n1, int& f0, int& f1) {
     int c[4];
     m.tileCorners(x, z, c);
@@ -376,27 +379,27 @@ TunnelPlan planTunnel(const INetworkMap& m, int kind, const std::vector<PathTile
     if (!m.onMap(path[i].x, path[i].z)) return tp;
     int n0, n1, f0, f1;
     nearFar(path[i].x, path[i].z, n0, n1, f0, f1);
-    if (!(n0 == n1 && f0 > n0 && f1 > n0)) continue;
-    int h0 = n0, hill = 0;
-    for (size_t j = i + 1; j < path.size(); j++) {
-      int c[4];
-      m.tileCorners(path[j].x, path[j].z, c);
-      int mn = *std::min_element(c, c + 4), mx = *std::max_element(c, c + 4);
-      if (mn < h0) break;
-      if (mx == h0 && mn == h0) {
-        if (hill >= 3) {
-          tp.ok = true;
-          tp.entrance = {path[i].x, path[i].z};
-          tp.exit = {path[j].x, path[j].z};
-          tp.hillTiles = hill;
-          for (size_t q = i + 1; q < j; q++) tp.hidden.push_back({path[q].x, path[q].z});
-          tp.price = costs.cost(kTunnelCostKey);
-          return tp;
-        }
-        break;
-      }
-      hill++;
+    if (!(f0 > n0 && f1 > n1)) continue;   // entrance E at the foot of rising ground
+    const int ex = path[i].x, ez = path[i].z, h = lowest(ex, ez);
+    // Walk: L = 1, P = E + d; step on while the lowest corner of P is >= h + 4. Off map: no tunnel.
+    int L = 1, px = ex + dx, pz = ez + dz;
+    if (!m.onMap(px, pz)) return tp;
+    bool off = false;
+    for (;;) {
+      int nx = px + dx, nz = pz + dz;
+      if (!m.onMap(nx, nz)) { off = true; break; }
+      px = nx; pz = nz; L++;
+      if (lowest(px, pz) < h + 4) break;
     }
+    if (off || L < 3) return tp;
+    tp.ok = true;
+    tp.entrance = {ex, ez};
+    tp.exit = {ex + L * dx, ez + L * dz};
+    tp.length = L;
+    tp.hillTiles = L - 1;
+    for (int q = 1; q < L; q++) tp.hidden.push_back({ex + q * dx, ez + q * dz});
+    tp.price = (L - 1) * costs.cost(kTunnelCostKey);   // per tunnel tile
+    return tp;
   }
   return tp;
 }
@@ -600,7 +603,19 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
   // tunnel attempt
   if (res.bridges == 0 && (P.kind == NK_ROAD || P.kind == NK_RAIL)) {
     TunnelPlan tp = planTunnel(m, P.kind, path, costs);
-    if (tp.ok && tp.price <= host.funds() && host.confirmTunnel(tp.price) && host.buildTunnel(P.kind, tp)) {
+    if (tp.ok && tp.price <= host.funds() && host.confirmTunnel(tp.price)) {
+      // Two portal pieces only (spec 12 s6.4 step 6): the entrance points along d, the exit back, both with length L.
+      static const uint32_t roadId[4] = {64, 63, 64, 63}, railId[4] = {18024, 18019, 18024, 18019};
+      static const int rotOf[4] = {0, 0, 2, 2};
+      const int dIn = tp.dir, dOut = (tp.dir + 2) & 3;
+      auto portal = [&](std::pair<int, int> t, int d) {
+        int c[4]; m.tileCorners(t.first, t.second, c);
+        m.placePiece(t.first, t.second, LAYER_SURFACE, P.kind == NK_RAIL ? railId[d] : roadId[d], rotOf[d], *std::min_element(c, c + 4));
+        m.setPieceSpan(t.first, t.second, LAYER_SURFACE, d, tp.length);
+      };
+      portal(tp.entrance, dIn);
+      portal(tp.exit, dOut);
+      host.buildTunnel(P.kind, tp);   // optional host notification (sound, bookkeeping)
       host.charge(tp.price);
       extraSpent += tp.price;
       res.tunnels++;

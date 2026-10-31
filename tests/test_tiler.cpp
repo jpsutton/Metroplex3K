@@ -342,16 +342,21 @@ static void testBridge() {
 
 static void testTunnel() {
   SimpleNetworkMap m(16, 4, 30);
-  // hill along +x: columns 3..7 raised, entrance tile x=2 has far corners higher
-  for (int vx = 3; vx <= 7; vx++) for (int vz = 0; vz <= 4; vz++) m.setCornerHeight(vx, vz, 33);
-  for (int vz = 0; vz <= 4; vz++) m.setCornerHeight(3, vz, 33);
-  // entrance tile 2: near (vx=2)=30, far (vx=3)=33 ; exit tile 8: corners vx 8,9 = 30 -> but vx=8 not raised. tile 7 corners vx7=33,vx8=30
+  // hill along +x (spec 12 s6.4): corners vx 3..7 raised to h + 5; entrance tile x=2 (near 30, far 35)
+  for (int vx = 3; vx <= 7; vx++) for (int vz = 0; vz <= 4; vz++) m.setCornerHeight(vx, vz, 35);
   PlacementCosts c;
   c.byType[16006] = 500;
   std::vector<PathTile> path;
   for (int x = 2; x <= 9; x++) { PathTile p; p.x = x; p.z = 1; path.push_back(p); }
   auto tp = planTunnel(m, NK_ROAD, path, c);
-  CHECK(tp.ok && tp.entrance.first == 2 && tp.exit.first == 8 && tp.hillTiles >= 3 && tp.price == 500);
+  // walk: tiles 3..6 have lowest corner 35 >= 34; tile 7 (corner vx 8 = 30) is the first below h + 4 -> X = 7, L = 5
+  CHECK(tp.ok && tp.entrance.first == 2 && tp.exit.first == 7 && tp.length == 5 && tp.dir == 2);
+  CHECK(tp.price == 4 * 500);   // (L - 1) x cost per tunnel tile
+  {  // a hill of only h + 3 is not high enough
+    SimpleNetworkMap low(16, 4, 30);
+    for (int vx = 3; vx <= 7; vx++) for (int vz = 0; vz <= 4; vz++) low.setCornerHeight(vx, vz, 33);
+    CHECK(!planTunnel(low, NK_ROAD, path, c).ok);
+  }
   CHECK(!planTunnel(m, NK_POWER, path, c).ok);
 }
 

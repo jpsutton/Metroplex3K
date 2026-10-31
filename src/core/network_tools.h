@@ -128,6 +128,7 @@ struct TunnelPlan {
   int dx = 0, dz = 0;
   std::pair<int, int> entrance, exit;
   int hillTiles = 0;
+  int dir = 0, length = 0;                  // span direction (0 -x, 1 -z, 2 +x, 3 +z) and portal distance L
   std::vector<std::pair<int, int>> hidden;  // tiles strictly between portals
   int price = 0;
 };
