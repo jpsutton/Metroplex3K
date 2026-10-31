@@ -210,6 +210,12 @@ Test vectors (Max 2000, Min −2000, step 280): `V` = 1540, `target` = −2000 �
 * **Neighbour connections.** For each connection kind k (0 road, 1 rail, 2 highway, 3 subway),
   `count_k` = number of neighbour connections of that kind; each item of
   `[ConnectionValveEffects] k=` adds `count_k × supply` and `count_k × demand`. [STATIC]
+  `count_k` is the neighbour's saved connection **counter** for that kind (`10-save-format.md`
+  §6.6: `nRoad`, `nRail`, `nHighway`, `nSubway`, summed over the neighbours), **not** the number
+  of connection tiles. A road crossing the map edge can occupy several edge tiles, and Berlin
+  has 19 road-connection tiles but 6 road connections. DATA: with the counters, Berlin's 5001
+  and 8001 supplies at day 40 come out exactly at the saved 1 078 500 and 1 030 800 (an
+  implementation check reported by the clean side).
 * **Ordinances.** `[OrdinanceEffects] 0xOrdinanceID=valve,f+valve,f…` (f in thousandths): while
   the ordinance is enacted, each cycle the listed valve's `Dacc` is increased by
   `trunc(Dlast × f/1000)` (sign taken so that a negative `f` reduces demand when `Dlast` is

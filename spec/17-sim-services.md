@@ -54,7 +54,16 @@ The fire-coverage and police-coverage layers are **coarse grids of 4 × 4-tile c
 tile coordinates (tile (x, z) belongs to cell (⌊x/4⌋, ⌊z/4⌋)). Each cell holds a signed integer
 accumulator *A* and a displayed byte *D* = clamp(trunc(*A* / 16), 0, 255). Because the kernel below is
 evaluated per *tile* and summed into the tile's cell, *A*/16 is the average over the cell's 16 tiles.
-[STATIC; the 4 × 4 cell size is INFERRED from the 4 × 4 sampling pattern and the ÷16, high confidence]
+[STATIC, including the 4 × 4 cell size: both grids address cells as (x >> 2, z >> 2)]
+**What the crime rule reads** [STATIC]: for each of its cell's 4 tiles the crime update (§7.1.3)
+reads *D* of the police cell containing that tile, divides it by `PoliceFactor` (shipped 1) and
+subtracts it, so a crime cell inside one police cell subtracts 4·*D*; the ordinance terms are
+then added before the division by 4. DATA (Berlin day 40, 18 police stations at 100 %
+funding, Neighbourhood Watch −16, Junior Sports −8 and Conservation Corps −8 enacted): in the
+3 711 crime cells with *D* = 0, saved potential − 4 × saved crime − 32 averages 3.8, which is
+within the truncation of the ÷4 plus later potential changes. In covered cells the median of
+(potential − 4·crime − 32) / 4*D* is 1.24. The crime sweep (period 40 days) leaves cells
+older than their potential, which explains the larger residuals.
 
 ### 2.2 Station parameters and the funding curve
 
