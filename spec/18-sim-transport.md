@@ -188,6 +188,13 @@ matches [STATIC]:
 
 (The names are those of `CitySim.ini` agent types [DATA]. Bus stops, stations, parking, schools
 and the like belong to none of these groups, so they neither make trips nor act as destinations.)
+Every occupant of a matching type is its own trip maker with its own lot, including the 1 × 1
+field pieces of farms (9300 → 8000, category 2, industrial radius) and each airport part
+(12310, category 1, commercial radius) [STATIC]. There is no farm- or airport-specific trip rule.
+Many of these pieces lie far from roads and fail. DATA, Madison at day ~460: 47 of 176 farm
+pieces and 24 of 87 airport parts have a failed last trip. The failures have no growth effect on
+airport parts, because the airport developer does not read the trip result (`15-sim-growth.md`
+§7); only the R/C/I developers use it (§9.2).
 
 The cross-reference to the occupant family tables is in `13-buildings-occupants.md`. Buildings that
 match none of these IDs make no trips.
