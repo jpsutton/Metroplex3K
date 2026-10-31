@@ -361,11 +361,18 @@ static void testWaterDistribution() {
   CHECK(f.L.tileServiced(10, 12) && !f.L.tileServiced(10, 14));
   // Shortage: conservation ordinance lets supply go further; tiny supply waters only nearest first.
   WaterParams p = WaterParams::fromIni(IniFile::fromText(kWaterIni));
-  p.towerCapa = 2;
+  p.towerCapa = 3;
   WaterLayer s(32, 32, p);
   s.addFacility(WaterKind::Tower, 2, 10, 0);
   s.monthlyUpdate(env);
-  CHECK(s.occupantWatered()[0] == 1 && s.occupantWatered()[1] == 0);   // nearest watered first, budget hits 0, spread stops
+  CHECK(s.occupantWatered()[0] == 1 && s.occupantWatered()[1] == 0);   // nearest watered first; 1 left <= 28: spread stops
+  {  // budget <= consumption: the budget becomes 0 and the building stays dry (spec 16 s3.4 step 4)
+    WaterParams p2 = p; p2.towerCapa = 2;
+    WaterLayer t(32, 32, p2);
+    t.addFacility(WaterKind::Tower, 2, 10, 0);
+    t.monthlyUpdate(env);
+    CHECK(t.occupantWatered()[0] == 0 && t.stats.used == 0);
+  }
   // Ordinances: k = 1 - 0.2 - 0.1.
   env.ordinances.set(ord::WaterConservation, true);
   env.ordinances.set(ord::WaterMeters, true);

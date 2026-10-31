@@ -330,12 +330,12 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
     switch (cmd.kind) {
       case DisasterCommand::DestroyOccupant: {
         int i = c.occupantIndexByUid(cmd.id);
-        if (i >= 0 && i < int(world_.occupants.size())) { world_.occupants[i].state = cmd.b == 0 || cmd.b == 1 ? 8 : world_.occupants[i].state; c.markOccupantsDirty(); }
+        if (i >= 0 && i < int(world_.occupants.size()) && (cmd.b == 0 || cmd.b == 1)) c.damageOccupant(i, 8);
         break;
       }
       case DisasterCommand::IgniteOccupant: {
         int i = c.occupantIndexByUid(cmd.id);
-        if (i >= 0 && i < int(world_.occupants.size())) { world_.occupants[i].state = 16; c.markOccupantsDirty(); }
+        if (i >= 0 && i < int(world_.occupants.size())) c.damageOccupant(i, 16);
         break;
       }
       case DisasterCommand::ClearBurning: {
@@ -372,8 +372,7 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
           std::set<int> hit;
           for (int x = cmd.pts[0].first; x <= cmd.pts[1].first; x++)
             for (int z = cmd.pts[0].second; z <= cmd.pts[1].second; z++) { int i = c.occupantAt(x, z); if (i >= 0) hit.insert(i); }
-          for (int i : hit) world_.occupants[size_t(i)].state = 8;
-          if (!hit.empty()) c.markOccupantsDirty();
+          for (int i : hit) c.damageOccupant(i, 8);
           sound(244);
         }
         break;

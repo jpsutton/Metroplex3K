@@ -92,7 +92,7 @@ struct GrowthConfig {
   IndustrialTuning ind;
   int landfillDecayRate = 490;
   const std::map<uint32_t, std::vector<ValveItem>>* valveEffects = nullptr;  // for committed demand
-  int airportValve = kValveComConn, seaportValve = kValveIndConn;           // [OPEN] valves gating port developers
+  int seaportValve = kValveIndConn;   // seaport rules read valve 8001 (spec 15 s3.1); the airport runs at a fixed 2000 of 2000
   bool cleanIndustryOnly = false;                                           // [OPEN] city-wide flag
 
   void parseZoneDescriptions(const IniFile& zoneLayerIni);  // SC3ZoneLayer.ini [ZoneDeveloperDescriptions]
@@ -165,7 +165,8 @@ class GrowthCity {
 // Developer result codes (spec 15 section 4.3).
 enum ResultCode {
   kNoResult = 0, kAbRadioactive = 1, kAbLowLV = 2, kAbNegDemand = 3, kAbNoPower = 4, kAbNoWater = 5, kAbNoAccess = 6, kAbFarmPollution = 7,
-  kNdRadioactive = 10, kNdLVBelow = 11, kNdLVAbove = 12, kNdNegDemand = 13, kNdNoPower = 14, kNdNoCategory = 15, kNdNoAccess = 16, kNdNoCategoryWatered = 18
+  kNdAirportIdle = 9, kNdRadioactive = 10, kNdLVBelow = 11, kNdLVAbove = 12, kNdNegDemand = 13, kNdNoPower = 14, kNdNoCategory = 15, kNdNoAccess = 16,
+  kNdSeaportIdle = 17, kNdNoCategoryWatered = 18
 };
 
 // Category selection (section 4.4). Return index into zd.cats or -1.

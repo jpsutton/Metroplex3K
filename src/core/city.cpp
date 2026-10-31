@@ -298,6 +298,9 @@ class GrowthAdapter : public growth::GrowthCity {
     return growth::ValveReading{v.V, v.Max, v.Min};
   }
   bool tripFailed(int x, int z) const override {
+    // Off by default: with our traffic model feeding "unfit", Madrid's and Craterville's code-6 counts match the original's
+    // (Madrid 106-200 per pass vs 85-170) but London's run 3-4x high and Madison/Moscow drop below their reference bands
+    // (spec 28 s5.1), so the trip model is still too pessimistic.
     return c_.cfg_.useTripFailure && c_.traffic && c_.traffic->tripResult(x, z) == 1;
   }
   int airPollution(int x, int z) const override { return c_.pollution.airAt(x, z); }
@@ -626,6 +629,15 @@ int City::addOccupant(const Occupant& o) {
       if (inMap(o.x + dx, o.z + dz)) occ_[idx(o.x + dx, o.z + dz)] = i;
   occDirty_ = true;
   return i;
+}
+
+void City::damageOccupant(int i, uint32_t st) {
+  if (i < 0 || i >= int(world_->occupants.size())) return;
+  Occupant& o = world_->occupants[size_t(i)];
+  const uint32_t b = o.state & ~0x200u;
+  if ((b == 1 || b == 4) && st != o.state) zones.buildingRemoved(o.agentType, o.sizeX, o.sizeZ, b);
+  o.state = st;
+  occDirty_ = true;
 }
 
 void City::removeOccupantIdx(const std::set<int>& kill) {
@@ -1326,7 +1338,7 @@ void City::monthlyPower() {
   for (const auto& e : events) {
     if (e.kind != us::PlantEvent::Explosion) continue;
     int oi = occupantAt(e.x, e.z);
-    if (oi >= 0) { world_->occupants[size_t(oi)].state = 8; occDirty_ = true; }
+    if (oi >= 0) damageOccupant(oi, 8);
     plantAt_.erase({e.x, e.z});
     if (onMessage) onMessage("A power plant exploded from overwork!");
   }

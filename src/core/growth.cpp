@@ -952,9 +952,10 @@ int ZoneManager::visitRCI(GrowthCity& c, SimRand& rng, int x, int z, const ZoneD
   }
   if (base == 2) {
     if (pw && acc && !c.tripFailed(lot.ax, lot.az) && !blocked && V > 0 && V - P > 0) {
-      if (lot.flagged()) { c.setLotState(lot, 1 | keep); return 0; }
+      // Re-occupation (2 -> 1) adds the lot back to the committed demand P (spec 15 s4 "Committed demand") [STATIC].
+      if (lot.flagged()) { c.setLotState(lot, 1 | keep); buildingAdded(lot.agentType, lot.sizeX, lot.sizeZ, 1); return 0; }
       int n = chooseCat();
-      if (n >= 0 && n == cat) c.setLotState(lot, 1 | keep);
+      if (n >= 0 && n == cat) { c.setLotState(lot, 1 | keep); buildingAdded(lot.agentType, lot.sizeX, lot.sizeZ, 1); }
       else if (n >= 0) startDevelopment(c, rng, x, z, zd, n, lot.agentType, V, P, Max, false);
     }
     return 0;
@@ -963,9 +964,8 @@ int ZoneManager::visitRCI(GrowthCity& c, SimRand& rng, int x, int z, const ZoneD
   auto abandon = [&](int code) {
     if (field) { if (lot.removable && !lot.flagged()) removeLot(c, lot); }
     else {
-      // Abandoning an occupied lot takes its supply out of the committed demand P, as removal does [INFERRED from the
-      // shipped saves' result counts: with it, Berlin's first pass gives 54 negative-demand abandonments (saved 58, by
-      // zone 33/12/9 vs 38/13/7); without it, 399. Spec 15 s4 "Committed demand" only names additions and removals.]
+      // Abandonment (1 -> 2) takes the lot's amount out of the committed demand P: every developer state change replaces
+      // the occupant, and P counts states 1 and 4 only (spec 15 s4 "Committed demand") [STATIC].
       c.setLotState(lot, 2 | keep);
       buildingRemoved(lot.agentType, lot.sizeX, lot.sizeZ, 1);
     }
@@ -1005,26 +1005,49 @@ int ZoneManager::visitRCI(GrowthCity& c, SimRand& rng, int x, int z, const ZoneD
 }
 
 int ZoneManager::visitPort(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd) {
-  // Per-tile step for airport/seaport zones is not specified beyond the placement rules (spec 15 5.5):
-  // empty tiles start development when the gating valve shows uncommitted demand; construction completes
-  // like R/C/I lots. Result codes are never produced ([OPEN] 8, 9, 17).
-  int vid = zd.developerClass == kDevAirport ? cfg_->airportValve : cfg_->seaportValve;
-  ValveReading vr = c.valve(vid);
-  int P = committed(vid);
-  LotInfo lot = c.lotAt(x, z);
-  if (lot.present) {
-    if (lot.ax != x || lot.az != z) return 0;
-    if (lot.baseState() == 4 && c.powered(x, z) && rng.rand(int64_t(lot.tiles()) * 100) < cfg_->res.constructionTimeFactor) c.setLotState(lot, 1 | (lot.state & 0x200));
-    return 0;
-  }
-  if (vr.V < 1 || vr.V - P < 1) return 0;
+  // Airport (zone 14) per-tile step, spec 15 s7 [STATIC]; S = the second service test, INFERRED to be water service.
+  const bool airport = zd.developerClass == kDevAirport;
+  const bool pw = c.powered(x, z), S = c.watered(x, z), blocked = c.radioactive(x, z);
+  const bool acc = c.hasAccess(x, z, 6);   // the s4.2 access box with d = 6
   // Airport and seaport zones have no category list; the rules' families are filed under the port agent types
   // (12310 airport, 12330 seaport; spec 15 s5.5), which is the key of DevRule::lists.
   Category k;
-  k.agentType = zd.developerClass == kDevAirport ? 12310 : 12330;
+  k.agentType = airport ? 12310 : 12330;
   k.minLV = 0; k.maxLV = 255;
-  startDevelopment(c, rng, x, z, zd, k, 0, vr.V, P, vr.Max, true);
-  return 0;
+  LotInfo lot = c.lotAt(x, z);
+  if (airport) {
+    if (lot.present) {
+      if (lot.ax != x || lot.az != z) return 0;
+      const uint32_t b = lot.baseState();
+      if ((b == 2 || b == 4) && S && pw && acc && !blocked) c.setLotState(lot, 1 | (lot.state & 0x200));
+      return 0;
+    }
+    if (blocked) return kNdRadioactive;
+    if (S) {
+      if (!pw) return kNdNoPower;
+      if (!acc) return kNdNoAccess;
+      // Airport rules run with a fixed demand of 2000 of 2000: valve 5001 does not gate airport growth.
+      return startDevelopment(c, rng, x, z, zd, k, 0, 2000, 0, 2000, true) ? 0 : kNdAirportIdle;
+    }
+    if (!pw) return kNdNoPower;
+    if (!acc) return kNdNoAccess;
+    return kNdNoCategory;
+  }
+  // Seaport (zone 15): rules receive valve 8001's V and Max (spec 15 s3.1); code 17 when a serviceable empty tile gets
+  // nothing [STATIC]. The rest of the seaport step mirrors the airport [INFERRED].
+  ValveReading vr = c.valve(cfg_->seaportValve);
+  int P = committed(cfg_->seaportValve);
+  if (lot.present) {
+    if (lot.ax != x || lot.az != z) return 0;
+    const uint32_t b = lot.baseState();
+    if ((b == 2 || b == 4) && pw && acc && !blocked) c.setLotState(lot, 1 | (lot.state & 0x200));
+    return 0;
+  }
+  if (blocked) return kNdRadioactive;
+  if (!pw) return kNdNoPower;
+  if (!acc) return kNdNoAccess;
+  if (vr.V < 1 || vr.V - P < 1) return 0;
+  return startDevelopment(c, rng, x, z, zd, k, 0, vr.V, P, vr.Max, true) ? 0 : kNdSeaportIdle;
 }
 
 // ---------------- persistence ----------------

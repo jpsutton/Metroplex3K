@@ -160,6 +160,9 @@ class City {
   void lvCentre(int& cx, int& cz) const;
   std::string lvExplain(int x, int z) const;   // city centre used by the land-value pass (tools)
   void runMonthlyWater() { monthlyWater(); }   // one water update now (tools)
+  // A building burns (16) or becomes rubble (8): the occupant is replaced, so a lot that counted in the committed demand
+  // P (state 1 or 4) leaves it (spec 15 s4 "Committed demand") [INFERRED, medium-high].
+  void damageOccupant(int index, uint32_t newState);
   // A connection tile of saved set `setIndex` (rail, road, pipe, power, highway, subway) to neighbour `neighbour`.
   bool connectionTile(int setIndex, int neighbour, int& tx, int& tz) const;
   std::optional<size_t> evaluateBusinessDeals(const BusinessDeals::Inputs& in) { return business.weeklyEvaluate(in, rng_); }

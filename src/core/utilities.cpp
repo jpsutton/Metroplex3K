@@ -440,12 +440,11 @@ void WaterLayer::monthlyUpdate(const WaterEnv& env) {
   stats.meanPollution = polN ? uint32_t(polSum / polN) : 0;
 
   // ---- 3.4 distribution ----
+  // A building is charged when the wet front reaches its ANCHOR tile (spec 16 s3.4 "Spreading front" step 4) [STATIC].
   std::vector<int> occAt(size_t(W) * H, -1);
   for (size_t i = 0; i < nCons; i++) {
     const auto& o = (*env.consumers)[i];
-    for (int x = o.x; x <= o.x1(); x++)
-      for (int z = o.z; z <= o.z1(); z++)
-        if (x >= 0 && z >= 0 && x < W && z < H && occAt[size_t(x) * H + z] < 0) occAt[size_t(x) * H + z] = int(i);
+    if (o.x >= 0 && o.z >= 0 && o.x < W && o.z < H && occAt[size_t(o.x) * H + o.z] < 0) occAt[size_t(o.x) * H + o.z] = int(i);
   }
   std::vector<uint8_t> reachedFac(fac_.size(), 0);
   const int r = params_.waterFromPipe;
@@ -514,12 +513,14 @@ void WaterLayer::monthlyUpdate(const WaterEnv& env) {
       service_[t] = 1;
       int oi = occAt[t];
       if (oi < 0 || watered_[oi]) return;
-      if (budget <= 0) { stop = true; return; }
       int cons = params_.consumptionPerTile((*env.consumers)[oi].agentType) * (*env.consumers)[oi].sizeX * (*env.consumers)[oi].sizeZ;
+      if (cons <= 0) { watered_[oi] = 1; return; }
+      // Remaining budget <= c: the budget becomes 0 and spreading stops; the building stays dry (step 4) [STATIC].
+      if (budget <= cons) { budget = 0; stop = true; return; }
       watered_[oi] = 1;
-      budget = std::max<int64_t>(0, budget - cons);
+      budget -= cons;
       stats.used += cons; drawn += cons;
-      if (budget == 0) stop = true;
+      if (budget < 1) stop = true;
     };
     for (size_t i = 0; i < frontier.size() && !stop; i++) reachTile(frontier[i]);
     for (int layer = 0; !stop && !frontier.empty(); layer++) {
