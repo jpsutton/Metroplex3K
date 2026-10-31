@@ -209,8 +209,16 @@ entries are kept; they are sorted by ID and looked up by binary search. A buildi
 consumption is *n* × (lot width × lot depth in tiles); buildings without an entry use
 `DefaultConsumption` × footprint. [STATIC]
 
-`SC3Tune.ini [WaterTreatment]`: `OptimalPollutionCap` (water-pollution units the plant removes per
-month at full funding), `MaxLifespan`, `DeclineAge` (months). [DATA; treatment behaviour OPEN]
+`SC3Tune.ini [WaterTreatment]`: `OptimalPollutionCap`, `MaxLifespan`, `DeclineAge` (months).
+**Treatment capacity** [STATIC]: each month a treatment plant's capacity is set to
+`OptimalPollutionCap`, reduced linearly after `DeclineAge` (cap − ⌊(age − DeclineAge) × cap /
+(MaxLifespan − DeclineAge)⌋). It is 0 if the plant's lot is not occupied (state 1), its tile is
+unpowered, or its tile has no water service. At age ≥ `MaxLifespan` the plant expires. No
+funding factor is applied. The pollution layer sums these capacities at the start of **every
+pollution run** (one per simulated day with the shipped `UpdatePeriod`), so the cap is
+**per run**, not per month (`17-sim-services.md` §7.2.4 step 4). Correction: earlier text said
+"per month at full funding". DATA: Berlin, 4 plants × 60 000, saved treated total 1 235 657
+per sweep.
 
 ### 3.2 Facility kinds
 
