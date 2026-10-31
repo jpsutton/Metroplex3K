@@ -77,6 +77,20 @@ int main(int argc, char** argv) {
       }
       continue;
     }
+    if (std::getenv("M3K_PIPEFLAG")) {   // which occupants carry the pipe flag 0x800000 (spec 12 s5.2, s9.2)
+      std::map<uint32_t, int> byAgent; int surf = 0, sub = 0;
+      for (const auto& o : s.game.world().occupants)
+        if (const OccAttr* a = c.gameData()->occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT)) if (a->flags & 0x800000) byAgent[o.agentType]++;
+      for (const auto& p : s.game.world().surface) if (const OccAttr* a = c.gameData()->occupant(p.pieceId, true)) if (a->flags & 0x800000) surf++;
+      for (const auto& p : s.game.world().subway) if (const OccAttr* a = c.gameData()->occupant(p.pieceId, true)) if (a->flags & 0x800000) sub++;
+      int pipeFlag = 0, pipeAll = 0;
+      for (const auto& p : s.game.world().pipes) { pipeAll++; if (const OccAttr* a = c.gameData()->occupant(p.pieceId, true)) if (a->flags & 0x800000) pipeFlag++; }
+      std::printf("   pipe pieces with the flag: %d of %d\n", pipeFlag, pipeAll);
+      std::printf("   pipe-flagged: surface pieces %d, subway pieces %d, buildings:", surf, sub);
+      for (const auto& kv : byAgent) std::printf(" %u x%d", kv.first, kv.second);
+      std::printf("\n");
+      continue;
+    }
     if (std::getenv("M3K_WATER")) {   // watered occupied R/C/I lots: saved bitmap at load vs after our month-start distribution
       auto dry = [&]() {
         int n = 0, tot = 0;
@@ -103,7 +117,118 @@ int main(int argc, char** argv) {
       std::printf("   water at load: dry %d of %d occupied RCI; supply %lld used %lld\n", a.first, a.second, (long long)c.water.stats.supply, (long long)c.water.stats.used);
       for (int d = 0; d < 35; d++) s.game.sim().tickDay();
       auto b = dry();
+      {  // classify the lots that are dry after our distribution but were watered in the saved bitmap
+        const int W = s.game.world().W, H = s.game.world().H, r = c.water.params().waterFromPipe;
+        int nearPipe = 0, farPipe = 0, unpowered = 0, shown = 0;
+        for (const auto& o : s.game.world().occupants) {
+          if (!(o.agentType >= 3000 && o.agentType < 10000 && (o.state & ~0x200u) == 1)) continue;
+          if (c.water.tileServiced(o.x, o.z)) continue;
+          bool near = false;
+          for (int x = o.x - r; x < o.x + o.sizeX + r && !near; x++)
+            for (int z = o.z - r; z < o.z + o.sizeZ + r; z++)
+              if (x >= 0 && z >= 0 && x < W && z < H && c.isPipe(x, z)) { near = true; break; }
+          (near ? nearPipe : farPipe)++;
+          if (!c.power.powered(o.x, o.z)) unpowered++;
+          if (near && shown++ < 5) std::printf("     dry lot near pipe: (%d,%d) %dx%d agent %u\n", o.x, o.z, o.sizeX, o.sizeZ, o.agentType);
+        }
+        std::printf("   dry after month: %d within WaterFromPipe=%d of a pipe, %d farther; %d unpowered\n", nearPipe, r, farPipe, unpowered);
+        // reached coverage: pipes (+ facility footprints) flood-filled from producing facilities, dilated by r
+        std::vector<uint8_t> pipe(size_t(W) * H, 0), reached(size_t(W) * H, 0), cover(size_t(W) * H, 0);
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) pipe[size_t(x) * H + z] = c.isPipe(x, z);
+        for (const auto& f : c.water.facilities()) pipe[size_t(f.x) * H + f.z] = 1;
+        std::vector<int> q;
+        int producing = 0, comps = 0;
+        for (const auto& f : c.water.facilities()) {
+          if (f.output <= 0) continue;
+          producing++;
+          int st = f.x * H + f.z;
+          if (reached[st]) continue;
+          comps++; reached[st] = 1; q.assign(1, st);
+          for (size_t h = 0; h < q.size(); h++) {
+            int cc = q[h], x = cc / H, z = cc % H;
+            const int d4[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+            for (auto& d : d4) {
+              int nx = x + d[0], nz = z + d[1];
+              if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue;
+              int n = nx * H + nz;
+              if (reached[n] || !pipe[n]) continue;
+              reached[n] = 1; q.push_back(n);
+            }
+          }
+        }
+        {  // per component: supply vs consumption of the lots inside its coverage
+          std::vector<int> compOf(size_t(W) * H, -1);
+          std::vector<int64_t> supply;
+          int id = 0;
+          for (const auto& f : c.water.facilities()) {
+            if (f.output <= 0) continue;
+            int st = f.x * H + f.z;
+            if (compOf[st] >= 0) { supply[size_t(compOf[st])] += f.output; continue; }
+            supply.push_back(f.output); compOf[st] = id; q.assign(1, st);
+            for (size_t h = 0; h < q.size(); h++) {
+              int cc = q[h], x = cc / H, z = cc % H;
+              static const bool diag = std::getenv("M3K_PIPE8") != nullptr;
+              const int d8[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+              for (int k = 0; k < (diag ? 8 : 4); k++) {
+                const auto& d = d8[k];
+                int nx = x + d[0], nz = z + d[1];
+                if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue;
+                int n = nx * H + nz;
+                if (compOf[n] >= 0 || !pipe[n]) continue;
+                compOf[n] = id; q.push_back(n);
+              }
+            }
+            id++;
+          }
+          std::vector<int> cov(size_t(W) * H, -1);
+          for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) { int cid = compOf[size_t(x) * H + z]; if (cid < 0) continue;
+            for (int xx = std::max(0, x - r); xx <= std::min(W - 1, x + r); xx++)
+              for (int zz = std::max(0, z - r); zz <= std::min(H - 1, z + r); zz++) if (cov[size_t(xx) * H + zz] < 0) cov[size_t(xx) * H + zz] = cid; }
+          std::vector<int64_t> demand(supply.size(), 0); std::vector<int> dryIn(supply.size(), 0), lots(supply.size(), 0);
+          for (const auto& o : s.game.world().occupants) {
+            if ((o.state & ~0x200u) != 1) continue;
+            int cid = cov[size_t(o.x) * H + o.z]; if (cid < 0) continue;
+            demand[size_t(cid)] += int64_t(c.water.params().consumptionPerTile(o.agentType)) * o.sizeX * o.sizeZ; lots[size_t(cid)]++;
+            if (o.agentType >= 3000 && o.agentType < 10000 && !c.water.tileServiced(o.x, o.z)) dryIn[size_t(cid)]++;
+          }
+          for (size_t i = 0; i < supply.size(); i++)
+            if (dryIn[i] > 0) std::printf("     component %zu: supply %lld demand %lld lots %d dry %d\n", i, (long long)supply[i], (long long)demand[i], lots[i], dryIn[i]);
+        }
+        int pipeTiles = 0, reachedTiles = 0;
+        for (size_t i = 0; i < pipe.size(); i++) { pipeTiles += pipe[i]; reachedTiles += reached[i]; }
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) if (reached[size_t(x) * H + z])
+          for (int xx = std::max(0, x - r); xx <= std::min(W - 1, x + r); xx++)
+            for (int zz = std::max(0, z - r); zz <= std::min(H - 1, z + r); zz++) cover[size_t(xx) * H + zz] = 1;
+        int dryCovered = 0, dryUncovered = 0;
+        for (const auto& o : s.game.world().occupants) {
+          if (!(o.agentType >= 3000 && o.agentType < 10000 && (o.state & ~0x200u) == 1) || c.water.tileServiced(o.x, o.z)) continue;
+          (cover[size_t(o.x) * H + o.z] ? dryCovered : dryUncovered)++;
+        }
+        std::printf("   pipes %d tiles, %d reached from %d producing facilities in %d components; dry lots covered %d, uncovered %d\n",
+                    pipeTiles, reachedTiles, producing, comps, dryCovered, dryUncovered);
+      }
       std::printf("   water after month: dry %d of %d; supply %lld used %lld\n", b.first, b.second, (long long)c.water.stats.supply, (long long)c.water.stats.used);
+      continue;
+    }
+    if (std::getenv("M3K_ZONES")) {   // zone-type tile counts (for the constant code-9 count per pass)
+      std::map<int, int> zc; const auto& w = s.game.world();
+      for (uint8_t z : w.zone) zc[z]++;
+      std::printf("   zones:"); for (const auto& kv : zc) if (kv.first) std::printf(" %d:%d", kv.first, kv.second); std::printf("\n");
+      continue;
+    }
+    if (std::getenv("M3K_PASSES")) {   // result codes of each completed pass over ~250 days, plus population
+      auto codes = [](const growth::ZoneManager::ResultMap& m) {
+        std::map<int, uint32_t> byCode; for (const auto& kv : m) if (kv.second) byCode[kv.first.first] += kv.second;
+        std::string o; for (const auto& kv : byCode) o += " " + std::to_string(kv.first) + ":" + std::to_string(kv.second);
+        return o;
+      };
+      std::string last = codes(c.zones.resultPrev);
+      std::printf("     day   0 pop %7d prev pass%s\n", c.population(), last.c_str());
+      for (int d = 1; d <= 250; d++) {
+        s.game.sim().tickDay();
+        std::string now = codes(c.zones.resultPrev);
+        if (now != last) { std::printf("     day %3d pop %7d prev pass%s\n", d, c.population(), now.c_str()); last = now; }
+      }
       continue;
     }
     if (std::getenv("M3K_RESULTS")) {   // zone-manager result codes: saved previous pass vs our first full pass (10 s6.4)

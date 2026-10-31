@@ -449,6 +449,9 @@ void WaterLayer::monthlyUpdate(const WaterEnv& env) {
   }
   std::vector<uint8_t> reachedFac(fac_.size(), 0);
   const int r = params_.waterFromPipe;
+  int64_t pool = 0;
+  for (const auto& f : fac_) pool += std::max(0, f.output);
+  pool = k > 0 ? int64_t(double(pool) / k) : INT64_MAX / 4;
   for (size_t fi = 0; fi < fac_.size(); fi++) {
     if (fac_[fi].output <= 0 || reachedFac[fi]) continue;
     // Component over pipes.
@@ -484,8 +487,14 @@ void WaterLayer::monthlyUpdate(const WaterEnv& env) {
       if (d.tx < 0 || d.tz < 0 || d.tx >= W || d.tz >= H || !comp[d.tx * H + d.tz]) continue;
       if (d.purchase) unlimited = true; else sold += d.amount;
     }
-    int64_t budget = unlimited ? INT64_MAX / 4 : (k > 0 ? int64_t(double(S) / k) : INT64_MAX / 4);
-    if (!unlimited) { budget = std::max<int64_t>(0, budget - sold); }
+    // Budget [INFERRED, clean-side fit; spec 16 s3.4 step 6 says trunc(S / k) per component]: the components share one
+    // city-wide pool, trunc(sum of all facility outputs / k), less what earlier components drew from it. With a budget
+    // per component, Berlin's month-start distribution dries 926 lots that the original's saved bitmap has watered
+    // (one component holds 14.6k of supply for 34k of demand while the city has 184k for 144k); with the shared pool
+    // 14 stay dry, and no other played city changes. A component with a purchase deal is unlimited and draws its own
+    // supply from the pool first.
+    int64_t budget = unlimited ? INT64_MAX / 4 : std::max<int64_t>(0, pool);
+    if (!unlimited) { budget = std::max<int64_t>(0, budget - sold); pool -= sold; }
     stats.sale[0] += sold;
 
     // Dilate pipe component by r tiles (square).
@@ -536,6 +545,7 @@ void WaterLayer::monthlyUpdate(const WaterEnv& env) {
       frontier.swap(next);
     }
     if (unlimited && drawn > S) { stats.purchase[0] += drawn - S; }
+    pool -= unlimited ? std::min<int64_t>(drawn, int64_t(double(S) / std::max(0.01, k))) : drawn;
   }
 
   uint32_t pct = stats.supply > 0 ? uint32_t(std::min<int64_t>(100, 100 * stats.used / stats.supply)) : 0;
