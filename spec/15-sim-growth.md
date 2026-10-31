@@ -732,25 +732,43 @@ scanning sides in order 0–3 and switching on a tie when `rand(100) > 49`. If t
 negative and the lot is exactly 5 × 3 nothing is built; otherwise a runway is laid oriented to
 that side.
 
-*Runway piece sequence* [STATIC for the sequence; INFERRED for the slot names]. The rule's
-families are grouped into **runway sets**; one set is chosen uniformly at random. A set holds up
-to 11 piece slots, each either a straight piece (placed with rotation 0) or, when that slot is
-empty, its alternative piece placed rotated 270° (for the long-axis slots) or 90° (for the
-middle runway slot). The runway is a strip `L` tiles long along the chosen side,
-`L = min(10, lot length along that side)`. Across the strip, with `D` = the lot depth, up to three
-parallel lines of pieces are laid in consecutive rows starting against the chosen side: line A
-always, line B only when `D ≥ 3`, line C when `D ≥ 2` (so a 2-deep lot gets lines A and C, a
-deeper lot A, B and C; tiles deeper than the third row are left for the airport-building rule):
+*Runway piece sequence* [STATIC]. **Runway sets.** Each family bound to the rule (shipped: one
+family) forms one runway set; a set is chosen uniformly at random when a runway is laid. A
+member is filed by its flag word f (attribute 0xCA), its edge `e` (only 1 × 1 members are used)
+and its **line number** L (1, 2 or 3; the puzzle-part index of `13-buildings-occupants.md`
+attribute 0x1F4 [INFERRED for the attribute]):
 
-| Position along the strip | Line A (runway) | Line B (taxiway) | Line C (apron edge) |
+| Slot | Condition | Role |
+|---|---|---|
+| S0 | L = 1, f has `0x800`, none of `0x20`/`0x10`/`0x40`/`0x80` | runway middle |
+| S1 | L = 1, f has `0x400`, none of `0x20`/`0x10`/`0x40`/`0x80` | runway middle, alternative |
+| S2 | L = 1, f has `0x20` | start cap, alternative |
+| S3 | L = 1, f has `0x10` | start cap |
+| S4 | L = 1, f has `0x80` | end cap |
+| S5 | L = 1, f has `0x40` | end cap, alternative |
+| S6 | L = 2, f has `0x800` | line-2 piece |
+| S7 | L = 2, f has `0x400` | line-2 piece, alternative |
+| S8 | L = 3, f has `0x800` | line-3 piece |
+| S9 | L = 3, f has `0x400` | line-3 piece, alternative |
+| F | f has `0x100` | filler list |
+
+A slot holds the last matching member. "X, else its alternative rotated r" below means: use slot
+X with rotation 0 if it is filled, else the alternative slot with rotation r.
+
+**Layout.** The runway is a strip `L` = min(10, lot length along the chosen side) long. With `D`
+= lot depth, at each position along the strip pieces are placed in consecutive rows starting
+against the chosen side: row A always; then a line-3 row if `D ≥ 3`; then a line-2 row if
+`D ≥ 2` (so a 2-deep lot gets rows A and line-2; a deeper lot A, line-3, line-2):
+
+| Position | Row A | line-3 row | line-2 row |
 |---|---|---|---|
-| 0 (first tile) | start cap | taxiway start | apron piece |
-| 1 … L−2 | runway middle (straight, or alternative rotated 90°) | taxiway middle | apron piece |
-| L−1 (last tile) | end cap | taxiway start piece again | apron piece |
+| first | S3, else S2 rotated 270° | S8, else S9 rotated 270° | S6, else S7 rotated 270° |
+| middle (1 … L−2) | S0, else S1 rotated 90° | first member of F | same piece as first position |
+| last | S4, else S5 rotated 270° | same piece as first position | same piece as first position |
 
-At each position the lines are placed in the order A, B, C; positions run away from the lot corner
-on the scoring side. Test: a 7 × 3 lot facing existing runway on its low-z side gives a 7-tile
-runway with lines A, B and C: 21 pieces.
+Test (shipped category 12310, line numbers from the members' part index): flags 0xA10 → S3;
+0xA80 → S4; 0x660 → S2 and S5; 0xA00 → S0/S6/S8 by line; 0x600 → S1/S7/S9 by line; 0xC00 →
+both slots of its line; 0x100 (×2) → F. A 7 × 3 lot gives 7 × 3 = 21 pieces.
 
 **Airport buildings `0x2207D9EE`** (zone 14) [STATIC]. Used only when `V − P > 0`. The lot is
 cut to at most 10 × 10 (keeping its low-x/low-y corner). Attempts, in order, until one succeeds:
@@ -806,10 +824,34 @@ filler; x across, z down):
 The spacing grid record `01FD7A8C` (`10-save-format.md` §6.3) is not written by this rule.
 
 **Estates `0xE22F4A83`** [STATIC]. Used only when `⌊(V − P) × 10 / Max⌋ ≥ 1`. The lot must be at
-least 4 × 4 and is cut to at most 6 × 6 (keeping the low corner). Member lists are filed by flag
-word bits as for row houses: a mansion list (non-filler, edge ≥ 2), four corner lists, four
-wall lists, four gate lists, a lawn list and a garden-feature list (all 1 × 1; each list has a
-fixed orientation) [INFERRED for the exact bit assignment].
+least 4 × 4 and is cut to at most 6 × 6 (keeping the low corner).
+*Member lists.* Each member is filed by its building flag word (attribute 0xCA, "f") and edge size
+`e` (lists are checked in this order; a member may enter several wall/gate lists):
+
+| Condition | List | Used at |
+|---|---|---|
+| `e` = 1 and f has `0x1` | corner K1 | (x0, z0) |
+| `e` = 1 and f has `0x2` | corner K2 | (x1, z1) |
+| `e` = 1 and f has `0x4` | corner K3 | (x0, z1) |
+| `e` = 1 and f has `0x8` | corner K4 | (x1, z0) |
+| otherwise, f has `0x100`: with `0x400` | lawn | interior, 95 % |
+| otherwise, f has `0x100`: without `0x400` | garden feature | interior, 5 % |
+| otherwise, f has none of `0xF0` and `e` < 4 | mansion | step 1 |
+| `e` = 1, f has `0x20`: with `0x800` / without | wall X0 / gate X0 | side x = x0 |
+| `e` = 1, f has `0x40`: with `0x800` / without | wall X1 / gate X1 | side x = x1 |
+| `e` = 1, f has `0x10`: with `0x400` / without | wall Z0 / gate Z0 | side z = z0 |
+| `e` = 1, f has `0x80`: with `0x400` / without | wall Z1 / gate Z1 | side z = z1 |
+
+*Mirroring.* After filing, each pair of opposite lists (K1/K2, K3/K4, wall X0/X1, gate X0/X1,
+wall Z0/Z1, gate Z0/Z1) is checked: if one list is empty it is filled with the members of the
+other and marked **mirrored**; a mirrored list's pieces are placed rotated 180°, all others with
+rotation 0. If both lists of a pair are empty, or the mansion, lawn or feature list is empty, the
+family is not registered for the category. Note that 1 × 1 members with flag word 0 land in the
+mansion list (so a "mansion" can be 1 × 1).
+Test (shipped category 3500): flags 0x102 → K2; 0x108 → K4; 0x240 and 0x640 → gate X1; 0x280 and
+0xA80 → gate Z1; 0x680 → wall Z1; 0xA40 → wall X1; 0xD00 → lawn; 0x100 (×2) → feature; 0x000
+(×2, 1 × 1) and the 2 × 2 mansions → mansion. K1, K3, wall X0, gate X0, wall Z0 and gate Z0 are
+empty and become mirrored copies of K2, K4, wall X1, gate X1, wall Z1 and gate Z1.
 1. Pick a random mansion (edge `e`) and place it at
    (x0 + 1 + rand(W − e − 1), z0 + 1 + rand(H − e − 1)), i.e. anywhere inside the one-tile ring.
 2. Corners (x0, z0), (x1, z1), (x0, z1), (x1, z0): each gets a corner piece only if that corner
@@ -924,6 +966,21 @@ recomputation** runs. [STATIC]
    block containing water, computed by `Rw` passes of 3×3 dilation (so only distances 0…`Rw`
    are distinguished). If `dist ≤ Rw`: `Wb = (Rw − dist + 1) × WaterEffect / (Rw + 1)`
    (integer), else 0. [STATIC]
+   *Water test* [STATIC]: a block contains water when any of its four tiles is a **water tile**,
+   and a tile is a water tile when, at **any** of its four corner vertices, the vertex's
+   water-surface altitude is **greater than or equal to** its ground altitude
+   (`11-world-terrain.md` Persisted state). Dry land lying exactly at the sea level, whose water
+   surface equals the ground, therefore counts as water. On the low, flat shipped maps (sea level
+   30, much land at 30) large inland areas get the full `WaterEffect`. The distance map is rebuilt
+   at every cycle start. [DATA: with this test the recomputed land value of Madison matches the
+   saved byte within 5 % for 95 % of unclassed blocks (sample of 942), up from 70 % with a strict
+   "surface above ground" test]
+   Test vector (Madison, block at tile (126, 124), shipped INI): zones 0/0/22/22 → class C;
+   `C_C` = 84, `dc` = 16, `rC` = 153 → base = 84 + round(16 × (45 − 84) / 153) = 80, +1 = 81; the block's own vertices sit at
+   the sea level → `dist` = 0, `Wb` = 50, `h` = 0 → `W` = 0.5, `B` = round(81 × 1.5) = 122;
+   crime 0 → `q` = 0.2; air 115, water pollution 52 → `p` = 0.098; C modifier 83–86 → `m` ≈ 0.85;
+   `T` = round(2.15 × 122) ≈ 262 per tile → stored 255 (saved 255). An unclassed empty block at
+   (118, 116) gives `B` = round(1 × 1.5) = 2, `T` = round(1.62 × 2) = 3 (saved 3).
 2. *Hill bonus* `Hb`: `h` = (altitude of terrain vertex (x, y), the block's origin vertex) −
    (sea level), computed **modulo 256** (an 8-bit difference). If `h > Href`:
    `Hb = HillEffect × min(h, 8·Href) / (8·Href)` (with `8·Href` replaced by 1 when `Href = 0`;
@@ -983,6 +1040,15 @@ recomputation** runs. [STATIC]
    e. `s = HomelessShelterOrdEffect / 100` if that ordinance is enacted, else 0.
    f. `B = round(base × (1 + W))`; tile value `T = round((1 + q + p + m + s) × B)`.
    g. If the tile has a class, add `T` to the city LV sum and count.
+   Note [OPEN, narrowed]: some saved blocks whose four tiles are all zone 0 hold high values
+   (Moscow 256 such blocks above 10, e.g. tiles (112..118, 96..106) at 255; Europolis 1 015, almost
+   all under civic buildings; Madrid 348), although by this rule an unclassed block cannot exceed
+   about 6. 80–93 % of them were recomputed during the pass in progress when the city was saved,
+   so they are not simply stale. No code path that gives an unzoned tile a class was found: the
+   class comes only from the zone byte. Interim: keep the saved byte for such blocks until the
+   tile's zone or occupant changes. Settling observation: load Moscow, query one of the tiles
+   above with the zone query tool, run 61 days without editing, save, and compare the zone grid and
+   land value of those blocks.
 7. Block LV `= clamp(ΣT / 4, 1, 255)` (integer division; values ≤ 0 become 1).
 
 All "round" operations are round-half-to-even float-to-int conversions. [STATIC]
@@ -996,6 +1062,9 @@ no smoothing, averaging with the previous value or rate limit: each visit overwr
 **Calibration notes for implementations whose recomputed LV is low near dense centres.** The
 original has no "2 × population" rule. A recomputation that matches only at 2P is most likely
 missing one of these terms:
+0. The water test of step 1 (surface **≥** ground at any corner). This was the dominant missing
+   term in the dense centres of the shipped cities: the centres of Madison, Moscow and Madrid lie
+   on sea-level flats and get `W` = 0.5 from it.
 1. `Href` too large (e.g. using the mean altitude instead of the mean dry height above sea
    level). With the shipped maps `Href` is 1–7, so almost every dry block above the sea gets a
    hill bonus of up to `HillEffect` (30 percentage points of `base`).
@@ -1026,7 +1095,10 @@ Map construction (at each cycle start): [STATIC]
    has (mapW/4) × (mapH/4) cells [INFERRED: the smoothing of step 3 steps 4 tiles from cell to
    cell]).
 2. For every occupant in the city's static occupant set (buildings, network pieces and flora)
-   that is occupied (lot state 1 or 513) or has no lot state: find its
+   that is occupied (lot state 1 or 513) or has no lot state, **each occupant exactly once**
+   [STATIC: the iteration walks the map and returns an occupant only at one tile of its
+   footprint; DATA: including network pieces and flora improves the recomputed grid in every
+   played city]: find its
    modifier entry — the entry for its exact agent type, else the first entry (in ascending
    agent-type order) whose type is an ancestor of it in `CitySim.ini [AgentTypeHierarchy]`. For
    every tile of its footprint add `A` to the All map, `R` to the R map, `C` to the C map, `I` to
@@ -1171,8 +1243,9 @@ mapping (§3.5). This document owns the record. Its byte layout, as far as it is
   buildings arrangement step (2), and the exact flag bits of the estate member lists. Housing
   projects A/B/C, row houses, estates and the runway sequence are now specified.
 * What sets the clean-industry flag (§4.5 step 3).
-* Whether network pieces and flora are part of the modifier-map iteration (§6.4 step 2;
-  INFERRED medium-high that they are).
+* High land value on blocks whose tiles are all zone 0 (§6.3 step 6g note).
+* Whether network pieces and flora are part of the modifier-map iteration (§6.4 step 2; the
+  clean-side fit supports it).
 * Occupant attributes 0x72 bits, 0xC9, 0x7B and the CSATTRIB trailer (`13-buildings-occupants.md`):
   growth does not use them; their meaning is unknown.
 * Landfill: the order in which new tiles join the active list (§7).
