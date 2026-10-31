@@ -796,6 +796,16 @@ stops when nothing changes or after a fixed maximum number of iterations: **600*
    power-line piece (agent type 17100 or descendant) and is not damaged (agent type 15400) marks
    as conductor its footprint rectangle **expanded by 2 tiles on every side**, clamped to the map.
    So buildings and lines conduct to anything within 2 tiles of their footprint `[STATIC]`.
+   **Zoned land conducts too** `[STATIC]`: every tile whose zone type is neither 0 (unzoned)
+   nor 17 (landfill) marks the same expanded rectangle (the tile ±2). The zone types that count
+   include airport, seaport and zone 22 (land under a plopped building). When a rectangle is
+   zoned, its expanded rectangle is set. When it is de-zoned (to 0) or zoned as landfill, the
+   expanded rectangle is cleared and rebuilt tile by tile from the remaining buildings, lines
+   and zoned tiles. Empty zoned land is therefore powered whenever it belongs to a powered
+   component; it has no consumption of its own. DATA: London's 112 empty airport tiles, 78 of
+   which are more than 2 tiles from any building or line, are all reported powered (result
+   code 9, `15-sim-growth.md` §4.3), not unpowered (code 14). Correction: the previous text
+   listed only buildings and lines.
 2. **Demand grid.** A per-tile byte grid. Each conducting occupant writes its power consumption
    (one byte, 0–255) into the cell of its **anchor tile only**; the other tiles of its footprint keep
    0 `[STATIC]`. The byte is the occupant's **own building record** (the occupant-attribute record whose key the occupant entry stores, `10-save-format.md` §6.2), u8 attribute **0xC9**; 0 when the record has no 0xC9 `[STATIC]`, taken while the lot is occupied (state 1/513); for other lot states a substitute record supplies it and it is effectively 0, so only occupied lots consume. See `16-sim-utilities.md` §2.6 for the data check. `16-sim-utilities.md` §2.6

@@ -414,7 +414,7 @@ re-occupied with the same building [STATIC].
 | 6 | abandoned: no transport access or trip failed | R, C, I |
 | 7 | abandoned: farm pollution | I |
 | 8 | never produced [INFERRED] | – |
-| 9 | airport developer (zone 14): empty tile powered, serviced (see §7) and with transport access within 6 tiles, but no rule placed anything this visit [STATIC]; saved passes: Berlin 80, London 112, Madrid 128, Sacramento 28, Seoul 2 per pass, each **exactly** the number of zone-14 tiles that no occupant's lot covers [DATA] | airport |
+| 9 | airport developer (zone 14): empty tile powered, serviced (see §7) and with transport access within 6 tiles, but no rule placed anything this visit [STATIC]; saved passes: Berlin 80, London 112, Madrid 128, Sacramento 28, Seoul 2 per pass, each **exactly** the number of zone-14 tiles that no occupant's lot covers [DATA]. The landfill developer also produces code 9, for a landfill tile that is not part of a 2 × 2 landfill square (§7). Seoul has 2 such tiles, so its total is 4 | airport, landfill |
 | 10 | not developed: tile radioactive | R, C, I |
 | 11 | not developed: land value below every category | R, C, I |
 | 12 | not developed: land value above every category (I: also no category on a watered tile, defect §4.3.2) | R, C, I |
@@ -1192,8 +1192,10 @@ families; it places landfill pieces (occupants 10006–10015, agent type 12850) 
   and 17 have descriptions without categories (`14=0xc1f81e7e,3000`, `15=0x82d2d72b,0`,
   `17=0x82348de5,0`); their developers do not use §4.3 or the category rules:
   * airport (14) [STATIC]: per visited tile, with `access` = a transport piece within **6** tiles
-    of the tile (§4.2 box with `d` = 6), `powered`, `blocked` (radioactive) and a second service
-    test S (a per-tile layer test whose identity was not traced; INFERRED: water service):
+    of the tile (§4.2 box with `d` = 6), `powered` (the power layer's powered bit at the visited
+    tile; zoned land conducts, `12-networks.md` §9.1), `blocked` (radioactive, from the
+    pollution layer) and S = the tile has **water service** (the water layer's service bit)
+    [STATIC; correction: S was previously INFERRED]:
     1. If an airport part stands on the tile and the tile is its anchor: if its state is 2 or 4
        and S, `powered`, `access` and not `blocked` all hold, it becomes occupied (state 1). No
        result code.
@@ -1204,8 +1206,14 @@ families; it places landfill pieces (occupants 10006–10015, agent type 12850) 
        else 15.
   * seaport (15): demand valve 8001, rules pier and yard of §5.5, same conditions;
   * landfill (17): no valve demand test; every visit runs decay, registration and filling above.
-  Result code 9 comes from the airport developer and 17 from the seaport developer (§4.3
-  table); 8 is never produced [INFERRED].
+  Result code 9 comes from the airport developer and from the landfill developer (below); 17
+  comes from the seaport developer (§4.3 table); 8 is never produced [INFERRED].
+  **Landfill tile test** [STATIC]: on each visit to a landfill tile the developer first checks
+  for a transport piece within **10** tiles and then a second transport-layer test on the tile
+  (identity not traced); if either fails it reports code 16. Then the tile qualifies for registration only if it is one corner of a
+  2 × 2 square of landfill-zoned (17) tiles, each with a transport piece within 10 tiles, in
+  any of the four orientations. Otherwise it reports code 9 and is not registered. DATA:
+  Seoul's saved pass has code 9 on 2 airport tiles and 2 landfill tiles (total 4).
   **Which tiles give code 9** [DATA]: in every shipped city with an airport zone, the code-9
   count of both saved passes equals the number of zone-14 tiles not covered by any occupant's
   lot. Madrid: 825 zone-14 tiles, 128 uncovered. Berlin: 453, 80. London: 189, 112.
@@ -1226,12 +1234,13 @@ families; it places landfill pieces (occupants 10006–10015, agent type 12850) 
   334, at the start and at the end. Why the runway and airport-building rules place nothing on
   these lots is [OPEN]. The placement check inside the rules is not decoded. Recommended until
   answered: for a loaded city, an airport rule call on a lot inside an existing airport places
-  nothing (code 9). A partial test of a newly zoned airport [OBSERVED]: 36 airport-zone tiles were zoned on
-  hilly land beside a road and power plants in a small city. Only the flat tiles took the
-  zone, and its largest solid rectangle was 3 × 5. Every tile was reported as code 9 in each
-  pass, and after 18 game months no airport part had been placed. This is consistent with the
-  interim rule, but it does not settle the question for a large flat zone. Remaining test:
-  zone a flat area of at least 10 × 10 by a road and count the parts after a few months.
+  nothing (code 9). A test of a newly zoned airport was **inconclusive** [OBSERVED]: 36
+  airport-zone tiles beside a road and power plants, with no water service. They gave code 15
+  (no water service) on 29 tiles and code 16 (no transport within 6) on 7, so the rules were
+  never called; no part was placed in 18 game months. (Correction: an earlier revision
+  reported code 9 here, from a per-zone counter rather than the per-code results.) Remaining
+  test: a flat airport zone of at least 10 × 10 with road, power **and water service**,
+  counting its parts after a few months.
 
 ## Persisted state
 
