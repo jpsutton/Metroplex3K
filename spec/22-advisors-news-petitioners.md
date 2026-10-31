@@ -566,16 +566,39 @@ run every cycle like the others. Thresholds (`Advisor-Demographics.ini [ADVICE_T
 `LOW_LIFE_EXPECTANCY`/`HIGH_LIFE_EXPECTANCY` (LL, LH, years); `LOW_EQ_CUTOFF`,
 `AVERAGE_EQ_CUTOFF`, `HIGH_EQ_CUTOFF` (EL, EA, EH, EQ points); `HIGH_DREARY_RATING` (DH);
 `[PETITIONER_GENERATION] HOSPITAL_RATIO` (HR, population). The zoo/marina, aura and dreary keys
-are used by the petitions (3.12.1). The funding class F_s comes from the services model
-(`17-sim-services.md`), not from `[FUNDING_RATE_CUTOFFS]`.
+are used by the petitions (3.12.1). The `[FUNDING_RATE_CUTOFFS]` keys are read when the advisor
+loads its INI, but no rule uses them [STATIC].
 
 Metrics: N population; LE, EQ city averages; nH, nS, nC = number of buildings of agent type 13310
 (hospital/clinic), 13010 (school), 13873 (college); nSt = number of agent type 14600 (stadium);
-service-model values per service s ∈ {health, school, college}: strike flag, strike-warning
-counter W_s (months under-funded, already divided by 100), funding class F_s (3 = adequate,
-4 = high, other = low), demand D_s and capacity C_s (`17-sim-services.md`); fH, fE = health and
-education funding percent; library and museum capacities CL, CM (population served); dreary
-rating Dr.
+fH, fE = health and education funding percent; dreary rating Dr.
+
+The per-service values below all come from the residential (population) layer. They are taken
+at the start of each advisor cycle (weekly, 3.6) [STATIC]. Except for W_s they are that layer's
+results from its last monthly update (`20-sim-population.md` §4.4, §5.1–§5.2). They are the same fields that
+the residential record stores (`10-save-format.md` §6.11) [STATIC]:
+
+| Value | Health | School | College |
+|---|---|---|---|
+| strike flag | healthStrike | schoolStrike | collegeStrike |
+| F_s | healthRating (0–4) | schoolRating (0–4) | collegeRating (0–4) |
+| D_s | patients | schoolAgePop (ages 7–18) | collegeAgePop (ages 19–24) |
+| C_s | hospitalBeds | schoolDesks | collegeDesks |
+| W_s | ⌊r_health / 100⌋ | ⌊r_school / 100⌋ | ⌊r_college / 100⌋ |
+
+* **F_s is the service rating** of `20-sim-population.md` §5.2 and §4.4 (health rating; school and
+  college ratings), not a funding class. The rule text keeps the names "adequate" (3) and
+  "high" (4), but the test is on the rating value [STATIC].
+* **W_s** is the strike risk r_s of `20-sim-population.md` §5.4 (0–10 000), divided by 100 with
+  integer division. It is evaluated when the advisor reads it, from the same inputs as the monthly
+  strike machine: current rating, the department funding last applied, and whether a facility of
+  that kind exists [STATIC; that the funding input is the last applied value is INFERRED]. While a
+  strike is active W_s = 100. Otherwise, W_s > 15 holds exactly when rating < `MinAcceptable…Rating`,
+  facilities exist, and funding ≤ `MinAcceptable…Funding` − 40 (because (MinF − f)² ≥ 1600)
+  [STATIC]. W_s is not a month counter.
+* CL = libraryCapacity and CM = museumCapacity (Σ `PopServed`, same record) [STATIC].
+* The residential layer also exposes the teacher, professor and doctor sums. The advisor does not
+  read them [STATIC].
 
 **Health** (key `0xE2A49484`, first match):
 
@@ -658,7 +681,7 @@ when the preceding conditions of the row hold.
 
 The hard-coded 71 (dreary) is a constant in the program, not an INI value. Of the
 `Advisor-Demographics.ini` keys, only `[FUNDING_RATE_CUTOFFS] *` and `COLLEGE_POPULATION_MINIMUM`
-are never referenced [STATIC].
+are never used. They are read at load, but no rule or petition tests them [STATIC].
 
 ### 3.13 Utilities advisor rules [STATIC; metric identities INFERRED from topic meaning]
 
