@@ -856,7 +856,20 @@ state). Monthly upkeep of roads/highways is driven by the transport funding keys
 (potholed) road pieces on the map; potholed roads are agent type 16016 `[DATA]`.
 
 * **Condition** X = (number of damaged road pieces) ÷ (number of road tiles), a fraction 0–1. This
-  is the value `18-sim-transport.md` §8.4 reads.
+  is the value `18-sim-transport.md` §8.4 reads, and also the transportation advisor's "damage"
+  (`22-advisors-news-petitioners.md` §3.10.1) [STATIC]. Exact terms [STATIC]:
+  * Numerator: count every occupant on the whole map that is a road piece (§5.2: flags 0x8000 and
+    0x800) and whose occupant ID is 15040, 15041, 15042 or 9051. It is recounted each time X is
+    asked for.
+  * Denominator: the network's running count of road pieces, meaning occupants carrying flag
+    0x8000. It goes up by one when such an occupant is added and down by one when it is removed.
+    Highway, rail, subway and power-line pieces are kept in their own counters (flags 0x10000,
+    0x20000, 0x40000, 0x400000). Pipes are counted elsewhere. The road count is the first of the
+    two road counts the transportation advisor reads.
+  * The division is a real division (extended precision), and the result is returned as a real.
+    With no road pieces it is 0 ÷ 0. The original does not guard this, so the result is NaN
+    (IEEE not-a-number; the original's floating-point exceptions are masked). See
+    `22-advisors-news-petitioners.md` §3.10.1 for how a NaN behaves in the advisor tests.
 * **Setting a new condition** v (0–1, from `18-sim-transport.md` §8.4; it arrives as a whole
   percentage and is divided by 100): count the road tiles N and the damaged pieces D, and let the
   target be T = trunc(v × N).

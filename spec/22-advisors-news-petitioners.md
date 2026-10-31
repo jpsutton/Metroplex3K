@@ -412,10 +412,13 @@ re-derived on load]; if not, an announcement can repeat after loading.
 
 Thresholds (`Advisor-Transportation.ini`): RFH, RFM, RFL = `ROAD_FUNDING_HIGH/MEDIUM/LOW`,
 TFH, TFM = `RAIL_FUNDING_HIGH/MEDIUM` (percent of recommended funding); RD = `ROAD_DAMAGE`
-(same scale as the road-damage fraction below [INFERRED]); THR, TMR = `HIGH_ROAD_TRAFFIC`,
+as a fraction. It is parsed as a real (C `atof`), multiplied by the 32-bit constant 0.01 in
+extended precision, and stored as a 32-bit float. So `ROAD_DAMAGE=15` gives RD ≈ 0.15 (the nearest
+float just below 0.15) [STATIC]. THR, TMR = `HIGH_ROAD_TRAFFIC`,
 `MED_ROAD_TRAFFIC`; TMU, THU = `MED_RAIL_USAGE`, `HIGH_RAIL_USAGE`. Metrics: road funding rf and
 transit funding tf (percent); nRd = road + highway tiles, nTr = rail + subway tiles (two counts
-each); damage = road-damage fraction (real); fail = fraction of failed commutes (real); Tr = road
+each); damage = the road condition X of `12-networks.md` §10: potholed road pieces ÷ road-piece
+count. It is read once per advisor cycle and stored as a 32-bit float [STATIC]; fail = fraction of failed commutes (real); Tr = road
 traffic index; Ru = mass-transit usage index; nB = buildings of agent type 12210 (bus stops),
 nT = agent types 12230 + 12360 + 12361 (transit stations); airport zone tiles, airport tiles with a
 non-development result code (9, 10, 14, 15, 16, 18), airport buildings (12310).
@@ -425,6 +428,9 @@ The rules run in this order:
 1. nRd + nTr = 0 → `0x53` (plain).
 2. Roads (key `0xC2A499BA`): if nRd = 0 → `0x123`. Else first match: rf > RFH and damage < 0.01 →
    `0x59`; rf > RFM and damage < 0.01 → `0x5A`; rf > RFL and damage ≤ RD → `0x5B`; else `0x5C`.
+   When damage is NaN (highways but no road pieces, `12-networks.md` §10), every damage test
+   above counts as true. With rf > RFH such a city gets `0x59` [STATIC: the comparison
+   branches treat an unordered result as "less"].
 3. Transit (key `0xE2A499BE`): if nTr = 0 → `0x124`. Else: transit strike → `0x61`; strike-warning
    counter > 10 → `0x60`; tf < TFM → `0x60`; tf ≤ TFH → `0x5F`; else `0x5E`.
 4. Transit use (key `0xA3372CAE`), only if nTr > 2: Ru > Tr and Ru > TMU → `0x11B`; else 3·Ru < Tr
