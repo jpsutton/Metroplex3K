@@ -152,6 +152,7 @@ class City {
   us::FlammabilityLayer flammability;
   std::unique_ptr<TrafficSim> traffic;
   const CityConfig& config() const { return cfg_; }
+  GameData* gameData() const { return game_; }
   World* world() { return world_; }
   void markOccupantsDirty() { occDirty_ = true; }
   int jailCapacity() const;

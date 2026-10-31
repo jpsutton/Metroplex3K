@@ -74,8 +74,26 @@ class CityDisasterWorld : public DisasterWorld {
     o.valid = true; o.id = oc.uid; o.ax = oc.x; o.az = oc.z; o.w = oc.sizeX; o.h = oc.sizeZ;
     o.agentType = oc.agentType;
     o.burning = oc.state == 16;
+    // Zoned building lots (agent types 3000-9999) are "lots" for the destroy and UFO rules; farm fields are the filler
+    // members flagged 0x100|0x400 of the farm family (spec 15 s4.3.2).
+    const uint32_t kind = oc.agentType / 1000;
+    o.isLot = kind >= 3 && kind <= 9;
+    if (o.isLot && oc.agentType == 9300 && c_.gameData())
+      if (const OccAttr* a = c_.gameData()->occupant(oc.occId)) o.crop = (a->buildingFlags & 0x500) == 0x500;
     o.lotDamage = oc.state == 8 ? kDmgRubble : oc.state == 16 ? kDmgBurnt : oc.state == 2 ? kDmgAbandon : 0;
     return o;
+  }
+  std::vector<OccInfo> occupantsTouching(const OccInfo& o) const override {
+    std::vector<OccInfo> out;
+    auto add = [&](int x, int z) {
+      OccInfo t = occupantAt(x, z);
+      if (!t.valid || t.id == o.id) return;
+      for (const auto& e : out) if (e.id == t.id) return;
+      out.push_back(t);
+    };
+    for (int i = 0; i < o.w; i++) { add(o.ax + i, o.az - 1); add(o.ax + i, o.az + o.h); }
+    for (int j = 0; j < o.h; j++) { add(o.ax - 1, o.az + j); add(o.ax + o.w, o.az + j); }
+    return out;
   }
   bool inGroup(const OccInfo& o, int group) const override { return c_.agentHierarchy().isAncestorOrSelf(o.agentType, uint32_t(group)); }
   bool isA(uint32_t agentType, uint32_t ancestor) const override { return c_.agentHierarchy().isAncestorOrSelf(agentType, ancestor); }
@@ -284,6 +302,30 @@ void Game::weeklyHook() {
 
 void Game::applyDisasterOutput(DisasterOutput& out) {
   City& c = city();
+  // The sprite automata that would carry out saucer bombs, crop circles, locust bites and falling debris are not
+  // drawn yet; their gameplay effect is applied here at once, as if each had just landed. Results go through the
+  // same command path (follow-up output is applied after this batch).
+  DisasterOutput follow;
+  {
+    CityDisasterWorld dw(world_, c);
+    for (const auto& cmd : out.commands) {
+      switch (cmd.kind) {
+        case DisasterCommand::UfoSwarm:
+          for (const auto& p : cmd.pts) disasters_.ufoBombHit(dw, p.first, p.second, follow);
+          for (const auto& p : cmd.pts2) disasters_.ufoCropCircle(dw, p.first, p.second, follow);
+          break;
+        case DisasterCommand::LocustSwarm:
+          for (const auto& p : cmd.pts) disasters_.locustEaten(dw, p.first, p.second, follow);
+          break;
+        case DisasterCommand::DebrisSpawn: {   // [INFERRED] the class value (2000/5000/10000) is the intensity: a/250 impacts
+          int n = std::max(1, cmd.a / 250);
+          for (int i = 0; i < n && world_.W > 0; i++) disasters_.debrisImpact(dw, int(rng_.rand(uint32_t(world_.W))), int(rng_.rand(uint32_t(world_.H))), follow);
+          break;
+        }
+        default: break;
+      }
+    }
+  }
   for (const auto& cmd : out.commands) {
     switch (cmd.kind) {
       case DisasterCommand::DestroyOccupant: {
@@ -347,6 +389,7 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
     if (ev.kind == DisasterEvent::AllOver) { disasterX_ = disasterZ_ = -1; }
   }
   out.clear();
+  if (!follow.commands.empty() || !follow.events.empty()) applyDisasterOutput(follow);
 }
 
 void Game::startDisaster(DisasterType t) {
