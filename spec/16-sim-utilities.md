@@ -225,9 +225,19 @@ For each facility, in list order: [STATIC]
    pollution layer]. Consequences: in the 40 shipped files without the bit set, every water tile
    is fresh and pumps work on the sea; in the 19 files with the bit, pumps next to sea cells get no
    water. An implementation must use the saved bit, not a geometric "edge-connected body ≥ 8 wide"
-   rule. [OPEN] Which tiles count as "water tiles" for the ring test (all four corners wet, or any
-   corner). Settling observation: on a flat terrain, place a pump with exactly one corner of one
-   ring tile under fresh water and read the pump's status in the query window.
+   rule. Water tile: a tile is water when, at any of its four corner vertices, the water-surface
+   altitude is greater than or equal to the ground altitude (the same test as the land-value
+   water bonus, `15-sim-growth.md` §6.3 step 1) [STATIC for land value; INFERRED, medium, that the
+   pump ring uses the same terrain test].
+   **Conditions that zero a pump, tower or desalination plant**, in order [STATIC]: (a) the
+   facility is not functional (its lot state, `0x200` removed, is not 1) or it is retired this
+   month (age ≥ *Lmax*); (b) its tile is unpowered; (c) the ring test fails (pumps,
+   desalination); (d) the water-pollution cut of step 5 (pollution at the facility tile ≥ *m*);
+   (e) the facility's trip failed twice (`18-sim-transport.md` §9.2 "utility facility"
+   [INFERRED for water facilities; STATIC for garbage facilities and recycling centres]). The saved status property (`10-save-format.md` §6.2.5,
+   `8351FDF5`) is only written by the ring test, so a pump zeroed by (a), (b), (d) or (e) keeps
+   status 0 ("good"). DATA: Madrid has 40 pumps with output 0 and status 0, all built on the same
+   day as 42 producing pumps, so age is not the cause; check (b), (d) and (e).
 4. Desalination plants: examine the border of the box from (x − 1, z − 1) to (x + 3, z + 3) (the ring
    around its 3 × 3 lot anchored at (x, z)); any **salt** water tile → full capacity, else 0.
 5. Water pollution: let *p* be the water-pollution value at the facility tile (0–32767,
@@ -313,14 +323,22 @@ stages below, and any part not disposed is added to the landfill store's pending
 (§4.4).
 
 **Recycling ratio** `r` [STATIC] (recomputed once a month): with `P` = the city population
-(`20-sim-population.md` §2), sort the functioning recycling centres by their reduction percentage
+(`20-sim-population.md` §2), sort the recycling centres by their current reduction percentage
 (descending). Walk them while `served < P`: `served += popServed_c`,
 `w += pct_c × popServed_c / 100`. Then `r = w / P` if `served < P`, else `r = w / served`; `r` = 0
-when there is no centre. `pct_c` and `popServed_c` are the centre's funded `OptimalPctReduction`
-and `OptimalPopServed` (`SC3Tune.ini [RecyclingCenter]`) [INFERRED for the funding scaling]. `r`
-is saved as the f32 "ratio" of the pollution record (`17-sim-services.md` §7.4).
-Test vector: `P` = 100 000, two centres (45 %, 50 000) each: served 100 000, w = 45 000 →
-`r` = 0.45. One centre: served 50 000 < `P` → `r` = 22 500 / 100 000 = 0.225.
+when there is no centre. A centre's monthly values [STATIC]:
+* 0 and 0 if it is expired, if its age ≥ `MaxLifespan` (it is then retired), if its tile is
+  unpowered, if its lot state is not 1, or if its trip failed twice (§4.3 "Traffic access");
+* otherwise `OptimalPctReduction` and `OptimalPopServed` (`SC3Tune.ini [RecyclingCenter]`), both
+  reduced linearly after `DeclineAge`: value − ⌊(age − `DeclineAge`) × value /
+  (`MaxLifespan` − `DeclineAge`)⌋.
+There is **no** funding scaling (correction: an earlier revision inferred one). The per-centre
+properties saved with the occupant (`10-save-format.md` §6.2.5) are the unaged INI values.
+`r` is saved as the f32 "ratio" of the pollution record (`17-sim-services.md` §7.4).
+Test vectors: `P` = 100 000, two new centres (45 %, 50 000): served 100 000, w = 45 000 →
+`r` = 0.45; one centre → `r` = 0.225. Craterville (`P` = 208 780, three centres): all three
+working → 0.3233; one of them zeroed → 0.2155 (saved 0.2155), so one centre is zeroed by a
+condition above, or all three are aged by the same factor √(2/3) [DATA].
 
 **Per tile** (inside the cell update of `17-sim-services.md` §7.2.4 step 3, non-landfill tiles):
 1. `q` = the tile's share of the cell's garbage; *produced* [0] += `q`.
@@ -441,11 +459,10 @@ absent, re-derive *Lmax* and *Ld* (§2.3) and start *W* at 0. [STATIC layout][IN
 * The expired-plant variant: which occupant replaces a retired plant, and whether it ever produces.
 * Water: exact row-sweep order of the spreading front; role of `DefaultLeak`; water treatment
   plant behaviour (`OptimalPollutionCap`).
-* Garbage: the remaining use of `GarbageScalingFactor` (not disposal); funding scaling of the
-  recycling-centre values. Closed: recycling ratio (4.3), abduction resets monthly (4.3), store
+* Garbage: the remaining use of `GarbageScalingFactor` (not disposal). Closed: recycling ratio (4.3), abduction resets monthly (4.3), store
   (4.4), counter labels (4.5).
-* Pumps: which tiles count as water tiles for the ring test (§3.3 step 3); whether purchased water
-  is included in the saved `supply` statistic.
+* Pumps: whether the ring test uses the land-value water-tile test (§3.3 step 3, INFERRED);
+  whether purchased water is included in the saved `supply` statistic.
 * Which ordinance ID is Water Conservation vs Water Meters (§3.4); settle from
   `19-sim-economy.md` §9.5.
 * Whether *m* in §3.3 step 5 is the constant `MaxWaterPolluteForUI` or a running maximum.
