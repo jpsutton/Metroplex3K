@@ -199,6 +199,26 @@ int main(int argc, char** argv) {
                   sd / n, nNo ? sdNo / nNo : 0, nNo, nHw ? sdHw / nHw : 0, nHw, nSf ? sdSf / nSf : 0, nSf);
     }
     std::printf("\n");
+    {  // Water fixed point (independent of traffic): split by the cell's water source sign.
+      us::PollutionLayer p = t.pollution;
+      us::PollutionEnv env; env.zone = &theirs.game.world().zone; env.ordinances = t.crimeOrdinances();
+      for (int d = 0; d < 2 * std::max(1, t.pollution.params().updatePeriod); d++) p.run(env);
+      const auto src = t.pollution.sourceGrids();
+      double sd[3] = {}; long long n[3] = {};
+      for (int x = 0; x < W; x += 2) for (int z = 0; z < H; z += 2) {
+        int a = p.waterAt(x, z), b = t.pollution.waterAt(x, z);
+        int ws = src.water[size_t(x / 2) * (H / 2) + z / 2];
+        int k = ws > 0 ? 0 : ws < 0 ? 1 : 2;
+        sd[k] += a - b; n[k]++;
+      }
+      std::printf("   water fixed point on their save: source>0 %+.1f /%lld, source<0 %+.1f /%lld, source=0 %+.1f /%lld\n", n[0] ? sd[0] / n[0] : 0,
+                  n[0], n[1] ? sd[1] / n[1] : 0, n[1], n[2] ? sd[2] / n[2] : 0, n[2]);
+      std::printf("   water treatment: plants theirs %zu ours %zu, cap/plant %d; saved rawLast %d treatedLast %d sumWater %d | after run rawLast %d "
+                  "treatedLast %d sumWater %d; ordinances CC %d LCB %d IPF %d\n",
+                  t.pollution.treatmentPlants.size(), c.pollution.treatmentPlants.size(), t.pollution.params().treatmentCap,
+                  t.pollution.rawWaterLast, t.pollution.treatedLast, t.pollution.sumWater, p.rawWaterLast, p.treatedLast, p.sumWater,
+                  env.ordinances.active(0xA2F6E7DA) ? 1 : 0, env.ordinances.active(0x62F6E808) ? 1 : 0, env.ordinances.active(0x02F6E7E2) ? 1 : 0);
+    }
   }
   // Largest crime and air differences.
   struct D { int d, x, z; };

@@ -806,7 +806,11 @@ void PollutionLayer::run(const PollutionEnv& env) {
   // 3 WTE burn its whole 104k/month remainder; Liverpool 3 incinerators burn 135,000 = 3 x 45,000 every month).
   int64_t wteBud = wteRb_.next(30 * wteN * P.wteCap * env.wteFunding / 100);
   int64_t incBud = incRb_.next(30 * incN * P.incineratorCap * env.incineratorFunding / 100);
-  int64_t trBud = trRb_.next(trN * P.treatmentCap * env.treatmentFunding / 100);
+  // Treatment capacity C_T is the per-run sum of the plants' OptimalPollutionCap (spec 17 7.2.4 "at the start of every
+  // tick"), not a monthly figure spread over 30 runs. [DATA] Berlin (4 plants x 60,000): the original's saved per-sweep
+  // treated total is 1.24M, more than the 240k a monthly reading allows; with the per-run cap their saved water is a fixed
+  // point of our update (mean -1.6 over two sweeps, against +17.6 with the monthly reading).
+  int64_t trBud = trN * P.treatmentCap * env.treatmentFunding / 100;
   burnCapA = uint32_t(incBud); burnCapB = uint32_t(wteBud);
   disp.abductionCap = P.garbageAbduction;
   disp.beginRun(wteBud, incBud, env.exportDeal);

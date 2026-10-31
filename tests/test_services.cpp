@@ -448,14 +448,14 @@ static void testPollutionRun() {
     runSweep(L, env, 4);
     CHECK(L.waterAt(4, 4) == 1);
   }
-  {   // Treatment plant removes water pollution (3000/30 = 100 per run)
+  {   // Treatment plant removes water pollution: C_T = 3000 per run, more than the cell's raw 2000
     PollutionLayer L; L.init(16, 16, p, &h);
     SimOccupant w; w.agentType = 7000; w.x = 4; w.z = 4;
     SimOccupant t; t.agentType = 12820; t.x = 12; t.z = 12;
     L.addOccupant(w); L.addOccupant(t);
     runSweep(L, env, 4);
-    CHECK(L.treatedLast == 100 && L.rawWaterLast == 2000);
-    CHECK(L.waterAt(4, 4) == 100);    // target (2000-100)/4 = 475 limited by step 100
+    CHECK(L.treatedLast == 2000 && L.rawWaterLast == 2000);   // no history: t = C_T, limited to S_W
+    CHECK(L.waterAt(4, 4) == 0);      // target (2000-2000)/4 = 0
   }
   {   // Traffic and car smogging
     PollutionLayer L; L.init(16, 16, p, &h);

@@ -333,7 +333,7 @@ class PollutionLayer {
   PollutionParams params_;
   const AgentHierarchy* hier_ = nullptr;
   MsRand rnd_;
-  RunBudget wteRb_, incRb_, trRb_, recRb_;
+  RunBudget wteRb_, incRb_, recRb_;
   int64_t recBudget_ = 0;
 };
 
