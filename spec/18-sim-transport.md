@@ -188,7 +188,10 @@ matches [STATIC]:
 
 (The names are those of `CitySim.ini` agent types [DATA]. Bus stops, stations, parking, schools
 and the like belong to none of these groups, so they neither make trips nor act as destinations.)
-Every occupant of a matching type is its own trip maker with its own lot, including the 1 × 1
+Every occupant of a matching type is its own trip maker with its own lot: the weekly firing visits
+each building occupant record once (each is a scheduler agent registered when it is added)
+[STATIC]. This includes filler pieces placed with a building (parking lots, gardens and similar
+fillers carry R/C/I agent types), and the 1 × 1
 field pieces of farms (9300 → 8000, category 2, industrial radius) and each airport part
 (12310, category 1, commercial radius) [STATIC]. There is no farm- or airport-specific trip rule.
 Many of these pieces lie far from roads and fail. DATA, Madison at day ~460: 47 of 176 farm
@@ -336,9 +339,13 @@ Travel modes [STATIC]:
 | 0x43 | Bus on a road tile with highway access |
 | 0x50 | At a bus stop |
 
-The visit mask records, per tile, which modes have already examined the tile in this trip. A tile
-is a candidate for a mode only if it has not yet been visited in that mode. At the start of a trip
-the mask is cleared and the origin rectangle is marked with the start mode.
+The visit mask records, per tile, which modes have already examined the tile in this trip. It is
+one **byte** per tile, and the **raw mode codes** of the table above are OR-ed into it; there is
+no separate bit per mode [STATIC]. A tile is skipped by a node of mode *m* when
+(byte AND *m*) = *m*. Because the codes share bits, marks overlap: for example a tile marked
+with 0x41 (bus) or 0x50 (bus stop) is also skipped by mode 1 (car), and 0x14 also covers 4 and
+0x10. Reproduce the overlaps. At the start of a trip the mask is cleared and the origin
+rectangle is marked with 0x80.
 
 ### 5.2 First step (from the origin)
 
@@ -510,8 +517,11 @@ The search is a depth-first walk [STATIC]:
    are skipped, and the choice rule of §5.3 starts afresh over the remaining candidates. Nothing
    resumes from the old scan position [STATIC].
 
-The visit mask is updated as each node is chosen: the new node's tiles are marked with the
-**parent's** mode bit, and rejected candidate tiles are marked with the scanning mode.
+The visit mask is updated as each node is chosen: the new node's tiles get the **parent's** mode
+code OR-ed in, not the new node's own mode. A ring tile examined without a valid transition is
+marked at once with the scanning node's code (1, 4, 8, 0x10, 0x41 or 0x50 by branch, §5.4)
+[STATIC]. Candidates that were valid but lost the §5.3 choice are not marked, so a retry
+(§5.7 step 4) can still take them.
 
 ### 5.8 Arrival test
 
