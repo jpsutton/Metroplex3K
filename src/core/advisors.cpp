@@ -1,5 +1,6 @@
 #include "core/advisors.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace m3k {
@@ -605,15 +606,19 @@ void AdvisorManager::transRules(TopicList& L, const AdvisorInputs& in, GameRng& 
   const auto& T = in.trans;
   const int64_t RFH = thr.get("ROAD_FUNDING_HIGH"), RFM = thr.get("ROAD_FUNDING_MEDIUM"), RFL = thr.get("ROAD_FUNDING_LOW");
   const int64_t TFH = thr.get("RAIL_FUNDING_HIGH"), TFM = thr.get("RAIL_FUNDING_MEDIUM");
-  const double RD = double(thr.get("ROAD_DAMAGE")) / 100.0;
+  // RD = f32(ROAD_DAMAGE x f32 0.01) (spec 22 s3.10.1) [STATIC]. A NaN damage (no road pieces: 0/0 in the original)
+  // makes every damage test true.
+  const float RD = float(double(thr.get("ROAD_DAMAGE")) * double(0.01f));
+  const float dmg = float(T.roadDamage);
+  const bool nan = std::isnan(dmg);
   const int64_t THR = thr.get("HIGH_ROAD_TRAFFIC"), TMR = thr.get("MED_ROAD_TRAFFIC");
   const int64_t TMU = thr.get("MED_RAIL_USAGE");
   const int Tr = T.roadTraffic, Ru = T.railUsage;
   if (T.nRoad + T.nTransit == 0) L.raise(0x53);
   if (T.nRoad == 0) L.raise(0x123, 0xC2A499BA);
-  else if (T.roadFunding > RFH && T.roadDamage < double(0.01f)) L.raise(0x59, 0xC2A499BA);
-  else if (T.roadFunding > RFM && T.roadDamage < double(0.01f)) L.raise(0x5A, 0xC2A499BA);
-  else if (T.roadFunding > RFL && T.roadDamage <= RD) L.raise(0x5B, 0xC2A499BA);
+  else if (T.roadFunding > RFH && (nan || dmg < 0.01f)) L.raise(0x59, 0xC2A499BA);
+  else if (T.roadFunding > RFM && (nan || dmg < 0.01f)) L.raise(0x5A, 0xC2A499BA);
+  else if (T.roadFunding > RFL && (nan || dmg <= RD)) L.raise(0x5B, 0xC2A499BA);
   else L.raise(0x5C, 0xC2A499BA);
   if (T.nTransit == 0) L.raise(0x124, 0xE2A499BE);
   else if (T.transitStrike) L.raise(0x61, 0xE2A499BE);

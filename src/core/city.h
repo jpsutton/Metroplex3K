@@ -125,6 +125,9 @@ class City {
     return -1;
   }
   int roadCount() const;
+  // Road condition X (spec 12 s10) [STATIC]: potholed road pieces (IDs 15040/15041/15042/9051) / road pieces; NaN with no
+  // road pieces (0/0, unguarded in the original).
+  double roadCondition() const;
   int population() const { return residents_; }
   bool powered(int x, int z) const { return power.powered(x, z); }
   bool watered(int x, int z) const { return water.tileServiced(x, z); }

@@ -299,6 +299,7 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
       }
     in.trans.nTransit = in.trans.railTiles + in.trans.subwayTiles;
   }
+  in.trans.roadDamage = c.roadCondition();   // spec 22 s3.10.1 / 12 s10 (NaN with no road pieces, as in the original)
   in.trans.carpoolEnacted = c.ordinances.enacted(ord::Carpool);
   in.trans.crossingGuardsEnacted = c.ordinances.enacted(ord::CrossingGuards);
   for (auto z : world_.zone) if (z == 14) in.trans.airportZoneTiles++;

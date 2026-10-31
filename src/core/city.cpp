@@ -643,6 +643,17 @@ void City::rebuildIndex() {
   occDirty_ = netDirty_ = true;
 }
 
+double City::roadCondition() const {
+  if (!world_) return 0.0;
+  int64_t roads = 0, damaged = 0;
+  for (const auto& p : world_->surface) {
+    if (!world_->inTiles(p.x, p.z)) continue;
+    if (cfg_.haveTiling ? !cfg_.tiling.inSet(netKindToTable(NK_ROAD), p.pieceId) : transport_[idx(p.x, p.z)] != 1) continue;
+    roads++;
+    if (p.pieceId == 15040 || p.pieceId == 15041 || p.pieceId == 15042 || p.pieceId == 9051) damaged++;
+  }
+  return double(damaged) / double(roads);   // 0/0 = NaN reproduced
+}
 int City::roadCount() const {
   int n = 0;
   for (uint8_t t : transport_) if (t) n++;
@@ -1456,6 +1467,7 @@ void City::monthlyTraffic() {
   int roads = 0, hwy = 0, rail = 0;
   for (uint8_t t : transport_) { if (t == 1) roads++; else if (t == 4) hwy++; else if (t == 2) rail++; }
   MonthlyInput in;
+  in.roadCondition = roadCondition();
   in.ord.parkingFines = ordinances.enacted(kOrdParkingFines);
   in.ord.alternateDayDriving = ordinances.enacted(kOrdAlternateDay);
   in.ord.carpool = ordinances.enacted(kOrdCarpool);
