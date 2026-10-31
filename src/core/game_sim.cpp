@@ -125,6 +125,9 @@ DisasterInputs inputsFor(City& c, bool enabled, const CheatRegistry& cheats) {
   // spec 29 section 2.6 interim sources: U = unemployment %, A = city aura.
   in.unrest = std::max(0, std::min(100, c.valves.unemploymentPct()));
   in.aura = int(c.aura.cityAura);
+  // Toxic-cloud pollution term (spec 21 s6.2) [STATIC]: the pollution record's avgAir over SC3Pollution MaxAirPolluteForUI.
+  in.pollutionTotal = int64_t(c.pollution.avgAir);
+  in.pollutionNorm = c.pollution.params().maxAir;
   in.ordCleanIndustry = c.ordinances.enacted(ord::CleanIndustry);
   in.ordIndPollutantFee = c.ordinances.enacted(ord::IndPollutantFee);
   in.ordWasteDisposal = c.ordinances.enacted(ord::IndWasteDisposal);

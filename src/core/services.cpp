@@ -683,9 +683,10 @@ void PollutionLayer::rebuild(const std::vector<SimOccupant>& occ) {
 }
 
 void PollutionLayer::finaliseSweep() {
-  int64_t cells = int64_t(nx_) * nz_;
-  avgAir = cells ? uint32_t(std::max<int64_t>(0, sumAir) / (4 * cells)) : 0;
-  avgWater = cells ? uint32_t(std::max<int64_t>(0, sumWater) / (4 * cells)) : 0;
+  // Spec 17 s7.4 [STATIC]: averages over the polluted-cell count (+4 per cell with a > 0, w > 0 or garbage), 0 when the
+  // count is 0 or the sum is <= 0.
+  avgAir = pollutedCount > 0 && sumAir > 0 ? uint32_t(int64_t(sumAir) / int64_t(pollutedCount)) : 0;
+  avgWater = pollutedCount > 0 && sumWater > 0 ? uint32_t(int64_t(sumWater) / int64_t(pollutedCount)) : 0;
   rawWaterLast = rawWaterSum; treatedLast = treatedSum;
   { bool any = false; for (auto v : standing) if (v & 0x7FFF) { any = true; break; } standingAtSweepEnd = any; }
   sumAir = sumWater = 0; rawWaterSum = treatedSum = 0; pollutedCount = 0;
@@ -887,7 +888,12 @@ PollutionLayer::RecyclingCentre PollutionLayer::recyclingCentreValues(bool worki
 }
 
 void PollutionLayer::monthEnd(int month, int year, int64_t population, const std::vector<RecyclingCentre>* centres) {
-  chartMonthEnd(chart, uint32_t(avgAir), month, year);
+  // Graph sample = the mean of avgAir and avgWater as a percentage of MaxAirPolluteForUI [INFERRED from DATA: Berlin
+  // (2050 + 568) / 2 -> saved 11, Madison (536 + 120) / 2 -> 2, Madrid (3474 + 813) / 2 -> 19; spec 17 leaves it OPEN].
+  {
+    uint64_t pbar = (uint64_t(avgAir) + avgWater) / 2;
+    chartMonthEnd(chart, params_.maxAir > 0 ? uint32_t(pbar * 100 / uint64_t(params_.maxAir)) : 0, month, year);
+  }
   disp.monthEnd();
   disp.store.monthly();
   if (centres) ratio = recyclingRatio(*centres, population);

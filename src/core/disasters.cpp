@@ -1491,7 +1491,8 @@ void DisasterManager::monthlyTick(DisasterWorld& w, const DisasterInputs& in, Di
   // Toxic cloud
   if (int(clouds_.size()) < tune.toxMaxInstances &&
       (!haveCloud_ || int64_t(in.jdn) - lastCloudJdn_ >= int64_t(tune.toxAvgMonthsBetween) * 30)) {
-    int64_t score = in.pollutionNorm != 0 ? int64_t(tune.toxWeightPollution) * (in.pollutionTotal / in.pollutionNorm) : 0;
+    // spec 21 s6.2 [STATIC]: floor(WeightForPollution x avgAir / MaxAirPolluteForUI), product first, signed 32-bit division
+    int64_t score = in.pollutionNorm != 0 ? int64_t(int32_t(int32_t(tune.toxWeightPollution) * int32_t(in.pollutionTotal)) / int32_t(in.pollutionNorm)) : 0;
     if (in.ordCleanIndustry) score -= tune.toxWeightCleanInd;
     if (in.ordIndPollutantFee) score -= tune.toxWeightIndFee;
     if (in.ordWasteDisposal) score -= tune.toxWeightWaste;
