@@ -147,15 +147,15 @@ The map is W × H tiles. The traffic subsystem keeps the following grids [STATIC
 | 0x0008 | subway occupant, subway station, subway–rail station | Subway |
 | 0x0010 | transit station building | Station / stop tile |
 | 0x0020 | subway–rail station | Rail↔subway transfer |
-| 0x0040 | occupant with the highway-access property (see below) | Road/highway junction tile (on-ramp) [INFERRED] |
+| 0x0040 | highway on-ramp piece: network piece IDs 15130–15141 ("Highway Onramp", agent type 17202) [STATIC] | Road/highway junction tile |
 | 0x0080 | road/highway piece reports itself damaged | Damaged (adds `DamagedCostAddToStep`) |
-| 0x0100 | road/highway/rail piece property "A" | Step cost × 0.7 [OPEN: which piece property — see open questions] |
-| 0x0200 | subway piece property "A" | Subway step cost × 0.7 |
+| 0x0100 | road/highway/rail piece whose record has bit 0 of attribute 0x12D set [STATIC] | Step cost × 0.7. The pieces with the bit are the diagonal ones (highway 11223, 11224, 15052, 15106; road 35, 11207, 11209, 18004; rail 50, 51) [DATA; "diagonal" INFERRED from the 0.7 ≈ 1/√2] |
+| 0x0200 | subway piece with the same bit (subway 11621, 11622, 18015, 18018) | Subway step cost × 0.7 |
 | 0x0400 | road tile is a neighbour connection | Road exit to a neighbour |
 | 0x0800 | highway tile is a neighbour connection | Highway exit |
 | 0x1000 | rail tile is a neighbour connection | Rail exit |
 | 0x2000 | subway tile is a neighbour connection (query exists; the game has no subway connections) | Subway exit |
-| 0x4000 | road/highway/rail piece is a multi-tile span (bridge/tunnel) | Trip jumps across the span (§5.5) |
+| 0x4000 | road/highway/rail piece carries a span record (bridge/tunnel): a per-piece run-time flag set by the bridge/tunnel builder together with a 2-bit direction and an 8-bit length [STATIC]. How it is restored on load is [OPEN] | Trip jumps across the span (§5.5) |
 
 Station occupants are recognised by occupant **type ID** [STATIC]:
 
@@ -194,7 +194,9 @@ match none of these IDs make no trips.
 
 There are 16 trip generators: one per (category × week-slot 0–3). Generators are assigned **per
 building type**, not per building. When the city is set up, the building types of `CitySim.ini`
-are visited in the order of the agent-type registry. Each type that belongs to one of the four
+are visited in the order of the agent-type registry, which is **ascending agent-type ID compared
+as unsigned 32-bit numbers** (the registry is an ordered map keyed by type ID, filled from
+`CitySim.ini [AgentTypes]`) [STATIC]. Each type that belongs to one of the four
 categories gets the generator of its category with the next slot from a single global counter
 that runs 0, 1, 2, 3, 0, … [STATIC]. Every building of that type therefore shares that type's
 slot. A generator only fires during its week:
@@ -265,8 +267,12 @@ On each firing [STATIC]:
 ### 4.5 Counting test
 
 This test only applies to buildings that are functional (as in §4.3). Let d be the value (0–255)
-of the city's "density" layer at the lot's first tile [OPEN: the layer is obtained from the city by
-layer ID; see open questions]. Draw q = rand(100). The trip is counted iff
+at the lot's first tile of the **valve-effect map** of the RCI development layer (`10-save-format.md`
+§6.7 `effectMap`, the map of the last completed cycle; owned by the growth valve layer,
+`15-sim-growth.md` §3.3). The traffic layer looks it up by the layer ID 0x80F1E6D3 [STATIC]. Each tile
+holds the clamped sum of the 3000/5000/8000 supplies and the 7000 (jobs) demand of
+`SC3ValveLayer.ini [AgentValveEffects]` over the occupied buildings covering it. It is saved, so
+a loaded city has it at once. Draw q = rand(100). The trip is counted iff
 
 > q ≤ trunc(`TripChanceCountingBase` + d × `TripChanceDensityMultiplier`/100)
 
@@ -392,7 +398,23 @@ the trip there).
 
 **Highway-like modes (2, 3, 0x42, 0x43).** These do not scan a ring. Instead the network piece
 under the node reports which of its four orthogonal neighbours may be entered, given the direction
-of the last move (and the view rotation) — see `12-networks.md`. Each permitted neighbour (tested
+of the last move [STATIC]:
+* *M* = the piece record's u32 attribute **0x136** (the road/highway connection matrix; 0x137 and
+  0x138 are the rail and subway matrices, used by other callers). A city-wide boolean *B* held by the
+  traffic layer, read from the application at start-up, selects the half: *B* true → bits 0–15,
+  *B* false → bits 16–31 [STATIC; what *B* means, possibly the driving side, is INFERRED].
+* With *d* = the node's last move direction (0–3) and *r* = the piece's rotation (0–3, from the
+  placement word), row *d* + 4*r* of the table below gives four bit numbers (*b*₀, *b*₁, *b*₂, *b*₃).
+  Neighbour (x−1) is permitted iff bit *b*₀ of the selected half is set, (y−1) iff *b*₁, (x+1) iff *b*₂,
+  (y+1) iff *b*₃.
+
+  | Row | b₀ b₁ b₂ b₃ | Row | b₀ b₁ b₂ b₃ | Row | b₀ b₁ b₂ b₃ | Row | b₀ b₁ b₂ b₃ |
+  |---|---|---|---|---|---|---|---|
+  | 0 | 0 1 2 3 | 4 | 15 12 13 14 | 8 | 10 11 8 9 | 12 | 5 6 7 4 |
+  | 1 | 4 5 6 7 | 5 | 3 0 1 2 | 9 | 14 15 12 13 | 13 | 9 10 11 8 |
+  | 2 | 8 9 10 11 | 6 | 7 4 5 6 | 10 | 2 3 0 1 | 14 | 13 14 15 12 |
+  | 3 | 12 13 14 15 | 7 | 11 8 9 10 | 11 | 6 7 4 5 | 15 | 1 2 3 0 |
+ Each permitted neighbour (tested
 in the order north/−y, west/−x, south/+y, east/+x) is evaluated as follows [STATIC]:
 
 | From | Neighbour (not a station) | New mode | Density layer |
@@ -912,15 +934,13 @@ occupants (any other argument disables it). It has no simulation effect [STATIC]
 
 ## Open questions
 
-1. Which piece property sets flag 0x100/0x200 (the × 0.7 step cost)? Candidates: "straight piece"
-   or "bridge". `12-networks.md` should identify it.
-2. Which city layer supplies the density value d of the counting test (§4.5)? It is obtained by a
-   layer ID from the city. Population density is most likely [INFERRED, medium].
+1. (Resolved: flag 0x100/0x200 = piece attribute 0x12D bit 0, §3.1.)
+2. (Resolved: the counting test reads the valve-effect map, §4.5.)
 3. Which provider supplies the (C, I) weights of §4.2? Most likely commercial and industrial job
    totals [INFERRED].
 4. (Resolved: the week-slot is dealt per building type; §4.1.)
-5. Highway/ramp piece exit rules (which neighbours a piece permits for a given direction of
-   travel): `12-networks.md`.
+5. (Resolved: piece attribute 0x136 matrix, §5.4.) Still open: the meaning of the city-wide
+   boolean *B* and how span flags (0x4000) are restored after a load.
 7. Airport/seaport puzzle development rules (§12): `15-sim-growth.md`.
 8. `TrafficSimLobotomyDensity`: loaded, but has no known effect.
 9. Strike side effects outside the trip model (news, advisor, automata).
