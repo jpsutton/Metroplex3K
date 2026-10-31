@@ -356,9 +356,13 @@ Thresholds (`Advisor-PublicSafety.ini`): PH/PM = `POLICE_FUNDING_HIGH/MEDIUM`, F
 `FIRE_FUNDING_HIGH/MEDIUM` (percent of recommended funding), CH/CM = `HIGH_CRIME_LEVEL` /
 `MED_CRIME_LEVEL` (city crime index), `FIRE_STATION_MIN_POP`, `JAIL_MIN_POP`,
 `POLICE_STATION_RATIO` (population per police station, petition trigger),
-`FIRE_COVERAGE_CUTOFF` (percent). Metrics: police/fire funding percent pf/ff, crime index K,
-population N, station counts, strike-warning counters (months of under-funding, see
-`17-sim-services.md`), police coverage percent Q.
+`FIRE_COVERAGE_CUTOFF` (percent). Metrics: police/fire funding percent pf/ff (department
+funding bytes), crime index K, population N, station counts, police coverage percent Q.
+Strike-warning counters: each is that layer's **strike chance per tick** (`17-sim-services.md`
+§3.4, 0–10 000; 10 000 while striking), divided by 100 with integer division. It is read at each
+advisor cycle. So "counter ≥ 16" means a strike chance ≥ 1 600. This is the same scheme as W_s in
+3.12. CORRECTION: it is not a count of months of under-funding [STATIC for police; INFERRED for
+fire, whose layer mirrors police].
 
 | Rule (key group) | Condition, first match wins | Topic |
 |---|---|---|
@@ -388,7 +392,7 @@ Public-safety petitions (post-update; probability per cycle, cool-down L in cycl
 | `0x67` / `0x70` (repeal) | K < CM, N > 100, curfew / sports enacted | 3% | 84 |
 | `0x37` | crime hurting business (K > CM) | [OPEN] | 84 |
 | `0x23` | K < CM, N > 10000, police coverage > 98 | 5% | 60 |
-| `0xD3` | K < CM, N > 10000, police strength measure > 105 | 5% | 36 |
+| `0xD3` | K < CM, N > 10000, police funding pf > 105 (percent; the same byte as the police rule's pf) [STATIC] | 5% | 36 |
 | `0x32` | no fire station | 3% | 24 |
 | strike petitions | police/fire strike threatened (`0x9F`/`0xA0`/`0xA2`/`0xCC`) | — | 6 |
 
@@ -575,9 +579,18 @@ run every cycle like the others. Thresholds (`Advisor-Demographics.ini [ADVICE_T
 are used by the petitions (3.12.1). The `[FUNDING_RATE_CUTOFFS]` keys are read when the advisor
 loads its INI, but no rule uses them [STATIC].
 
-Metrics: N population; LE, EQ city averages; nH, nS, nC = number of buildings of agent type 13310
+Metrics: N population; EQ = Q(20, 65) and LE = the same unweighted mean of `LE[a]` over ages
+20–65 with `p[a] > 0`, rounded to a byte (`20-sim-population.md` §4.5) [STATIC]. These are the
+working-age means, **not** the city chart values over ages 0–89; nH, nS, nC = number of buildings of agent type 13310
 (hospital/clinic), 13010 (school), 13873 (college); nSt = number of agent type 14600 (stadium);
 fH, fE = health and education funding percent; dreary rating Dr.
+
+**Dreary rating Dr** (0–100) is the residential amenity usage in percent: the `capPct` that the
+cap rule of `15-sim-growth.md` §3.2 computes from valve 3001's `Slast`/`Dlast` at the residential
+layer's last month-end (0 if `D` = 0; 100 if `S` < `D`; else ⌊100·D/S⌋, capped at 100) [STATIC].
+It equals the saved `capPercent` of valve 3000 (`10-save-format.md` §6.11) [INFERRED: same value,
+same month-end; DATA test vector: Madison 3001 S 739 500, D 150 984 → 20]. A high Dr means the
+parks/culture amenity supply is nearly used up.
 
 The per-service values below all come from the residential (population) layer. They are taken
 at the start of each advisor cycle (weekly, 3.6) [STATIC]. Except for W_s they are that layer's
