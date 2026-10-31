@@ -741,8 +741,9 @@ If no side qualifies, the layout builds nothing (the next rule is tried, §5.3).
 * `c` = maximum air pollution, `d` = maximum water pollution (0–32767 scales of
   `17-sim-services.md`) on the lot's edge tiles (shipped 450 and 450).
 
-*Member lists* (one set per family of the category; members are entered as often as their
-weight). Filler members (flag `0x100`) with edge 1 go to **fields**. Non-filler members go by
+*Member lists* (one set per family; members are entered as often as their weight). The rule uses
+the registered family whose ID equals the category being developed (the first match). If none
+matches, it fails; there is no random family choice [STATIC]. Filler members (flag `0x100`) with edge 1 go to **fields**. Non-filler members go by
 edge: ≥ 3 → **farmhouse**, 2 → **outbuilding**, ≤ 1 → **yard piece**. A family is registered only
 if all four lists are non-empty. The rule fails if the category has no registered family.
 
@@ -827,7 +828,7 @@ otherwise the family is not registered as a runway set. (In the shipped set S1, 
 are empty and their partners carry `0x200`, so the set is valid.) "X, else its alternative rotated r" below means: use slot
 X with rotation 0 if it is filled, else the alternative slot with rotation r.
 
-**Layout.** The runway is a strip `L` = min(10, lot length along the chosen side) long. With `D`
+**Layout.** The runway is a strip `L` = min(10, lot length along the chosen side) long. Before any piece is laid, the rule reserves the strip's segment in the spacing grid `01FD7A8C` (segment flag, `10-save-format.md` §6.3). If the reservation fails, because another runway's flagged blocks lie within one block of the segment, nothing is built [STATIC; the segment end points are the strip's first and last tiles, INFERRED]. With `D`
 = lot depth, at each position along the strip pieces are placed in consecutive rows starting
 against the chosen side: row A always; then a line-3 row if `D ≥ 3`; then a line-2 row if
 `D ≥ 2` (so a 2-deep lot gets rows A and line-2; a deeper lot A, line-3, line-2):
@@ -978,8 +979,13 @@ The rule fails if no family is registered.
 *1. Choosing the shore run.* Each of the four lot sides is scanned tile by tile along the edge, in
 this order: low-z side (outward direction (0, −1)), high-z side (0, +1), high-x side (+1, 0), low-x
 side (−1, 0). A side tile (x, z) on the edge qualifies when the 5 tiles outward from it,
-(x, z) + k·d for k = 1…5, all lie on the map, are water, and hold no occupant. In addition, a
-terrain query at the 5th tile must succeed [INFERRED: a water-depth/navigability test]. The
+(x, z) + k·d for k = 1…5, all lie on the map, are water, and hold no occupant. "Water" is the terrain water test: at least one of the tile's
+four corner vertices has a water surface ≥ its ground altitude (the same test as
+`16-sim-utilities.md` §3.3). In addition, the 5th tile must be found in the terrain's
+**deep-water table** [STATIC lookup]. The terrain builds that table on first use from a per-vertex
+classification: water surface ≥ 8, ground ≤ water − 8, and water surface equal to the map's sea
+level [STATIC]. A tile passes when its key is in the table [INFERRED: deep sea water at sea level,
+water that ships can reach; the exact keying is OPEN]. The
 rule keeps the longest run of consecutive qualifying tiles over all four sides. Only a strictly
 longer run replaces the best one, so on ties the earlier side and the earlier run win. If the
 best run is shorter than 5 tiles, nothing is built. If it is longer than 12, it is cut to its
@@ -1002,9 +1008,18 @@ outward tile T = (x, z) + d:
   tile. If g < 5 it is a shore tile;
 * if T holds an occupant, or placing the chosen piece (head for a pier, shore piece otherwise) at T
   with its rotation fails, nothing changes for this tile;
-* otherwise the piece is placed and n ← n + 1. If the tile is a pier, the previous placed tile was
-  not a pier, and the spacing grid `01FD7A8C` accepts T [INFERRED: test-and-increment of
-  the 5 × 5-block counter, `10-save-format.md` §6.3], then: for k = 2…5 a body piece is placed
+* otherwise the piece is placed and n ← n + 1. Placing uses the zone layer's ordinary placement
+  routine (shared by all growth rules) with **no flatness test** and lot state 1. That routine
+  checks only that every footprint tile is on the map and that any occupant already there is
+  removable. Removable occupants (e.g. flora) are removed, and network pieces are bulldozed
+  through the network subsystem. It does **not** test zone, water or terrain, so the pier pieces'
+  water requirement comes only from the run test above [STATIC]. Removal happens tile by tile
+  before the remaining tiles are checked, so a placement that fails on a later tile has already
+  cleared the earlier ones (original behaviour). If the tile is a pier, the previous placed tile
+  was not a pier, and the spacing grid `01FD7A8C` accepts T, then:
+  (accepting means *add* on the overlap counter succeeds: refused if any block in the 5 × 5-block
+  neighbourhood of T already holds 15, otherwise all 25 counters + 1, `10-save-format.md` §6.3
+  [STATIC]) for k = 2…5 a body piece is placed
   at (x, z) + k·d wherever that tile holds no occupant; g ← 0, p ← p + 1, "last was a pier" ←
   true. Otherwise (shore piece, or a head whose extension was refused, which stays as placed):
   g ← g + 1 and "last was a pier" ← false.
