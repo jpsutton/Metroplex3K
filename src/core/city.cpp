@@ -261,6 +261,9 @@ class GrowthAdapter : public growth::GrowthCity {
   // decays it on each visit (credit back as capacity) and fills tiles from the garbage the disposal stage parked.
   int landfillGarbage(int x, int z) const override { return c_.world_->inTiles(x, z) ? c_.pollution.standingGarbageAt(x, z) : 0; }
   void setLandfillGarbage(int x, int z, int g) override { if (c_.world_->inTiles(x, z)) c_.pollution.setStandingGarbage(x, z, g); }
+  bool insideLoadedAirport(int x, int z) const override {
+    return c_.world_->inTiles(x, z) && !c_.loadedAirport_.empty() && c_.loadedAirport_[c_.idx(x, z)];
+  }
   bool landfillRegistered(int x, int z) const override { return c_.world_->inTiles(x, z) && c_.pollution.landfillRegistered(x, z); }
   void registerLandfill(int x, int z) override { if (c_.world_->inTiles(x, z)) c_.pollution.registerLandfill(x, z); }
   void creditLandfillRoom(int d) override { c_.pollution.disp.store.D += d; }
@@ -493,6 +496,29 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
         if (w->seaVertex[size_t(w->vIdx(x, z))]) pollution.markSeaVertex(x, z);
   if (!haveLv) landValue.recomputeAll(*lvView_);
   wire();
+  {  // Airport regions present at load: 4-connected zone-14 regions holding at least one airport part (spec 15 s7 interim:
+     // the original adds no part to them in 480-day runs of Madrid, London and Berlin).
+    loadedAirport_.assign(size_t(W) * H, 0);
+    std::vector<uint8_t> seen(size_t(W) * H, 0);
+    for (int x0 = 0; x0 < W; x0++)
+      for (int z0 = 0; z0 < H; z0++) {
+        if (seen[idx(x0, z0)] || w->zone[idx(x0, z0)] != 14) continue;
+        std::vector<int> region{int(idx(x0, z0))}; seen[idx(x0, z0)] = 1;
+        bool hasPart = false;
+        for (size_t h = 0; h < region.size(); h++) {
+          int x = region[h] / H, z = region[h] % H;
+          int oi = occupantAt(x, z);
+          if (oi >= 0 && w->occupants[size_t(oi)].agentType == 12310) hasPart = true;
+          const int d4[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+          for (auto& d : d4) {
+            int nx = x + d[0], nz = z + d[1];
+            if (!inMap(nx, nz) || seen[idx(nx, nz)] || w->zone[idx(nx, nz)] != 14) continue;
+            seen[idx(nx, nz)] = 1; region.push_back(int(idx(nx, nz)));
+          }
+        }
+        if (hasPart) for (int t : region) loadedAirport_[size_t(t)] = 1;
+      }
+  }
   // Source-grid offset (see refresh): saved minus restamped, taken once at load when a pollution record exists.
   polBaseline_ = {};
   crimeBaseline_.clear();

@@ -154,6 +154,8 @@ class GrowthCity {
   virtual void clearLandfillTile(int, int) {}
   // Landfill store 0xA2C9E821 (spec 16 s4.4): registration adds the tile's free room, decay credits room back,
   // placing garbage moves it from the pending amount S onto the tile (and out of the room D).
+  // Spec 15 s7 interim [OPEN]: in a loaded city an airport rule call on a lot inside an existing airport places nothing.
+  virtual bool insideLoadedAirport(int, int) const { return false; }
   virtual bool landfillRegistered(int, int) const { return false; }
   virtual void registerLandfill(int, int) {}
   virtual void creditLandfillRoom(int) {}

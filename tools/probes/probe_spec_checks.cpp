@@ -277,6 +277,18 @@ int main(int argc, char** argv) {
       int uncovered = 0;
       for (int x = 0; x < w.W; x++) for (int z = 0; z < w.H; z++) if (w.zone[size_t(w.tIdx(x, z))] == 14 && c.occupantAt(x, z) < 0) { if (uncovered++ < 6) std::printf("     uncovered airport tile (%d,%d)\n", x, z); }
       std::printf("   uncovered zone-14 tiles: %d\n", uncovered);
+      {  // powered state of the uncovered airport tiles and their distance to the nearest occupant tile
+        int pw = 0, far2 = 0;
+        for (int x = 0; x < w.W; x++) for (int z = 0; z < w.H; z++) {
+          if (w.zone[size_t(w.tIdx(x, z))] != 14 || c.occupantAt(x, z) >= 0) continue;
+          if (c.power.powered(x, z)) pw++;
+          int best = 99;
+          for (int xx = std::max(0, x - 4); xx <= std::min(w.W - 1, x + 4); xx++) for (int zz = std::max(0, z - 4); zz <= std::min(w.H - 1, z + 4); zz++)
+            if (c.occupantAt(xx, zz) >= 0 || c.isPowerLine(xx, zz)) best = std::min(best, std::max(std::abs(xx - x), std::abs(zz - z)));
+          if (best > 2) far2++;
+        }
+        std::printf("   uncovered airport tiles powered %d of %d; farther than 2 from any building or line: %d\n", pw, uncovered, far2);
+      }
       for (const auto& o : w.occupants) if (o.agentType == 12310 && (o.sizeX > 1 || o.sizeZ > 1)) std::printf("     multi-tile airport part (%d,%d) %dx%d occ %08X key %08X\n", o.x, o.z, o.sizeX, o.sizeZ, o.occId, o.keyType);
       continue;
     }

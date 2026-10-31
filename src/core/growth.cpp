@@ -1027,6 +1027,7 @@ int ZoneManager::visitPort(GrowthCity& c, SimRand& rng, int x, int z, const Zone
       if (!pw) return kNdNoPower;
       if (!acc) return kNdNoAccess;
       // Airport rules run with a fixed demand of 2000 of 2000: valve 5001 does not gate airport growth.
+      if (c.insideLoadedAirport(x, z)) return kNdAirportIdle;   // spec 15 s7 interim: no part is ever added there
       return startDevelopment(c, rng, x, z, zd, k, 0, 2000, 0, 2000, true) ? 0 : kNdAirportIdle;
     }
     if (!pw) return kNdNoPower;
