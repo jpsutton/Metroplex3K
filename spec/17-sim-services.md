@@ -168,7 +168,8 @@ Per tick:
 2. Jail release (3.2).
 3. For each of the *N* cells: take the accumulator *A*; during a strike *A* ← trunc(`StrikeEfficiency`
    × *A* / 100); while *P* > 0, *A* ← round(*A* × `NoJailPenalty`); write *D* = clamp(trunc(*A*/16), 0,
-   255) to the displayed layer. The cell is "developed" if any of its 16 tiles is non-zero in the
+   255) to the displayed layer. The penalty is also applied when a stamp (§2.3) refreshes a
+   cell's *D*. The crime rule reads this penalised *D* (§2.1). [STATIC] The cell is "developed" if any of its 16 tiles is non-zero in the
    per-tile occupancy layer [INFERRED meaning]. Developed cells add to the sweep statistics (count,
    Σ*D*, count of *D* = 0). If the crime value *c* at the anchor tile and *D* are both non-zero, the
    tick's arrest potential grows by min(*c*, *D*).
@@ -866,13 +867,19 @@ Police / fire layer record (34 bytes, no version/sentinel header): [DATA sizes; 
 | 0x05 | 4 | u32 | cursorZ | Next anchor tile z (multiple of 4) |
 | 0x09 | 1 | u8 | striking | 1 while on strike |
 | 0x0A | 4 | u32 | strikeCounter | Strike tick counter (kept after a strike ends) |
-| 0x0E | 4 | u32 | a | [INFERRED] department upkeep total |
-| 0x12 | 4 | u32 | b | [OPEN] (police: possibly unjailed prisoners) |
-| 0x16 | 4 | u32 | c | [OPEN] |
+| 0x0E | 4 | u32 | sweepCount | Developed cells visited so far in the current sweep (§3.3 statistics) [STATIC for police] |
+| 0x12 | 4 | u32 | sweepSumD | Σ *D* over those cells [STATIC for police] |
+| 0x16 | 4 | u32 | sweepZeros | Number of those cells with *D* = 0 [STATIC for police] |
 | 0x1A | 4 | u32 | avgCoverage | Last full-sweep average coverage (0–255) [INFERRED] |
 | 0x1E | 4 | u32 | pctCovered | Last full-sweep coverage percent (0–100) [INFERRED] |
 
-Coverage accumulators are not saved; they are rebuilt from the stations on load. [INFERRED from size]
+Correction: fields 0x0E–0x16 were earlier read as upkeep, unjailed prisoners and unknown. They are
+the running sweep statistics. DATA, Berlin day 40: 1 945 cells, Σ*D* 84 177 (mean 43.3, matching
+avgCoverage 43); 557 of the cells have *D* = 0. The fire record uses the same layout [INFERRED].
+**Not saved** [STATIC]: the coverage accumulators (rebuilt from the stations on load) and the
+unjailed-prisoner count *P* of §3.2. *P* starts at 0 after a load, so the `NoJailPenalty` of §3.3
+is off until the first redistribution leaves prisoners unjailed. Jail inmates are saved with
+each jail (`10-save-format.md` §6.2.5).
 
 ## Open questions
 
@@ -880,8 +887,8 @@ Coverage accumulators are not saved; they are rebuilt from the stations on load.
   tiles under networks and parks counted?), and the order of the chart series.
 * Which list holds libraries/museums in the education funding pass (§6.2).
 * Fire strike machine assumed identical to police.
-* Meanings of fields b, c of the police/fire record; the (now decoded) `garbageStore` block of the pollution
-  record (§7.4).
+* The (now decoded) `garbageStore` block of the pollution record (§7.4). (Police record fields
+  closed, see Persisted state.)
 * What triggers the crime, pollution, aura and flammability runs, and how often (§1).
 * Whether the agent-type distance of §7.1.2 is the parent-step count.
 * Flammability visiting order within a run (§4).
