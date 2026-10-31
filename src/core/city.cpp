@@ -298,9 +298,9 @@ class GrowthAdapter : public growth::GrowthCity {
     return growth::ValveReading{v.V, v.Max, v.Min};
   }
   bool tripFailed(int x, int z) const override {
-    // Off by default: with our traffic model feeding "unfit", Madrid's and Craterville's code-6 counts match the original's
-    // (Madrid 106-200 per pass vs 85-170) but London's run 3-4x high and Madison/Moscow drop below their reference bands
-    // (spec 28 s5.1), so the trip model is still too pessimistic.
+    // Off by default. With neighbour connections absorbing trips, feeding "unfit" from our traffic model gives code-6
+    // counts close to the original's (London 26-66 per pass vs 27-48, Madrid 65-95 vs 85-170) but Madison (2-13 vs 0-1)
+    // and Moscow still lose population and leave their reference bands (spec 28 s5.1).
     return c_.cfg_.useTripFailure && c_.traffic && c_.traffic->tripResult(x, z) == 1;
   }
   int airPollution(int x, int z) const override { return c_.pollution.airAt(x, z); }
@@ -1077,6 +1077,16 @@ void City::rebuildTraffic() {
       uint8_t k = transport_[idx(x, z)];
       traffic->flags(x, z) = k == 1 ? TF_ROAD : k == 4 ? TF_HIGHWAY : k == 2 ? TF_RAIL : 0;
     }
+  // Neighbour connections absorb every trip that reaches them (spec 18 s3 flags 0x0400-0x1000, s5.8) [STATIC].
+  // Saved connection sets: rail, road, pipe, power, highway, subway.
+  const uint16_t exitFlag[6] = {TF_RAIL_EXIT, TF_ROAD_EXIT, 0, 0, TF_HWY_EXIT, TF_SUBWAY_EXIT};
+  for (int k = 0; k < 6; k++) {
+    if (!exitFlag[k]) continue;
+    for (uint32_t p : neighbours.conn[k]) {
+      int x = int(p >> 16), z = int(p & 0xFFFF);
+      if (inMap(x, z)) traffic->flags(x, z) |= exitFlag[k];
+    }
+  }
   tripBuildings_.clear();
   int i = 0;
   for (const auto& o : world_->occupants) {
