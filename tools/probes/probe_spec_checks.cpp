@@ -310,6 +310,11 @@ int main(int argc, char** argv) {
       }
       continue;
     }
+    if (std::getenv("M3K_LANDMARKS")) {   // landmark picker membership: agent types under 18000 in the hierarchy
+      int n = 0, lo = 1 << 30, hi = 0;
+      for (const auto& kv : c.config().parent) if (c.agentHierarchy().isAncestorOrSelf(kv.first, 18000)) { n++; lo = std::min<int>(lo, int(kv.first)); hi = std::max<int>(hi, int(kv.first)); }
+      std::printf("   landmark agent types under 18000: %d (ids %d..%d); 19999 under 18000: %d\n", n, lo, hi, c.agentHierarchy().isAncestorOrSelf(19999, 18000) ? 1 : 0);
+    }
     if (std::getenv("M3K_POTHOLES")) {   // road condition walk (spec 12 s10): underfund roads, then overfund
       auto count = [&] { int n = 0; for (const auto& p : s.game.world().surface) n += (p.pieceId >= 15040 && p.pieceId <= 15042) || p.pieceId == 9051; return n; };
       std::printf("   potholes at load %d, condition %.4f\n", count(), c.roadCondition());

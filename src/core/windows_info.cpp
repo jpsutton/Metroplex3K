@@ -373,7 +373,9 @@ PickerFilter PickerFilter::defaults(PickerCategory c) {
   switch (c) {
     case PickerCategory::PowerPlants: f.ranges = {{12111, 12118}}; break;                 // coal .. wind (spec 16 s2)
     case PickerCategory::Garbage: f.ranges = {{12851, 12853}, {12005, 12005}}; break;     // recycling, incinerator, WTE, garbage family
-    case PickerCategory::Landmarks: f.ranges = {{18000, 18045}, {19999, 20002}}; break;   // spec 13 section 4
+    // Landmarks (spec 09 s6.11) [STATIC]: every exemplar whose agent type is 18000 or a descendant; the caller applies the
+    // hierarchy test (the range only bounds the scan). No availability condition.
+    case PickerCategory::Landmarks: f.ranges = {{0, 0xFFFFFFFFu}}; break;
     case PickerCategory::Rewards: f.ranges = {{19000, 19004}, {11001, 11099}}; break;
     case PickerCategory::Water: f.ranges = {{12810, 12840}}; break;                       // pump 12810, treatment 12820, desalination 12830, tower 12840 (observed in the picker)
   }

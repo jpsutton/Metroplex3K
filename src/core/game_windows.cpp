@@ -164,6 +164,8 @@ void Game::buildPickerEntries(PickerCategory c) {
     // Power, water and garbage menus list unlocked types only (spec 22 "Building availability", 09 s6.11); nuclear is hidden while
     // Nuclear Free Zone is enacted. `power to the masses` / `water in the desert` skip the unlock flag.
     std::function<bool(uint32_t, const OccAttr&)> avail;
+    if (c == PickerCategory::Landmarks)
+      avail = [hier](uint32_t, const OccAttr& a) { return hier.isA(a.agentType, 18000); };
     if (c == PickerCategory::PowerPlants || c == PickerCategory::Water || c == PickerCategory::Garbage) {
       const bool all = c == PickerCategory::PowerPlants ? cheats_.active("power to the masses")
                        : c == PickerCategory::Water ? cheats_.active("water in the desert") : cheats_.active("garbage in, garbage out");
