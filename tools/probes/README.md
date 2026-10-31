@@ -12,6 +12,7 @@ Point each at the install with the first argument or `$M3K_GAME_DIR`.
 | `probe_retile GAME [city...]` | Re-run the network tiler over each saved road/rail/power network and diff against the stored pieces. | #47 |
 | `probe_xa GAME` | Decode every shipped `.xa`; compare with `ffmpeg` when it is on `PATH`. | #66 |
 | `probe_disasters GAME [city]` | Start each disaster in a loaded city and report how it ends and what it damages. | #35 #37 |
+| `probe_overview GAME [name...]` | Compare the overview colours (mini-map / thumbnail) with the preview thumbnail of every shipped `.sc3` and `.sct`. Expect 0 differing tiles. | |
 | `probe_play_smoke GAME` | Build a small city from empty land (roads, zones, plant, pump, power, pipes) and run 10 years. | |
 
 Exit status is 0 unless the install cannot be opened; numbers are for reading, not pass/fail.

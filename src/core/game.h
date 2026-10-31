@@ -323,7 +323,7 @@ class Game {
   AdvisorWindow advWin_;
   CityPropertiesDialog propsDlg_;
   CityPropsState propsState_;
-  Image neighMap_;   // city thumbnail for the Neighbors Map centre cell
+  Image neighRegion_;   // Neighbors Map region image (spec 11 section 9), rebuilt when the window opens
   ScenarioGoalsWindow goalsWin_;
   MapWindow mapWin_;
   GraphsWindow graphsWin_;

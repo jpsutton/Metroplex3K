@@ -248,7 +248,8 @@ class NeighboursWindow {
   std::string cityName;
   int64_t cityPop = 0;
   uint64_t nationalPop = 0;
-  const Image* centreMap = nullptr;   // city overview thumbnail (preview record), may be null
+  const Image* regionMap = nullptr;   // 256 x 256 region image (spec 11 section 9), may be null
+  int viewRotation = 0;               // city view rotation 0-3: turns the diamond (spec 11 section 9.7)
   // Compass placement: index 0 N, 1 E, 2 S, 3 W [OPEN: spec does not say which edge is which side].
   WindowResult draw(Ui& ui, const WinEnv& E, NeighbourDeals& n);
 };
