@@ -9,6 +9,7 @@
 // Text: every string comes from WinEnv::text(table, id, fallback). With no GameData and no text
 // callback the English fallback literal is used, so everything works headless.
 #pragma once
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -640,7 +641,17 @@ class CreditsWindow {
  public:
   double scroll = 0;                    // pixels
   double speed = 30;                    // px per second [OPEN rate]
-  std::vector<std::string> lines;       // filled on first draw from table 830CDF29 (ids ascending)
+  std::vector<std::string> lines;       // filled on first draw from table 830CDF29 (ids ascending); raw, style digit included
+  std::vector<uint32_t> ids;            // string id of each entry in `lines`
+  // Laid-out row. Table ids 1..199 are left-hand entries (heading / role); id + 199 holds the matching name(s).
+  struct Row {
+    enum Kind { Blank, Heading, Centered, Pair } kind = Blank;
+    std::string left;                   // heading / role / centred text, style digit removed
+    std::vector<std::string> names;     // Pair only: one per line
+    int lineCount() const { return kind == Pair ? std::max<int>(1, int(names.size())) : 1; }
+  };
+  std::vector<Row> rows;
+  static std::vector<Row> layoutRows(const std::vector<uint32_t>& ids, const std::vector<std::string>& lines);
   void update(uint32_t dtMs) { scroll += speed * dtMs / 1000.0; }
   WindowResult draw(Ui& ui, const WinEnv& E);
 };
