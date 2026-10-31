@@ -408,8 +408,11 @@ Keys in `SC3DisasterLayer.ini [ToxicCloudDisasterTunables]` [DATA][STATIC]:
 
 Score [STATIC]: score = WeightForPollution × P_total / P_norm − Σ(weights of active ordinances:
 Clean Industry, Industrial Pollutant Fee, Waste Disposal) + WeightForEachToxicWastePlant × N_toxic,
-where P_total / P_norm is the pollution layer's total divided by its normaliser
-(`17-sim-services.md`; integer division) `[OPEN: exact pollution statistics]`.
+where the pollution term is computed as ⌊WeightForPollution × avgAir ÷ `MaxAirPolluteForUI`⌋.
+The product is formed first, then divided with signed 32-bit integer division. avgAir is the
+pollution layer's last completed sweep average (`17-sim-services.md` §7.4). `MaxAirPolluteForUI`
+is the `SC3Pollution.ini` key of `17-sim-services.md` §7.2.2, the air scale maximum [STATIC]. Correction: P_total
+and P_norm are exactly these two values; they were previously OPEN.
 
 Random trigger [STATIC]: a cloud may start only if fewer than the maximum instances are active,
 at least `AverageDurationBetweenOccurrences` has elapsed since the previous one, and score >

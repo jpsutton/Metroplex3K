@@ -246,8 +246,9 @@ DATA: in all 25 played shipped cities the newest EQ-chart sample equals Q(0, 89)
 ### 5.1 Patients
 
 `patients = trunc((P̄ × PollutionFactor + HospitalizationRate) × N)`, where P̄ = ⌊(*P₁* + *P₂*) / 2⌋
-and *P₁*, *P₂* are two city-wide pollution totals supplied by the pollution layer. [STATIC for the
-formula; INFERRED that *P₁*, *P₂* are the air and water totals of `17-sim-services.md` §7.2]
+*P₁* = the pollution layer's **avgAir** and *P₂* = its **avgWater**: the averages of the last
+completed pollution sweep, the saved fields of `17-sim-services.md` §7.4 [STATIC]. Correction:
+these were previously only inferred.
 `PollutionFactor` is held in double precision.
 
 ### 5.2 Health gain *x* and health rating
@@ -425,7 +426,6 @@ statistics and the three charts (population, EQ, LE). The byte layout is in
 
 ## Open questions
 
-* The exact source of the two pollution totals used for patients (§5.1).
 * How facilities are grouped (one group per kind is inferred) and how the groups are ordered.
 * The CPR-training flag read is inferred from the key and ID pattern.
 * The meaning of the unknown byte at offset 0x1BE of the residential state.

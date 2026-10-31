@@ -267,8 +267,8 @@ Doctors are only summed for the record (`10-save-format.md` §6.11). The cohort 
 *x_H* = Σ(beds·*e*) / max(patients, beds).
 
 Here patients = trunc((⌊(*P₁* + *P₂*) / 2⌋ · `PollutionFactor` + `HospitalizationRate`) × population),
-where *P₁* and *P₂* are the two city-wide pollution totals of `20-sim-population.md` §5.1 (the
-pollution term is their integer mean). [STATIC formula; the identity of *P₁*, *P₂* is owned by 20]
+where *P₁* = avgAir and *P₂* = avgWater of the pollution record (§7.4), so the pollution term is
+their integer mean [STATIC].
 
 ### 5.3 Health rating, ordinances, strikes
 
@@ -631,8 +631,8 @@ interpreting it.
 | … | 37 | struct | garbageStore | Landfill store `0xA2C9E821` (`16-sim-utilities.md` §4.4) in the valve layout of `15-sim-growth.md` Persisted state **without** the ID: s32 `Slast`, s32 `Dlast`, s32 `Sacc`, s32 `Dacc`, f32 `f1`, f32 `f2`, u8 `capPct`, s32 `V`, s32 `Sbase`, s32 `Dbase`. `D` = landfill room, `S` = pending garbage; `Dlast` = `Dacc` and `Slast` = `Sacc` in every played city [STATIC][DATA] |
 | … | 2·*T*² | u16[] | standingGarbage | Per tile (7.2.1). Rows stored last row first. |
 | … | 56 | s64[7] | garbageTotals | Seven 64-bit garbage-flow counters over the last 12 months: [0] produced (incl. imports), [1] imported, [2] exported, [3] recycled, [4] incinerated, [5] waste-to-energy, [6] placed on landfill (`16-sim-utilities.md` §4.5). Each equals the sum of the 12 history entries below [STATIC][DATA: Liverpool, Berlin, Craterville exact] |
-| … | 4 | u32 | avgAir | Last sweep's average air [INFERRED] |
-| … | 4 | u32 | avgWater | Last sweep's average water [INFERRED] |
+| … | 4 | u32 | avgAir | Last completed sweep's average air: ⌊sumAir ÷ pollutedCount⌋ when pollutedCount > 0 and sumAir > 0, else 0 (both running values as below, taken when the sweep finalises) [STATIC]. Read by the patient count (`20-sim-population.md` §5.1) and the toxic-cloud score (`21-disasters.md` §6.2) |
+| … | 4 | u32 | avgWater | Same with sumWater [STATIC]. Read by the patient count |
 | … | 2 | u16 | – | 0 in all files (OPEN) |
 | … | 4 | s32 | sumAir | Running Σ*S_A* |
 | … | 4 | s32 | sumWater | Running Σ*S_W* after treatment |
