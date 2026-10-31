@@ -309,16 +309,41 @@ indices WP and AP (same scale as the pollution graphs, `17-sim-services.md`).
 | | AM < AP ≤ AH | `0x7F` (`0x22A497FB`) |
 | | AP ≤ AM and `0x7E` or `0x7F` currently listed | event `0x80`, L = 6 (`0x22A497FB`) |
 | Garbage (no trash-export deal active) | garbage not accumulating, surplus capacity within limit | `0x78` (`0xC2F8060C`) |
-| | not accumulating but near capacity | `0x77` (or `0xF8` when a trash-import deal exists [INFERRED]) |
+| | not accumulating but near capacity | `0x77` if *C*, else `0xF8` (see Garbage metrics) |
 | | accumulating, year < 1920 | `0x76` |
 | | accumulating, 1920 ≤ year < 1970 | `0xEF` |
 | | accumulating, 1970 ≤ year ≤ 1982 | `0xF0` |
-| | accumulating, year > 1982 | `0xF2` or `0xF1` (by deal state [OPEN]) |
+| | accumulating, year > 1982 | `0xF2` if *C*, else `0xF1` |
 | Trash export hint | accumulating ≥ 7 cycles, no export deal: < 4 neighbour connections and no seaport | `0x70` (`0x03387EA5`) |
 | | otherwise with ≥ 1 connection and no existing deal | `0x6F` (`0x03387EA5`) |
 | Problem solved | accumulation streak ended after ≥ 7 cycles | `0xF3`, L = 60 |
 
 The hard-coded years 1920/1970/1982 select which garbage-solution advice text applies.
+
+**Garbage metrics** [STATIC for the advisor-side formulas; the identity of the pollution-layer
+values is INFERRED as marked]. Each cycle the environment advisor reads from the pollution layer
+(`17-sim-services.md` §7.4, `16-sim-utilities.md` §4.5):
+* six 64-bit garbage statistics: produced *G0*, imported *G1*, exported *G2*, recycled *G3*,
+  incinerated *G4* and landfilled *G6* (the waste-to-energy amount *G5* is not read)
+  [INFERRED: the last completed month's counters, in counter order];
+* the two burn capacities per pollution run, *Bi* (incinerators) and *Bw* (waste-to-energy);
+* two further values *X* and *Y* [OPEN], and a factor *f* from the landfill developer [OPEN];
+* a garbage-accumulating flag *A* [OPEN: which pollution-layer test].
+
+From these:
+* demand *GD* = *G0* + *G1* (64-bit);
+* capacity *GC* = ⌊*X*/12⌋ + 30·(*Bi* + *Bw*) + *G3* + round((max(*Y*, *X*) − *X*) · *f*);
+* "not accumulating, surplus within limit" (topic `0x78`) = not *A* and *GD* ≤ *GC*;
+* "not accumulating but near capacity" = not *A* and *GD* > *GC*. Topic `0x77` if a further
+  advisor condition *C* holds, else `0xF8` [*C* OPEN; possibly a garbage deal, which would make the
+  earlier reading that `0xF8` means "trash-import deal" the wrong way round];
+* "accumulating" = *A*. The accumulation counter rises by 1 each cycle with *A* and falls by 1
+  (not below 0) without it;
+* the "problem solved" event `0xF3` fires when the counter is > 6 and *A* is clear. Without an
+  export deal it also needs 10·*GD* < 7·*GC*.
+
+The year bands of the accumulating case are compared with the city year: < 1920 → `0x76`;
+< 1970 → `0xEF`; ≤ 1982 → `0xF0`; later → `0xF2` if *C* holds, else `0xF1`.
 
 ### 3.9 Public-safety advisor rules [STATIC; metric identity INFERRED]
 
