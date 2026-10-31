@@ -271,6 +271,9 @@ int main(int argc, char** argv) {
     }
     std::printf("   our connection sets (rail, road, pipe, power, highway, subway):");
     for (int k = 0; k < 6; k++) std::printf(" %zu", c.neighbours.conn[k].size());
+    std::printf("\n   world charts newest/max (theirs):");
+    for (int k = 0; k < 5; k++) std::printf(" c%d %u/%u", k + 1, t.valves.world.charts[k].w[0], t.valves.world.charts[k].w[32]);
+    std::printf(" | pollution chart %u/%u", t.pollution.chart.monthly[0], t.pollution.chart.max);
     std::printf("\n   neighbours (name pop exists):");
     for (const auto& n : c.neighbours.neighbours) std::printf(" [%s %u %d]", n.cityName.c_str(), n.population, n.exists ? 1 : 0);
     std::printf("\n   neighbour counts nRoad/nRail/nHighway/nSubway:");

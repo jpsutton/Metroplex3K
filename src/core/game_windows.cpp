@@ -131,19 +131,20 @@ void Game::buildBudgetView(BudgetView& v) {
   in.bizIncome = c.business.monthlyIncome();
   in.fares = c.traffic ? double(c.traffic->rec().faresLastMonth) : 0.0;
   IndicatorData& ind = v.ind;
-  ind.citySize = std::min(100, int(in.population / 5000));
-  // SimNation population = newest sample of the world layer's fifth chart (spec 10 s6.13; Berlin 41,000,660), as in the
-  // Neighbors window; before the first world cycle of a new city, the city plus its neighbours.
-  uint64_t np = c.valves.world.charts[4].w[0];
+  // Newest samples of the Graphs-window series (spec 09 s6.1, 10 s6.13). Before the first world cycle of a new city the
+  // charts are empty: fall back to population and the city plus its neighbours.
+  const auto& wc = c.valves.world.charts;
+  ind.citySize = wc[0].w[0] ? wc[0].w[0] : uint32_t(std::max(0, c.population())); ind.citySizeMax = wc[0].w[32];
+  ind.commerce = wc[1].w[0]; ind.commerceMax = wc[1].w[32];
+  ind.industry = wc[2].w[0]; ind.industryMax = wc[2].w[32];
+  ind.unemployment = wc[3].w[0] || wc[3].w[32] ? int(wc[3].w[0]) : std::max(0, std::min(100, c.valves.unemploymentPct()));
+  uint64_t np = wc[4].w[0];
   if (np == 0) {
     np = uint64_t(std::max(0, c.population()));
     for (const auto& n : c.neighbours.neighbours) np += n.population;
   }
   ind.nationalPop = uint32_t(std::min<uint64_t>(np, 0xFFFFFFFFu));
-  ind.unemployment = std::max(0, std::min(100, c.valves.unemploymentPct()));
-  ind.pollution = std::min(100, int(c.pollution.avgAir) * 100 / 255);
-  ind.commerce = std::min(100, int(in.zoneTotals[1] / 50));
-  ind.industry = std::min(100, int(in.zoneTotals[2] / 50));
+  ind.pollution = c.pollution.chart.monthly[0]; ind.pollutionMax = c.pollution.chart.max;
   v.approval = -1;
 }
 

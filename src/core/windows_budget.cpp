@@ -459,12 +459,13 @@ WindowResult BudgetWindow::draw(Ui& ui, const WinEnv& E, Budget& b, const Budget
   if (button(ui, E, "back", {r.x + 14, r.y + r.h - 34, 90, 24}, E.win(0x84, "Back"))) openMain();
   struct Ind { uint32_t id; const char* fb; std::string val; float frac; };
   const IndicatorData& d = v.ind;
-  Ind inds[] = {{0x161, "City size", std::to_string(d.citySize), d.citySize / 100.f},
+  auto frac = [](uint32_t v, uint32_t m) { return m ? std::min(1.f, float(v) / float(m)) : 0.f; };
+  Ind inds[] = {{0x161, "City size", groupDigits(d.citySize), frac(d.citySize, d.citySizeMax)},
                 {0x165, "National population", groupDigits(d.nationalPop), -1},
-                {0x163, "Commerce", std::to_string(d.commerce), d.commerce / 100.f},
-                {0x164, "Industry", std::to_string(d.industry), d.industry / 100.f},
+                {0x163, "Commerce", groupDigits(d.commerce), frac(d.commerce, d.commerceMax)},
+                {0x164, "Industry", groupDigits(d.industry), frac(d.industry, d.industryMax)},
                 {0x168, "Unemployment", std::to_string(d.unemployment) + "%", d.unemployment / 100.f},
-                {0x167, "Pollution", std::to_string(d.pollution), d.pollution / 100.f}};
+                {0x167, "Pollution", std::to_string(d.pollution), frac(d.pollution, d.pollutionMax)}};
   int y = y0 + 8;
   for (auto& i : inds) {
     ui.text(x0, y, E.win(i.id, i.fb));

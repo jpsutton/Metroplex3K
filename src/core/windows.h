@@ -172,10 +172,15 @@ void spriteCentred(Ui& ui, GameData* gd, const ResKey& appearance, Rect box, Rec
 }  // namespace wui
 
 // ---- 6.1 Budget window --------------------------------------------------------------------------------
+// Budget indicator strip (spec 09 s6.1): the newest sample of each series of the Graphs window (spec 10 s6.13) and that
+// chart's scale maximum: world charts 1-5 (city size, commerce, industry, unemployment %, SimNation population) and the
+// pollution chart.
 struct IndicatorData {
-  int citySize = 0;           // 0..100 scale
+  uint32_t citySize = 0, citySizeMax = 0;
   uint32_t nationalPop = 0;
-  int commerce = 0, industry = 0, unemployment = 0, pollution = 0;   // 0..100 scale
+  uint32_t commerce = 0, commerceMax = 0, industry = 0, industryMax = 0;
+  int unemployment = 0;       // percent
+  uint32_t pollution = 0, pollutionMax = 0;
 };
 
 struct BudgetView {
