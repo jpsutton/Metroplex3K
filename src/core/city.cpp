@@ -493,7 +493,23 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
         if (w->seaVertex[size_t(w->vIdx(x, z))]) pollution.markSeaVertex(x, z);
   if (!haveLv) landValue.recomputeAll(*lvView_);
   wire();
+  // Source-grid offset (see refresh): saved minus restamped, taken once at load when a pollution record exists.
+  polBaseline_ = {};
+  crimeBaseline_.clear();
+  us::PollutionLayer::SourceGrids savedSrc;
+  if (havePollution) savedSrc = pollution.sourceGrids();
+  const bool haveCrime = w->raw && w->raw->findInner(kCrimeKey);
+  const std::vector<int16_t> savedPotential = crime.potential;
   refresh(true);
+  if (haveCrime && savedPotential.size() == crime.potential.size()) {
+    crimeBaseline_.resize(savedPotential.size());
+    for (size_t i = 0; i < savedPotential.size(); i++) { crimeBaseline_[i] = int16_t(savedPotential[i] - crime.potential[i]); crime.potential[i] = savedPotential[i]; }
+  }
+  if (havePollution) {
+    us::PollutionLayer::SourceGrids now = pollution.sourceGrids();
+    polBaseline_ = us::PollutionLayer::SourceGrids::diff(savedSrc, now);
+    pollution.applySourceOffset(polBaseline_.air, polBaseline_.water, polBaseline_.garbage);
+  }
   // City population = valve 3000 Slast (spec 20 s2) [DATA]; a city without a completed valve cycle counts its buildings.
   residents_ = valves.v3000.Slast > 0 ? valves.v3000.Slast : countResidents();
   {  // Spec 15 s3.3 interim [OPEN, narrowed]: carry the saved 5001/8001 demand ratio (saved Dlast / building sum).
@@ -1108,7 +1124,16 @@ void City::refresh(bool force) {
   if (netDirty_) classifyNetwork();
   auto all = simOccupants(false);
   crime.rebuild(all);
+  // Crime potential: as for the pollution sources below, the saved P is kept (spec 17 s7.1, "Otherwise the saved P is
+  // kept"); later changes are applied on top of it.
+  if (!crimeBaseline_.empty())
+    for (size_t i = 0; i < crime.potential.size() && i < crimeBaseline_.size(); i++) crime.potential[i] = int16_t(crime.potential[i] + crimeBaseline_[i]);
+  // Pollution sources: the saved grids are used as loaded (spec 17 s7.2.3: rebuilt only when the INI table changed);
+  // later changes are applied on top. We restamp everything and add back the load-time difference between the saved
+  // grids and a full restamp, which keeps the original's accumulated sources (Berlin: our restamp is 9% above the
+  // saved air total, with cells up to 3.5x the saved value, which pushed air pollution and so land value off).
   pollution.rebuild(all);
+  if (!polBaseline_.air.empty()) pollution.applySourceOffset(polBaseline_.air, polBaseline_.water, polBaseline_.garbage);
   aura.rebuild(all);
   syncFacilities();
   rebuildTraffic();

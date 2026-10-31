@@ -250,6 +250,22 @@ class PollutionLayer {
   void addOccupant(const SimOccupant& o) { stampOccupant(o, +1); }
   void removeOccupant(const SimOccupant& o) { stampOccupant(o, -1); }
   void rebuild(const std::vector<SimOccupant>& occ);
+  struct SourceGrids {
+    std::vector<int32_t> air, water; std::vector<int16_t> garbage;
+    static SourceGrids diff(const SourceGrids& a, const SourceGrids& b) {
+      SourceGrids d; d.air.resize(a.air.size()); d.water.resize(a.water.size()); d.garbage.resize(a.garbage.size());
+      for (size_t i = 0; i < a.air.size() && i < b.air.size(); i++) d.air[i] = a.air[i] - b.air[i];
+      for (size_t i = 0; i < a.water.size() && i < b.water.size(); i++) d.water[i] = a.water[i] - b.water[i];
+      for (size_t i = 0; i < a.garbage.size() && i < b.garbage.size(); i++) d.garbage[i] = int16_t(a.garbage[i] - b.garbage[i]);
+      return d;
+    }
+  };
+  SourceGrids sourceGrids() const { return {airSource, waterSource, garbageSource}; }
+  void applySourceOffset(const std::vector<int32_t>& a, const std::vector<int32_t>& w, const std::vector<int16_t>& g) {
+    for (size_t i = 0; i < airSource.size() && i < a.size(); i++) airSource[i] += a[i];
+    for (size_t i = 0; i < waterSource.size() && i < w.size(); i++) waterSource[i] += w[i];
+    for (size_t i = 0; i < garbageSource.size() && i < g.size(); i++) garbageSource[i] = int16_t(std::max(0, garbageSource[i] + g[i]));
+  }
 
   void run(const PollutionEnv& env);   // one daily run (spec 7.2.4)
 

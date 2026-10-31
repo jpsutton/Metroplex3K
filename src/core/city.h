@@ -244,6 +244,8 @@ class City {
   int residents_ = 0;
   uint32_t nextUid_ = 1;
   std::vector<uint8_t> radiation_;
+  us::PollutionLayer::SourceGrids polBaseline_;   // saved minus restamped pollution sources at load
+  std::vector<int16_t> crimeBaseline_;            // saved minus restamped crime potential at load
   int countResidents() const;
   std::vector<growth::ValveBuilding> valveBuildings() const;
   std::map<std::pair<int, int>, int> plantAt_, waterFacAt_;      // anchor -> layer id

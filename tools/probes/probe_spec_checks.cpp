@@ -318,6 +318,32 @@ int main(int argc, char** argv) {
       }
       continue;
     }
+    if (std::getenv("M3K_POLSRC")) {   // saved pollution source grids vs the ones we rebuild from the occupants at load
+      const ResKey key{0x206C6E7C, 0xC0A81498, 0};
+      const auto* rec = s.game.world().raw ? s.game.world().raw->findInner(key) : nullptr;
+      if (!rec) continue;
+      us::PollutionLayer saved; saved.parse(rec->data.data(), rec->data.size(), s.game.world().W, s.game.world().H);
+      const auto& ours = c.pollution;
+      long long sa = 0, oa = 0, sw = 0, ow = 0; int diffA = 0, diffW = 0;
+      for (size_t i = 0; i < saved.airSource.size() && i < ours.airSource.size(); i++) {
+        sa += saved.airSource[i]; oa += ours.airSource[i]; sw += saved.waterSource[i]; ow += ours.waterSource[i];
+        diffA += saved.airSource[i] != ours.airSource[i]; diffW += saved.waterSource[i] != ours.waterSource[i];
+      }
+      std::printf("   air source: saved sum %lld ours %lld, %d cells differ; water source: saved %lld ours %lld, %d differ; table entries saved %zu ours %zu\n",
+                  sa, oa, diffA, sw, ow, diffW, saved.table.size(), ours.table.size());
+      for (const auto& kv : ours.table)
+        if (!saved.table.count(kv.first)) std::printf("     only ours: type %u air %d water %d rA %d rW %d garbage %d\n", kv.first, kv.second.air, kv.second.water, kv.second.rA, kv.second.rW, kv.second.garbage);
+        else if (!(saved.table.at(kv.first) == kv.second)) std::printf("     differs: type %u\n", kv.first);
+      for (const auto& kv : saved.table)
+        if (!ours.table.count(kv.first)) std::printf("     only saved: type %u air %d water %d\n", kv.first, kv.second.air, kv.second.water);
+      const int nz = s.game.world().H / 2;
+      for (auto t : std::vector<std::pair<int, int>>{{60, 144}, {20, 223}, {50, 192}, {11, 216}, {61, 71}}) {
+        size_t ci = size_t(t.first / 2) * nz + t.second / 2;
+        std::printf("     cell of (%d,%d): air source saved %d ours %d, water source saved %d ours %d, state air saved %d\n", t.first, t.second,
+                    saved.airSource[ci], ours.airSource[ci], saved.waterSource[ci], ours.waterSource[ci], saved.airAt(t.first, t.second));
+      }
+      continue;
+    }
     if (std::getenv("M3K_PASSES")) {   // result codes of each completed pass over ~250 days, plus population
       auto codes = [](const growth::ZoneManager::ResultMap& m) {
         std::map<int, uint32_t> byCode; for (const auto& kv : m) if (kv.second) byCode[kv.first.first] += kv.second;
