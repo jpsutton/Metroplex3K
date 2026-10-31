@@ -849,6 +849,16 @@ void testTipAndCredits() {
   h.drawFn = [&] { return c2.draw(h.ui, h.E); };
   h.frame();
   CHECK(c2.lines.size() == 3 && c2.lines[0] == "Line 1");
+
+  // Style digit is stripped; ids 1..199 pair with id + 199; '5' rows are hidden; blank line before headings and between pair/centred runs.
+  auto rows = CreditsWindow::layoutRows({2, 4, 6, 8, 10, 201, 203, 207},
+                                        {"4Lead Engineer", "5skip", "1\"Song\"", "4Composer", "Plain role", "Ann", "x", "Bo\nCy"});
+  using K = CreditsWindow::Row;
+  CHECK(rows.size() == 6);
+  CHECK(rows[0].kind == K::Pair && rows[0].left == "Lead Engineer" && rows[0].names.size() == 1 && rows[0].names[0] == "Ann");
+  CHECK(rows[1].kind == K::Blank && rows[2].kind == K::Heading && rows[2].left == "\"Song\"");
+  CHECK(rows[3].kind == K::Pair && rows[3].left == "Composer" && rows[3].names.size() == 2 && rows[3].lineCount() == 2);
+  CHECK(rows[4].kind == K::Blank && rows[5].kind == K::Centered && rows[5].left == "Plain role");
 }
 
 void testScenarioViewIsPlain() {

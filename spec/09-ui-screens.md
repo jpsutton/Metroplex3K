@@ -837,6 +837,9 @@ Played from the front end. Background `MAIN.IXF` image `82B9B75C:22729940` (357Ã
 strings `830CDF29:*` (378 entries) scroll upward in order of string ID. The frame is
 horizontally centred; on screens wider than 600 px it is offset by (width âˆ’ 600)/2. Scroll rate:
 [OPEN].
+[DATA] Entry layout: ids 1..199 are left-hand entries (role or heading); the name(s) for id N are
+in id N+199 (lines separated by LF). A leading ASCII digit is a style code: `1` heading, `4`
+normal entry, `5` placeholder (not shown); no digit = normal. [OPEN] exact original styling of each code.
 
 ### 6.16 Message boxes and confirmations
 

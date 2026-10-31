@@ -389,29 +389,84 @@ WindowResult TipWindow::draw(Ui& ui, const WinEnv& E) {
 }
 
 // ================================================================ Credits (spec 09 6.15)
+// Credits table layout [DATA]: ids 1..199 are left-hand entries, id + 199 holds the matching name(s) (lines joined by '\n').
+// A leading ASCII digit is a style code: '1' heading, '4' normal entry, '5' placeholder that is not shown. No digit = normal.
+std::vector<CreditsWindow::Row> CreditsWindow::layoutRows(const std::vector<uint32_t>& ids, const std::vector<std::string>& lines) {
+  constexpr uint32_t kNameBase = 200, kNameOffset = 199;
+  std::map<uint32_t, std::string> byId;
+  for (size_t i = 0; i < ids.size() && i < lines.size(); i++) byId[ids[i]] = lines[i];
+  auto splitLines = [](const std::string& s) {
+    std::vector<std::string> out; std::string cur;
+    for (char c : s) { if (c == '\n') { out.push_back(cur); cur.clear(); } else if (c != '\r') cur += c; }
+    out.push_back(cur);
+    return out;
+  };
+  std::vector<Row> rows;
+  for (auto& [id, raw] : byId) {
+    if (id >= kNameBase) continue;                      // consumed as a name below
+    char style = 0; std::string text = raw;
+    if (!text.empty() && text[0] >= '0' && text[0] <= '9') { style = text[0]; text.erase(0, 1); }
+    if (style == '5') continue;
+    Row r; r.left = text;
+    auto nm = byId.find(id + kNameOffset);
+    if (style == '1') r.kind = Row::Heading;
+    else if (nm != byId.end() && !nm->second.empty()) { r.kind = Row::Pair; r.names = splitLines(nm->second); }
+    else r.kind = text.empty() ? Row::Blank : Row::Centered;
+    // Blank line before a heading, and between paired and centred rows.
+    if (!rows.empty()) {
+      Row::Kind prev = rows.back().kind;
+      bool swap = (r.kind == Row::Pair && prev == Row::Centered) || (r.kind == Row::Centered && prev == Row::Pair);
+      if (r.kind == Row::Heading ? (prev != Row::Blank && prev != Row::Heading) : swap) rows.push_back(Row());
+    }
+    rows.push_back(r);
+  }
+  return rows;
+}
+
 WindowResult CreditsWindow::draw(Ui& ui, const WinEnv& E) {
   WindowResult R;
   if (lines.empty()) {
     for (uint32_t id = 1; id <= 378; id++) {
       std::string s = E.text(kTblCredits, id, "");
-      if (!s.empty()) lines.push_back(s);
+      if (!s.empty()) { lines.push_back(s); ids.push_back(id); }
     }
-    if (lines.empty()) lines = {"Metroplex3K", "", "A clean-room SimCity 3000 Unlimited compatible engine", "", "Original game by Maxis", "Thanks for playing"};
+    if (lines.empty()) {
+      lines = {"Metroplex3K", "", "A clean-room SimCity 3000 Unlimited compatible engine", "", "Original game by Maxis", "Thanks for playing"};
+      for (size_t i = 0; i < lines.size(); i++) ids.push_back(uint32_t(i + 1));
+    }
+    rows = layoutRows(ids, lines);
   }
-  Rect r = wui::centered(ui, 400, 320);
-  ui.fill({0, 0, ui.W, ui.H}, rgb(8, 10, 30));
-  if (const Image* bg = E.img(0x82B9B75C, 0x22729940)) ui.blit(*bg, r.x + (r.w - bg->w) / 2, r.y - 4);
-  Rect view{r.x + 20, r.y + 60, r.w - 40, r.h - 80};
+  Rect r = wui::centered(ui, 560, 420);
+  const uint32_t bgCol = rgb(8, 10, 30);
+  ui.fill({0, 0, ui.W, ui.H}, bgCol);
+  const Image* bg = E.img(0x82B9B75C, 0x22729940);
+  int logoH = 0;
+  if (bg) { ui.blit(*bg, r.x + (r.w - bg->w) / 2, r.y); logoH = bg->h; }
+  // Scrolling text sits below the logo so it never overlaps it.
+  Rect view{r.x + 10, r.y + logoH + 8, r.w - 20, r.h - logoH - 16};
   // Clip by rendering into a sub-buffer.
-  std::vector<uint32_t> buf(size_t(view.w) * view.h, rgb(8, 10, 30));
+  std::vector<uint32_t> buf(size_t(view.w) * view.h, bgCol);
   Ui sub = ui; sub.fb = &buf; sub.W = view.w; sub.H = view.h;
   int lh = wui::lineHeight(ui) + 2;
-  double total = double(lines.size()) * lh + view.h;
+  int totalLines = 0;
+  for (auto& row : rows) totalLines += row.lineCount();
+  double total = double(totalLines) * lh + view.h;
   if (scroll > total) scroll = 0;
-  for (size_t i = 0; i < lines.size(); i++) {
-    int y = int(view.h - scroll + double(i) * lh);
-    if (y < -lh || y > view.h) continue;
-    sub.text((view.w - ui.textWidth(lines[i])) / 2, y, lines[i], "main10", rgb(230, 235, 255));
+  const int colGap = 8, mid = view.w / 2;
+  int line = 0;
+  for (auto& row : rows) {
+    int y = int(view.h - scroll + double(line) * lh);
+    line += row.lineCount();
+    if (y < -lh * row.lineCount() || y > view.h) continue;
+    switch (row.kind) {
+      case Row::Blank: break;
+      case Row::Heading: sub.text((view.w - ui.textWidth(row.left)) / 2, y, row.left, "main10", rgb(255, 214, 120)); break;
+      case Row::Centered: sub.text((view.w - ui.textWidth(row.left)) / 2, y, row.left, "main10", rgb(230, 235, 255)); break;
+      case Row::Pair:
+        sub.text(mid - colGap - ui.textWidth(row.left), y, row.left, "main10", rgb(170, 180, 220));
+        for (size_t k = 0; k < row.names.size(); k++) sub.text(mid + colGap, y + int(k) * lh, row.names[k], "main10", rgb(230, 235, 255));
+        break;
+    }
   }
   for (int y = 0; y < view.h; y++)
     for (int x = 0; x < view.w; x++) {
