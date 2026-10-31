@@ -474,7 +474,27 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
   uint8_t scanMode = cur.mode;
   uint8_t prevMode = cur.prevMode;
   if (scanMode == TM_SUBWAY_STN && prevMode == TM_SUBWAY) scanMode = TM_SUBWAY;  // stays on the subway
-  const int bit = 1 << modeBit(scanMode);
+  // Visit mask (spec 18 5.1, 5.7) [STATIC]: one u8 per tile holding the OR of raw mode codes. A scan in mode m skips a
+  // tile when (v & m) == m. The chosen node's tiles get the scanning (parent's) code; ring tiles with no valid transition
+  // get the scanning branch's code (1 road, 4 rail, 8 subway, 0x10 station, 0x41 bus, 0x50 bus stop); candidates that
+  // lose the choice are not marked. NOT the default yet: on the observed saves these rules lower rail/station density
+  // well below the original's (Berlin day 356 108 vs 139, Madison day 460 32 vs 50; private bits give 122 / 50) and leave
+  // London's road excess unchanged, so they are behind M3K_VISITSPEC=1 until the dirty side rechecks them.
+  static const bool privateBits = std::getenv("M3K_VISITSPEC") == nullptr;
+  const int bit = privateBits ? (1 << modeBit(scanMode)) : int(scanMode);
+  int rejectBit = bit;
+  if (!privateBits) {
+    switch (scanMode) {
+      case TM_ROAD: rejectBit = 0x01; break;
+      case TM_RAIL: rejectBit = 0x04; break;
+      case TM_SUBWAY: rejectBit = 0x08; break;
+      case TM_RAIL_STN: case TM_SUBWAY_STN: case TM_XFER_STN: rejectBit = 0x10; break;
+      case TM_BUS: rejectBit = 0x41; break;
+      case TM_BUS_STOP: rejectBit = 0x50; break;
+      default: rejectBit = bit; break;
+    }
+  }
+  auto seen_ = [&](size_t k) { return privateBits ? (visit_[k] & bit) != 0 : (visit_[k] & bit) == bit; };
 
   struct Cand { int x, z; uint8_t mode; int d; bool stn; uint16_t f; };
   bool have = false;
@@ -501,10 +521,10 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
       int x = cur.r.x0 + ox[i], z = cur.r.z0 + oz[i];
       if (x < 0 || z < 0 || x >= W_ || z >= H_) continue;
       size_t k = size_t(x) * H_ + z;
-      if (visit_[k] & bit) continue;
-      visit_[k] |= uint16_t(bit);
+      if (seen_(k)) continue;
+      if (privateBits) visit_[k] |= uint16_t(bit);
       uint16_t f = flags_[k];
-      if (f & TF_STATION) continue;
+      if (f & TF_STATION) { if (!privateBits) visit_[k] |= uint16_t(rejectBit); continue; }
       bool road = f & TF_ROAD, hwy = f & TF_HIGHWAY, acc = f & TF_ACCESS;
       uint8_t nm = 0;
       int layerMode = TM_ROAD;
@@ -522,7 +542,7 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
           break;
       }
       (void)bus;
-      if (!nm) continue;
+      if (!nm) { if (!privateBits) visit_[k] |= uint16_t(rejectBit); continue; }
       SpanInfo sp; bool isSpan;
       if (!spanOk(x, z, sp, isSpan)) continue;
       int d = densityOf(uint8_t(layerMode), x, z);
@@ -550,11 +570,11 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
       for (size_t i = tiles.size(); i > 1; i--) std::swap(tiles[i - 1], tiles[size_t(rng_.rand(int(i)))]);
     for (auto& t : tiles) {
       size_t k = size_t(t.first) * H_ + t.second;
-      if (visit_[k] & bit) continue;
+      if (seen_(k)) continue;
       uint16_t f = flags_[k];
       uint8_t nm = classify(scanMode, prevMode, f, c.rail, c.bus, c.subway);
       SpanInfo sp; bool isSpan;
-      if (nm == 0 || !spanOk(t.first, t.second, sp, isSpan)) { visit_[k] |= uint16_t(bit); continue; }
+      if (nm == 0 || !spanOk(t.first, t.second, sp, isSpan)) { visit_[k] |= uint16_t(rejectBit); continue; }
       int d = densityOf(nm, t.first, t.second);
       bool stn = (f & TF_STATION) != 0;
       seen++;
@@ -615,7 +635,7 @@ TripResult TrafficSim::routeTrip(const TripRequest& req) {
   start.alt = true;   // the origin node is created with "alternatives exist" set too (spec 18 5.3)
   for (int x = std::max(0, req.origin.x0); x <= std::min(W_ - 1, req.origin.x1); x++)
     for (int z = std::max(0, req.origin.z0); z <= std::min(H_ - 1, req.origin.z1); z++)
-      visit_[size_t(x) * H_ + z] |= uint16_t(1 << modeBit(TM_START));
+      visit_[size_t(x) * H_ + z] |= uint16_t(std::getenv("M3K_VISITSPEC") == nullptr ? (1 << modeBit(TM_START)) : int(TM_START));
   std::vector<TripNode> stack{start};
   size_t guard = size_t(W_) * H_ * 16 + 1024;
   while (guard-- > 0) {
