@@ -124,6 +124,22 @@ int main(int argc, char** argv) {
     { us::IniReader pr{&c.config().ini.police}; std::printf("   SC3Police NoJailPenalty %lld ConvictionRate %lld DailyJailReleaseRate %lld MaxJailOvercrowding %lld\n",
         (long long)pr.num("TuningParameters", "NoJailPenalty", -1), (long long)pr.num("TuningParameters", "ConvictionRate", -1),
         (long long)pr.num("TuningParameters", "DailyJailReleaseRate", -1), (long long)pr.num("TuningParameters", "MaxJailOvercrowding", -1)); }
+    {  // mean police D over developed 4x4 cells (any occupant tile) vs the saved average coverage of the last full sweep
+      auto meanD = [&](const City& cc, const World& wd) {
+        long long sum = 0, n = 0;
+        for (int x = 0; x < W; x += 4) for (int z = 0; z < H; z += 4) {
+          bool dev = false;
+          for (int dx = 0; dx < 4 && !dev; dx++) for (int dz = 0; dz < 4; dz++) if (cc.occupantAt(x + dx, z + dz) >= 0) { dev = true; break; }
+          if (!dev) continue;
+          sum += cc.police.coverageAt(x, z); n++;
+        }
+        (void)wd; return n ? double(sum) / n : 0.0;
+      };
+      std::printf("   police mean D over developed cells: ours %.1f, our model on their save %.1f; their saved avgCoverage %u pct %u\n",
+                  meanD(c, w), meanD(t, theirs.game.world()), t.police.avgCoverage, t.police.pctCovered);
+    }
+    for (const auto& o : theirs.game.world().occupants)
+      if (o.agentType == 13881) { std::printf("   jail (%d,%d) props:", o.x, o.z); for (const auto& kv : o.intProps) std::printf(" %08X=%u", kv.first, kv.second); std::printf("\n"); break; }
     std::printf("   police: ours striking %d prisoners-unjailed? / theirs striking %d; funding ours %d theirs %d; stations %d/%d\n", c.police.strike.striking ? 1 : 0,
                 t.police.strike.striking ? 1 : 0, c.police.funding(), t.police.funding(), c.police.stationCount(), t.police.stationCount());
     std::printf("   police term (sum of 4 tiles / PoliceFactor): implied %.1f vs ours %.1f over %lld cells; ratio x10 histogram:", m ? si / m : 0, m ? so / m : 0, m);

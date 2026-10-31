@@ -88,13 +88,14 @@ class CoverageLayer {
   bool removeStation(int id);
   void setFunding(int pct);                            // restamps every station, updates upkeep
   int funding() const { return funding_; }
-  int upkeepTotal = 0;                                  // record field 'a'
+  int upkeepTotal = 0;                                  // monthly upkeep of the stations (not saved)
 
   int addJail(int capacity);                            // police only
   bool removeJail(int id);
   const std::vector<Jail>& jails() const { return jails_; }
   void addPrisoners(int n);
-  int unjailed = 0;                                     // record field 'b' (OPEN meaning)
+  void setJailInmates(int id, int n) { for (auto& j : jails_) if (j.id == id) j.inmates = std::max(0, n); }
+  int unjailed = 0;                                     // unjailed prisoners P (not saved; 0 after load)
 
   void dispatch(int tx, int ty_z);                      // temporary unit stamp (spec 2.4)
 
@@ -108,7 +109,6 @@ class CoverageLayer {
   uint8_t phase = 0;
   uint32_t cursorX = 4, cursorZ = 8;
   StrikeMachine strike;
-  uint32_t recC = 0;                                    // record field 'c' (OPEN, preserved)
   uint32_t avgCoverage = 0, pctCovered = 0;
   Bytes serialize() const;
   void parse(const uint8_t* p, size_t n);               // throws FormatError unless n == 34

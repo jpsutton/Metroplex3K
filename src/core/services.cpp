@@ -306,9 +306,11 @@ Bytes CoverageLayer::serialize() const {
   put32(b, cursorX); put32(b, cursorZ);
   b.push_back(strike.striking ? 1 : 0);
   put32(b, strike.counter);
-  put32(b, uint32_t(upkeepTotal));
-  put32(b, uint32_t(unjailed));
-  put32(b, recC);
+  // Running sweep statistics (spec 17 s3.3, Persisted state) [STATIC]: developed cells visited so far, the sum of their
+  // D, and how many had D = 0; then the last full sweep's average and percent covered.
+  put32(b, uint32_t(sweepCount_));
+  put32(b, uint32_t(sweepSumD_));
+  put32(b, uint32_t(sweepZeros_));
   put32(b, avgCoverage); put32(b, pctCovered);
   return b;
 }
@@ -319,10 +321,11 @@ void CoverageLayer::parse(const uint8_t* p, size_t n) {
   phase = r.u8(); cursorX = r.u32(); cursorZ = r.u32();
   strike.striking = r.u8() != 0;
   strike.counter = r.u32();
-  upkeepTotal = int(r.u32());
-  unjailed = int(r.u32());
-  recC = r.u32();
+  sweepCount_ = r.u32();
+  sweepSumD_ = r.u32();
+  sweepZeros_ = r.u32();
   avgCoverage = r.u32(); pctCovered = r.u32();
+  unjailed = 0;   // the unjailed prisoner count is not saved; it starts at 0 after load (spec 17 s3.3)
 }
 
 // ======================= Flammability =======================

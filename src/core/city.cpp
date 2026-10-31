@@ -1091,7 +1091,12 @@ void City::syncFacilities() {
                o.agentType == kAgentJail) {
       st.insert(key);
       if (!stationAt_.count(key)) {
-        if (o.agentType == kAgentJail) stationAt_[key] = {2, police.addJail(jailCapacity())};
+        if (o.agentType == kAgentJail) {
+          // A loaded jail keeps its inmates (property 0352FBBD; spec 10 s6.2.5, 17 s3.3 persisted state).
+          int id = police.addJail(jailCapacity());
+          for (const auto& kv : o.intProps) if (kv.first == 0x0352FBBD) police.setJailInmates(id, int(kv.second));
+          stationAt_[key] = {2, id};
+        }
         else if (usHier_.isAncestorOrSelf(o.agentType, kAgentPolice)) stationAt_[key] = {0, police.addStation(o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1)};
         else stationAt_[key] = {1, fire.addStation(o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1)};
       }
@@ -1566,6 +1571,10 @@ void City::loadRecords() {
   tryLoad(kCrimeKey, [&](const uint8_t* p, size_t n) { crime.parse(p, n, W, H); return true; });
   tryLoad(kPoliceKey, [&](const uint8_t* p, size_t n) { police.parse(p, n); return true; });
   tryLoad(kFireKey, [&](const uint8_t* p, size_t n) { fire.parse(p, n); return true; });
+  // Station stamps use the department's saved funding from the start (spec 17 §2.2), not 100 % until the first month end:
+  // Berlin is saved at 103 % police funding, and its saved crime matches only the over-funded R/Max/Min.
+  if (const Department* p = budget.dept(dept::Police)) police.setFunding(p->funding);
+  if (const Department* f = budget.dept(dept::Fire)) fire.setFunding(f->funding);
   tryLoad(keys::Flammability, [&](const uint8_t* p, size_t n) { flammability.parse(p, n); return true; });
 }
 
