@@ -830,16 +830,27 @@ Computed at each monthly decay [STATIC]:
   is updated only when at least one trip failed. Both counters are reset each month.
   **What the counters count** [STATIC]: `tripsAttempted` is incremented at the start of **every**
   routed trip with a destination category 0–3. That includes counted and uncounted generator trips,
-  the garbage facilities' and recycling centres' re-route trips (§9.2), and the "can this
-  facility reach anything" trips of several civic facility classes (destination "any",
-  trip-length factor 255, all modes allowed, uncounted). `tripsFailed` is incremented when the
+  the garbage facilities' and recycling centres' re-route trips (§9.2), the landfill developer's
+  tile-origin trips (one per visit of a landfill-zoned tile, including empty zoned tiles, §9.2),
+  and the "can this building reach anything" trips of four business-deal buildings (destination
+  "any", trip-length factor 255, all modes allowed, uncounted). Those four are the GigaMall, Casino
+  Row, the Toxic Waste Conversion Plant and the Maximum Security Prison. Their trip is part of a
+  "functional" test (powered, watered, lot state 1, and the trip succeeds). That test runs only
+  when the building's query window is built, so it adds nothing in normal play [STATIC; the deal
+  manager also binds this test but no periodic call to it was found]. These are **all** the
+  route calls in the program [STATIC]. Every trip goes through the traffic layer's two trip entry
+  points (occupant trip and tile-origin trip). Their only callers are the per-building
+  generators, the garbage and recycling facilities, the landfill developer and the four
+  business-deal buildings. Correction: the previous text spoke of "several civic facility
+  classes". No police, fire, health, school or park building routes trips. `tripsFailed` is incremented when the
   search stack empties. Both are cleared in the monthly decay (§11 step 2.1), which runs on
   day 1 **after** that day's weekly work. So when day 1 is a Monday, that Monday's generator trips
   are counted and then immediately cleared; they are missing from the saved month total.
   DATA (Berlin runs): non-zero counts with no Monday since the month start (70 at 2068-03-04,
-  88 at 2067-08-06 after a day-1 Monday), i.e. about 15–20 non-generator trips per day. A saved
-  total of about 33 % of the generator count per month, against the 21 % that the threshold
-  draw alone predicts, is not fully explained [OPEN]. The saved trip bitmaps show only 4–5 % of
+  88 at 2067-08-06 after a day-1 Monday), i.e. about 15–20 non-generator trips per day. Of the sources above, only the landfill developer
+  runs every day, so these are most likely its tile visits (Berlin has 719 landfill-zoned
+  tiles) [INFERRED]. A saved total of about 33 % of the generator count per month, against the
+  21 % that the threshold draw alone predicts, is otherwise not explained [OPEN]. The saved trip bitmaps show only 4–5 % of
   occupied lots with no result, so the first-trip path (§4.4 step 2) adds at most a few percent.
 
 The average road traffic is pushed into the transport advisor and graph history monthly. In
