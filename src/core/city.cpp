@@ -1136,6 +1136,7 @@ void City::rebuildTraffic() {
   if (!traffic) return;
   const int W = world_->W, H = world_->H;
   hwyMatrix_.assign(size_t(W) * H, 0); hwyRot_.assign(size_t(W) * H, 0); hwyPiece_.assign(size_t(W) * H, 0);
+  span_.assign(size_t(W) * H, 0);
   if (cfg_.haveTiling && game_) {
     // Network flags from the surface pieces (spec 18 s3.1) [STATIC]: road/highway/rail by tiling-set membership (a piece
     // may be in more than one set: on-ramps are highway-set members with or without road); 0x0040 on the on-ramp pieces
@@ -1152,6 +1153,13 @@ void City::rebuildTraffic() {
       if (p.pieceId >= 15130 && p.pieceId <= 15141) f |= TF_ACCESS;
       const OccAttr* a = game_->occupant(p.pieceId, true);
       if (a && (a->netAttr12D & 1)) f |= TF_PROP_A;
+      // Piece word (spec 10 s6.2.6) [STATIC]: bit 16 span flag, bits 17-18 direction (0 -x, 1 -z, 2 +x, 3 +z), bits 19-26
+      // length; bit 27 damaged (traffic 0x80). Saved and restored with the piece, so spans come back at load.
+      if ((p.pieceWord >> 16) & 1) {
+        f |= TF_SPAN;
+        span_[size_t(p.x) * H + p.z] = uint16_t(((p.pieceWord >> 17) & 3) | (((p.pieceWord >> 19) & 0xFF) << 2));
+      }
+      if ((p.pieceWord >> 27) & 1) f |= TF_DAMAGED;
       traffic->flags(p.x, p.z) |= f;
       size_t i = size_t(p.x) * H + p.z;
       if (a && a->hasNetMatrix) { hwyMatrix_[i] = a->netMatrix[0]; hwyRot_[i] = uint8_t(p.rot & 3); hwyPiece_[i] = 1; }
@@ -1192,6 +1200,12 @@ void City::rebuildTraffic() {
     for (const auto& p : world_->subway)
       if (inMap(p.x, p.z)) traffic->flags(p.x, p.z) |= TF_SUBWAY;
   }
+  traffic->spanOf = [this, H](int x, int z, SpanInfo& sp) -> bool {
+    size_t i = size_t(x) * H + z;
+    if (i >= span_.size() || !span_[i]) return false;
+    sp.dir = span_[i] & 3; sp.len = span_[i] >> 2;
+    return sp.len >= 1;
+  };
   // Counting-test density d (spec 18 s4.5) [STATIC]: the RCI development layer's valve-effect map (layer 0x80F1E6D3,
   // last completed cycle) at the lot's first tile.
   // Trips from landfill tiles and pieces succeed (spec 18 s9.2 interim [INFERRED from DATA]: every Berlin landfill tile is
