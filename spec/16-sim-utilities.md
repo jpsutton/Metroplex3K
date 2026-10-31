@@ -142,10 +142,26 @@ Each month, in this order: [STATIC]
      occupant's expired variant, which inherits *Lmax* and *Ld* and is flagged expired [STATIC;
      the visual variant and its zero output are INFERRED].
    * Recompute output *O* (2.4).
-5. Count functional plants whose age ≥ *Ld* ("ageing plants"; reported to advisors).
-6. For each plant not yet reached by an earlier pass, run **distribution** (2.7) seeded at the
-   plant's tile. Then, for each neighbour connection whose slot has a non-zero deal amount and that
-   was not reached, run distribution seeded at the connection tile.
+5–6. Ageing counts and distribution, in one pass over the plant list in list order [STATIC]. Before
+   the pass, clear both counters and every plant's "reached" mark. For each plant that is **not yet
+   reached**:
+   * if its lot state word is 1 and its age ≥ its own *Ld* (2.3), add 1 to the ageing-plant count
+     ("old plants"). If such a plant is also a nuclear plant (agent type 12115), add 1 to the
+     ageing-nuclear count as well;
+   * then run **distribution** (2.7) seeded at the plant's tile. Every plant whose tile that
+     distribution powers, the seed included, is marked reached.
+
+   Plants already reached by an earlier plant's distribution are therefore **not counted** (original
+   defect). In effect, only the first plant in list order of each connected power network is tested,
+   plus any plant whose tile no earlier distribution powered. Both counts are reported to the
+   utilities advisor (`22-advisors-news-petitioners.md` §3.13). Correction: the previous revision
+   counted all functional plants, as a separate step before distribution. DATA: Moscow's eight
+   nuclear plants include one built in 2013 (*Ld* 536, age ≈ 629 months at 2065/250, *Lmax* 670). The
+   shipped topic list holds the "ageing nuclear plant" topic. After the first evaluation in the
+   original's run it is gone and stays gone (W5_Moscow_s02 to s15), though that plant stays old
+   and unretired. Counting all plants would keep the topic. After all plants, for each neighbour
+   connection whose slot has a non-zero deal amount and that was not reached, run distribution
+   seeded at the connection tile.
 7. Post-processing: buildings on unpowered tiles are flagged unpowered (consumed by
    `15-sim-growth.md`); statistics are added to the rolling history.
 8. Spare capacity % = ⌊(100·produced − 100·consumed) / produced⌋ if produced > consumed, else 0.

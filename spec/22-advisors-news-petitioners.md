@@ -698,9 +698,33 @@ rules. Metrics: PU power used, PC power capacity, PD power demanded (32-bit); U_
 unpowered buildings, U_all = number of buildings needing power; WU water used, WC water capacity
 (64-bit); W_dry = buildings without water (needing it), W_all = buildings needing water; Nb =
 number of neighbour connections/neighbours (0–4); flags DS_p, DB_p, DS_w, DB_w = a sell-power,
-buy-power, sell-water, buy-water deal is active; nP = power plants, nPo = old power plants,
-nNe = nuclear plants near end of life, nW / nWo = pumps / old pumps, nI / nIo = incinerators /
-old incinerators; N population.
+buy-power, sell-water, buy-water deal is active; plant and facility counts as defined below; N
+population.
+
+Facility counts used by the ageing rules [STATIC]. "Count of type T" is the number of buildings
+whose agent type is T **or a descendant of T** in `[AgentTypeHierarchy]`. DATA: no city with plants
+and without a buy deal ever lists `0x10E`, so the count must include descendants (no building has
+the bare type 12101).
+
+* nP = count of 12101 (power plant: 12111–12118 and waste-to-energy 12853).
+* nPo, nNe = the power layer's ageing-plant and ageing-nuclear counts from its last monthly update
+  (`16-sim-utilities.md` §2.6 steps 5–6). These are functional plants (lot state 1) with age ≥ their
+  own *Ld*, and for nNe also nuclear (12115). Because of the original's counting defect, only
+  plants not yet reached by an earlier plant's power distribution are counted.
+* nW = count of 12007 (plumbing: pump 12810, water treatment 12820, desalination 12830, tower
+  12840). Water treatment plants are included in nW but never in nWo.
+* nWo = water facilities (pumps, towers, desalination) counted during the last monthly water pass
+  (`16-sim-utilities.md` §3.3). A facility counts when it gets as far as the ageing step 6 with
+  age > *Ld*. That means it is functional, not retired this month, and its tile is powered; the ring
+  and pollution tests do not stop it being counted.
+* nI = count of 12852 (incinerator) + count of 12853 (waste-to-energy). WTE plants are therefore
+  counted in both nP and nI.
+* nIo = incinerators plus WTE plants in the garbage layer's lists, counted at its last monthly
+  update, whose lot state is 1 and whose age ≥ the decline age. For incinerators the decline age is
+  the global `SC3Tune.ini [Incinerator] DeclineAge`, with no per-building spread (after loading:
+  `MaxLifespan` 0 → 1; if `DeclineAge` > `MaxLifespan`, `DeclineAge` = ⌊`MaxLifespan`/2⌋). For WTE
+  plants it is the plant's own *Ld* [INFERRED: the WTE entry uses the plant's lifespan, as for the
+  power count].
 
 | Topic (key) | Condition | Notes |
 |---|---|---|
