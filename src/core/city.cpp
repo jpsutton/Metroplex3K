@@ -1607,6 +1607,13 @@ void City::monthlyWater() {
 
 void City::monthlyPollution() {
   cal::Date d = clock.date();
+  // Garbage facilities whose last trip failed route a fresh trip (spec 16 s4.3, 18 s9.2) [STATIC]. Applied to every
+  // occupant of the garbage family 12005, landfill tiles (12850) included [INFERRED from DATA: Berlin's 401 landfill lots
+  // all hold result "ok" in the original's saves, while the weekly trips alone fail on interior tiles].
+  if (traffic)
+    for (const auto& o : world_->occupants)
+      if ((o.state & ~0x200u) == 1 && traffic->tripResult(o.x, o.z) == 1 && usHier_.isAncestorOrSelf(o.agentType, 12005))
+        traffic->routeFacilityTrip(TripRect{o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1});
   // Recycling centres' monthly values (spec 16 s4.3): working = occupied, powered and the lot's last trip not failed;
   // age from the build date.
   std::vector<us::PollutionLayer::RecyclingCentre> centres;

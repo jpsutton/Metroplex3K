@@ -203,6 +203,9 @@ class TrafficSim {
   void writeResult(const TripRect& origin, bool ok);
   // One generator firing of a building (4.4-4.6). Returns true when a trip was routed.
   bool fireBuilding(const TripBuilding& b);
+  // Garbage-facility access retry (spec 18 s9.2, 16 s4.3) [STATIC]: an uncounted trip from the lot with destination
+  // "any", budget 255 x TripCellCostBaseRoad, cars and rail only. Writes the lot's result; returns success.
+  bool routeFacilityTrip(const TripRect& lot);
   // Weekly Monday run: slot fires iff floor(day/7)==slot. Day is 1-based.
   int runWeekly(int dayOfMonth, const std::vector<TripBuilding>& buildings);
   static bool slotFires(int slot, int dayOfMonth) { return dayOfMonth / 7 == slot; }

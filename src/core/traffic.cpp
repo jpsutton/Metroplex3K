@@ -454,7 +454,7 @@ uint8_t TrafficSim::classify(uint8_t from, uint8_t prev, uint16_t f, bool rail, 
 bool TrafficSim::arrived(const Ctx& c, const TripNode& n) const {
   uint16_t f = flags(n.r.x0, n.r.z0);
   switch (n.mode) {
-    case TM_START: return false;
+    case TM_START: break;   // origin node (0x80): destination test only, no connection check (spec 18 s5.7 step 2, s5.8)
     case TM_ROAD: case TM_BUS: if (f & TF_ROAD_EXIT) return true; break;
     case TM_HWY: case TM_BUS_HWY: return (f & TF_HWY_EXIT) != 0;
     case TM_RAIL: return (f & TF_RAIL_EXIT) != 0;
@@ -736,6 +736,21 @@ bool TrafficSim::fireBuilding(const TripBuilding& b) {
   writeResult(origin, tr.success);
   if (tr.success && counted) applyCountedTrip(origin, tr);
   return true;
+}
+
+bool TrafficSim::routeFacilityTrip(const TripRect& lot) {
+  if (lot.x0 < 0 || lot.z0 < 0 || lot.x0 >= W_ || lot.z0 >= H_) return false;
+  TripRequest req;
+  req.origin = lot;
+  req.originCategory = CAT_OTHER;
+  req.dest = CAT_ANY;
+  req.rail = true; req.bus = req.subway = false;
+  req.budgetFactor = 255;
+  TripResult tr = routeTrip(req);
+  rec_.tripsAttempted++;   // [INFERRED] counted like any routed trip
+  if (!tr.success) rec_.tripsFailed++;
+  writeResult(lot, tr.success);
+  return tr.success;
 }
 
 int TrafficSim::runWeekly(int day, const std::vector<TripBuilding>& bs) {

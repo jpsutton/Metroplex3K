@@ -131,6 +131,86 @@ int main(int argc, char** argv) {
         for (auto& kv : surf) if (hier.isAncestorOrSelf(kv.first, a)) std::printf(" %u:%d", kv.first, kv.second);
       }
       { std::printf("\n   chains:"); for (uint32_t id : {73u, 11258u, 15051u, 15098u, 14010u, 15045u, 15046u, 15106u, 29u}) { std::printf(" [%u", id); for (uint32_t c : hier.chain(id)) if (c != id) std::printf("<%u", c); std::printf("]"); } }
+      {  // surface pieces that got no road/highway/rail flag, and pieces over water
+        const auto& tw = theirs.game.world();
+        std::map<uint32_t, int> unflagged, overWater;
+        for (const auto& p : tw.surface) {
+          if (p.x < 0 || p.z < 0 || p.x >= W || p.z >= H) continue;
+          if (!(t.traffic->flags(p.x, p.z) & 0x7)) unflagged[p.pieceId]++;
+          bool wet = false;
+          for (int dx = 0; dx < 2; dx++) for (int dz = 0; dz < 2; dz++) if (tw.waterAt(p.x + dx, p.z + dz) > tw.altAt(p.x + dx, p.z + dz)) wet = true;
+          if (wet) overWater[p.pieceId]++;
+        }
+        std::printf("\n   surface pieces without road/hwy/rail flag:"); for (auto& kv : unflagged) std::printf(" %u:%d", kv.first, kv.second);
+        std::printf("\n   surface pieces over water:"); for (auto& kv : overWater) std::printf(" %u:%d", kv.first, kv.second);
+      }
+      {  // our failed lots (first tile) vs theirs
+        const auto& A = c.traffic->rec(); const auto& B = t.traffic->rec();
+        int bothFail = 0, oursOnly = 0, theirsOnly = 0; std::vector<std::pair<int, int>> ex;
+        for (const auto& o : w.occupants) {
+          size_t i = size_t(o.x) * H + o.z;
+          if (i >= A.tripTried.size()) continue;
+          bool fo = A.tripTried[i] && !A.tripOk[i], ft = B.tripTried[i] && !B.tripOk[i];
+          if (fo && ft) bothFail++; else if (fo) { oursOnly++; if (ex.size() < 12) { ex.push_back({o.x, o.z}); std::printf("\n   ours-only fail lot (%d,%d) type %u size %dx%d state %u", o.x, o.z, o.agentType, o.sizeX, o.sizeZ, o.state); } } else if (ft) theirsOnly++;
+        }
+        if (const char* r = std::getenv("M3K_TRAFDUMP")) {  // x0,z0,x1,z1: our flags (hex), trip result o/X/., and connection tiles
+          int x0, z0, x1, z1;
+          if (std::sscanf(r, "%d,%d,%d,%d", &x0, &z0, &x1, &z1) == 4) {
+            std::printf("\n   our flags / result rows z, columns x %d..%d:", x0, x1);
+            for (int z = z0; z <= z1; z++) {
+              std::printf("\n   z%3d ", z);
+              for (int x = x0; x <= x1; x++) {
+                size_t i = size_t(x) * H + z; uint16_t f = c.traffic->flags(x, z);
+                char res = A.tripTried[i] ? (A.tripOk[i] ? 'o' : 'X') : '.';
+                char rt = B.tripTried[i] ? (B.tripOk[i] ? 'o' : 'X') : '.';
+                std::printf(" %04X%c%c", f, res, rt);
+              }
+            }
+          }
+        }
+        if (std::getenv("M3K_TRIPTEST")) {  // route from every functional generator in their city with our router, car only, per (origin, destination)
+          long long n[4][3] = {}, ok[4][3] = {}; std::map<uint32_t, std::pair<int, int>> failTypes;
+          for (const auto& o : theirs.game.world().occupants) {
+            int cat = categoryOfTypeChain(t.agentHierarchy().chain(o.agentType));
+            if (cat < 0 || (o.state & ~0x200u) != 1) continue;
+            for (int dest = 0; dest < 3; dest++) {
+              TripRequest q; q.origin = TripRect{o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1}; q.originCategory = cat; q.dest = dest;
+              q.rail = q.bus = q.subway = false;
+              { bool sub; TrafficSim::permissions(cat, q.rail, q.bus, q.subway, sub); if (sub) q.rail = q.bus = q.subway = false; }
+              n[cat][dest]++;
+              bool good = t.traffic->routeTrip(q).success;
+              if (good) ok[cat][dest]++;
+              auto& ft = failTypes[o.agentType]; ft.first++; if (!good) ft.second++;
+            }
+          }
+          static const char* cn[] = {"res", "com", "ind", "other"};
+          for (int c2 = 0; c2 < 4; c2++) {
+            std::printf("\n   our router on their city, %s ->", cn[c2]);
+            for (int d = 0; d < 3; d++) std::printf(" %s %.3f", cn[d], double(ok[c2][d]) / std::max(1LL, n[c2][d]));
+            std::printf(" (n %lld)", n[c2][0]);
+          }
+          {  // their and our saved trip results on the lots of the worst types
+            const auto& A2 = c.traffic->rec(); const auto& B2 = t.traffic->rec();
+            for (uint32_t ty : {12310u, 12850u, 12330u, 5500u}) {
+              int tried = 0, okk = 0, otried = 0, ook = 0, cnt = 0;
+              for (const auto& o : theirs.game.world().occupants) {
+                if (o.agentType != ty) continue;
+                cnt++; size_t i = size_t(o.x) * H + o.z;
+                tried += B2.tripTried[i]; okk += B2.tripTried[i] && B2.tripOk[i];
+                otried += A2.tripTried[i]; ook += A2.tripTried[i] && A2.tripOk[i];
+              }
+              std::printf("\n   type %u lots %d: theirs tried %d ok %d | ours tried %d ok %d", ty, cnt, tried, okk, otried, ook);
+            }
+          }
+          std::vector<std::pair<int, uint32_t>> worst;
+          for (auto& kv : failTypes) if (kv.second.second) worst.push_back({kv.second.second, kv.first});
+          std::sort(worst.rbegin(), worst.rend());
+          std::printf("\n   most failing types (fails/tries):");
+          for (size_t i = 0; i < worst.size() && i < 12; i++) std::printf(" %u:%d/%d", worst[i].second, worst[i].first, failTypes[worst[i].second].first);
+        }
+        std::printf("\n   failed lots: both %d ours only %d theirs only %d; ours-only examples:", bothFail, oursOnly, theirsOnly);
+        for (auto& e : ex) std::printf(" (%d,%d)", e.first, e.second);
+      }
       std::printf("\n   flag census theirs: road %d hwy %d rail %d subway %d station %d access %d span %d propA %d\n", [&] { int n = 0; for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) n += (t.traffic->flags(x, z) & 1) != 0; return n; }(),
                   [&] { int n = 0; for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) n += (t.traffic->flags(x, z) & 2) != 0; return n; }(),
                   [&] { int n = 0; for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) n += (t.traffic->flags(x, z) & 4) != 0; return n; }(),
