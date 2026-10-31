@@ -521,7 +521,13 @@ The visit mask is updated as each node is chosen: the new node's tiles get the *
 code OR-ed in, not the new node's own mode. A ring tile examined without a valid transition is
 marked at once with the scanning node's code (1, 4, 8, 0x10, 0x41 or 0x50 by branch, §5.4)
 [STATIC]. Candidates that were valid but lost the §5.3 choice are not marked, so a retry
-(§5.7 step 4) can still take them.
+(§5.7 step 4) can still take them. Station-mode scans (0x14, 0x18, 0x30) mark their rejects with
+0x10 only, so they never block a later rail (4) or subway (8) scan of the tile. Highway-like modes
+(2, 3, 0x42, 0x43) use the same skip test; a permitted neighbour that is a station or has no valid
+transition is marked with the scanning code itself (OR-ed), valid ones are not. Codes that only
+partly overlap do not block each other (a tile marked 1 is still open to mode 3), so a path may
+cross its own earlier tiles in another mode. For a span step the marks go on the tile entered
+**before** the jump; the landing rectangle is not marked.
 
 ### 5.8 Arrival test
 
