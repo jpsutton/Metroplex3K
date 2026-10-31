@@ -1005,7 +1005,7 @@ Note the count order (road, rail, power, pipe, highway, subway) differs from the
 |---|---|---|---|
 | var | string | neighbourName | Partner city name (copy of that neighbour's cityName) [DATA 59/59] |
 | var | string | text | Display text template; shipped files hold a placeholder string [DATA] |
-| 4 | s32 | penalty | Cancellation penalty currently due [INFERRED; changes over the life of a deal] |
+| 4 | s32 | reportedQuantity | For buy deals: the quantity the utility layer last reported as actually drawn from the neighbour (`16-sim-utilities.md` §2.7) [DATA: Moscow power buy deal = column 0 of the current power-production row in the shipped file and 3 later saves (32 897, 33 815, 34 349, 34 747); London water buy deal 20 752 = the water record's purchaseDeal]. Correction: earlier text called this the cancellation penalty |
 | 4 | s32 | monthlyAmount | Simoleons per month paid or received [DATA: for sell types = trunc(quantity × rate / BASE)] |
 | 1 | u8 | neighbourIndex | 0–3 (§1 above) [DATA 59/59: consistent with neighbourName] |
 | 1 | u8 | dealType | 0–5 (`19-sim-economy.md` §10.1) |

@@ -592,8 +592,10 @@ the bill from the next month-end on.
 The utilities side reports the current quantity for each deal type (one active deal per type)
 [STATIC for the rule; OPEN for the exact caller and quantity measure]:
 
-* Buy types (0, 2, 4): the deal's `units` is overwritten with the reported quantity (the deal
-  follows the city's actual draw, so the bill follows usage, never below `minimumCost`).
+* Buy types (0, 2, 4): the reported quantity is stored in the deal's `reportedQuantity` field
+  (`10-save-format.md` §6.6). Correction: an earlier revision said it overwrites `units`; in
+  480-day runs of the original, Moscow's buy deals kept `units` and the monthly amount unchanged
+  while `reportedQuantity` followed the actual draw [OBSERVED]. Bill by `units` (§10.3).
 * Sell types (1, 3, 5): if the deal's `units` is **less than** the reported value, the deal is
   marked terminated (age set to −1) **without** a penalty. [OPEN: which quantity the caller
   passes; the advisor text describes this as the contract being dropped when the city cannot
