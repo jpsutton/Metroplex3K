@@ -83,7 +83,7 @@ void Game::syncStreetSources() {
   for (int id : streetSources_) street_->removeBuilding(id);
   streetSources_.clear();
   for (const Occupant& o : world_.occupants) {
-    if (o.state != 1) continue;
+    if ((o.state & ~0x200u) != 1) continue;
     const OccAttr* a = data_.occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT);
     if (!a) continue;
     if (a->agentType == 12330) { street_->addSeaport(o.x, o.z); continue; }

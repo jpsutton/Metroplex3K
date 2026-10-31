@@ -36,6 +36,18 @@ foreach(t ${TOOL_SRC})
   target_link_libraries(${name} PRIVATE m3k_core)
 endforeach()
 
+# Probes: engine-vs-real-install checks (tools/probes/README.md). Not tests: CI has no game install.
+option(M3K_BUILD_PROBES "Build the real-install probes in tools/probes" ON)
+if(M3K_BUILD_PROBES)
+  file(GLOB PROBE_SRC CONFIGURE_DEPENDS tools/probes/probe_*.cpp)
+  foreach(t ${PROBE_SRC})
+    get_filename_component(name ${t} NAME_WE)
+    add_executable(${name} ${t})
+    target_include_directories(${name} PRIVATE tools/probes)
+    target_link_libraries(${name} PRIVATE m3k_core)
+  endforeach()
+endif()
+
 # Game application (SDL2 desktop host). M3K_BUILD_APP=OFF builds core, tests and tools only (no SDL needed).
 # With the option ON and SDL2 missing, the app is skipped with a status message so core + tests still build.
 option(M3K_BUILD_APP "Build the SDL2 desktop application (src/app)" ON)

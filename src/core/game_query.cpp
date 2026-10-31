@@ -1,4 +1,5 @@
 // Game: query popup data (spec 09 6.12), news ticker strip (09 4.4), snapshots (09 6.13).
+#include <cmath>
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
@@ -139,6 +140,8 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
     }
     if (q.cls == QueryClass::None) for (const auto& p : w.subway) if (p.x == x && p.z == z) q.cls = QueryClass::Subway;
     if (q.cls == QueryClass::None && c.isPowerLine(x, z)) q.cls = QueryClass::PowerLine;
+    if (q.cls == QueryClass::Road || q.cls == QueryClass::Rail || q.cls == QueryClass::Subway)
+      q.band[0] = uint8_t(c.trafficDensityAt(x, z));   // usage band of the panel from the live traffic load
     return;
   }
 
@@ -225,6 +228,114 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
       q.fundingCost = d->charge() / std::max(1, n);
     }
   }
+}
+
+// Sound classification of a tile (spec 06 s10.4). Classification of the tile content is [INFERRED] from the
+// sound names; zoned families follow the agent-type table of spec 13 s4.
+TileSoundContext Game::tileSoundContext(int x, int z) {
+  TileSoundContext sc;
+  if (!world_.W || !world_.inTiles(x, z)) return sc;
+  const City& c = sim_.city();
+  const size_t ti = world_.tIdx(x, z);
+  if (ropt_.underground) {
+    for (const auto& p : world_.subway) if (p.x == x && p.z == z) { sc.view = SoundView::Subway; sc.subwayPiece = true; return sc; }
+    for (const auto& p : world_.pipes) if (p.x == x && p.z == z) { sc.view = SoundView::Pipes; sc.pipePiece = true; return sc; }
+    sc.view = SoundView::Subway;
+    return sc;
+  }
+  // desert / jungle landscapes (sounds 252 / 253) are not identifiable from the scheme id [OPEN]
+  const int idx = c.occupantAt(x, z);
+  if (idx >= 0 && size_t(idx) < world_.occupants.size()) {
+    const Occupant& o = world_.occupants[size_t(idx)];
+    if (haveData_) if (const OccAttr* a = data_.occupant(o.occId)) sc.sparseId = a->sparseId;
+    bool plant = false;
+    QueryClass qc = classify(c.config().parent, o.agentType, plant);
+    const uint32_t t = o.agentType;
+    if (o.state == 2) sc.kind = TileKind::Abandoned;
+    else if (o.state == 4) sc.kind = TileKind::Construction;
+    else if (qc == QueryClass::Zoned) sc.kind = t < 5000 ? TileKind::Residential : t < 8000 ? TileKind::Commercial : t < 9300 ? TileKind::Industrial : TileKind::Agricultural;
+    else if (qc == QueryClass::Landmark) sc.kind = TileKind::Landmark;
+    else if (qc == QueryClass::Airport) sc.kind = TileKind::Airport;
+    else if (qc == QueryClass::Seaport) sc.kind = TileKind::Seaport;
+    else if (qc == QueryClass::Garbage || qc == QueryClass::Recycling) sc.kind = TileKind::Landfill;
+    else if (qc == QueryClass::WaterBuilding || qc == QueryClass::WaterTreatment) sc.kind = TileKind::WaterFacility;
+    return sc;
+  }
+  if (c.isRoadTile(x, z)) { sc.kind = TileKind::Road; return sc; }
+  for (const auto& p : world_.surface) {
+    if (p.x != x || p.z != z) continue;
+    uint32_t k = c.kindOf(p);
+    if (k == uint32_t(NetworkKind::Rail)) { sc.kind = TileKind::Rail; return sc; }
+    if (k == uint32_t(NetworkKind::Power)) { sc.kind = TileKind::PowerLine; return sc; }
+  }
+  if (c.isPowerLine(x, z)) { sc.kind = TileKind::PowerLine; return sc; }
+  if (ti < world_.flora.size() && world_.flora[ti]) { sc.kind = TileKind::Tree; return sc; }
+  int lo = std::min(std::min(world_.altAt(x, z), world_.altAt(x + 1, z)), std::min(world_.altAt(x, z + 1), world_.altAt(x + 1, z + 1)));
+  if (world_.waterAt(x, z) > lo) sc.kind = TileKind::Water;
+  return sc;
+}
+
+// Ambient area from what is on screen (spec 06 s5.3). Which weights the original uses is [OPEN]; this samples
+// a grid of visible tiles and lets the dominant area win. Zoom rules are [INFERRED]: close views follow the tile
+// type, audio zoom 3 uses the generic zoom-3 beds, far views the wind bed. Switching is held back by
+// FreshnessSelectionAreaMinMsec and suppressed while scrolling faster than FreshnessMaxXSpeed.
+void Game::updateAmbience(uint32_t dtMs) {
+  if (!audio_ || !world_.W) return;
+  ambAcc_ += dtMs;
+  if (ambAcc_ < 250) return;
+  const int64_t dt = ambAcc_;
+  ambAcc_ = 0;
+  const auto& opt = audio_->ini().options;
+  if (!ambCfg_) { ambSel_.configure(opt.get("FreshnessSelectionAreaMinMsec", 0), float(opt.get("FreshnessMaxXSpeed", 1 << 20))); ambCfg_ = true; }
+  const float pxPerTile = 4.f * float(1 << cam_.zoom);
+  const float speed = (std::fabs(cam_.u - ambLastU_) + std::fabs(cam_.v - ambLastV_)) * pxPerTile * 1000.f / float(dt);
+  ambLastU_ = cam_.u; ambLastV_ = cam_.v;
+  enum { Res, Com, Ind, Agri, Nature, Desert, Jungle, Water, Wind, Arctic, Traffic, Constr, Seaport, Airport, Aband, Garbage, Crime, Unpwr, Pipes, Subway, Zm3City, Zm3 };
+  std::vector<float> w(22, 0.f);
+  const int az = cam_.zoom + 1;
+  if (ropt_.underground) {
+    w[world_.subway.empty() ? Pipes : Subway] = 1.f;
+  } else if (az <= 2) {
+    w[Wind] = 1.f;
+  } else {
+    int built = 0, total = 0;
+    const City& c = sim_.city();
+    for (int gy = 0; gy < 8; gy++)
+      for (int gx = 0; gx < 12; gx++) {
+        int tx, tz;
+        if (!renderer_.pickTile(cam_, (2 * gx + 1) * W_ / 24, (2 * gy + 1) * H_ / 16, tx, tz)) continue;
+        total++;
+        TileSoundContext sc = tileSoundContext(tx, tz);
+        if (az == 3) { if (sc.kind != TileKind::None && sc.kind != TileKind::Water && sc.kind != TileKind::Tree) built++; continue; }
+        switch (sc.kind) {
+          case TileKind::Residential: w[Res] += 1; break;
+          case TileKind::Commercial: w[Com] += 1; break;
+          case TileKind::Industrial: w[Ind] += 1; break;
+          case TileKind::Agricultural: w[Agri] += 1; break;
+          case TileKind::Water: w[Water] += 1; break;
+          case TileKind::Road: w[Traffic] += 0.5f; break;
+          case TileKind::Construction: w[Constr] += 1; break;
+          case TileKind::Abandoned: w[Aband] += 1; break;
+          case TileKind::Seaport: w[Seaport] += 1; break;
+          case TileKind::Airport: w[Airport] += 1; break;
+          case TileKind::Landfill: w[Garbage] += 1; break;
+          case TileKind::None: case TileKind::Tree: w[Nature] += 1; break;
+          default: break;
+        }
+        const int oi = sc.kind == TileKind::Road || sc.kind == TileKind::None || sc.kind == TileKind::Tree ? -1 : c.occupantAt(tx, tz);
+        if (oi >= 0 && !c.powered(tx, tz)) w[Unpwr] += 1;
+        if (oi >= 0 && !c.crime.crime.empty() && c.crime.crimeAt(tx, tz) > 200) w[Crime] += 1;
+      }
+    if (az == 3) w[total > 0 && built * 4 >= total ? Zm3City : Zm3] = 1.f;
+  }
+  const int before = ambSel_.current();
+  int sel = ambSel_.update(dt, w, speed);
+  if (sel != before || audio_->ambientArea() != sel) audio_->setAmbientArea(sel);
+}
+
+void Game::stopAmbience() {
+  if (audio_ && audio_->ambientArea() >= 0) audio_->setAmbientArea(-1);
+  ambSel_.reset(-1);
 }
 
 // ================================================================================== ticker (spec 09 4.4)

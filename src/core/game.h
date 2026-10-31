@@ -91,6 +91,8 @@ class Game {
   // Run a MenuItem.INI command class id directly (tools, windows, ...). For tools/tests.
   void runCommand(uint32_t target, uint32_t arg1 = 0) { runTarget(target, arg1); }
   void startDisaster(DisasterType t);
+  void setDisastersOn(bool on) { disastersOn_ = on; disasters_.setDisastersEnabled(on); }   // city flag; probes and scripts
+  bool disasterActive() const { return disasters_.anyActiveNonParade(); }
   void typeCheat(const std::string& s);
   void setPaused(bool p) { paused_ = p; }
   void setDirty(bool d) { dirty_ = d; }            // mark the city modified (save prompts); tools/tests
@@ -201,6 +203,9 @@ class Game {
   // windows (game_windows.cpp)
   void handleWindowResult(const WindowResult& r);
   void buildQueryInfo(int tx, int tz, QueryInfo& q);
+  void stopAmbience();
+  void updateAmbience(uint32_t dtMs);                  // picks the ambient FSC area from the view (game_query.cpp)
+  TileSoundContext tileSoundContext(int tx, int tz);   // audio classification of a tile (game_query.cpp)
   void buildMapSource(MapSource& src);
   void buildBudgetView(BudgetView& v);
   void buildPickerEntries(PickerCategory c);
@@ -273,6 +278,10 @@ class Game {
   RenderOptions ropt_ = [] { RenderOptions o; o.grid = true; return o; }();   // grid on by default
   CityConfig cityCfg_;
   std::unique_ptr<AudioSystem> audio_;
+  AmbientAreaSelector ambSel_;
+  bool ambCfg_ = false;
+  int64_t ambAcc_ = 0;
+  float ambLastU_ = 0, ambLastV_ = 0;
   Sim sim_;
   std::unique_ptr<Terraformer> terra_;
   Lcg floraLcg_{99};
@@ -280,6 +289,10 @@ class Game {
   bool paused_ = true;
   int speed_ = 1;
   double simAccum_ = 0;
+  bool minuteModeOn_ = false;   // a disaster is active: the clock runs in minutes (tickSim)
+  int minutesDone_ = 0;
+  int vortexMs_ = 0;            // remaining life of an active whirlpool vortex
+  uint32_t minuteAccMs_ = 0;
   MenuTree menu_;
   bool menuLoaded_ = false;
   uint32_t openRoot_ = 0, openFly_ = 0;
@@ -356,6 +369,7 @@ class Game {
 
   // simulation glue
   AdvisorManager advisors_;
+  std::unique_ptr<DealHandler> dealHandler_;   // utilities advisor's neighbour-deal hook (game_sim.cpp)
   PetitionerManager petitioners_;
   NewsTicker news_;
   TickerDb tickerDb_;

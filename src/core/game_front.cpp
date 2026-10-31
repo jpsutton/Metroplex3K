@@ -119,6 +119,7 @@ void Game::attachWorld() {
 void Game::enterCity() {
   // Sim.init rebuilds the City; windows referencing it are closed first.
   closeModelessWindows();
+  ticker_ = TickerWidget();   // every new, loaded or scenario city starts with an empty strip
   streetHost_.reset(); street_.reset();
   sim_.init(&world_, haveData_ ? &data_ : nullptr, &cityCfg_, 12345u + uint32_t(world_.W));
   sim_.city().onSound = [this](int id) { sound(id); };
@@ -133,6 +134,8 @@ void Game::enterCity() {
   setTool(ToolKind::None);
   openRoot_ = openFly_ = 0;
   lastMonth_ = sim_.city().clock.date().month;
+  // City start / load ticker items (spec 22 4.7.2); mode 3 is used for every ordinary city [OPEN: mode names].
+  if (haveData_) for (const NewsKey& k : cityStartNews(3, 0, rng_)) postNews(k.table, k.id);
 }
 
 void Game::adopt(World&& w) {

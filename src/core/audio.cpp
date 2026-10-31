@@ -175,7 +175,10 @@ bool FscSchedule::parse(const std::string& text, FscSchedule& out) {
   while (std::getline(in, line)) {
     while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
     if (line.empty() || line[0] == '#') continue;
-    rows.push_back(splitTabs(line));
+    auto f = splitTabs(line);
+    // Shipped data rows start with a tab (empty first field) before the vol column [DATA].
+    if (rows.size() >= 1 && f.size() > 1 && f[0].empty()) f.erase(f.begin());
+    rows.push_back(std::move(f));
   }
   if (rows.size() < 2 || rows[0].size() < 2 || lower(rows[0][0]) != "version") return false;
   long v;

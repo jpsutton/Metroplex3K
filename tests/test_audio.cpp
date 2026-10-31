@@ -243,6 +243,13 @@ static void testFsc() {
   FscSchedule s;
   CHECK(FscSchedule::parse(t, s));
   CHECK(s.rows == 1 && s.cols == 3 && s.tempo == 600 && s.cells.size() == 3 && s.cells[1].file == "s1.xa" && s.cells[0].prob == 20);
+  {  // shipped files start the header and cell rows with a tab
+    std::string t2 = "version 7\r\n#\tvol\r\n\t1024\t32\t1\t1\t1\t2\t600\t4\t1\t0\t0\t0\t2\t0\r\n";
+    for (int c = 0; c < 2; c++) t2 += "\t1024\t0\t512\t512\t0\t10\t20\t0\t0\t0\t0\t0\t20\t0\t0\t0\t0\t0\tt" + std::to_string(c) + ".xa\r\n";
+    FscSchedule s2;
+    CHECK(FscSchedule::parse(t2, s2));
+    CHECK(s2.vol == 1024 && s2.cols == 2 && s2.tempo == 600 && s2.cells.size() == 2 && s2.cells[1].file == "t1.xa" && s2.cells[0].prob == 20);
+  }
   CHECK(fscProbThreshold(0) == 0 && fscProbThreshold(10) == 32767 && fscProbThreshold(18) == 300000);
   FscScheduler sch;
   sch.init(&s, 3);

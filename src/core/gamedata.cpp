@@ -38,6 +38,7 @@ OccAttr parseOccAttr(const uint8_t* p, size_t n) {
         case 0xCA: if (!nums.empty()) a.buildingFlags = nums[0]; break;
         case 0xC9: if (!nums.empty()) a.powerAttr = int(nums[0]); break;
         case 0x6D: if (!keys.empty()) a.nameKey = keys[0]; break;
+        case 0x6F: if (!keys.empty()) a.sparseId = int(keys[0].instance); break;
         case 0x64: if (!strs.empty()) a.designName = strs[0]; break;
         case 0x6B: if (!keys.empty()) a.pedProdKey = keys[0]; break;
         case 0x6C: if (!keys.empty()) a.vehProdKey = keys[0]; break;

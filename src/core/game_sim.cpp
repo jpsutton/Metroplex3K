@@ -8,6 +8,58 @@ namespace m3k {
 
 namespace {
 
+// Neighbour-deal hook of the utilities advisor (spec 22 s3.13.1): offer terms come from NeighbourDeals::makeOffer.
+class UtilityDeals : public DealHandler {
+ public:
+  explicit UtilityDeals(Game& g) : g_(g) {}
+  bool dealActive(int type) override { return g_.city().neighbours.dealOfType(type); }
+  int dealAgeMonths(int type) override {
+    for (const auto& d : g_.city().neighbours.active) if (d.dealType == type && !d.terminated()) return d.monthCounter;
+    return 0;
+  }
+  bool eligibleNeighbour(int type) override {
+    SimRng probe = rng_;   // the neighbour pick draws a random number; do not consume it for a mere eligibility test
+    return g_.city().neighbours.chooseNeighbour(type, context(type), probe) >= 0;
+  }
+  bool offersDisabled() override { return !g_.city().neighbours.newDealsEnabled; }
+  bool offerStillValid(int type) override {
+    for (const auto& d : g_.city().neighbours.pending) if (d.dealType == type) return true;
+    return false;
+  }
+  bool generateOffer(int type) override { return g_.city().neighbours.makeOffer(type, context(type), rng_).has_value(); }
+  void clearOffer(int type) override {
+    auto& p = g_.city().neighbours.pending;
+    p.erase(std::remove_if(p.begin(), p.end(), [&](const Deal& d) { return d.dealType == type; }), p.end());
+  }
+  // Petition ids 0xA5-0xCA are the per-type offer variants of the table in spec 22 s3.13.1; -1 for anything else.
+  static int typeOfPetition(uint32_t id) {
+    static const struct { uint32_t id; int type; } t[] = {
+        {0xB3, 1}, {0xB4, 1}, {0xB5, 1}, {0xAC, 0}, {0xAD, 0}, {0xCA, 0}, {0xB9, 3}, {0xBA, 3}, {0xBB, 3},
+        {0xA5, 2}, {0xA6, 2}, {0xA7, 2}, {0xBF, 5}, {0xC0, 5}, {0xC1, 5}, {0xC4, 4}, {0xC5, 4}, {0xF7, 4}};
+    for (const auto& e : t) if (e.id == id) return e.type;
+    return -1;
+  }
+ private:
+  OfferContext context(int type) {
+    City& c = g_.city();
+    OfferContext x;
+    x.cityPopulation = uint32_t(std::max(0, 2 * c.population()));
+    x.currentYear = c.clock.date().year;
+    x.referenceRate = 0;   // [OPEN] the neighbour's reference rate is not modelled
+    for (const auto& o : g_.world().occupants) if (o.agentType == 12330) { x.hasSeaport = true; break; }
+    const int64_t pc = c.power.stats().produced, pu = c.power.stats().consumed;
+    const int64_t wc = c.water.stats.supply, wu = c.water.stats.used;
+    int64_t avail = 0;
+    if (type == 1) avail = pc - pu; else if (type == 3) avail = wc - wu;
+    x.availableToSell = uint32_t(std::max<int64_t>(0, avail));
+    x.powered = [pc](int, int) { return pc > 0; };
+    x.watered = [wc](int, int) { return wc > 0; };
+    return x;
+  }
+  Game& g_;
+  SimRng rng_{7};
+};
+
 // DisasterWorld adapter over World / City.
 class CityDisasterWorld : public DisasterWorld {
  public:
@@ -22,8 +74,26 @@ class CityDisasterWorld : public DisasterWorld {
     o.valid = true; o.id = oc.uid; o.ax = oc.x; o.az = oc.z; o.w = oc.sizeX; o.h = oc.sizeZ;
     o.agentType = oc.agentType;
     o.burning = oc.state == 16;
+    // Zoned building lots (agent types 3000-9999) are "lots" for the destroy and UFO rules; farm fields are the filler
+    // members flagged 0x100|0x400 of the farm family (spec 15 s4.3.2).
+    const uint32_t kind = oc.agentType / 1000;
+    o.isLot = kind >= 3 && kind <= 9;
+    if (o.isLot && oc.agentType == 9300 && c_.gameData())
+      if (const OccAttr* a = c_.gameData()->occupant(oc.occId)) o.crop = (a->buildingFlags & 0x500) == 0x500;
     o.lotDamage = oc.state == 8 ? kDmgRubble : oc.state == 16 ? kDmgBurnt : oc.state == 2 ? kDmgAbandon : 0;
     return o;
+  }
+  std::vector<OccInfo> occupantsTouching(const OccInfo& o) const override {
+    std::vector<OccInfo> out;
+    auto add = [&](int x, int z) {
+      OccInfo t = occupantAt(x, z);
+      if (!t.valid || t.id == o.id) return;
+      for (const auto& e : out) if (e.id == t.id) return;
+      out.push_back(t);
+    };
+    for (int i = 0; i < o.w; i++) { add(o.ax + i, o.az - 1); add(o.ax + i, o.az + o.h); }
+    for (int j = 0; j < o.h; j++) { add(o.ax - 1, o.az + j); add(o.ax + o.w, o.az + j); }
+    return out;
   }
   bool inGroup(const OccInfo& o, int group) const override { return c_.agentHierarchy().isAncestorOrSelf(o.agentType, uint32_t(group)); }
   bool isA(uint32_t agentType, uint32_t ancestor) const override { return c_.agentHierarchy().isAncestorOrSelf(agentType, ancestor); }
@@ -107,6 +177,8 @@ void Game::initManagers() {
   sink_->text = textFn;
   advisors_.setSink(sink_.get());
   advisors_.petitioners = &petitioners_;
+  dealHandler_ = std::make_unique<UtilityDeals>(*this);
+  advisors_.deals = dealHandler_.get();
   advisors_.clear();
   petitioners_.setSink(sink_.get());
   petitioners_.clear();
@@ -130,7 +202,7 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   int unpowered = 0, needPower = 0;
   for (const auto& o : world_.occupants) {
     totalB++;
-    if (o.state != 1) continue;
+    if ((o.state & ~0x200u) != 1) continue;
     switch (o.agentType) {
       case 13130: in.safety.policeStations++; break;
       case 13002: in.safety.fireStations++; break;
@@ -187,6 +259,15 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
     }
   }
   in.util.waterUsed = c.water.stats.used; in.util.waterCap = c.water.stats.supply;
+  in.util.powerDemand = in.util.powerUsed;   // [INFERRED] demand = consumption actually served
+  {
+    // [INFERRED] garbage capacity GC = what the disposal stages took this month plus what they could still take
+    const auto& ps = c.pollution;
+    in.util.garbageProduced = ps.garbageMonth[0];
+    in.util.garbageCap = ps.garbageMonth[4] + ps.garbageMonth[5] + ps.garbageMonth[6] + ps.disp.wteBudget + ps.disp.incineratorBudget + ps.disp.landfillRoom();
+  }
+  for (const auto& o : world_.occupants)
+    if ((o.state & ~0x200u) == 1 && o.agentType >= 3000 && o.agentType < 10000 && !c.watered(o.x, o.z)) in.util.dryBuildings++;
   in.plan.landValue = c.landValue.cityAverage();
   in.safety.curfewEnacted = c.ordinances.enacted(ord::YouthCurfew);
   in.safety.youthSportsEnacted = c.ordinances.enacted(ord::YouthSports);
@@ -221,6 +302,30 @@ void Game::weeklyHook() {
 
 void Game::applyDisasterOutput(DisasterOutput& out) {
   City& c = city();
+  // The sprite automata that would carry out saucer bombs, crop circles, locust bites and falling debris are not
+  // drawn yet; their gameplay effect is applied here at once, as if each had just landed. Results go through the
+  // same command path (follow-up output is applied after this batch).
+  DisasterOutput follow;
+  {
+    CityDisasterWorld dw(world_, c);
+    for (const auto& cmd : out.commands) {
+      switch (cmd.kind) {
+        case DisasterCommand::UfoSwarm:
+          for (const auto& p : cmd.pts) disasters_.ufoBombHit(dw, p.first, p.second, follow);
+          for (const auto& p : cmd.pts2) disasters_.ufoCropCircle(dw, p.first, p.second, follow);
+          break;
+        case DisasterCommand::LocustSwarm:
+          for (const auto& p : cmd.pts) disasters_.locustEaten(dw, p.first, p.second, follow);
+          break;
+        case DisasterCommand::DebrisSpawn: {   // [INFERRED] the class value (2000/5000/10000) is the intensity: a/250 impacts
+          int n = std::max(1, cmd.a / 250);
+          for (int i = 0; i < n && world_.W > 0; i++) disasters_.debrisImpact(dw, int(rng_.rand(uint32_t(world_.W))), int(rng_.rand(uint32_t(world_.H))), follow);
+          break;
+        }
+        default: break;
+      }
+    }
+  }
   for (const auto& cmd : out.commands) {
     switch (cmd.kind) {
       case DisasterCommand::DestroyOccupant: {
@@ -254,6 +359,14 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
         }
         break;
       case DisasterCommand::MarkRadiation: c.markRadiation(cmd.x, cmd.z); break;
+      case DisasterCommand::VortexSpawn: {   // the vortex object is not drawn; it still scours the coast once and lasts its duration
+        CityDisasterWorld dw(world_, c);
+        DisasterOutput extra;
+        disasters_.vortexPosition(dw, cmd.x, cmd.z, extra);
+        for (auto& e : extra.commands) out.commands.push_back(e);
+        vortexMs_ = std::max(1, cmd.a);
+        break;
+      }
       case DisasterCommand::Crater:
         if (cmd.pts.size() >= 2) {
           std::set<int> hit;
@@ -268,10 +381,15 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
     }
   }
   for (const auto& ev : out.events) {
-    if (ev.kind == DisasterEvent::Started) { disasterX_ = ev.x; disasterZ_ = ev.z; }
+    if (ev.kind == DisasterEvent::Started) {
+      disasterX_ = ev.x; disasterZ_ = ev.z;
+      NewsKey k = disasterStartNews(ev.type, rng_, ev.a == 1);   // ticker item per disaster type (spec 22 4.7); none for parades
+      if (k.valid()) postNews(k.table, k.id);
+    }
     if (ev.kind == DisasterEvent::AllOver) { disasterX_ = disasterZ_ = -1; }
   }
   out.clear();
+  if (!follow.commands.empty() || !follow.events.empty()) applyDisasterOutput(follow);
 }
 
 void Game::startDisaster(DisasterType t) {
@@ -293,8 +411,15 @@ void Game::gotoDisaster() {
 }
 
 void Game::dispatchUnit(int kind, int tx, int tz) {
-  (void)kind;
+  // Dispatch tools (spec 21 s10.3): 0 police, 1 fire, 2 plane. A police or fire unit adds a temporary coverage stamp around
+  // the clicked tile (limited to one unit more than the station count) and a street vehicle drives there.
   sound(kind == 0 ? 34 : 35);
+  if (simReady_ && world_.inTiles(tx, tz)) {
+    City& c = city();
+    if (kind == 0) c.police.dispatch(tx, tz);
+    else if (kind == 1) c.fire.dispatch(tx, tz);
+    if (street_) street_->dispatchEmergency(kind == 0 ? EmergencyType::PoliceCar : kind == 1 ? EmergencyType::FirePumper : EmergencyType::Ambulance, tx, tz);
+  }
   centreOn(tx, tz);
 }
 
@@ -359,6 +484,18 @@ void Game::startScenarioHooks() {
 
 void Game::applyPetitionEffect(const PetitionEffect& e) {
   City& c = city();
+  if (e.kind == PetitionEffect::NeighbourDeal) {   // answers to the utilities advisor's offer petitions (spec 22 s5.5)
+    int type = UtilityDeals::typeOfPetition(e.petition);
+    if (type < 0) return;
+    auto& pend = c.neighbours.pending;
+    for (size_t i = 0; i < pend.size(); i++)
+      if (pend[i].dealType == type) {
+        if (e.accepted) c.neighbours.accept(i); else pend.erase(pend.begin() + long(i));
+        dirty_ = true;
+        break;
+      }
+    return;
+  }
   if (!e.accepted) {
     if (e.kind == PetitionEffect::BusinessDeal) c.business.pendingOffer.reset();   // declined: offers may be raised again
     return;
@@ -401,22 +538,65 @@ void Game::presentPetitions() {
 void Game::tickSim(uint32_t dtMs) {
   if (!simReady_ || paused_ || !world_.W) return;
   if (!managersReady_) initManagers();
-  // Game days per real second from the clock compression factor of the speed (spec 14 4).
-  simAccum_ += dtMs / 1000.0 * double(SpeedControl::kFactor[std::max(1, std::min(4, speed_))]) / 86400.0;
-  int guard = 0;
-  while (simAccum_ >= 1.0 && guard++ < 16) {
-    simAccum_ -= 1.0;
+  const uint32_t factor = SpeedControl::kFactor[std::max(1, std::min(4, speed_))];
+  // One simulated day: sim step, disaster day tick, month/anniversary hooks, scenario and weekly hooks.
+  auto dayStep = [&] {
     sim_.tickDay();
     CityDisasterWorld dw(world_, city());
     DisasterOutput out;
     DisasterInputs in = inputsFor(city(), disastersOn_, cheats_);
     disasters_.dayTick(dw, in, out);
     int month = city().clock.date().month;
-    if (month != lastMonth_) { lastMonth_ = month; disasters_.monthlyTick(dw, in, out); }
+    if (month != lastMonth_) {
+      lastMonth_ = month; disasters_.monthlyTick(dw, in, out);
+      if (month == 1) {   // city anniversary ticker item (10, 25, 50, 100, ... years since founding)
+        NewsKey k = anniversaryNews(city().clock.date().year - world_.info.foundingYear);
+        if (k.valid()) postNews(k.table, k.id);
+      }
+    }
     applyDisasterOutput(out);
     if (scen_) scen_->dayTick();
     int wd = cal::weekday(city().clock.jdn());
     if (wd == 1 && lastWeekDay_ != int(city().clock.jdn())) { lastWeekDay_ = int(city().clock.jdn()); weeklyHook(); }
+  };
+  // While a disaster instance is active the clock runs at minute resolution (spec 21 s4.1, spec 14 s4): the instances
+  // advance once per simulated minute and a day passes every 1440 minutes. msPerMinute has a 50 ms floor.
+  if (vortexMs_ > 0) {   // whirlpool object lifetime (real time); the manager only ends on the host's signal
+    vortexMs_ -= int(dtMs);
+    if (vortexMs_ <= 0) {
+      vortexMs_ = 0;
+      DisasterOutput out;
+      disasters_.vortexFinished(inputsFor(city(), disastersOn_, cheats_), out);
+      applyDisasterOutput(out);
+    }
+  }
+  const bool minuteMode = disasters_.anyActiveNonParade();
+  if (minuteMode) {
+    if (!minuteModeOn_) { minuteModeOn_ = true; minutesDone_ = int(simAccum_ * 1440.0); simAccum_ = 0; minuteAccMs_ = 0; }
+    const uint32_t msPerDay = uint32_t(86400000ull / std::max<uint32_t>(1, factor));
+    const uint32_t msPerMinute = std::max<uint32_t>(std::max<uint32_t>(msPerDay / 24, 50) / 60, 50);
+    minuteAccMs_ += dtMs;
+    int guard = 0;
+    while (minuteAccMs_ >= msPerMinute && guard++ < 256) {
+      minuteAccMs_ -= msPerMinute;
+      {
+        CityDisasterWorld dw(world_, city());
+        DisasterOutput out;
+        disasters_.minuteTick(dw, inputsFor(city(), disastersOn_, cheats_), out);
+        applyDisasterOutput(out);
+      }
+      if (++minutesDone_ >= 1440) { minutesDone_ = 0; dayStep(); }
+      if (!disasters_.anyActiveNonParade()) break;
+    }
+  } else {
+    if (minuteModeOn_) { minuteModeOn_ = false; simAccum_ = minutesDone_ / 1440.0; minutesDone_ = 0; }
+    // Game days per real second from the clock compression factor of the speed (spec 14 4).
+    simAccum_ += dtMs / 1000.0 * double(factor) / 86400.0;
+    int guard = 0;
+    while (simAccum_ >= 1.0 && guard++ < 16) {
+      simAccum_ -= 1.0;
+      dayStep();
+    }
   }
   if (shake_ > 0) shake_--;
 }
