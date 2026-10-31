@@ -357,8 +357,18 @@ all integers: [STATIC]
 
 For the visited tile the developer reads: [STATIC]
 
-* `powered` (power layer), `watered` (water layer), `LV` (land value of the tile, §6), `access`
-  (a transport tile within `MaxDistFromTransport`, see `12-networks.md`).
+* `powered` (power layer), `watered` (water layer), `LV` (land value of the tile, §6), `access`.
+* `access` [STATIC]: with `d` = `MaxDistFromTransport` (+1 with ordinance `0xA2BF1DE5`) and
+  (x, z) = the visited tile (for an occupied lot this is the lot's **anchor** tile, not its
+  footprint), the box [x − d − 1, x + d + 1] × [z − d − 1, z + d + 1], clipped to the map, must
+  contain at least one tile occupied by a **transport network piece** (an occupant whose kind
+  flag marks it as a transport piece). Bus stops and train or subway stations are **not**
+  counted. So the reach is `d + 1` tiles in Chebyshev distance from the anchor. [INFERRED,
+  medium: transport pieces are the road, avenue, highway and rail pieces with their bridges and
+  ramps; whether subway and power-line or pipe pieces carry the flag was not checked]
+  Test vector (`d` = 4): anchor (50, 50) has access if a road piece lies anywhere in
+  [45, 55] × [45, 55]; a road at (56, 50) does not count, even for a 4 × 4 lot whose far edge is
+  at x = 53.
 * `blocked`: the tile is **radioactive** (the radiation flag of the pollution layer,
   `17-sim-services.md` §7.2) [STATIC].
 * `unfit`: the lot's last traffic trip **failed** (trip result 1 of `18-sim-transport.md` §9.2),
@@ -752,7 +762,11 @@ attribute 0x1F4 [INFERRED for the attribute]):
 | S9 | L = 3, f has `0x400` | line-3 piece, alternative |
 | F | f has `0x100` | filler list |
 
-A slot holds the last matching member. "X, else its alternative rotated r" below means: use slot
+A slot holds the last matching member. A member whose part index is not 1, 2 or 3 (e.g. 0) fills
+no slot. **Set validation** [STATIC]: for each pair (S0, S1), (S2, S3), (S4, S5), (S6, S7),
+(S8, S9), if one slot is empty the other must be filled and its flag word must have bit `0x200`;
+otherwise the family is not registered as a runway set. (In the shipped set S1, S2, S5 and S6
+are empty and their partners carry `0x200`, so the set is valid.) "X, else its alternative rotated r" below means: use slot
 X with rotation 0 if it is filled, else the alternative slot with rotation r.
 
 **Layout.** The runway is a strip `L` = min(10, lot length along the chosen side) long. With `D`
@@ -766,9 +780,11 @@ against the chosen side: row A always; then a line-3 row if `D ≥ 3`; then a li
 | middle (1 … L−2) | S0, else S1 rotated 90° | first member of F | same piece as first position |
 | last | S4, else S5 rotated 270° | same piece as first position | same piece as first position |
 
-Test (shipped category 12310, line numbers from the members' part index): flags 0xA10 → S3;
-0xA80 → S4; 0x660 → S2 and S5; 0xA00 → S0/S6/S8 by line; 0x600 → S1/S7/S9 by line; 0xC00 →
-both slots of its line; 0x100 (×2) → F. A 7 × 3 lot gives 7 × 3 = 21 pieces.
+Test (shipped category 12310; part index from attribute 0x1F4: 0xA00, 0xA10, 0xA80 = 1; 0x600 =
+2; 0xC00 = 3; 0x660 = 0): S0 = 0xA00, S3 = 0xA10, S4 = 0xA80, S7 = 0x600, S8 = S9 = 0xC00, F =
+the two 0x100 members; S1, S2, S5 and S6 empty; the 0x660 member is not used by the runway rule.
+Pieces used: row A first 0xA10, middle 0xA00, last 0xA80; line-3 row 0xC00 (S8); line-2 row
+0x600 rotated 270° (S6 empty → S7); line-3 middle the first filler. A 7 × 3 lot gives 21 pieces.
 
 **Airport buildings `0x2207D9EE`** (zone 14) [STATIC]. Used only when `V − P > 0`. The lot is
 cut to at most 10 × 10 (keeping its low-x/low-y corner). Attempts, in order, until one succeeds:

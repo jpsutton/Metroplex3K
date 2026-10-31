@@ -126,8 +126,11 @@ Each month, in this order: [STATIC]
 
 1. Read whether the Power Conservation and Stairwell Lighting ordinances are in force (ordinance
    IDs 0x82B9999B and 0x82E42E30 respectively, as in `19-sim-economy.md` §9.5 [DATA]).
-2. Load the month's neighbour power deals: up to four slots, one per neighbour, each with a
-   purchased amount (`19-sim-economy.md`). Advance a 12-month rolling history of the layer's
+2. Load the month's neighbour power deals: up to four slots, one per neighbour (map edge)
+   [STATIC]. For a **buy** deal (kind 0) with that neighbour the slot's amount is
+   1 000 000 000, i.e. unlimited; for a **sell** deal (kind 1) the slot's sell amount is the
+   deal's `units`. The deal's own `units` is **not** the amount available: a buy deal never
+   causes a brown-out in a component that reaches that neighbour's connection tile. Advance a 12-month rolling history of the layer's
    statistics.
 3. Reset the month's statistics (produced, consumed, consumer tiles, powered consumer tiles) and
    clear all powered bits and all "reached" marks.
@@ -159,7 +162,7 @@ Given a seed tile: [STATIC]
 3. Mark each neighbour connection whose tile is in *K* as reached; its slot is "active".
 4. If **no** neighbour connection is active in *K*, *S* ← trunc(1.1 × *S*) (a hard-coded 10 % margin
    applies only to networks without a neighbour connection).
-5. *D* = Σ deal amounts of the active slots.
+5. *D* = Σ deal amounts of the active slots (a buy slot contributes 1 000 000 000).
 6. *k* = 1 − (*p*_cons if Power Conservation) − (*p*_stair if Stairwell Lighting), *p* = key/100.
 7. Budget *B* = trunc((*S* + *D*) / *k*).
 8. Visit the tiles of *K* in row-major order (z ascending, then x ascending), within the rows spanned
@@ -168,7 +171,14 @@ Given a seed tile: [STATIC]
    * *c* > 0: count it as a consumer, set its powered bit; if *c* ≤ *B*, *B* ← *B* − *c*. Otherwise
      (**brown-out**) *B* ← 0, the active deal slots are zeroed, **all remaining tiles of *K* in scan
      order stay unpowered**, consumed += *S* + *D*, and distribution ends.
-9. If the scan completes, leftover *L* = trunc(*B* × *k*); consumed += *S* + *D* − *L*. The leftover is
+9. If the scan completes, leftover *L* = trunc(*B* × *k*); consumed += *S* + *D* − *L*.
+   **Reported draw** [STATIC]: after distribution the layer reports to the deal manager, for
+   kind 0, Σ over buy slots of (slot amount − amount left in the slot), i.e. the power actually
+   drawn from neighbours; the buy deal's `units` is overwritten with it, so the bill follows the
+   draw (`19-sim-economy.md` §10.4). For kind 1 it reports the amount actually sold; a sell slot
+   with power left undelivered terminates the sell deal. Test (Moscow, saved month): produced
+   128 000, consumed 140 800 → drawn ≈ 12 800 (deal `units` saved 12 600 from the previous
+   month). The leftover is
    credited back to the active slots (first against power sold, then against power bought) so that
    unused purchased power is reported as unused. [STATIC; reporting use INFERRED]
 
@@ -269,6 +279,11 @@ Towers need neither water adjacency nor anything but power. [STATIC]
    consumption (3.1) is charged against the budget trunc(*S* / *k*). When the budget reaches 0 the
    spread stops; buildings not yet reached are dry. [STATIC; exact sweep tie-breaking OPEN]
 
+**At load** [INFERRED, high]: the per-tile water-service bitmap saved in the water record is
+restored as is, and it is what the zone developers read as `watered` until the next month-start
+distribution. Do not recompute water service at load; use the saved bitmap for the rest of the
+loaded month. (Madrid's last saved pass has 0 code-5 abandonments, consistent with this.)
+
 Hence, under shortage, the buildings farthest (along the pipe-served area) from the water sources
 lose water first. [INFERRED]
 
@@ -337,8 +352,10 @@ properties saved with the occupant (`10-save-format.md` §6.2.5) are the unaged 
 `r` is saved as the f32 "ratio" of the pollution record (`17-sim-services.md` §7.4).
 Test vectors: `P` = 100 000, two new centres (45 %, 50 000): served 100 000, w = 45 000 →
 `r` = 0.45; one centre → `r` = 0.225. Craterville (`P` = 208 780, three centres): all three
-working → 0.3233; one of them zeroed → 0.2155 (saved 0.2155), so one centre is zeroed by a
-condition above, or all three are aged by the same factor √(2/3) [DATA].
+working → 0.3233; one of them zeroed → 0.2155 (saved 0.2155) [DATA]. The three centres are
+occupied, powered and 73 months old, so the remaining zeroing condition is the failed trip:
+check the saved trip results of the three centre lots (`18-sim-transport.md` §9). Note that a
+facility that failed its trip keeps capacity 0 until its next monthly check.
 
 **Per tile** (inside the cell update of `17-sim-services.md` §7.2.4 step 3, non-landfill tiles):
 1. `q` = the tile's share of the cell's garbage; *produced* [0] += `q`.
