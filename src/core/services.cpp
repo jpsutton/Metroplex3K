@@ -888,11 +888,12 @@ PollutionLayer::RecyclingCentre PollutionLayer::recyclingCentreValues(bool worki
 }
 
 void PollutionLayer::monthEnd(int month, int year, int64_t population, const std::vector<RecyclingCentre>* centres) {
-  // Graph sample = the mean of avgAir and avgWater as a percentage of MaxAirPolluteForUI [INFERRED from DATA: Berlin
-  // (2050 + 568) / 2 -> saved 11, Madison (536 + 120) / 2 -> 2, Madrid (3474 + 813) / 2 -> 19; spec 17 leaves it OPEN].
+  // Graph sample (spec 17 s7.4) [STATIC]: min(100, (floor(avgWater 100 / MaxWaterPolluteForUI) + floor(avgAir 100 /
+  // MaxAirPolluteForUI)) >> 1), unsigned; reproduces the saved samples (Berlin 11, Madison 2, Madrid 19, London 4).
   {
-    uint64_t pbar = (uint64_t(avgAir) + avgWater) / 2;
-    chartMonthEnd(chart, params_.maxAir > 0 ? uint32_t(pbar * 100 / uint64_t(params_.maxAir)) : 0, month, year);
+    uint32_t w = params_.maxWater > 0 ? uint32_t(uint64_t(avgWater) * 100 / uint32_t(params_.maxWater)) : 0;
+    uint32_t a = params_.maxAir > 0 ? uint32_t(uint64_t(avgAir) * 100 / uint32_t(params_.maxAir)) : 0;
+    chartMonthEnd(chart, std::min<uint32_t>(100, (w + a) >> 1), month, year);
   }
   disp.monthEnd();
   disp.store.monthly();
