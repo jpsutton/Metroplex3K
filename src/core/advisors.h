@@ -308,10 +308,11 @@ class AdvisorManager {
   bool loadRecord(uint32_t type, uint32_t group, uint32_t instance, const Bytes& data);
   void clear();   // new city: empty topics, rewards neither owned nor available
 
-  // Building availability (spec 22 "Building availability") [STATIC]: the [POWER_BUILDINGS] / [WATER_BUILDINGS] entries
+  // Building availability (spec 22 "Building availability") [STATIC]: the [POWER_BUILDINGS] / [WATER_BUILDINGS] /
+  // [GARBAGE_BUILDINGS] (Advisor-Environment.ini) entries
   // each carry an unlock flag (not saved). At load every entry with year <= the current year is unlocked; each month,
   // with rand(100) < 10, the first locked entry with year <= the current year is unlocked (power list first) and its
-  // topic is announced by the utilities advisor. Types in neither list are not gated.
+  // topic is announced by the utilities advisor. Types in no list are not gated.
   void initBuildingUnlocks(int year);
   void monthlyBuildingUnlock(int year, GameRng& rng);
   bool buildingUnlocked(int agentType) const;
@@ -320,7 +321,8 @@ class AdvisorManager {
   std::vector<TopicList> lists_;
   std::set<uint32_t> announced_;                  // announcement topics already raised (not saved)
   std::set<int> unlocked_;                        // unlocked power/water building types (not saved)
-  std::vector<uint32_t> unlockTopics_;            // unlocks waiting to be announced by the utilities advisor
+  std::vector<uint32_t> unlockTopics_;            // power/water unlocks waiting for the utilities advisor
+  std::vector<uint32_t> unlockTopicsEnv_;         // garbage unlocks waiting for the environment advisor [INFERRED owner]
   // Transport announcement flags (not saved [OPEN])
   bool tAnnounced_[4] = {false, false, false, false};
   int garbageStreak_ = 0;

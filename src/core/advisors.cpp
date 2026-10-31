@@ -416,7 +416,7 @@ void AdvisorManager::clear() {
   for (auto& e : rewards.entries()) { e.available = false; e.owned = false; }
   rewards.rawEntries.clear();
   announced_.clear();
-  unlocked_.clear(); unlockTopics_.clear();
+  unlocked_.clear(); unlockTopics_.clear(); unlockTopicsEnv_.clear();
   for (auto& a : tAnnounced_) a = false;
   garbageStreak_ = 0;
   for (auto& r : ring_) r.clear();
@@ -506,6 +506,8 @@ void AdvisorManager::budgetRules(TopicList& L, const AdvisorInputs& in, AdvisorO
 
 // ---- Environment (3.8) ------------------------------------------------------------------------
 void AdvisorManager::envRules(TopicList& L, const AdvisorInputs& in) {
+  for (uint32_t t : unlockTopicsEnv_) L.raise(t, 0, 120, true, true, true);   // garbage-building unlock announcements
+  unlockTopicsEnv_.clear();
   if (in.population < 100) return;
   const auto& E = in.env;
   const int64_t WH = thr.get("WATER_POLLUTION_HIGH"), WM = thr.get("WATER_POLLUTION_MEDIUM");
@@ -533,8 +535,6 @@ void AdvisorManager::envRules(TopicList& L, const AdvisorInputs& in) {
     if (in.neighbourConnections < 4 && !E.hasSeaport) L.raise(0x70, 0x03387EA5);
     else if (in.neighbourConnections >= 1 && !E.anyTrashDeal) L.raise(0x6F, 0x03387EA5);
   }
-  for (auto& a : thr.garbage)
-    if (a.topic && in.year >= a.year && announced_.insert(a.topic).second) L.raise(a.topic, 0, 120, true, true, true);
 }
 
 // ---- Public safety (3.9) ----------------------------------------------------------------------
@@ -898,22 +898,22 @@ void AdvisorManager::utilRules(TopicList& L, const AdvisorInputs& in) {
 }
 
 void AdvisorManager::initBuildingUnlocks(int year) {
-  unlocked_.clear(); unlockTopics_.clear();
-  for (auto* lst : {&thr.power, &thr.water})
+  unlocked_.clear(); unlockTopics_.clear(); unlockTopicsEnv_.clear();
+  for (auto* lst : {&thr.power, &thr.water, &thr.garbage})
     for (auto& a : *lst) if (a.year <= year) unlocked_.insert(a.buildingId);
 }
 void AdvisorManager::monthlyBuildingUnlock(int year, GameRng& rng) {
   if (rng.rand(100) >= 10) return;
-  for (auto* lst : {&thr.power, &thr.water})
+  for (auto* lst : {&thr.power, &thr.water, &thr.garbage})
     for (auto& a : *lst)
       if (a.year <= year && !unlocked_.count(a.buildingId)) {
         unlocked_.insert(a.buildingId);
-        if (a.topic) unlockTopics_.push_back(a.topic);
+        if (a.topic) (lst == &thr.garbage ? unlockTopicsEnv_ : unlockTopics_).push_back(a.topic);
         return;
       }
 }
 bool AdvisorManager::buildingUnlocked(int agentType) const {
-  for (auto* lst : {&thr.power, &thr.water})
+  for (auto* lst : {&thr.power, &thr.water, &thr.garbage})
     for (auto& a : *lst) if (a.buildingId == agentType) return unlocked_.count(agentType) != 0;
   return true;
 }
