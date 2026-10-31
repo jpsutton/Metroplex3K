@@ -672,10 +672,21 @@ Piece word [STATIC; values DATA]:
 | Bits | Label (label only; not needed by an implementation) | Meaning |
 |---|---|---|
 | 0–15 | `6355941D` | Network occupant ID. The piece's attribute key is `E223741F:A317745F:<ID>` |
-| 16 | `6355941E` | Piece flag [OPEN] |
-| 17–18 | `6355941F` | 2-bit piece field [OPEN] |
-| 19–26 | `63559420` | 8-bit piece field [OPEN; non-zero only on a handful of raised surface pieces] |
-| 27 | `63559421` | Piece flag [OPEN] |
+| 16 | `6355941E` | **Span flag**: the piece is the end of a bridge or tunnel span (`18-sim-transport.md` §3.1 flag 0x4000, §5.5) [STATIC] |
+| 17–18 | `6355941F` | **Span direction**, read only when bit 16 is set: 0 = −x, 1 = −z, 2 = +x, 3 = +z [STATIC; DATA below] |
+| 19–26 | `63559420` | **Span length** in tiles, read only when bit 16 is set [STATIC] |
+| 27 | `63559421` | **Damaged flag**: the piece "reports itself damaged" and gets traffic flag 0x80 (`18-sim-transport.md` §3.1) [STATIC] |
+
+On load, all four fields are copied back into the piece. Direction and length are restored only if
+the span flag is set; otherwise they stay 0 [STATIC]. The span record therefore **is** persisted,
+and the traffic layer's flag 0x4000 comes back when it rebuilds its flags from the loaded pieces.
+DATA: spans occur in pairs, one at each end, pointing at each other. Mount Herrang has piece 64 at
+x 56 (dir 2, len 23) and at x 79 (dir 0, len 23), with 56 + 23 = 79. A Better Betterfeld has piece
+63 at z 51 (dir 3, len 16) and at z 67 (dir 1, len 16). Spans appear in Mount Herrang (4 entries),
+Seoul (6), A Better Betterfeld (4), Seoul World Cup (6), Top of the World (6) and Tutorial on
+Transportation (10), always on pieces 63, 64 or 18019. No other shipped file has any; in
+particular London has none. Bit 27 is set in exactly 3 shipped entries: Sacramento's three
+potholed pieces (15040, 15042 and 9051, `12-networks.md` §10).
 | 28 | — | Occupant boolean A (as flags bit 29 of §6.2.4) |
 | 29 | — | Occupant boolean B (as flags bit 30 of §6.2.4) |
 | 30–31 | — | 0 |

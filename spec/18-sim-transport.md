@@ -148,14 +148,14 @@ The map is W × H tiles. The traffic subsystem keeps the following grids [STATIC
 | 0x0010 | transit station building | Station / stop tile |
 | 0x0020 | subway–rail station | Rail↔subway transfer |
 | 0x0040 | highway on-ramp piece: network piece IDs 15130–15141 ("Highway Onramp", agent type 17202) [STATIC] | Road/highway junction tile |
-| 0x0080 | road/highway piece reports itself damaged | Damaged (adds `DamagedCostAddToStep`) |
+| 0x0080 | road/highway piece reports itself damaged: its damaged flag (piece word bit 27, `10-save-format.md` §6.2.6) is set [STATIC] | Damaged (adds `DamagedCostAddToStep`) |
 | 0x0100 | road/highway/rail piece whose record has bit 0 of attribute 0x12D set [STATIC] | Step cost × 0.7. The pieces with the bit are the diagonal ones (highway 11223, 11224, 15052, 15106; road 35, 11207, 11209, 18004; rail 50, 51) [DATA; "diagonal" INFERRED from the 0.7 ≈ 1/√2] |
 | 0x0200 | subway piece with the same bit (subway 11621, 11622, 18015, 18018) | Subway step cost × 0.7 |
 | 0x0400 | road tile is a neighbour connection | Road exit to a neighbour |
 | 0x0800 | highway tile is a neighbour connection | Highway exit |
 | 0x1000 | rail tile is a neighbour connection | Rail exit |
 | 0x2000 | subway tile is a neighbour connection (query exists; the game has no subway connections) | Subway exit |
-| 0x4000 | road/highway/rail piece carries a span record (bridge/tunnel): a per-piece run-time flag set by the bridge/tunnel builder together with a 2-bit direction and an 8-bit length [STATIC]. How it is restored on load is [OPEN] | Trip jumps across the span (§5.5) |
+| 0x4000 | road/highway/rail piece carries a span record (bridge/tunnel). The bridge/tunnel builder sets it together with a 2-bit direction and an 8-bit length. All three are **saved** in the piece word (`10-save-format.md` §6.2.6 bits 16–26) and restored at load, so the flag comes back when the grid is rebuilt from the pieces [STATIC] | Trip jumps across the span (§5.5) |
 
 Station occupants are recognised by occupant **type ID** [STATIC]:
 
@@ -1006,7 +1006,7 @@ occupants (any other argument disables it). It has no simulation effect [STATIC]
 3. (Resolved: the (C, I) weights of §4.2 are the `EconomicPhases` weights.)
 4. (Resolved: the week-slot is dealt per building type; §4.1.)
 5. (Resolved: piece attribute 0x136 matrix, §5.4.) Still open: the meaning of the city-wide
-   boolean *B* and how span flags (0x4000) are restored after a load.
+   boolean *B*. (Resolved: span flags 0x4000 are restored from the saved piece word.)
 7. Airport/seaport puzzle development rules (§12): `15-sim-growth.md`.
 8. `TrafficSimLobotomyDensity`: loaded, but has no known effect.
 9. Strike side effects outside the trip model (news, advisor, automata).
