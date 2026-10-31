@@ -1186,12 +1186,10 @@ void City::rebuildTraffic() {
   // Trips from landfill tiles and pieces succeed (spec 18 s9.2 interim [INFERRED from DATA]: every Berlin landfill tile is
   // "ok" in every save of the original, including tiles with no road in reach).
   traffic->alwaysReaches = [this](int x, int z) { return inMap(x, z) && world_->zone[idx(x, z)] == 17; };
-  // (C, I) weights of the commercial-or-industrial destination draw (spec 18 s4.2): commercial and industrial job
-  // totals, read as the 5000 / 8000 valves' last supply [INFERRED, medium in the spec]. DATA: against equal weights,
-  // Madison's day-460 road/rail snapshot moves from 18.9/17.2 to 27.7/50.5 (original 33.3/50.3) and Berlin's day-356
-  // rail/highway from 96/10.4 to 115/16.3 (original 139/19.2). M3K_CIW=0 restores equal weights for comparison.
-  if (!(std::getenv("M3K_CIW") && std::getenv("M3K_CIW")[0] == '0'))
-    traffic->ciWeights = [this](int& C, int& I) { C = std::max(0, valves.valve(5000).Slast); I = std::max(0, valves.valve(8000).Slast); };
+  // (C, I) weights of the commercial-or-industrial destination draw (spec 18 s4.2) [STATIC]: the EconomicPhases weights
+  // (a, b) at the current population, held by the world jobs valve (15 s3.5). An earlier revision used job totals.
+  traffic->ciWeights = [this](int& C, int& I) { C = valves.phaseA(); I = valves.phaseB(); };
+  if (residents_ > 0) valves.setPhase(residents_);   // recomputed at load, not only at the month end (spec 18 s4.2)
   traffic->lotDensity = [this, H](int x, int z) -> int {
     size_t i = size_t(x) * H + z;
     return i < valves.effectMap.size() ? int(valves.effectMap[i]) : 0;
