@@ -4,9 +4,11 @@ Metroplex3K is a C++17 engine that is compatible with *SimCity 3000 Unlimited* (
 It loads the original game data from **your own installation**, reads and writes the original city, terrain, scenario
 and BAT file formats, and re-implements the simulation, rendering and UI.
 
-> **Status: experimental.** The engine was written from the specification in `spec/` and tested only on synthetic
-> fixtures. It has **never been verified against real game data**. Expect fixes to be needed on first run with a real
-> install. See [STATUS.md](STATUS.md).
+> **Status: experimental.** The engine was first written from the specification in `spec/` with only synthetic
+> fixtures. It has since been run against a real GOG install: parsers, save round trips (47 of 60 shipped saves
+> byte-identical, the rest differ only in compression bytes), and budget, pollution, crime, water and power results are
+> checked against the shipped saves. Many gaps remain. See [STATUS.md](STATUS.md) and the
+> [GitHub issues](https://github.com/jpsutton/Metroplex3K/issues).
 
 ## Clean-room status
 
@@ -71,50 +73,66 @@ Omit the vcpkg steps and pass `-DM3K_BUILD_APP=OFF` to build only core, tests an
 
 Android: design notes only, see [docs/ANDROID.md](docs/ANDROID.md).
 
-Run: `build/metroplex3k [--game-dir DIR] [--city FILE]`.
+Run: `build/metroplex3k [--game-dir DIR] [--city FILE] [--language NAME]`. `--game` is an alias for `--game-dir`.
+`NAME` is an installed language (English, French, German, ...); the default is `$M3K_LANGUAGE`, else the OS locale.
+
+CI (`.github/workflows`) builds on Linux, macOS and Windows (Windows without the app) only for pushes to the `build`
+branch. It runs the tests only for pull requests that target `build`.
 
 ## Controls
 
-Desktop host (`src/app/main.cpp`, mapping into the platform-neutral `Input` struct):
+Desktop host (`src/app/main.cpp`) passes mouse, keyboard and dropped files to the platform-neutral `Input` struct.
+Keyboard shortcuts come from the game's own hotkey table (`Res/Hotkeys/<language>.IXF`) when present, else from the
+built-in defaults (`HotkeyTable::loadDefaults` in `src/core/hotkeys.cpp`). Commands run in `Game::hotkeyCommand`
+(`src/core/game.cpp`). Defaults:
 
 | Input | Action |
 |-------|--------|
 | Left mouse | Click UI, apply the current tool (click, or drag for areas/lines) |
-| Right mouse | Cancel/context action on the map |
+| Right mouse (hold and drag) | Pan the map |
 | Mouse wheel | Zoom (5 levels) |
-| Arrow keys / WASD | Scroll the map |
-| `+` / `-` (`=`) | Zoom in / out |
-| Space | Pause / resume |
+| Arrow keys | Scroll the map |
+| Page Up / Page Down | Rotate the view |
+| Numpad `+` / `-` | Zoom in / out |
+| Numpad `1`-`5` | Jump to a zoom level |
+| `/` | Pause / resume |
+| `,` / `.` | Slower / faster |
+| Space | Centre the map on the pointer |
 | `g` | Toggle grid |
-| `Esc` | Cancel query/tool, close menu/window, then return to main menu |
+| `F12` | Hide / show the toolbars |
+| `F11` | Toggle fullscreen (host) |
+| `Esc` | Cancel the current tool |
 | `Enter` | Confirm dialogs |
-| `Shift+B`, `O`, `M`, `N`, `P` | Open budget and other windows (see `Game::drawInCity` in `src/core/game.cpp`) |
-| `q w e a s d z x c v l r t b` | Tool hotkeys (`Game::loadHotkeys`, spec 08/09) |
-| `Tab` | Open the cheat box (see Limitations) |
-| `F11` | Toggle fullscreen |
+| `Ctrl+A`, `Ctrl+B`, `Ctrl+O`, `Ctrl+M`, ... | Advisors, budget, ordinances, maps and other windows |
+| `q w e a s d z x c v l r t b` and others | Tool hotkeys |
+| `Ctrl+Alt+Shift+C` | Open the cheat box |
+| `F10`, `Ctrl+Q` | Quit |
 | Drop file/folder | Provide game data or open a city file |
+
+Edge scrolling is off by design (spec 29 3.5). Terrain edit mode accepts only a restricted set of keys.
 
 ## Repository layout
 
 ```
-src/core/   platform-independent engine (no SDL, no OS APIs); static library m3k_core
-src/app/    SDL2 desktop host (main.cpp)
-tools/      developer tools (headless)
-tests/      test_*.cpp, plain executables registered with CTest
-spec/       the compatible-engine specification (00-README.md is the index)
-docs/       ARCHITECTURE.md, ANDROID.md, LICENSING.md
-android/    Android port scaffold (notes only)
-STATUS.md   current implementation status
+src/core/       platform-independent engine (no SDL); static library m3k_core
+src/app/        SDL2 desktop host (main.cpp)
+tools/          developer tools (headless)
+tools/probes/   checks that compare the engine with a real install (see tools/probes/README.md)
+tests/          test_*.cpp, plain executables registered with CTest
+spec/           the compatible-engine specification (00-README.md is the index)
+docs/           ARCHITECTURE.md, ANDROID.md, LICENSING.md
+STATUS.md       current implementation status
 ```
 
 ## Testing
 
-`ctest` (in the build dir) runs about 30 test executables from `tests/`. They use synthetic fixtures and need no game data.
-Passing tests means the code matches the spec as the authors read it, not that it matches the real game.
+`ctest` (in the build dir) runs the test executables from `tests/` (one per `test_*.cpp`). They use synthetic fixtures and
+need no game data. Passing tests means the code matches the spec as the authors read it, not that it matches the real
+game. For checks against a real install, use the probes in `tools/probes/`.
 
 ## Tools
 
-All build to `build/` next to the tests and need no SDL.
+All build to `build/` next to the tests and need no SDL. The probes in `tools/probes/` build too (`-DM3K_BUILD_PROBES=OFF` to skip).
 
 | Tool | Usage |
 |------|-------|
@@ -123,14 +141,19 @@ All build to `build/` next to the tests and need no SDL.
 | `game_demo` | `game_demo [--game DIR] out_prefix` — scripted UI smoke test, writes PNG screenshots |
 | `city_sim_demo` | `city_sim_demo [--game DIR] [--seed N] [--years N] [--size 128] out.png` — headless growth check with yearly stats |
 | `windows_demo` | `windows_demo [outdir]` — render every in-game window with fake data to `win_<name>.png` |
+| `game_play_demo` | `game_play_demo [--game DIR] [--size WxH] out_prefix` — build a small city through `Game`, write screenshots |
+| `hud_shot` | `hud_shot --game DIR [--city FILE] --size WxH [--do STEP]... out.png` — scripted headless UI screenshot (steps listed in the file header) |
+| `skin_demo` | `skin_demo [outdir [GAMEDIR]]` — render the skinned UI chrome (synthetic art, or real art with `GAMEDIR`) |
+| `diag` | `diag GAME_DIR [OUT_DIR]` — report what the engine can read from an install; paste the output into bug reports |
 
 ## Status and limitations
 
-- Never verified against real game data; first run on a real install will probably expose bugs.
-- Original UI skins are not used; UI is drawn with the built-in toolkit (original fonts are used when present).
-- Some growth layouts and many details are `[OPEN]` in the spec; recommended defaults from `spec/29-open-issues.md` are used.
-- The intro movie decoder (`tqi.*`) is untested on real files.
-- The desktop host does not yet map `Tab` (cheat box) or Left/Right keys into `Input`.
+Known gaps, guesses and verification tasks are tracked as [GitHub issues](https://github.com/jpsutton/Metroplex3K/issues)
+(see [STATUS.md](STATUS.md) for the labels). Notable points:
+
+- Verified against a real install only where [STATUS.md](STATUS.md) says so; other areas may still differ from the original.
+- Original UI skin art and fonts are used when present, with the built-in toolkit and font as fallback.
+- Some growth layouts and details are `[OPEN]` in the spec; recommended defaults from `spec/29-open-issues.md` are used.
 - Android is not implemented (docs only).
 
 ## License
