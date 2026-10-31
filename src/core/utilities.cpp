@@ -258,6 +258,7 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
   std::vector<int64_t> cat(10, 0);
   for (const auto& p : plants_) {
     if (visited[p.x * H_ + p.z]) continue;
+    if (env.nowAbsMonth - p.buildAbsMonth >= p.ld) { stats_.oldPlants++; if (p.agentType == 12115) stats_.nuclearEnding++; }
     distribute(p.x, p.z, env, visited, cat);
   }
   for (auto& d : deals_) {

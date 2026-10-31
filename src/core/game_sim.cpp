@@ -222,8 +222,10 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
     }
     if (o.agentType >= 3000 && o.agentType < 10000) { needPower++; if (!c.powered(o.x, o.z)) unpowered++; }
     if (us::powerCategory(o.agentType) >= 0) in.util.nPlants++;
-    if (o.agentType == 12810 || o.agentType == 12840 || o.agentType == 12830) in.util.nPumps++;
-    if (o.agentType == 12852) in.util.nIncin++;
+    // spec 22 s3.13 [STATIC]: nW = water facilities (12007 family: pump, treatment, desalination, tower); nI = incinerators
+    // + waste-to-energy plants (WTE counts as both a plant and an incinerator).
+    if (o.agentType == 12810 || o.agentType == 12840 || o.agentType == 12830 || o.agentType == 12820) in.util.nPumps++;
+    if (o.agentType == 12852 || o.agentType == 12853) in.util.nIncin++;
   }
   in.plan.totalBuildings = totalB;
   in.util.unpoweredBuildings = unpowered; in.util.buildingsNeedingPower = needPower;
@@ -314,6 +316,25 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
     }
   }
   in.util.desalinationAvailable = advisors_.buildingUnlocked(12830);
+  {  // Ageing counts (spec 16 s2.6, 22 s3.13) [STATIC]: plants from the power layer's monthly pass, water facilities that reached
+     // the ageing step, incinerators (global [Incinerator] DeclineAge) and WTE plants (their own Ld) in lot state 1.
+    in.util.nOldPlants = c.power.stats().oldPlants;
+    in.util.nNuclearEnding = c.power.stats().nuclearEnding;
+    in.util.nOldPumps = int(c.water.stats.ageingCount);
+    us::IniReader tu{&c.config().ini.tune};
+    int maxL = int(tu.num("Incinerator", "MaxLifespan", 0)); if (maxL <= 0) maxL = 1;
+    int decl = int(tu.num("Incinerator", "DeclineAge", 0)); if (decl > maxL) decl = maxL / 2;
+    const int now = 12 * c.clock.date().year + c.clock.date().month;
+    for (const auto& o : world_.occupants) {
+      if ((o.state & ~0x200u) != 1) continue;
+      if (o.agentType == 12852 && o.hasDate && o.dateYear > 0) {
+        int built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
+        if (now - built >= decl) in.util.nOldIncin++;
+      }
+    }
+    for (const auto& p : c.power.plants())
+      if (p.agentType == 12853 && c.clock.date().year * 12 + c.clock.date().month - p.buildAbsMonth >= p.ld) in.util.nOldIncin++;
+  }
   {  // Health & education inputs (spec 22 s3.12 metrics) [STATIC]: the residential layer's saved fields. fundClass* are the
      // 0-4 service ratings; demand = patients / school-age (7-18) / college-age (19-24) population; capacity = beds /
      // desks; warn = strike risk / 100.

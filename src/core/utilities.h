@@ -76,6 +76,9 @@ struct PowerStats {
   int64_t produced = 0, consumed = 0;
   int consumerTiles = 0, poweredConsumerTiles = 0;
   int spareCapacityPct = 0, unpoweredConsumers = 0, ageingPlants = 0;
+  // Advisor counts (spec 16 s2.6 steps 5-6, 22 s3.13) [STATIC]: tested while distributing, so a plant already reached by an
+  // earlier plant's flood is skipped (original defect). Old = age >= its Ld; nuclear ending = old nuclear (12115).
+  int oldPlants = 0, nuclearEnding = 0;
 };
 
 class PowerLayer {
