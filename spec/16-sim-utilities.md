@@ -252,8 +252,15 @@ For each facility, in list order: [STATIC]
    [STATIC]. Under a power shortage the brown-out rule of §2.7 leaves the tiles with the largest z
    unpowered first, so facilities at the high-z map edge go dry first; this is the most likely
    cause of the Madrid edge pumps switching off in the original's runs (`28-conformance.md`
-   §5.1) [INFERRED]. DATA: Madrid has 40 pumps with output 0 and status 0, all built on the same
-   day as 42 producing pumps, so age is not the cause; check (b), (d) and (e).
+   §5.1) [INFERRED, medium-high]. DATA: Madrid's shipped file has 40 pumps with output 0 and
+   status 0. All were built on the same day as 42 producing pumps, so age is not the cause. All 40
+   lie at z ≥ 236 (x 191–214). Every producing pump of that network lies at z ≤ 235, apart from
+   the corner pumps at z 0–1, which come first in the row-major scan. That is the pattern of a
+   brown-out cut in row order, not of pollution: the pollution at those tiles is 100–500, far
+   below *m*. At day 33 all 40 produce 880–904.
+   The value of about 900 is ageing (step 6). The pumps were built in 2000 and the date is
+   2076/352, so age ≈ 923 months; *Ld* = 660 and *Lmax* = 1 320 (`WaterPumpLife` 110) give
+   1 500 − ⌊263 × 1 500 / 660⌋ = 903 [DATA].
 4. Desalination plants: examine the border of the box from (x − 1, z − 1) to (x + 3, z + 3) (the ring
    around its 3 × 3 lot anchored at (x, z)); any **salt** water tile → full capacity, else 0.
 5. Water pollution: let *p* be the water-pollution value at the facility tile (0–32767,
@@ -271,31 +278,84 @@ Towers need neither water adjacency nor anything but power. [STATIC]
 1. *k* = 1 − (`WaterConservationFactor`/100 if that ordinance is active) − (`WaterMeterFactor`/100 if
    active). [STATIC]
 2. Facility outputs are computed (3.3).
-3. For each facility with non-zero output not yet reached this month, a pipe-network component is
-   flood-filled from it (row-wise expansion, at most 500 passes; connectivity in `12-networks.md`). All
-   producing facilities inside the component are marked reached and their outputs summed into the
-   supply *S*.
-4. If a neighbour water-purchase deal connection lies in the component, supply is treated as
-   unlimited; a water-sale deal is served from *S* (`19-sim-economy.md`). [STATIC]
-5. The component's pipe mask is dilated by `WaterFromPipe` tiles; tiles inside the dilated mask are
+3. **Components.** Repeat: take the first facility in list order (the order in which facilities
+   were added, i.e. occupant load order, then placement order) whose output is non-zero and which
+   has not been reached this month; stop when there is none. Flood-fill the **pipe mask** from
+   that facility's tile. The pipe mask has a bit for every tile holding a pipe piece and for every
+   tile of a water facility's lot [STATIC]. The flood starts with the seed tile only; each pass
+   first grows the filled set by one tile left and right inside the pipe mask, then by one tile up
+   and down; it stops when a pass adds nothing or after **500 passes**, whichever comes first
+   [STATIC]. A long, winding network therefore may not be filled completely.
+   The component's supply *S* starts at **0 for every component** and is the sum of the outputs of
+   **every** producing facility whose tile is inside the filled set, **including facilities
+   already counted by an earlier component this month**; all of them are (re-)marked reached and
+   tagged with this component [STATIC]. There is no city-wide pool and no running total across
+   components.
+   Consequence [STATIC; DATA]: when a flood is cut by the 500-pass cap, a facility outside the cut
+   seeds a later component whose flood covers much of the same network, and facilities are
+   counted twice. The water these duplicates add is real for the spreading step: the later
+   component's budget serves buildings the earlier one did not reach. In Madrid this gives 2
+   components with *S* = 118 890 and 109 638. Their sum, 228 528, is exactly the saved `supply`
+   of the original's day-33 save, while the facility outputs sum to only 119 437. Day 61 matches
+   the same way (228 131) and so does day 472 (223 473). Months in which a single component
+   reaches everything (the same file at day 218: 92 865 = Σ outputs) have no duplicates. In
+   Berlin, Madison and Craterville every flood finishes within the cap (at most 330 passes) and
+   `supply` equals the sum of outputs. An implementation **must** reproduce the cap, the
+   one-step-per-pass growth and the missing "already reached" filter, or Madrid has about half
+   of the original's water.
+4. If a neighbour water-purchase deal connection lies in the component, the budget is unlimited.
+   After spreading, let *U* be the water consumed in that component. If *U* > *S*, the difference
+   is drawn from the neighbour and *S* becomes *U* (the draw is included in the month's `supply`
+   statistic) and the component's leftover is 0; otherwise the leftover is *S* − *U*. A
+   water-sale deal is served from *S* (`19-sim-economy.md`). [STATIC; that the draw enters
+   `supply` is INFERRED, medium-high: Moscow day 127 has `supply` − Σ outputs = 46 537, and its
+   edge component has *S* = 50 742 against a demand of 113 522 × *k*]
+5. The component's filled set is dilated by `WaterFromPipe` tiles (one tile left/right, then
+   one tile up/down per step, i.e. a Chebyshev square). Tiles inside the dilated set are
    serviceable.
-6. Water spreads from the facility rows as an expanding front over serviceable tiles, alternating a
-   downward and an upward row sweep, each sweep growing the front by one tile horizontally and
-   vertically. When the front first reaches a building, the building is marked watered and its
-   consumption (3.1) is charged against the budget trunc(*S* / *k*). When the budget reaches 0 the
-   spread stops; buildings not yet reached are dry. [STATIC; exact sweep tie-breaking OPEN]
+6. **Budget** *B* = trunc(*S* / *k*) for this component alone (or unlimited, step 4). Water
+   spreads from the tiles of the facilities counted in *S* as an expanding front over
+   serviceable tiles, alternating a downward and an upward row sweep. Each sweep grows the front
+   by one tile horizontally and vertically. Buildings are charged as described under "Spreading
+   front" below. When the budget is exhausted, the spread stops; buildings not yet charged are
+   dry. [STATIC; exact sweep tie-breaking OPEN]
+7. After spreading, leftover *L* = trunc(*B*remaining × *k*). The month's `supply` statistic is
+   Σ *S* over all components (after step 4) and `used` = `supply` − Σ *L*. Each facility tagged
+   with the component gets a used share of ⌊(*S* − *L*) × output / *S*⌋, saved as the low half
+   of `8351FDF4` (`10-save-format.md` §6.2.5) [STATIC; DATA: Madrid day 33, used share /
+   output ≈ 0.89 for every facility of the last component]. A facility counted by two
+   components keeps the share of the later one.
 
 **Spreading front** [STATIC for steps 1, 2, 4 and 5; INFERRED for the exact growth per sweep in step 3]: (1) the component mask (pipe flood fill, at most 500
 expansion passes) is dilated by `WaterFromPipe` tiles to give the serviceable mask; (2) the wet
 mask starts as the producing facilities' tiles and the active row range is their rows; (3) each
 iteration runs a down sweep then an up sweep over the active rows; each sweep grows the wet mask by
 one tile horizontally and vertically inside the serviceable mask, then the row range widens by
-one row each way; (4) whenever a newly wet tile is the anchor of a building that needs water, the
-building's consumption `c` is charged: if the remaining budget is ≤ `c`, the budget becomes 0 and
-spreading stops; otherwise the budget drops by `c` and the building is watered; (5) the loop ends
-when neither sweep added a tile or the budget is below 1. A component containing a water buy
-deal's connection gets an unlimited budget. Only the 500-pass cap of the pipe flood exists; the
-front itself has no pass cap.
+one row each way; (4) whenever a newly wet tile carries a **needs-water mark**, the building's
+consumption `c` is charged: if the remaining budget is ≤ `c`, the budget becomes 0 and spreading
+stops; otherwise the budget drops by `c`, the mark is cleared and the building is watered; (5) the
+loop ends when neither sweep added a tile or the budget is below 1. A component containing a water
+buy deal's connection gets an unlimited budget. Only the 500-pass cap of the pipe flood exists;
+the front itself has no pass cap.
+**Needs-water marks** [STATIC]: one mark per building, on the **centre tile** of its lot,
+(⌊(x0 + x1)/2⌋, ⌊(z0 + z1)/2⌋) with x1, z1 the last lot tiles. The mark is set when the building
+is added to the city and removed when it is removed. Water facilities (pump, tower,
+desalination) get no mark. At the start of the distribution the marks are copied once for the
+whole month. A mark cleared by one component is therefore not charged again by a later
+component; a building is charged at most once per month. `c` is the `[AgentIDModifiers]` value of the building's exact
+agent type times its lot width × depth (3.1), and 0 for types not listed. Marked buildings with
+`c` = 0 are cleared without cost. In practice the buildings charged are those in lot states 1
+and 4 [DATA: the per-type demand of states 1 + 4 reproduces the saved `used` within 1 % in
+Madison and Berlin].
+**Wet tiles.** The front marks new tiles wet a 32-tile row word at a time, then charges the
+marked buildings among them. When the budget runs out partway, the rest of that word stays
+wet but uncharged [STATIC]. The saved service bitmap is the union of all components' wet tiles.
+**Counts** [STATIC; DATA]: after distribution the number of marks still set is the number of
+buildings without water. It is saved as `unwatered` (`10-save-format.md` §6.14). Berlin day 40:
+17, equal to the 17 buildings whose centre tile is dry in the saved bitmap; Madrid day 33: 3 = 3;
+Madison: 11 = 11. `needWater` holds the total number of marks, except that it is set to 100
+when no mark is left and at least one building needs water. It is unchanged when no building
+needs water.
 **Observed result** [OBSERVED, `28-conformance.md` §5.1]: one month after load the original
 leaves **0** occupied R/C/I lots without water service at their anchor in Berlin (4 in the
 shipped file) and **1** in Madrid (9 399 in the shipped file), so whenever supply exceeds use the
@@ -477,8 +537,8 @@ recomputed by the next monthly update (§2.6). [STATIC]
 
 **Water layer `206C6E7C:02BF0033:0`** (version 4). It stores the per-tile water-service bitmap
 (trimmed to the range of non-zero words), the `water %` graph history (fixed scale 100), the month's
-total supply and consumption, the neighbour sale/purchase-deal accumulators of §3.4 step 4, the
-mean facility water pollution (§3.3 step 5) and the count of ageing facilities (§3.3 step 6). The
+total supply and consumption, the neighbour sale/purchase-deal accumulators of §3.4 step 4, the counts of
+unwatered buildings and of buildings needing water (§3.4 "Counts"), the mean facility water pollution (§3.3 step 5) and the count of ageing facilities (§3.3 step 6). The
 facility list is not saved; it is rebuilt from the occupants. [STATIC]
 
 **Per-plant and per-facility state.** Neither record contains per-plant age, lifetime (*Lmax*),
@@ -499,8 +559,10 @@ absent, re-derive *Lmax* and *Ld* (§2.3) and start *W* at 0. [STATIC layout][IN
   plant behaviour (`OptimalPollutionCap`).
 * Garbage: the remaining use of `GarbageScalingFactor` (not disposal). Closed: recycling ratio (4.3), abduction resets monthly (4.3), store
   (4.4), counter labels (4.5).
-* Pumps: whether the ring test uses the land-value water-tile test (§3.3 step 3, INFERRED);
-  whether purchased water is included in the saved `supply` statistic.
+* Pumps: whether the ring test uses the land-value water-tile test (§3.3 step 3, INFERRED).
+  Purchased water entering `supply` is INFERRED (§3.4 step 4); what the purchase accumulators
+  hold when the deal component is not the last component is OPEN. The original clears them
+  at the start of every component.
 * Which ordinance ID is Water Conservation vs Water Meters (§3.4); settle from
   `19-sim-economy.md` §9.5.
 * Whether *m* in §3.3 step 5 is the constant `MaxWaterPolluteForUI` or a running maximum.

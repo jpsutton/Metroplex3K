@@ -194,12 +194,19 @@ Further observations from these runs [OBSERVED]:
 * **Craterville recycling.** The shipped ratio 0.2155 belongs to the month in which it was saved:
   one day after load the original writes 0.3233 (three working centres). During the run the ratio
   is 0.30–0.33, with one sample at 0.2005 (one centre zeroed that month).
-* **Madrid pumps.** The 17 pumps at tiles (191..197, 246..255) have output 0 in the shipped file
+* **Madrid pumps.** The 40 zero pumps of the shipped file all lie at z ≥ 236 (x 191–214; see
+  `16-sim-utilities.md` §3.3 for the brown-out reading). The 17 of them at tiles (191..197, 246..255) have output 0 in the shipped file
   and at day 1, produce at days 33–96, are partly or fully zeroed again at days 127–218 and
   380–442, and produce at 249–349 and 472. Their lot state stays 1 and their saved status stays 0,
   so the zeroing comes from power, pollution or trips (`16-sim-utilities.md` §3.3), not from the
   ring test. The zero-pump months are followed, one pass later (the code counts lag by one pass), by
   passes with many code-4/code-5 abandonments (day 33: 657 code 5; day 218: 453).
+  The saved water `supply` follows the pumps. When they produce, Madrid's pipe network splits
+  into two 500-pass-capped components that count most facilities twice, and `supply` is about
+  1.9 × the facility outputs: 228 528 at day 33, 228 131 at day 61, 223 473 at day 472. When
+  they are off, a single component remains and `supply` = Σ outputs (83 837 shipped, 92 865 at
+  day 218). A recomputation of both cases from the saved facilities and pipes reproduces the
+  saved value exactly (`16-sim-utilities.md` §3.4 step 3).
 * **Moscow deals.** The power buy deal (type 0, neighbour 0) keeps `units` 12 600 and monthly
   amount 504, and the water buy deal (type 2, neighbour 3) keeps 5 100 and 204, in every save.
   Within these 480 days the saved deal quantity does not change.

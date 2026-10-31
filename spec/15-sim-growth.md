@@ -414,7 +414,7 @@ re-occupied with the same building [STATIC].
 | 6 | abandoned: no transport access or trip failed | R, C, I |
 | 7 | abandoned: farm pollution | I |
 | 8 | never produced [INFERRED] | – |
-| 9 | airport developer (zone 14): empty tile powered, serviced (see §7) and with transport access within 6 tiles, but no rule placed anything this visit [STATIC]; saved passes: Berlin 80, London 112, Madrid 128, Sacramento 28 per pass | airport |
+| 9 | airport developer (zone 14): empty tile powered, serviced (see §7) and with transport access within 6 tiles, but no rule placed anything this visit [STATIC]; saved passes: Berlin 80, London 112, Madrid 128, Sacramento 28, Seoul 2 per pass, each **exactly** the number of zone-14 tiles that no occupant's lot covers [DATA] | airport |
 | 10 | not developed: tile radioactive | R, C, I |
 | 11 | not developed: land value below every category | R, C, I |
 | 12 | not developed: land value above every category (I: also no category on a watered tile, defect §4.3.2) | R, C, I |
@@ -1206,6 +1206,15 @@ families; it places landfill pieces (occupants 10006–10015, agent type 12850) 
   * landfill (17): no valve demand test; every visit runs decay, registration and filling above.
   Result code 9 comes from the airport developer and 17 from the seaport developer (§4.3
   table); 8 is never produced [INFERRED].
+  **Which tiles give code 9** [DATA]: in every shipped city with an airport zone, the code-9
+  count of both saved passes equals the number of zone-14 tiles not covered by any occupant's
+  lot. Madrid: 825 zone-14 tiles, 128 uncovered. Berlin: 453, 80. London: 189, 112.
+  Sacramento: 98, 28. Seoul: 98, 2, at tiles (154, 5) and (154, 6); the other 96 tiles are
+  covered by occupants of type 12310 in state 1. All uncovered tiles are watered and none
+  holds a network piece. These are leftover gaps inside built airports that no airport rule
+  can fill, so the count stays the same from pass to pass (the original's runs show 128 in
+  all 16 Madrid passes). An implementation that reports more than this count treats some
+  covered tiles as empty.
 
 ## Persisted state
 
