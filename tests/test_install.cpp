@@ -40,7 +40,7 @@ int main() {
   World w; w.init(64, 64);
   for (auto& a : w.alt) a = 100;
   for (auto& a : w.water) a = 40;
-  w.seaLevel = 40; w.info.cityName = "Fakeville"; w.info.mayorName = "M"; w.info.year = 1950; w.info.foundingYear = 1950; w.info.fileKind = 3;
+  w.seaLevel = 40; w.info.flagA = 1; w.info.cityName = "Fakeville"; w.info.mayorName = "M"; w.info.year = 1950; w.info.foundingYear = 1950; w.info.fileKind = 3;
   w.view = {32, 32, 2, 0, true};
   fake::writeFile(root / "Cities" / "fake.sc3", saveCity(w));
   game.requestFile((root / "Cities" / "fake.sc3").string());
@@ -68,5 +68,12 @@ int main() {
   for (uint32_t p : game.screen()) if ((p & 0xFFFFFF) == 0x00FF00 || (p & 0xFFFFFF) == 0x00FB00 || (p & 0xFFFFFF) == 0x00FC00) green++;
   std::printf("greenpx=%d\n", green);
   CHECK(green > 0);
+  // A started disaster runs at minute resolution: an earthquake must start, play out and end (it used to stay
+  // frozen because nothing drove the per-minute instance update).
+  game.startDisaster(DisasterType::Earthquake);
+  bool sawQuake = false;
+  for (int i = 0; i < 1200; i++) { frame(1, 500); sawQuake = sawQuake || game.disasterActive(); if (sawQuake && !game.disasterActive()) break; }
+  CHECK(sawQuake);
+  CHECK(!game.disasterActive());
   TEST_MAIN_END();
 }

@@ -317,6 +317,14 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
         }
         break;
       case DisasterCommand::MarkRadiation: c.markRadiation(cmd.x, cmd.z); break;
+      case DisasterCommand::VortexSpawn: {   // the vortex object is not drawn; it still scours the coast once and lasts its duration
+        CityDisasterWorld dw(world_, c);
+        DisasterOutput extra;
+        disasters_.vortexPosition(dw, cmd.x, cmd.z, extra);
+        for (auto& e : extra.commands) out.commands.push_back(e);
+        vortexMs_ = std::max(1, cmd.a);
+        break;
+      }
       case DisasterCommand::Crater:
         if (cmd.pts.size() >= 2) {
           std::set<int> hit;
@@ -487,11 +495,9 @@ void Game::presentPetitions() {
 void Game::tickSim(uint32_t dtMs) {
   if (!simReady_ || paused_ || !world_.W) return;
   if (!managersReady_) initManagers();
-  // Game days per real second from the clock compression factor of the speed (spec 14 4).
-  simAccum_ += dtMs / 1000.0 * double(SpeedControl::kFactor[std::max(1, std::min(4, speed_))]) / 86400.0;
-  int guard = 0;
-  while (simAccum_ >= 1.0 && guard++ < 16) {
-    simAccum_ -= 1.0;
+  const uint32_t factor = SpeedControl::kFactor[std::max(1, std::min(4, speed_))];
+  // One simulated day: sim step, disaster day tick, month/anniversary hooks, scenario and weekly hooks.
+  auto dayStep = [&] {
     sim_.tickDay();
     CityDisasterWorld dw(world_, city());
     DisasterOutput out;
@@ -509,6 +515,45 @@ void Game::tickSim(uint32_t dtMs) {
     if (scen_) scen_->dayTick();
     int wd = cal::weekday(city().clock.jdn());
     if (wd == 1 && lastWeekDay_ != int(city().clock.jdn())) { lastWeekDay_ = int(city().clock.jdn()); weeklyHook(); }
+  };
+  // While a disaster instance is active the clock runs at minute resolution (spec 21 s4.1, spec 14 s4): the instances
+  // advance once per simulated minute and a day passes every 1440 minutes. msPerMinute has a 50 ms floor.
+  if (vortexMs_ > 0) {   // whirlpool object lifetime (real time); the manager only ends on the host's signal
+    vortexMs_ -= int(dtMs);
+    if (vortexMs_ <= 0) {
+      vortexMs_ = 0;
+      DisasterOutput out;
+      disasters_.vortexFinished(inputsFor(city(), disastersOn_, cheats_), out);
+      applyDisasterOutput(out);
+    }
+  }
+  const bool minuteMode = disasters_.anyActiveNonParade();
+  if (minuteMode) {
+    if (!minuteModeOn_) { minuteModeOn_ = true; minutesDone_ = int(simAccum_ * 1440.0); simAccum_ = 0; minuteAccMs_ = 0; }
+    const uint32_t msPerDay = uint32_t(86400000ull / std::max<uint32_t>(1, factor));
+    const uint32_t msPerMinute = std::max<uint32_t>(std::max<uint32_t>(msPerDay / 24, 50) / 60, 50);
+    minuteAccMs_ += dtMs;
+    int guard = 0;
+    while (minuteAccMs_ >= msPerMinute && guard++ < 256) {
+      minuteAccMs_ -= msPerMinute;
+      {
+        CityDisasterWorld dw(world_, city());
+        DisasterOutput out;
+        disasters_.minuteTick(dw, inputsFor(city(), disastersOn_, cheats_), out);
+        applyDisasterOutput(out);
+      }
+      if (++minutesDone_ >= 1440) { minutesDone_ = 0; dayStep(); }
+      if (!disasters_.anyActiveNonParade()) break;
+    }
+  } else {
+    if (minuteModeOn_) { minuteModeOn_ = false; simAccum_ = minutesDone_ / 1440.0; minutesDone_ = 0; }
+    // Game days per real second from the clock compression factor of the speed (spec 14 4).
+    simAccum_ += dtMs / 1000.0 * double(factor) / 86400.0;
+    int guard = 0;
+    while (simAccum_ >= 1.0 && guard++ < 16) {
+      simAccum_ -= 1.0;
+      dayStep();
+    }
   }
   if (shake_ > 0) shake_--;
 }

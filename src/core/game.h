@@ -91,6 +91,7 @@ class Game {
   // Run a MenuItem.INI command class id directly (tools, windows, ...). For tools/tests.
   void runCommand(uint32_t target, uint32_t arg1 = 0) { runTarget(target, arg1); }
   void startDisaster(DisasterType t);
+  bool disasterActive() const { return disasters_.anyActiveNonParade(); }
   void typeCheat(const std::string& s);
   void setPaused(bool p) { paused_ = p; }
   void setDirty(bool d) { dirty_ = d; }            // mark the city modified (save prompts); tools/tests
@@ -287,6 +288,10 @@ class Game {
   bool paused_ = true;
   int speed_ = 1;
   double simAccum_ = 0;
+  bool minuteModeOn_ = false;   // a disaster is active: the clock runs in minutes (tickSim)
+  int minutesDone_ = 0;
+  int vortexMs_ = 0;            // remaining life of an active whirlpool vortex
+  uint32_t minuteAccMs_ = 0;
   MenuTree menu_;
   bool menuLoaded_ = false;
   uint32_t openRoot_ = 0, openFly_ = 0;
