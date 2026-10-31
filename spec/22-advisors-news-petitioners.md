@@ -1092,7 +1092,7 @@ petition ID:
 | `0xA3`, `0xA4` | Transportation: transit strike [INFERRED] |
 | `0xA5`–`0xCA` (deal IDs), `0xE9`–`0xEE`, `0xF7`, `0xF8` | Utilities: neighbour deals (`19-sim-economy.md` §10) |
 | ordinance petitions | table 5.4 |
-| `0xD7` | accept: treasury +100000; decline: sets a city-planner flag [OPEN: meaning] |
+| `0xD7` | accept: treasury +100000, nothing else; decline: sets the "refused Vinnie" flag, whose only reader is the `zyxwvu` cheat (`27-platform.md`) [STATIC]. Petition 0xD7 is raised only by the `call cousin Vinnie` cheat. Retyping the cheat while it is pending only re-marks it. Once it has been answered, or has gone unanswered for its 6-cycle limit, it stays hidden for the rest of the session [STATIC; not tested in play] |
 | `0x12D` | accept: starts the holiday parade (automata, `26-automata.md`) |
 | all others | informational only |
 
@@ -1312,6 +1312,19 @@ when unknown.
 * PetitionerExtraInfo character-type → voice-sound table.
 * Meaning of the six utilities-advisor booleans (P.4), the topic argument fields `a`/`b`/`value`
   (P.1), and the mapping of reward-state resource keys (P.3) to INI building types.
-* Effect of declining petition `0xD7` (sets a city-planner flag).
+* (Resolved: declining petition `0xD7` sets the flag read by `zyxwvu`.) Whether that flag is saved with the city is OPEN.
 * Per-stage triggered-news IDs of the disaster state machines (`SIMDSTR`); network events were not
   found to post news (no `SIMNTWRK` reference to the news tables).
+
+## Building availability (utilities advisor)
+
+[STATIC] `Advisor-Utilities.ini [POWER_BUILDINGS]` and `[WATER_BUILDINGS]` list the gated types as
+`agentType=Name;year;topic` (shipped: coal, oil, pump and tower year 0; gas 1955, nuclear 1965,
+wind 1980, solar 1990, microwave 2020, fusion 2050; water treatment 1935, desalination 1960). Each
+entry has an unlock flag, which is not saved:
+* At city load, every entry whose year ≤ the current year is unlocked.
+* Each month, with probability 10 % (rand(100) < 10), the first locked entry whose year ≤ the
+  current year is unlocked: power list first, then water. The advisor announces it with the
+  entry's topic number.
+A type absent from both lists (e.g. waste-to-energy 12853) is not gated by this mechanism.
+`desalinationAvailable` in the advisor rules is the unlock flag of type 12830.

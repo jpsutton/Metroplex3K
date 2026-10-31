@@ -731,8 +731,12 @@ Review ▸ Scenario goals (`844587AE`, only enabled in a scenario): the scenario
 Command `E2ED3560` with a category parameter. Title by category from the building-catalogue table
 `62E69238`: landmarks `44`, rewards & opportunities `2A`, power plants `1`, waste management `75`,
 water structures `1D`, generic `7C`. A list "buildings available" (`76`) of the occupants of that
-category whose availability conditions hold (year, population, rewards earned;
-`13-buildings-occupants.md`), each with picture, name, size (`041F2625:133` "WxH") and cost; landmarks
+category whose availability conditions hold. For power plants and water structures the condition is
+the per-type unlock flag of the utilities advisor (`22-advisors-news-petitioners.md`, section
+"Building availability"); the nuclear plant (12115) is also hidden while the Nuclear Free Zone
+ordinance (0xE0D0722E) is in force. The cheats `power to the masses` and `water in the desert`
+bypass the unlock flag (`27-platform.md`). For garbage facilities and landmarks the condition is
+[OPEN]; rewards follow the reward manager's earned state. Each entry shows each with picture, name, size (`041F2625:133` "WxH") and cost; landmarks
 and rewards already placed are greyed and marked `70`. Empty-list messages: landmarks `77`, rewards
 `6E`, power `7A`, waste `79`, water `7B`, other `FFFFFFFF`. Choosing a building arms the plop tool
 (§5.2) for that occupant; the picker closes.
