@@ -32,7 +32,7 @@ The zone layer stores one byte per tile. [STATIC] Values:
 | 14 | Airport | 14 |
 | 15 | Seaport | 15 |
 | 17 | Landfill | 17 |
-| 22 | (special, commercial-class) | — |
+| 22 | Land under a non-zoned (plopped) building, commercial-class for land value. When an occupant is removed, every zone-22 tile of its footprint is reset to 0 [STATIC] | — |
 
 [INFERRED] 4, 8, 12, 13 and others are unused gaps; 22 is treated like commercial by the land
 value layer. For land-value purposes, zones group into classes: residential {1,2,3}; commercial
@@ -78,8 +78,9 @@ only through `capPct` (§3.2): once a month each of the residential, commercial 
 layers sets `capPct` of its family valve (3000, 5000, 8000) from the last completed cycle of its
 amenity valve (3001, 5001, 8001), by the rule in §3.2 "Cap rule". In addition:
 
-* valve 5001 is the demand valve of the **airport** developer and valve 8001 that of the
-  **seaport** developer (their `V` and `V − P` in §5.5 are read from these valves) [STATIC];
+* valve 8001 is the demand valve of the **seaport** developer: its rules receive 8001's `V` and
+  `Max` [STATIC]. The **airport** developer also holds valve 5001, but it calls its rules with a
+  fixed demand of 2000 of 2000, so airport growth is not gated by demand [STATIC] (§7);
 * a third, unnamed valve with ID `0xA2C9E821` is the **landfill store** (§7 and
   `16-sim-utilities.md` §4.4). It is saved inside the pollution record, not with the valve
   records [STATIC].
@@ -317,6 +318,14 @@ developer is the accumulator of its family's valve.
   `tiles × e`, where `tiles` = footprint X × Y (computed as a signed 8-bit product) and `e` = the
   building's per-tile valve effect for that valve (its `[AgentValveEffects]` supply, §3.3)
   [INFERRED for `e`]. When such a building is removed, the same amount is subtracted.
+  Every state change made by a developer (abandon, re-occupy, finish construction, redevelop)
+  replaces the occupant: the old one is removed and a new one with the new state is added
+  [STATIC], and the same goes for fire and rubble replacements [INFERRED]. Since only states 1
+  and 4 count, the net effect on `P` is: abandonment (1 → 2) subtracts the lot's amount;
+  re-occupation (2 → 1) adds it; completion (4 → 1) leaves it unchanged; burning or rubble
+  (1 or 4 → 16 or 8) subtracts it [INFERRED, medium-high; DATA on the clean side: with the
+  abandonment subtraction Berlin's first-pass code-3 count is 54 against 58 saved, instead of
+  399].
 * At every pass rollover (when the shuffled list is exhausted, below) all accumulators are reset to 0.
 So `P` approximates the supply that has been built since the last pass started but is not yet
 reflected in the valve (valves update monthly). It can be negative when more was removed than
@@ -404,7 +413,8 @@ re-occupied with the same building [STATIC].
 | 5 | abandoned: dense lot without water | R, C, I |
 | 6 | abandoned: no transport access or trip failed | R, C, I |
 | 7 | abandoned: farm pollution | I |
-| 8, 9 | never produced by the R/C/I developers [STATIC]; airport, seaport and landfill developers [OPEN] | – |
+| 8 | never produced [INFERRED] | – |
+| 9 | airport developer (zone 14): empty tile powered, serviced (see §7) and with transport access within 6 tiles, but no rule placed anything this visit [STATIC]; saved passes: Berlin 80, London 112, Madrid 128, Sacramento 28 per pass | airport |
 | 10 | not developed: tile radioactive | R, C, I |
 | 11 | not developed: land value below every category | R, C, I |
 | 12 | not developed: land value above every category (I: also no category on a watered tile, defect §4.3.2) | R, C, I |
@@ -412,7 +422,7 @@ re-occupied with the same building [STATIC].
 | 14 | not developed: no power | R, C, I |
 | 15 | not developed: no category fits (unwatered) | R, C, I |
 | 16 | not developed: no transport access | R, C, I |
-| 17 | never produced by the R/C/I developers [STATIC]; other developers [OPEN] | – |
+| 17 | seaport developer (zone 15): the seaport counterpart of code 9, an empty serviceable tile where no rule placed anything [STATIC] | seaport |
 | 18 | not developed: no category fits (watered) | R, C |
 
 Codes 1–8 are the occupied-lot codes and 9–18 the empty-tile codes; the pass statistics count
@@ -438,6 +448,12 @@ the two groups separately (§4 "Scan order").
 choose a category by rule E; if it equals the current one (or the lot carries the
 "keep building" flag), re-occupy the same building (state 1), else redevelop with the new category
 (§5.3). Lots without a category are redeveloped when the same demand conditions hold.
+There is **no water condition** for re-occupation, but rule E (§4.4) admits only density-1
+categories on an unwatered tile, so an abandoned **dense** lot on dry land is not re-occupied:
+it is redeveloped as a low-density building [STATIC]. Madrid shows this in the original
+(`28-conformance.md` §5.1): the dry dense lots abandoned in the first pass after load are
+rebuilt, and the number of occupied low-density residential lots rises from 5 152 to 6 842 by
+day 61.
 
 **Occupied (state 1).**
 1. If `blocked`: abandon [1].
@@ -1175,12 +1191,21 @@ families; it places landfill pieces (occupants 10006–10015, agent type 12850) 
 * **Default behaviour of the three developers without a category list** [STATIC]. Zones 14, 15
   and 17 have descriptions without categories (`14=0xc1f81e7e,3000`, `15=0x82d2d72b,0`,
   `17=0x82348de5,0`); their developers do not use §4.3 or the category rules:
-  * airport (14): demand valve 5001 (`V`, `P` and `Max` of that valve); builds only through its
-    two rules of §5.5 when `V − P > 0`; lots are processed like empty tiles of §4.3 for power,
-    transport and radiation [INFERRED for the shared checks];
+  * airport (14) [STATIC]: per visited tile, with `access` = a transport piece within **6** tiles
+    of the tile (§4.2 box with `d` = 6), `powered`, `blocked` (radioactive) and a second service
+    test S (a per-tile layer test whose identity was not traced; INFERRED: water service):
+    1. If an airport part stands on the tile and the tile is its anchor: if its state is 2 or 4
+       and S, `powered`, `access` and not `blocked` all hold, it becomes occupied (state 1). No
+       result code.
+    2. Empty tile: `blocked` → code 10. If S: not `powered` → 14; else if `access`: run the
+       airport rules (§5.5) with a **fixed demand of 2000 of 2000**, so their `V − P > 0` test
+       always passes and valve 5001 does not gate airport growth; nothing placed → code 9,
+       otherwise no code. Without `access` → 16. If not S: not `powered` → 14, not `access` → 16,
+       else 15.
   * seaport (15): demand valve 8001, rules pier and yard of §5.5, same conditions;
   * landfill (17): no valve demand test; every visit runs decay, registration and filling above.
-  None of them produces result codes 8, 9 or 17 [INFERRED: no code path sets them].
+  Result code 9 comes from the airport developer and 17 from the seaport developer (§4.3
+  table); 8 is never produced [INFERRED].
 
 ## Persisted state
 

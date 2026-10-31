@@ -206,6 +206,34 @@ Further observations from these runs [OBSERVED]:
 * Speed: the saved speed changes from the shipped value to 4 only because the runs were made at
   speed 4.
 
+Further observations, round 4 [OBSERVED]:
+* **Madrid first-pass loss and rebound.** Residential lots by state and density (L = 3100/3300/
+  3500, M = 3700/3900/4100, H = 4300–4700; agent types 3000–4999 only):
+
+  | Save | Day | Occupied L/M/H | Abandoned L/M/H | Construction L/M/H |
+  |---|---|---|---|---|
+  | shipped | 0 | 5 152 / 3 822 / 928 | 267 / 186 / 120 | 1 283 / 196 / 28 |
+  | s01 | 1 | 5 140 / 3 801 / 918 | 259 / 185 / 111 | 1 369 / 215 / 34 |
+  | s02 | 33 | 6 006 / 3 580 / 854 | 130 / 251 / 94 | 1 336 / 283 / 77 |
+  | s03 | 61 | 6 842 / 3 755 / 897 | 186 / 246 / 96 | 436 / 113 / 34 |
+  | s04 | 96 | 6 956 / 3 773 / 916 | 267 / 237 / 94 | 205 / 122 / 22 |
+
+  Residential lot changes between saves (a lot is the same lot when anchor and building are
+  unchanged): days 1→33: 1 123 occupied lots removed (redeveloped or replaced), 1 180 new
+  constructions, 969 constructions completed (4 → 1), 867 new lots placed and completed within
+  the window, 185 abandoned (1 → 2), 114 re-occupied (2 → 1). Days 33→61: 1 108 completions
+  (4 → 1), 13 re-occupations, 61 abandonments. So the rebound comes from **construction that
+  completes in the following month**, mostly low-density residential replacing dry dense lots, not
+  from re-occupation of abandoned lots.
+* **Water service one month after load** (anchor tile bit of the saved bitmap, bit order of
+  `10-save-format.md` §6.14): occupied R/C/I lots without water: Berlin shipped 4, day 1 4,
+  day 40 **0**, day 73 11; Madrid shipped 9 399, day 33 **1**, day 61 2.
+* **Land value and occupied lots.** In the original's own land-value grid, occupied R/C/I lots with
+  `LV < ⌊minLV/2⌋` (the abandonment test of `15-sim-growth.md` §4.3): Berlin shipped 0, day 1 0,
+  day 40 1, day 73 0; Europolis shipped 0.
+* **Moscow power.** The previous-pass result codes contain **no** code 4 (unpowered) in any of the
+  16 Moscow saves: no zoned lot was abandoned for lack of power in 480 days.
+
 #### Madison, WI
 
 | File | Day | Date | Pop | R V/cap | C V/cap | I V/cap | R D | C S/D | I S/D | Jobs S/D | Unemp | Lots 1/2/4/8/16 | Codes prev pass (1-8 / 9-18) | Power row | Water S/U | Garbage month [0..6] |

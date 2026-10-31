@@ -1275,7 +1275,7 @@ decline age, overwork months) is **not** in this record (see `16-sim-utilities.m
 | 0x00 | 8 | hdr | header | Version 4 |
 | 0x08 | 4 | u32 | firstWord | Index of the first stored word of the tile bitmap |
 | 0x0C | 4 | u32 | n | Number of stored words; firstWord + n ≤ W·H/32 |
-| 0x10 | 4·n | u32[n] | bits | Words firstWord … firstWord+n−1 of a W·H-bit per-tile bitmap (32 tiles per word, same word/bit order as the terrain tile flags of `11-world-terrain.md` [INFERRED]); the writer trims leading and trailing all-zero words (first and last stored word are non-zero; n = 0 when all are zero) [STATIC][DATA]. Bit set = tile has water service [INFERRED]. Words outside the stored range are 0 |
+| 0x10 | 4·n | u32[n] | bits | Words firstWord … firstWord+n−1 of a W·H-bit per-tile bitmap (32 tiles per word; tile (x, z) is bit number z·W + x, i.e. **z-major**, bit k in word ⌊k/32⌋ at position k mod 32 [DATA: with this order the bitmaps of the 13 played cities leave 0–18 occupied R/C/I lots without water at their anchor tile, except Madrid with 9 399, and the original's own month-later saves leave 0–4 (Berlin) and 1 (Madrid); this is **not** the order of the terrain tile flags]); the writer trims leading and trailing all-zero words (first and last stored word are non-zero; n = 0 when all are zero) [STATIC][DATA]. Bit set = tile has water service [DATA]. Words outside the stored range are 0 |
 | +0 | 132 | chart | waterChart | `water %` graph history (§6.19); fixed scale, max = 100 in all files |
 | +132 | 8 | s64 | supply | Total water produced this month [INFERRED] |
 | +140 | 8 | s64 | used | Water consumed this month [INFERRED] |
