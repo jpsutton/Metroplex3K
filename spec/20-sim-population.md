@@ -54,8 +54,10 @@ Ordinance IDs referenced by the cohort model [STATIC]: youth curfew `0xC2BF1DC5`
   the residential layer sums each residential building's occupancy over its building lists every
   month]. [OPEN] Whether a building's occupancy equals its residential valve supply (footprint
   tiles × the valve-3000 supply per tile of `SC3ValveLayer.ini`), which would make the city
-  population equal to `N_R` of `19-sim-economy.md` §5.1. Recommended until tested: city
-  population = `N_R`. Taxes, ordinances, cohorts and advisors all use this one figure.
+  population equal to `N_R` of `19-sim-economy.md` §5.1. [DATA] The newest population-chart
+  sample equals the `Slast` of valve 3000 in 13/13 played cities; use valve 3000 `Slast` as the
+  city population (it includes non-family residential supply such as military bases, so it can
+  exceed `N_R` by a few thousand). Taxes, ordinances, cohorts and advisors all use this one figure.
 * The cohort model below does not count people; it stores **shares** (fractions summing to 1)
   per age, which are multiplied by the city population when absolute numbers are needed
   (e.g. number of school-age children = population × Σ share over the served ages) [STATIC].
@@ -99,7 +101,8 @@ seeded from the millisecond timer when the layer is created, and its state is no
 At each month boundary the residential layer performs these steps in order. Let *N* be the city
 population (§2) at the start of the month. [STATIC]
 
-1. Compute the employment percentage (§6).
+1. Set the cap of valve 3000 from valve 3001 (`15-sim-growth.md` §3.2 "Cap rule"; earlier
+   drafts called this the employment percentage, see §6).
 2. Re-apply the education and health department funding to every facility and total their upkeep
    (`19-sim-economy.md`).
 3. Distribute education (§4.2). This step uses the shares as they were before this month's changes.
@@ -233,6 +236,8 @@ DATA: in all 25 played shipped cities the newest EQ-chart sample equals Q(0, 89)
 * City EQ (the chart value, the aura input in `17-sim-services.md` §8.4, and the advisors' EQ) is
   Q(0, 89).
 * The parental term uses Q(20, 40).
+* The industrial developer's clean/dirty choice (`15-sim-growth.md` §4.5) uses Q(20, 65), the
+  working-age EQ [STATIC].
 
 ## 5. Health quotient and life expectancy
 
@@ -316,21 +321,53 @@ Jobs and workers are not counted per person; they are the two sides of the **job
   share of residents (`trunc(residentSupply × w)`, `w` = the workforce fraction defined below) **plus** the constant
   `SC3WorldLayer.ini ExternalJobDemand`, added once per cycle.
 
-**Workforce fraction `w`** (owned here; used by `15-sim-growth.md` §3.4). `w` is a floating-point
-fraction that the residential population layer supplies whenever residential supply is added to
-valve 3000. The jobs valve then receives `round(n × w)` workers [STATIC]. [OPEN] The exact formula of
-`w` has not been confirmed. Recommended definition until tested [INFERRED, low confidence]:
-`w` = (sum of the cohort shares of working age) / (sum of all cohort shares), i.e. the working-age
-share of the population, and `w` = 0 when the population is 0. Use the working-age band of §6
-(the cohorts that count as employable). An implementation must make `w` configurable so it can be
-calibrated against the original's employment figures.
+**Workforce fraction `w`** (owned here; used by `15-sim-growth.md` §3.4) [STATIC]:
 
-Employment percentage, computed monthly by the residential layer [STATIC for the formula;
-INFERRED, high confidence, that the two queried totals are the jobs-valve supply and demand]:
+    w = p[20] + p[21] + … + p[65]
 
-* `D = 0` → 0 %; `S < D` (fewer workers than jobs) → 100 %; else `floor(100 × D / S)`.
+the sum of the cohort shares of ages **20 to 65 inclusive** (46 ages). Because the shares sum to
+1, `w` is the working-age fraction of the population; it is 0 only if those ages are empty. There
+is no per-age employable share, no unemployment coupling and no wealth or EQ weighting. `w` is
+evaluated each time residential supply is added to valve 3000 (in the monthly valve update of day
+1, before this layer's month-end work), so it uses the shares of the previous month-end. The jobs
+valve then receives `round(n × w)` workers (round half to even) for each residential supply `n`.
 
-Unemployment = `100 − employment` percent [INFERRED].
+Verification [DATA]: the jobs-valve supply `Slast` saved in the world layer
+(`10-save-format.md` §6.13, field `v0`) against `R × w + ExternalJobDemand`, with `R` = valve 3000
+`Slast` and `w` from the saved shares:
+
+| City | `R` | `w` | `R·w + 150` | saved jobs `Slast` |
+|---|---|---|---|---|
+| Berlin | 794 278 | 0.6471 | 514 102 | 514 166 |
+| Madrid | 1 176 537 | 0.6530 | 768 398 | 768 362 |
+| Moscow | 929 879 | 0.6383 | 593 732 | 593 747 |
+| Madison, WI | 148 844 | 0.7150 | 106 574 | 107 853 |
+
+All 13 played cities agree within 1.2 %; the residual comes from the saved shares having been
+updated once more (month-end and January ageing) after the valve update that produced `Slast`.
+The world-layer fields `v0`, `v1` and `v2` of `10-save-format.md` §6.13 are the jobs valve's
+`Slast`, `Dlast` and `Sbase` (= `ExternalJobDemand`, 150) [DATA 13/13].
+
+**Unemployment** [STATIC; DATA]. The world layer computes the unemployment percentage once a month
+(the fourth world-layer chart, `10-save-format.md` §6.13): with `R` = valve 3000 `Slast`,
+`K = round(R × w)` (resident workers only, **without** `ExternalJobDemand`) and `J` = the jobs
+valve's `Dlast` (jobs):
+
+| Condition | Unemployment % |
+|---|---|
+| `R = 0` or `K ≤ J` | 0 |
+| `J = 0` (and `K > J`) | 100 |
+| otherwise | `⌊(100·K − 100·J) / (2·K)⌋` (unsigned integer arithmetic) |
+
+The factor 2 halves the raw jobless share. Test vector (Berlin): `K` = 513 952, `J` = 425 561 →
+⌊8 839 100 / 1 027 904⌋ = 8 (saved chart sample 8). Craterville: `K` = 140 724, `J` = 126 521 →
+5 (saved 5). The value feeds the unemployment chart and the advisors.
+
+**Correction to earlier drafts.** The monthly residential-layer computation previously described
+here as the "employment percentage" (`D = 0` → 0 %; `S < D` → 100 %; else `⌊100 × D / S⌋`) reads
+the **amenity valve 3001**, not the jobs valve, and its result is the `capPct` of valve 3000
+(`15-sim-growth.md` §3.2 "Cap rule"). It is not an employment figure; unemployment is the
+world-layer value above.
 
 **Commuting / outside world** [STATIC, detailed in `15-sim-growth.md` §3.4–3.5]:
 * `ExternalJobDemand` models workers from outside who want jobs in the city: it is added to the
@@ -388,5 +425,4 @@ statistics and the three charts (population, EQ, LE). The byte layout is in
 * The exact source of the two pollution totals used for patients (§5.1).
 * How facilities are grouped (one group per kind is inferred) and how the groups are ordered.
 * The CPR-training flag read is inferred from the key and ID pattern.
-* Exact formula of the workforce fraction `w` (§6; a recommended definition is given there).
 * The meaning of the unknown byte at offset 0x1BE of the residential state.

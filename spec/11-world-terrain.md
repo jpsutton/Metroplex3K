@@ -529,9 +529,18 @@ For raise, lower and level the commit repeats the plan computation and writes as
   "some corners under water" for shoreline tiles [INFERRED].
 * **Sea (salt) vs fresh water**: the generator produces a per-vertex sea flag next to the water
   surface (section 3.4 step 10) and hands it to the terrain together with the water surface
-  [STATIC]. Vertices reached from a coastal edge are sea; inland lakes and rivers are fresh. How
-  the terrain stores the flag after generation is `[OPEN]`. It is not part of the persisted record
-  layout below, so it is presumably recomputed (for example from connectivity to the map edge).
+  [STATIC]. Vertices reached from a coastal edge are sea; inland lakes and rivers are fresh.
+  **Storage**: the terrain does not keep the flag itself. When a water surface is written at
+  vertex (x, z) together with a set sea flag, the terrain sets the per-cell **sea-water flag** (bit
+  30 of the pollution state word, `17-sim-services.md` §7.2.1) for each of the up to four tiles
+  that share the vertex: (x−1, z−1), (x−1, z), (x, z−1) and (x, z), clipped to the map. Each tile
+  maps to its 2 × 2 cell [STATIC]. Writing a surface with the sea flag clear never clears the
+  flag. Only a whole-terrain reset clears all flags [STATIC]. The flag is therefore persisted
+  with the pollution record, not with the terrain record. It can be stale after later terrain
+  edits: in the 19 shipped files that have any flags set, 67–96 % of the flagged cells contain
+  water [DATA]. Users of the flag: the water renderer (salt water colour, `25-rendering.md`), the
+  new-city neighbour test (`19-sim-economy.md` §10.6) and the Neighbors-window region image
+  (section 9).
 * Coastline: there is no separate coastline object. Shore tiles are tiles whose corners straddle
   the water surface. They are drawn with the edge and shore palettes (section 7) [INFERRED].
 * Land-value effects of water are configured in `SC3LandValue.ini` `[TuningParameters]`:
@@ -639,6 +648,149 @@ All palettes are 24-bit uncompressed BMP files in `Res/Dirt/Palette/` [DATA]:
   `12-networks.md`. The terrain has no special edge rule beyond clipping all operations to the
   grid [STATIC].
 
+## 9. Neighbour region image (Neighbors window terrain)
+
+The Neighbors window (`09-ui-screens.md` §6.7) shows the city inside a larger diamond of
+surrounding land: the city's own terrain in the middle third, and invented terrain for the four
+neighbours around it. That surrounding terrain is **not stored anywhere** and is **not random per
+session**. It is rebuilt each time the window is built, by the deterministic procedure below. The
+procedure uses a fixed seed, so it depends only on the city's current altitude and water-surface
+grids and on four sea-water flags at the edge midpoints. The same city therefore always shows the
+same neighbours' terrain, and the neighbours' terrain changes only when those inputs change. All
+statements in this section are [STATIC] unless tagged otherwise.
+
+Verification [OBSERVED]: an implementation of this section reproduces the Neighbors-window
+screenshot of `Berlin, Germany.sc3` with 93 % agreement of the palette index per sampled pixel.
+The remainder comes from display scaling and overlay outlines. With any other seed, agreement
+falls to about 45–50 %.
+
+### 9.1 Working image
+
+* The procedure fills a 256 × 256 image I(p, q) of 16-bit cells. Here p is the horizontal pixel
+  coordinate (column) and q is the vertical one (row). Before anything else, every cell is set to
+  the marker value **0xFFFF**, which means "not yet set".
+* Writing a signed height h stores h modulo 65536. A negative value is therefore stored as its
+  16-bit two's complement, and a stored −1 is the same as the marker (see 9.5).
+* Reading a height takes the **low 8 bits as a signed byte** (−128…127). Every height read in
+  9.4–9.6 uses this rule. A test for "unset" compares the full 16-bit cell with 0xFFFF.
+* The image uses a private generator instance (the LCG of section 2). It is seeded with the
+  constant **0x83010C56** at the start of every build.
+
+Coordinate correspondence: column p follows the city's second coordinate z, and row q follows
+the first coordinate x. The image side q = 0 faces the map edge x = 0 (neighbour 0, numbering of
+`10-save-format.md` §6.6). Side q = 255 faces x = W−1 (neighbour 2), side p = 0 faces z = 0
+(neighbour 1) and side p = 255 faces z = H−1 (neighbour 3).
+
+### 9.2 Step 1: the city in the middle
+
+R = W+1 and C = H+1 are the vertex counts. For i = 0…85 (outer loop) and j = 0…85 (inner loop):
+
+1. a = ⌊i·R / 86⌋ and b = ⌊j·C / 86⌋. These are the vertex coordinates: x = a, z = b.
+2. h = altitude(a, b) − waterSurface(a, b), clamped to 0…255. Underwater vertices give 0.
+3. I(j + 85, i + 85) = h.
+
+This fills the block p, q ∈ 85…170. Heights of 128 or more are later read back as negative (9.1),
+so they draw as water. This is a quirk of the original and must be kept.
+
+### 9.3 Step 2: sea flags of the four edges
+
+For each neighbour, take the tile at the middle of its edge and read the **sea-water flag** of
+that tile. The flag is held per 2 × 2-tile pollution cell (`17-sim-services.md` §7.2.1, bit 30), so
+the tile (x, z) uses cell (⌊x/2⌋, ⌊z/2⌋).
+
+| Neighbour | Test tile (x, z) |
+|---|---|
+| 0 | (0, ⌊C/2⌋) |
+| 1 | (⌊R/2⌋, 0) |
+| 2 | (R − 2, ⌊C/2⌋) |
+| 3 | (⌊R/2⌋, C − 2) |
+
+These are the same edge-midpoint tiles that the deal manager tests when a new city creates its
+neighbours (`19-sim-economy.md` §10.6). The window repeats the test live each time it is built. It
+does **not** use the stored neighbour `exists` byte.
+
+### 9.4 Step 3: edges
+
+Seed the generator (9.1). Then process the edges in the order neighbour 0, 2, 1, 3. No edge step
+draws a random number.
+
+| Neighbour | Sea flag set: fill with −20 | Sea flag clear: copy the city's edge outward |
+|---|---|---|
+| 0 | for r = 0…85, cells (p, r) with r ≤ p ≤ 255 − r | for p = 86…171: I(p, 0) = I(p, 86) |
+| 2 | for r = 0…85, cells (p, 255 − r) with r ≤ p ≤ 255 − r | for p = 86…171: I(p, 255) = I(p, 169) |
+| 1 | for r = 0…85, cells (r, q) with r ≤ q ≤ 255 − r | for q = 86…171: I(0, q) = I(86, q) |
+| 3 | for r = 0…85, cells (255 − r, q) with r ≤ q ≤ 255 − r | for q = 86…171: I(255, q) = I(169, q) |
+
+* The −20 fill makes a trapezoid of sea between the image edge and the city block, so a coastal
+  neighbour shows as open water.
+* The copy moves the raw 16-bit cell value. The source cell at index 171 lies outside the city
+  block, so it still holds the marker, and the marker is what gets copied. The copy rows are
+  86 and 169, not 85 and 170. Both off-by-one details are exact.
+
+### 9.5 Step 4: corners and midpoint displacement
+
+1. For each corner in the order (0, 0), (0, 255), (255, 0), (255, 255): if the cell is unset, write
+   centreRand(−2, 10) (section 3.2).
+2. Run **fill(0, 0, 255, 255)**. fill(x0, y0, x1, y1) works on the rectangle with corners
+   (x0, y0) and (x1, y1), where x is p and y is q. It repeats these steps:
+   1. If x0 + 1 ≥ x1 **and** y0 + 1 ≥ y1, stop.
+   2. mx = ⌊(x0 + x1)/2⌋. If x0 + x1 is odd and rand(2) ≠ 0, then mx += 1. Compute my from y0 and
+      y1 the same way (its own rand(2) draw, only when the sum is odd).
+   3. d = ⌊min(x1 − x0, y1 − y0) / 2⌋.
+   4. In this order, write each of the following points only if its cell is unset:
+      * (x0, my) = mix(I(x0, y0), I(x0, y1), d)
+      * (x1, my) = mix(I(x1, y0), I(x1, y1), d)
+      * (mx, y0) = mix(I(x0, y0), I(x1, y0), d)
+      * (mx, y1) = mix(I(x0, y1), I(x1, y1), d)
+      * (mx, my): draw rand(2). If it is non-zero, use mix(I(x0, y0), I(x1, y1), d). Otherwise
+        use mix(I(x0, y1), I(x1, y0), d). This draw is made only when the centre cell is unset.
+   5. Recurse, in this order, into fill(x0, y0, mx, my), fill(mx, y0, x1, my) and
+      fill(x0, my, mx, y1). Then continue the loop with (x0, y0) = (mx, my), which handles the
+      fourth quadrant (mx, my, x1, y1).
+3. **mix(a, b, d)** takes a and b as signed bytes:
+   * m = (a + b)/2, truncated toward zero
+   * lo = max(m − d, −127) and hi = min(m + d, 127)
+   * if lo < hi − 2: v = centreRand(lo, hi). If v < 0, the result is (2v)/3 truncated toward zero.
+     Otherwise the result is v.
+   * otherwise the result is (lo + hi)/2, truncated toward zero.
+
+   The result is stored as a signed byte value.
+
+The rule for negative values (2v/3) makes the generated sea shallower than the generated land is
+high. A result of −1 is stored as 0xFFFF, so that cell counts as unset again. A later step may
+overwrite it, and a cell that is never revisited keeps the marker. Exactly the call order above
+(including the conditional rand(2) draws) is required to reproduce the original image.
+
+### 9.6 Step 5: colouring
+
+Each cell's signed height h (the low byte read of 9.1, so a cell still holding the marker reads
+as −1) is turned into a colour index k:
+
+| h | k |
+|---|---|
+| h < 1 | 0 (water) |
+| 1 ≤ h < 10 | ⌊h/2⌋ + 1 (1…5) |
+| h ≥ 10 | ⌊10h/256⌋ + 5 (5…9), capped at 11 |
+
+The colour is the pixel at column k, row 3 of the ramp image `62B9DA24:000005E5:00000021`
+(32 × 32, in `Res/UI/Shared/000005E5_Maps.ixf`; decoding in `04-graphics-formats.md` §6) [DATA].
+The coloured 256 × 256 image is what the window displays.
+
+### 9.7 Display
+
+* The window shows the image rotated so that it forms a diamond. At view rotation 0, the image is
+  turned 45° clockwise [OBSERVED]. Its top side (q = 0, neighbour 0) then faces upper right, its
+  left side (p = 0, neighbour 1) faces upper left, its right side (neighbour 3) faces lower right
+  and its bottom side (neighbour 2) faces lower left. The city block is the small diamond in the
+  centre.
+* The image widget receives an angle that depends on the view rotation: 315°, 45°, 135° and 225°
+  for rotations 0, 1, 2 and 3 [STATIC]. Each rotation step therefore turns the diamond by a
+  further 90°, consistent with 315° meaning 45° clockwise [INFERRED].
+* The widget occupies the window rectangle (31, 40)–(333, 342), which is 302 × 302 pixels. The
+  rotated image is scaled so that the diamond's diagonals fill it [STATIC rectangle; OBSERVED
+  fit]. The resampling filter is [OPEN]. Nearest-neighbour is visually indistinguishable.
+* The neighbour outlines, names and populations are drawn on top (`09-ui-screens.md` §6.7).
+
 ## Persisted state
 
 The terrain is a record inside the main compressed city stream (see `10-save-format.md` for the
@@ -694,8 +846,13 @@ Notes:
   press-vs-drag handler split and sound looping; the tree-planting tool's rules.
 * The run-time per-tile "changed" bitset used for the plan preview highlight versus the persisted
   tileBits (they are different bitsets).
-* Where the sea flag is kept after generation, and the exact rule for when a tile counts as
-  water.
+* The exact rule for when a tile counts as water. (The sea flag storage is resolved in §5.)
+* Neighbors-window region image (§9.7): the resampling filter used when the rotated image is
+  scaled into the 302 × 302 widget, and the turning direction for view rotations 1–3.
+* A whole-terrain operation exists that clears every sea flag and then re-marks sea cells by
+  walking inward from edges where more than 60 % of the edge is under water (similar to §3.4 step
+  10). Which command triggers it (probably the `Salt on` cheat of §4.8) and its exact walk rules
+  have not been documented.
 * Row and column indexing of the 32 × 512 land and underwater palettes and of the 512-entry edge
   palettes; how the data-map palettes (64 × 32) are indexed.
 * World-space meaning of the persisted height scale (3.266).

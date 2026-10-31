@@ -71,10 +71,21 @@ ID. [STATIC]
 | 8001 | Industrial connections/freight. Supplied by neighbour connections, airports, seaports and a constant (`SC3IndLayer.ini InitialConnectionSupply`); demanded by industrial buildings. |
 
 [INFERRED, high confidence] The 3001/5001/8001 roles follow from which agents supply them and the
-INI key names. [OPEN] How their values feed back into R/C/I growth: no rule in this document
-reads them. Question for testing against the original: does a shortage on 3001/5001/8001 raise
-the `capPct` of valve 3000/5000/8000 (§3.2)? Until answered, implement 3001/5001/8001 as
-bookkeeping valves with no effect on development.
+INI key names.
+
+**Feedback of the amenity valves into growth** [STATIC]. The amenity valves act on R/C/I growth
+only through `capPct` (§3.2): once a month each of the residential, commercial and industrial
+layers sets `capPct` of its family valve (3000, 5000, 8000) from the last completed cycle of its
+amenity valve (3001, 5001, 8001), by the rule in §3.2 "Cap rule". In addition:
+
+* valve 5001 is the demand valve of the **airport** developer and valve 8001 that of the
+  **seaport** developer (their `V` and `V − P` in §5.5 are read from these valves) [STATIC];
+* a third, unnamed valve with ID `0xA2C9E821` is the **landfill store** (§7 and
+  `16-sim-utilities.md` §4.4). It is saved inside the pollution record, not with the valve
+  records [STATIC].
+
+Other valves (in data): there are no further valves; `[AgentValveEffects]` items for any other
+valve ID are ignored [INFERRED].
 
 ### 3.2 Valve state and monthly update
 
@@ -111,10 +122,34 @@ are set when the city is created or loaded:
 | 3000 | 2000 | −2000 | [INFERRED, high: every shipped save fits these limits, e.g. a residential valve with `D − S` = 22 310 and `capPct` 20 holds `V` = 1600 = 2000 − 400; the setting code was not located] |
 | 3001 | 2 147 483 647 | −2 147 483 648 | [INFERRED, high: `V = D − S` exactly in all shipped saves] |
 
-`capPct` is non-zero only on the R/C/I valves (shipped saves: 11–56). [OPEN] Which rule sets
-`capPct`. The value is saved, so a loaded city keeps it, but a new city starts at 0. Question for
-testing: how does `capPct` of valve 3000/5000/8000 change month by month, and does it follow the
-shortage on 3001/5001/8001? Recommended until answered: keep the saved value unchanged.
+`capPct` is non-zero only on the R/C/I valves (shipped saves: 6–100). It is set by the
+**cap rule** below and saved, so a loaded city keeps it until the next month-end.
+
+**Cap rule** [STATIC; DATA 13/13 played cities, every value exact]. Once a month, during the
+month-end work of the residential (for 3000), commercial (for 5000) and industrial (for 8000)
+layers, i.e. **after** that month's valve update, with `S` = `Slast` and `D` = `Dlast` of the
+amenity valve (3001, 5001, 8001):
+
+| Condition | `capPct` of the family valve |
+|---|---|
+| `D = 0` | 0 |
+| `S < D` | 100 |
+| otherwise | `⌊100 × D / S⌋` (integer division; the result is ≤ 100) |
+
+So `capPct` is the amenity **usage** in percent: the more of the amenity supply is used, the
+lower the ceiling of the family's demand in §3.2 step 4 (`Max − capPct × Max / 100`). The new value
+first takes effect at the **next** monthly valve update.
+Test vector (Madison, WI): 3001 `S` = 739 500, `D` = 150 984 → 20; 5001 `S` = 282 000, `D` = 33 668
+→ 11; 8001 `S` = 503 200, `D` = 120 493 → 23 (saved values 20, 11, 23). Craterville 5001
+`S` = 25 000, `D` = 71 566 → 100.
+
+**Industrial ordinance demand cut** [STATIC; DATA]. Directly after setting the industrial cap,
+if valve 8000's `Dlast > 0`: while the Power Conservation ordinance (`0x82B9999B`) is enacted,
+8000 `Dacc += ⌊PowerConservationOrdEffect × Dlast / −100⌋`, and while the Water Conservation
+ordinance (`0x02BF1DFA`) is enacted, 8000 `Dacc += ⌊WaterConservationOrdEffect × Dlast / −100⌋`
+(both keys in `SC3IndLayer.ini [TuningParameters]`, shipped 3; division truncates toward 0). The
+amount is applied in the next cycle. Test vector: Berlin 8000 `Dlast` = 113 594, one of the two
+ordinances enacted → `Dacc` = −3 407 (saved −3 407).
 
 Update (once per month, see **Schedule** above):
 
@@ -133,14 +168,37 @@ Update (once per month, see **Schedule** above):
    (so −1000 ≤ N ≤ 1000, negative = oversupply). The UI demand indicator and the advisors read
    `N` per valve ID after every update. [STATIC]
 
+**Smoothing** [STATIC; DATA]. The `smooth` flag is set when **any** valve is created and nothing
+clears it; it is not saved. Every valve therefore uses step 5's gradual rule. `step` is computed in
+64-bit arithmetic: 280 for the ±2000 valves (3000, 5000, 7000, 8000), 300 647 710 for the
+unbounded valves (3001, 5001, 8001, `0xA2C9E821`), which in practice makes those follow `target`
+exactly. Because `V` is saved, a loaded city continues from the saved `V`. Note the zero-snap in
+step 5: a positive `V` facing a negative `target` drops to 0 first (unless `V ≤ step`), then
+moves 280 per month.
+Test vectors (Max 2000, Min −2000, step 280): `V` = 1540, `target` = −2000 → 0 → −280 → −560 …
+(−2000 after 8 months); `V` = −1000, `target` = 1600 → 0 → 280 → … ; `V` = 1500, `target` = 1700 →
+1700 (|δ| < 280); `V` = 200, `target` = −2000 → −80 (`V ≤ step`, so no snap).
+
 ### 3.3 Contributions from buildings and connections
 
 * **Buildings.** Every occupant whose agent type has an `[AgentValveEffects]` entry contributes,
   each cycle, while it is in the normal (occupied, functioning) state: for each
   `valve:supply:demand` item, `Sacc += tiles × supply` and `Dacc += tiles × demand` of that valve,
   where `tiles` = lot X × lot Y (attribute 0x66 of `13-buildings-occupants.md`). The values in the
-  INI are therefore **per tile**. Buildings in the abandoned, construction or damaged states
-  contribute nothing. [STATIC]
+  INI are therefore **per tile**. [STATIC]
+  * *Which entry*: the entry of the building's exact agent type; if there is none, the entry of
+    its **nearest** ancestor in `CitySim.ini [AgentTypeHierarchy]`. Exactly one entry applies;
+    entries of further ancestors are not added. [STATIC; DATA: recomputing 3000 supply, 5000
+    supply, 8000 supply and 7000 demand from the saved occupants this way reproduces the saved
+    `Slast`/`Dlast` within 1 % in 13/13 played cities, exactly for Craterville 5000 and 8000]
+  * *Which states count*: the lot state word with the developer flag `0x200` removed must be 1
+    (occupied). So states 1 and 513 contribute; 2/514 (abandoned), 4/516 (under construction),
+    8 (rubble) and 16 (burnt) contribute nothing. Occupants without a lot state (network pieces,
+    props) contribute if they have an entry. [STATIC; DATA: Madison 5000 `Slast` 23 932 =
+    23 390 (state 1) + 488 (state 513) + 54 (later changes)]
+  * Contributions are added in the monthly valve-layer work, before the valve update; they are
+    not accumulated during the month [INFERRED, high: saved `Sacc` of 5000/8000 is 0 in every
+    played city, and `Dacc` holds only the items added after the update, see §3.4].
 * Entry syntax: `agentType=valve:supply:demand+valve:supply:demand+…`, whitespace-separated
   trailing text is a comment. Supply and demand are 16-bit signed. [STATIC]
 * **Per-tile valve maps.** For items on valves 3000, 5000 and 8000, the building's `supply` is
@@ -155,6 +213,27 @@ Update (once per month, see **Schedule** above):
   the ordinance is enacted, each cycle the listed valve's `Dacc` is increased by
   `trunc(Dlast × f/1000)` (sign taken so that a negative `f` reduces demand when `Dlast` is
   positive). [STATIC]
+* **Amenity demand of commerce and industry** [OPEN, narrowed]. For valve 3001 the rule above is
+  complete: the saved `Dlast` equals the building sum within 1 % in 13/13 played cities. For 5001
+  and 8001 the saved `Dlast` is **larger** than the building sum (the 5001/8001 items of commercial
+  and industrial buildings) in every played city, by a factor of 1.33–2.09 (5001) and 1.47–2.01
+  (8001):
+
+  | City | 5001 `Dlast` saved | building sum | 8001 `Dlast` saved | building sum |
+  |---|---|---|---|---|
+  | Madison, WI | 33 668 | 22 148 | 120 493 | 60 527 |
+  | Craterville | 71 566 | 38 806 | 171 484 | 87 268 |
+  | Berlin | 614 402 | 322 895 | 180 069 | 113 068 |
+  | Mount Herrang | 3 104 | 2 378 | 25 301 | 12 755 |
+
+  The excess is not explained by `[ConnectionValveEffects]` (supply only), `[OrdinanceEffects]`
+  (valves 5000/8000 only), abandoned or under-construction lots, or by applying ancestor entries
+  as well (that would also inflate 5000/8000 supply, which matches the saves). No other rule that
+  adds demand to 5001/8001 was found. Recommended until settled: keep the building rule and, when
+  loading a city, carry the saved `Dlast` ratio (saved ÷ building sum) as a per-valve multiplier
+  on the building demand of 5001 and 8001 until the next save; this keeps the cap rule's input at
+  the original's level. Settling observation: in a new city with only zoned commercial
+  buildings, record 5001 `Dlast` and the building sum across three consecutive month-end saves.
 
 ### 3.4 The jobs valve (7000) and the R/C/I coupling
 
@@ -171,11 +250,11 @@ The jobs valve is created by the world layer with `Max = 2000`, `Min = −2000`.
   valve 5000 `Dacc += c`, valve 8000 `Dacc += i`, and the running sums are updated.
 * Workforce supply comes from residents: whenever residential supply `n` (n ≠ 0) is added to
   valve 3000, the jobs valve receives workforce supply `round(n × w)` (round half to even), where
-  `w` is a floating-point workforce fraction provided by the residential population layer
-  [STATIC]. [OPEN] The formula of `w`; neither this document nor `20-sim-population.md` defines
-  it. Question for testing: is `w` the employable share of the cohorts (for example the share of
-  the population of working age in `20-sim-population.md`)? Recommended until answered: `w` =
-  population of working age / total population, 0 when the population is 0.
+  `w` is the **working-age share** of the population [STATIC]:
+  `w = p[20] + p[21] + … + p[65]`, the sum of the cohort shares of ages 20 to 65 inclusive
+  (`20-sim-population.md` §3, §6). There is no unemployment, wealth or EQ weighting. `w` is read
+  from the cohort shares current at the time of the valve update (day 1, before the population
+  month-end work). Full definition and test vectors in `20-sim-population.md` §6.
 * At the start of every jobs-valve cycle the running sums are reset and workforce supply
   `ExternalJobDemand` (`SC3WorldLayer.ini`) is added. [STATIC]
 
@@ -356,8 +435,10 @@ choose a category by rule E; if it equals the current one (or the lot carries th
    chance `rand(100) < NoServicePercentage / tiles` (integer division) abandon
    [4 if unpowered, 5 if only water is missing on a dense lot, 6 otherwise].
 3. Else if `V < 0` and `rand(−Min) < −((V − P) / tiles)`: abandon [3].
-4. Else, if the category's `maxLV / 2 ≤ LV` (land value still adequate), with "flagged" meaning
-   the lot is flagged `0x200` (above): [STATIC]
+4. Else, if the category's `⌊minLV / 2⌋ ≤ LV` (land value still adequate), with "flagged"
+   meaning the lot is flagged `0x200` (above): [STATIC for all three developers; DATA: 97–99.9 %
+   of occupied R/C/I lots in the shipped cities satisfy this test, against 41–62 % for the
+   `maxLV / 2` test of earlier drafts]
    a. If not flagged, `V > 0`, the lot has a category and a higher-land-value category fits
       (rule H): redevelop with it when `rand(100) < HigherLandValueRedevelopmentPct`, otherwise
       do nothing this visit (b and c are **not** tried).
@@ -370,16 +451,23 @@ choose a category by rule E; if it equals the current one (or the lot carries th
         category and `rand(10000) < AnarchyFactor`: redevelop with the same category (a fresh
         random building).
    c. Unwatered lots are never redeveloped for density or by anarchy.
-5. Else (land value fell below half of the category's `maxLV`): look for a lower-land-value
-   category (rule L); if found and `rand(100) < LowerLandValueRedevelopmentPct` redevelop, else
-   abandon [2].
+5. Else (`LV < ⌊minLV / 2⌋`, land value fell below half of the category's **minimum**): look
+   for a lower-land-value category (rule L); if found and `rand(100) <
+   LowerLandValueRedevelopmentPct` redevelop, else abandon [2].
+   Test vector: residential category 3300 (`minLV` 76, `maxLV` 150): `LV` = 38 → step 4 (kept);
+   `LV` = 37 → abandoned [2]. Industrial 8300 (`minLV` 1): never abandoned for land value.
 
 `rand(n)` is the simulation RNG returning an integer in `[0, n)` (`14-sim-clock.md`).
 
 Defect (all three R/C/I developers): the lower-land-value search (rule L) never returns a
-category, so a lot whose land value drops below half its category's `maxLV` is always abandoned
+category, so a lot whose land value drops below half its category's `minLV` is always abandoned
 in step 5 (farm fields: removed, §4.5). `LowerLandValueRedevelopmentPct` therefore has no effect.
 [STATIC for each of residential, commercial and industrial]
+
+Note on the category record layout [STATIC]: the residential developer stores each category as
+(density, maxLV, minLV) and the commercial and industrial developers as (density, minLV, maxLV);
+all three compare the **minimum**. An implementation reading `[ZoneDeveloperDescriptions]`
+(`agentType,density,maxLV,minLV`) must use the fourth number (the smaller one) in steps 4–5.
 
 ### 4.3.1 Commercial developer differences [STATIC]
 
@@ -451,10 +539,11 @@ integer arithmetic, results stored as bytes (percent). All six keys are in
    set [STATIC that a city-wide flag held by the zone manager forces the clean set; OPEN: what sets
    the flag. Question for testing: is it tied to a scenario or to an ordinance? Recommended until
    answered: flag never set]. Otherwise:
-   * `e = max(EQ, 85)` where EQ is the city-wide education quotient reported by the residential
-     population layer (`20-sim-population.md` §4; EQ values are capped at 150, so `e` lies in
-     85–150 and the next line maps it to 0–100 %) [STATIC that the value comes from that layer;
-     INFERRED that it is the city average EQ];
+   * `e = max(EQ, 85)` where EQ is the **working-age EQ** reported by the residential population
+     layer: `Q(20, 65)` of `20-sim-population.md` §4.5, the unweighted mean EQ of the ages 20–65
+     that have a positive share, rounded to a byte [STATIC: the developer reads the layer value
+     defined as Q(20, 65); it is **not** the city EQ Q(0, 89) of the charts] (EQ values are
+     capped at 150, so `e` lies in 85–150 and the next line maps it to 0–100 %);
      `clean = clamp((e − 85) × 100 / 65, minClean, maxClean)`; `dirty = 100 − clean`.
    * Ordinance adjustments while enacted (all values from `[IndustrialZoneDeveloper]`):
 
@@ -580,7 +669,37 @@ continuing through the corners in turn, take the first corner whose `2e`-long st
 adjoining edges are entirely fronted by transport; in the `2e × 2e` square at that corner place
 the building in the three `e × e` quadrants that touch those two edges, and fill each tile of the
 fourth (inner) quadrant with a random member of the category's filler list. If no corner qualifies
-nothing is built. Layouts B and C: [OPEN] (other arrangements of the same building).
+nothing is built.
+
+Layouts B and C [STATIC]. Both use the same building (edge `e`) and the category's 1 × 1 filler
+list. A side of the lot is tried starting from a random side (`rand(4)`) and continuing through
+the sides in turn; the first side that has the required room and whose frontage strip is
+**entirely** fronted by transport is used. Coordinates below are for side 0 (the low-z edge, the
+strip running along x from the low-x corner); the other sides are the same pattern rotated so
+that "row 0" is the row against that side.
+
+*Layout B* (staggered triple). Room: `3e` along the side and `e + 1` deep. Frontage strip: the
+`3e` tiles of row 0. Placement (tile offsets from the lot corner, along × depth):
+
+| Item | Tiles | Building orientation |
+|---|---|---|
+| filler | row 0, along 0 … e−1 | – |
+| building | anchored at (0, 1) | 0 |
+| building | anchored at (e, 0) | 1 |
+| filler | row e, along e … 2e−1 | – |
+| filler | row 0, along 2e … 3e−1 | – |
+| building | anchored at (2e, 1) | 0 |
+
+So the middle building sits on the road and the outer two are set back one tile behind a row of
+filler. Example, `e` = 2, side 0, lot corner (10, 20): fillers at (10,20) (11,20) (14,20) (15,20)
+(12,22) (13,22); buildings anchored at (10,21) (12,20) (14,21).
+
+*Layout C* (pair with a path). Room: `2e + 1` along the side and `e` deep. Frontage strip: the
+first `2e` tiles of row 0. Placement: building anchored at (0, 0); a column of `e` filler tiles at
+along = `e`, depth 0 … e−1; building anchored at (e + 1, 0). Example, `e` = 3, corner (0, 0):
+buildings at (0,0) and (4,0); fillers (3,0) (3,1) (3,2).
+
+If no side qualifies, the layout builds nothing (the next rule is tried, §5.3).
 
 **Farm `0xA2C1EDA3`** [STATIC]. Parameters: `a` is raised to at least 4, `b` to at least `a`, both
 capped at 22; `c` and `d` capped at 32767.
@@ -598,7 +717,8 @@ Procedure:
 3. The farmstead is placed in a strip against a frontage edge: 3–8 tiles along the edge and 3–4
    deep (sizes and the position along the edge are random within the lot), using a building from
    the category's large list; the remaining lot tiles are covered with field pieces (the
-   `0x100`+`0x400` filler members, §4.3.2) [INFERRED from structure; exact field tiling OPEN].
+   `0x100`+`0x400` filler members, §4.3.2) [INFERRED from structure; exact field tiling OPEN,
+   interim: fill the remaining tiles row by row with uniformly random field pieces, one per tile].
 
 **Airport runway `0x81FFC3CE`** (zone 14) [STATIC]. Used only when `V − P > 0` and the rule has
 families. The lot must be at least 3 × 3 with at least one edge ≥ 5. Each of the four sides of the
@@ -610,7 +730,27 @@ zoned airport (14). Runways therefore extend existing runways and prefer airport
 surroundings. The side with the highest score is chosen,
 scanning sides in order 0–3 and switching on a tie when `rand(100) > 49`. If the best score is
 negative and the lot is exactly 5 × 3 nothing is built; otherwise a runway is laid oriented to
-that side [piece sequence OPEN].
+that side.
+
+*Runway piece sequence* [STATIC for the sequence; INFERRED for the slot names]. The rule's
+families are grouped into **runway sets**; one set is chosen uniformly at random. A set holds up
+to 11 piece slots, each either a straight piece (placed with rotation 0) or, when that slot is
+empty, its alternative piece placed rotated 270° (for the long-axis slots) or 90° (for the
+middle runway slot). The runway is a strip `L` tiles long along the chosen side,
+`L = min(10, lot length along that side)`. Across the strip, with `D` = the lot depth, up to three
+parallel lines of pieces are laid in consecutive rows starting against the chosen side: line A
+always, line B only when `D ≥ 3`, line C when `D ≥ 2` (so a 2-deep lot gets lines A and C, a
+deeper lot A, B and C; tiles deeper than the third row are left for the airport-building rule):
+
+| Position along the strip | Line A (runway) | Line B (taxiway) | Line C (apron edge) |
+|---|---|---|---|
+| 0 (first tile) | start cap | taxiway start | apron piece |
+| 1 … L−2 | runway middle (straight, or alternative rotated 90°) | taxiway middle | apron piece |
+| L−1 (last tile) | end cap | taxiway start piece again | apron piece |
+
+At each position the lines are placed in the order A, B, C; positions run away from the lot corner
+on the scoring side. Test: a 7 × 3 lot facing existing runway on its low-z side gives a 7-tile
+runway with lines A, B and C: 21 pieces.
 
 **Airport buildings `0x2207D9EE`** (zone 14) [STATIC]. Used only when `V − P > 0`. The lot is
 cut to at most 10 × 10 (keeping its low-x/low-y corner). Attempts, in order, until one succeeds:
@@ -622,10 +762,69 @@ arrangement step, else another [OPEN]; (3) otherwise a random building of a rand
 the rule is placed at a uniformly random tile of the (cut) lot, if that tile passes the
 placement check.
 
-**Estates `0xE22F4A83` and row houses `0x61F44687`**: [OPEN] placement geometry. Row houses
-(and possibly estates) place buildings in runs along a line; the per-tile spacing grid saved as
-record `01FD7A8C` (`10-save-format.md` §6.3) is the zone developer's record of such runs
-[INFERRED; which of the two rules writes it is not confirmed].
+**Row houses `0x61F44687`** [STATIC]. Used only when `⌊(V − P) × 50 / Max⌋ ≥ 1`.
+*Member lists.* When a family is bound, each member is filed by the bits of its building flag
+word (attribute 0xCA) and its edge size (a member may go to several lists):
+
+| List | Flag bit | Edge | Role |
+|---|---|---|---|
+| C1 | `0x1` | 2 | corner at (x0, z0) |
+| C2 | `0x2` | 2 | corner at (x1−1, z1−1) |
+| C3 | `0x4` | 2 | corner at (x0, z1−1) |
+| C4 | `0x8` | 2 | corner at (x1−1, z0) |
+| E1 | `0x20` | 2 | run along the x0 edge |
+| E2 | `0x80` | 2 | run along the z1 edge |
+| E3 | `0x10` | 2 | run along the z0 edge |
+| E4 | `0x40` | 2 | run along the x1 edge |
+| F | `0x100` | 1 | interior filler |
+
+*Lot.* Width `W` and depth `H` of the found lot must each be **even and ≥ 6**; otherwise the rule
+fails. A side longer than 8 is cut to 8 (keeping the low corner), so blocks are 6 × 6, 6 × 8,
+8 × 6 or 8 × 8.
+*Placement* (all buildings 2 × 2, oriented by their list; "fronted" = the tile has transport
+access at distance 0, i.e. touches a road):
+1. Corner C1 is placed at (x0, z0) if tiles (x0+1, z0) and (x0, z0+1) are fronted; C2 at
+   (x1−1, z1−1) if (x1, z1−1) and (x1−1, z1) are fronted; C3 at (x0, z1−1) if (x0+1, z1) and
+   (x0, z1−1) are fronted; C4 at (x1−1, z0) if (x1, z0+1) and (x1−1, z0) are fronted.
+2. If no corner was placed the rule fails.
+3. Edge runs, each a 2 × 2 building every 2 tiles strictly between the two corners of that edge:
+   if C1 and C3: E1 at (x0, z) for z = z0+2, z0+4, … < z1−1; if C1 and C4: E3 at (x, z0) for
+   x = x0+2, … < x1−1; if C2 and C3: E2 at (x, z1−1) for x = x0+2, … < x1−1; if C2 and C4: E4 at
+   (x1−1, z) for z = z0+2, … < z1−1.
+4. Only if all four corners were placed: every tile (x, z) with x0+2 ≤ x < x1−1 and
+   z0+2 ≤ z < z1−1 gets a random member of F (a courtyard).
+ASCII example, an 8 × 6 block with roads on all four sides (C = corner, E = edge run, f =
+filler; x across, z down):
+
+    C C E E E E C C
+    C C E E E E C C
+    E E f f f f E E
+    E E f f f f E E
+    C C E E E E C C
+    C C E E E E C C
+
+The spacing grid record `01FD7A8C` (`10-save-format.md` §6.3) is not written by this rule.
+
+**Estates `0xE22F4A83`** [STATIC]. Used only when `⌊(V − P) × 10 / Max⌋ ≥ 1`. The lot must be at
+least 4 × 4 and is cut to at most 6 × 6 (keeping the low corner). Member lists are filed by flag
+word bits as for row houses: a mansion list (non-filler, edge ≥ 2), four corner lists, four
+wall lists, four gate lists, a lawn list and a garden-feature list (all 1 × 1; each list has a
+fixed orientation) [INFERRED for the exact bit assignment].
+1. Pick a random mansion (edge `e`) and place it at
+   (x0 + 1 + rand(W − e − 1), z0 + 1 + rand(H − e − 1)), i.e. anywhere inside the one-tile ring.
+2. Corners (x0, z0), (x1, z1), (x0, z1), (x1, z0): each gets a corner piece only if that corner
+   tile passes the rule's frontage test.
+3. Walls: along x = x0 for z0 < z < z1, along z = z0 for x0 < x < x1, along z = z1 for
+   x0 < x < x1, along x = x1 for z0 < z < z1 (in that order, increasing coordinate). Each wall
+   tile is a wall piece, except that the first time `rand(100) < 20` on a side the tile gets that
+   side's **gate** piece instead (at most one gate per side; a side may get none).
+4. Every remaining interior tile (x0 < x < x1, z0 < z < z1) not covered by the mansion gets a
+   garden feature with `rand(100) < 5`, else a lawn piece.
+Test: 6 × 6 lot, mansion edge 3 → mansion anchor x ∈ {x0+1, x0+2}, z likewise; 20 ring tiles
+(4 corners, 16 wall or gate tiles); 16 − 9 = 7 interior tiles of lawn or feature.
+
+The per-tile spacing grid saved as record `01FD7A8C` is not touched by the row-house or estate
+rules; among the developers only the seaport pier rule (below) updates it [STATIC].
 
 **Airport and seaport pieces ("puzzle zones")**. The airport (zone 14, agent type 12310) and
 seaport (zone 15, agent type 12330) are built from part occupants whose attribute records are
@@ -644,7 +843,11 @@ tile, x-major then y: if it is free and has transport access, choose a random no
 of the category when `rand(100) < d`, else a random filler member; if its footprint (edge `e`)
 fits inside the cut lot from this tile, try to place it and mark its `e × e` tiles used.
 
-**Seaport pier `0xC2D3FD7E`** (zone 15): [OPEN] (lays pier pieces into adjacent water).
+**Seaport pier `0xC2D3FD7E`** (zone 15): [OPEN, narrowed] lays pier pieces from the lot into
+adjacent water; while doing so it increments the spacing grid `01FD7A8C` (5 × 5-block counters,
+`10-save-format.md` §6.3) for each run of decoration it places at intervals of at least 5 tiles.
+The piece order is not decoded. Interim: lay one straight pier, one tile wide, from the lot edge
+that touches water, perpendicular to the shore, up to 6 tiles or until the water ends.
 
 ## 6. Land value
 
@@ -691,14 +894,29 @@ the map edge the phase advances; after phase 15 it wraps to 0 and the **cycle-st
 recomputation** runs. [STATIC]
 
 **Cycle-start recomputation** (once per complete 16-phase pass):
-1. Centre values `C_R, C_C, C_I` from the three curves at the current city population.
+1. Centre values `C_R, C_C, C_I` from the three curves (§6.2) at population `P` = `Slast` of
+   the residents valve 3000 (§3.2), i.e. the residential supply of the last completed valve
+   cycle [STATIC]. This is the same number as the city population of the population chart
+   (`20-sim-population.md` §2; DATA: the newest population-chart sample equals 3000 `Slast` in
+   13/13 played cities). **There is no factor 2**: the curves are read at `P`, not `2P`, and
+   there is no per-lot, density-class or unit conversion between `P` and the curve keys
+   (`x × 1000`). A fit that needs `2P` is compensating for another term; the most likely ones are
+   listed under "Calibration notes" below.
+   Test vector (shipped `ResCityCenterEffect=45+80 … 100:61 150:67 …`): `P` = 148 844 →
+   `C_R` = 61 + (148 844 − 100 000) × |67 − 61| / 50 000 = 61 + 5 = 66 (integer division).
 2. Agent-modifier maps (§6.4) rebuilt.
 3. `prevSum := sum`; city average LV `avgLV := max(sum, 0) / count` as a byte (0 when `count`
    = 0) is stored for other subsystems; `sum` and `count` are reset to 0. [STATIC]
-4. The hill reference height `Href` (one byte) is refreshed from the terrain at every cycle start
-   [STATIC]. [OPEN] Which terrain statistic `Href` is; `11-world-terrain.md` defines no such value.
-   Question for testing: is it the sea (water) level or the mean land height above it?
-   Recommended until answered: the mean height above the water level of all land tiles.
+4. The hill reference height `Href` (one byte) is refreshed from the terrain at every cycle
+   start [STATIC]: over **all** (W+1) × (H+1) terrain vertices whose altitude is **above** the
+   vertex's water-surface altitude (dry vertices, `11-world-terrain.md` Persisted state), sum
+   (altitude − sea level) and divide by the number of such vertices (integer division, low 8 bits
+   kept); `Href` = 0 when no vertex is dry. It is therefore the mean height of dry land above the
+   sea level, in altitude units. Shipped values (DATA): Madison, Moscow and Sacramento 1, Berlin and
+   Roadless Paradise 2, Madrid and Liverpool 3, London, Seoul and Europolis 4, Frankfurt 5,
+   Farmsville 6, Mount Herrang 7, Craterville 75.
+   Test vector: a 2 × 2-tile map (9 vertices), sea level 30, altitudes 30 30 30 / 31 32 33 /
+   30 40 30 with every water surface at 30: dry vertices are 31, 32, 33, 40 → (1+2+3+10)/4 = 4.
 
 **Per block** at tile origin (x, y), with `Rw` from 6.1:
 
@@ -706,9 +924,15 @@ recomputation** runs. [STATIC]
    block containing water, computed by `Rw` passes of 3×3 dilation (so only distances 0…`Rw`
    are distinguished). If `dist ≤ Rw`: `Wb = (Rw − dist + 1) × WaterEffect / (Rw + 1)`
    (integer), else 0. [STATIC]
-2. *Hill bonus* `Hb`: `h` = terrain height at the block minus the terrain's base (water) level.
-   If `h > Href`: `Hb = HillEffect × min(h, 8·Href) / (8·Href)` (with `8·Href` replaced by 1 when
-   `Href = 0`; integer division), else 0. Note the original uses `h`, not `h − Href`.
+2. *Hill bonus* `Hb`: `h` = (altitude of terrain vertex (x, y), the block's origin vertex) −
+   (sea level), computed **modulo 256** (an 8-bit difference). If `h > Href`:
+   `Hb = HillEffect × min(h, 8·Href) / (8·Href)` (with `8·Href` replaced by 1 when `Href = 0`;
+   integer division), else 0. Note the original uses `h`, not `h − Href`. [STATIC]
+   Defect to reproduce: a vertex **below** the sea level gives `h` = 256 − depth (≥ 226 in
+   practice), so underwater and shore blocks get the full `HillEffect` (shipped 30) on top of
+   the water bonus.
+   Test vectors (`HillEffect` 30, `Href` 1, so `8·Href` = 8): `h` = 1 → 0; `h` = 2 → 7;
+   `h` = 4 → 15; `h` ≥ 8 → 30; altitude 29 with sea level 30 → `h` = 255 → 30.
 3. `W = (Wb + Hb) / 100` (float).
 4. *Block class for unzoned tiles*: commercial if any of the 4 tiles is commercial-class, else
    residential if any is residential-class, else industrial if any is industrial-class, else none.
@@ -717,18 +941,26 @@ recomputation** runs. [STATIC]
    [STATIC for the read at the origin tile; INFERRED for the tile-to-cell division].
 6. For each of the 4 tiles:
    a. Class = zone class of the tile (§1), or the block class if unzoned.
-   b. Distance to the city centre `(cx, cy)`, in tiles, fetched once per update call
-      [STATIC]. [OPEN] How the centre is defined. Question for testing: does the land-value
-      peak move when the player scrolls the view, or stay fixed? (The value comes from a
-      city-level object that may be the view centre.) Recommended until answered: the map centre
-      `(mapW/2, mapH/2)`. `[DATA]` Offline test on 13 shipped cities: fitting the centre that best
-      explains the saved land-value layer as a function of `dc` gave a centre within 8 tiles of the
-      map centre, and a fit as good as the map centre, in four cities (Craterville, Europolis,
-      Frankfurt, London). In the other nine the water, hill and agent terms dominate and the fit is
-      scattered (R² 0.15–0.46), and the fitted centre does not follow the centroid of the buildings
-      either. The result does not contradict the map-centre default and does not prove it. The
-      decisive test, scrolling the view and watching whether the peak moves after a simulation
-      run, was not done:
+   b. Distance to the city centre `(cx, cy)`, in tiles, fetched once per update call [STATIC].
+      The centre is **not** the view and not the map centre: it is the **area-weighted centroid
+      of the city's buildings**, kept up to date by the occupant manager as buildings are added
+      and removed [STATIC]:
+      * Start (new or loaded city): `sumX = sumZ = n = 0`, centre = (⌊mapW/2⌋, ⌊mapH/2⌋).
+      * Each time a lot-bearing occupant is added (every building with a lot state, in any
+        state; network pieces, props and flora are not counted), with footprint
+        [x0..x1] × [z0..z1], `dx = x1 − x0`, `dz = z1 − z0`, `a = (dx+1)(dz+1)`:
+        `sumX += (⌊dx/2⌋ + x0) × a`, and if `dx` is even also `sumX += ⌊dx × (dz+1) / 2⌋`;
+        `sumZ` likewise with the axes swapped; `n += a`. Then `cx = ⌊sumX / n⌋`, `cz = ⌊sumZ / n⌋`.
+        (The extra term is an original rounding quirk: a 3 × 3 lot at x0 = 10 adds 9·11 + 3 = 102,
+        not 99.)
+      * When such an occupant is removed, the same amounts are subtracted and the centre
+        recomputed; if `n` reaches 0 the centre returns to the map centre.
+      The player influences the centre only by where buildings stand. Because the sums are not
+      saved, a loaded city rebuilds them from its occupants in load order (the result does not
+      depend on the order). DATA: the decoded centroid of the shipped cities is (139, 131)
+      Madison, (126, 130) Moscow, (125, 138) Berlin, (125, 124) Madrid, (126, 134) London,
+      (82, 105) Farmsville (192-tile map), (108, 119) Seoul, (130, 145) Sacramento: 1–20 tiles from
+      the map centre in every played city, which is consistent with the earlier offline fit.
       `dx = |cx − tx|`, `dy = |cy − ty|`, `dc = max(dx, dy) + min(dx, dy) / 2` (integer).
    c. Base: for class K ∈ {R, C, I} with radius `rK = max(1, RpK × ((mapW + mapH)/2) / 100)`:
       `base = E_K` if `dc > rK`, else `base = C_K + round(dc × (E_K − C_K) / rK)` (float slope,
@@ -755,6 +987,33 @@ recomputation** runs. [STATIC]
 
 All "round" operations are round-half-to-even float-to-int conversions. [STATIC]
 
+Clamps and rounding between the computed value and the stored byte [STATIC]: modifier map values
+clamped to [−150, 150] before `/100`; `base` rounded (half to even) before `+1`; `B` and `T`
+rounded (half to even); the block value is `ΣT` over **all four** tiles (classed or not) divided
+by 4 with truncation toward zero, then values < 1 become 1 and values > 255 become 255. There is
+no smoothing, averaging with the previous value or rate limit: each visit overwrites the byte.
+
+**Calibration notes for implementations whose recomputed LV is low near dense centres.** The
+original has no "2 × population" rule. A recomputation that matches only at 2P is most likely
+missing one of these terms:
+1. `Href` too large (e.g. using the mean altitude instead of the mean dry height above sea
+   level). With the shipped maps `Href` is 1–7, so almost every dry block above the sea gets a
+   hill bonus of up to `HillEffect` (30 percentage points of `base`).
+2. The underwater wrap of `h` (step 2): shore blocks get the full hill bonus.
+3. Modifier maps built from buildings only. §6.4 counts **every** occupied or stateless occupant
+   with an entry, including network pieces (`16000` roads +1 R/+3 C/+2 I per tile, `16001`
+   highways, `12103` power lines) and flora (`300`, +5 R/+5 C/+2 I/+4 A per tree tile), each
+   summed per tile into 4 × 4-tile cells, so a cell full of trees holds +80 R before smoothing
+   [INFERRED, medium-high, that network pieces and flora are iterated: the shipped table lists
+   them, and the iteration covers the city's whole static occupant set].
+4. Air threshold 144 (not 400) and the water-threshold defect of step 6d.
+Test vector for one tile (no modifiers, no pollution, crime 0, no ordinance), Madison-like:
+`C_R` = 66, `E_R` = 45, `rR` = 0.80 × 256 = 204, `dc` = 51 → base = 66 + round(51 × (−21)/204) =
+66 − 5 = 61, +1 = 62; `Wb` = 0, `h` = 2 with `Href` = 1 → `Hb` = 7, `W` = 0.07 → `B` =
+round(62 × 1.07) = 66; crime `q` = (25 − 0) × 0.2 / 25 = 0.2; air 0 → `p` = 0.25, water 0 → +0.1,
+garbage 0 → 0 (threshold 0): `T` = round((1 + 0.2 + 0.35) × 66) = round(102.3) = 102. Four such
+tiles give a stored byte of 102.
+
 ### 6.4 Agent ID modifiers (`[AgentIDModifiers]`)
 
 Syntax: `agentType=n:L,n:L,…` (text after the last item following whitespace is a comment).
@@ -766,7 +1025,8 @@ Map construction (at each cycle start): [STATIC]
 1. Clear the four maps (All, R, C, I; signed 16-bit cells, one cell per 4×4 tiles, so a map
    has (mapW/4) × (mapH/4) cells [INFERRED: the smoothing of step 3 steps 4 tiles from cell to
    cell]).
-2. For every occupant in the city that is occupied (state 1, or has no state): find its
+2. For every occupant in the city's static occupant set (buildings, network pieces and flora)
+   that is occupied (lot state 1 or 513) or has no lot state: find its
    modifier entry — the entry for its exact agent type, else the first entry (in ascending
    agent-type order) whose type is an ancestor of it in `CitySim.ini [AgentTypeHierarchy]`. For
    every tile of its footprint add `A` to the All map, `R` to the R map, `C` to the C map, `I` to
@@ -794,22 +1054,50 @@ families; it places landfill pieces (occupants 10006–10015, agent type 12850) 
   search stops there; in that case, or when no set matches, `LandfillStartRule` is tried as the
   fallback and applied if it matches with at least one piece. (Fill level enters only through
   the neighbourhood the rules test.)
-* **Filling** [STATIC]. Each landfill tile holds a garbage amount `g` (0–32767); its free
-  capacity is `32767 − g`. On a visit, after decay (below), the garbage that the disposal pipeline
-  has routed to landfill (stage 3 of `16-sim-utilities.md` §4.3, accumulated since the previous
-  visit) is poured into the developer's list of active landfill tiles in list order: each tile takes
-  `min(remaining, capacity)`, the amount is removed from the garbage totals, and a tile without a
-  landfill piece receives the first landfill piece (occupant ID 10006, key
-  `207EDC0E:0000057E:00002716` in the attribute-file key order of `13-buildings-occupants.md`).
-  While garbage remains, the active list is extended to further zone-17 tiles. [OPEN] The order
-  in which further tiles are added. Recommended until answered: the zone-17 tile nearest
-  (Chebyshev distance) to the last tile of the list, ties in row-major order.
+* **Landfill store** [STATIC; DATA]. Landfill capacity is kept in a valve-like store with ID
+  `0xA2C9E821` (the 37-byte `garbageStore` block of the pollution record, `17-sim-services.md`
+  §7.4: the valve layout of this document without the ID). Its fields mean:
+  * `D` (demand, `Dlast` = `Dacc`) = **spare room** = Σ over registered landfill tiles of
+    (32 767 − g). A tile is registered when it is zone 17 and the pollution layer has set its
+    landfill flag (`17-sim-services.md` §7.2.5): registering adds (32 767 − g), unregistering
+    subtracts it; a non-landfill tile that still carries the flag loses it and 32 767 is
+    subtracted. DATA: Berlin 720 registered tiles holding 10 048 989 → `D` = 23 592 240 −
+    10 048 989 = 13 543 251 (saved 13 543 251); Mount Herrang 16 tiles, 357 427 → 166 845 (saved
+    166 845).
+  * `S` (supply, `Slast` = `Sacc`) = garbage **routed to landfill but not yet placed** on tiles
+    (stage 3 of `16-sim-utilities.md` §4.3 adds to it).
+  * `V` = available room `D − S` as of the last monthly valve update (it lags the live values;
+    Berlin saved `V` 13 561 864). Negative `V` means a backlog of routed garbage larger than the
+    room.
+* **Filling** [STATIC]. Each landfill tile holds a garbage amount `g` (0–32 767; it is the
+  standing-garbage word of the tile, `17-sim-services.md` §7.2.1); its free capacity is
+  `32 767 − g`. On a visit to a landfill tile the developer (1) applies decay (below), (2) updates
+  the tile's registration, then (3) while the store's `S` > 0 walks its list of active landfill
+  tiles in list order: for each registered tile `amt = min(S, 32 767 − g)`; `g += amt`; the
+  store's `S` and `D` both decrease by `amt`; the landfill counter (slot [6] of the garbage
+  statistics, `16-sim-utilities.md` §4.5) increases by `amt`; a tile without a landfill piece (or
+  whose piece has flag word bit `0x400`) receives the first landfill piece (occupant ID 10006, key
+  `207EDC0E:0000057E:00002716` in the attribute-file key order of `13-buildings-occupants.md`). When
+  the list has no active tile and the visited tile qualifies, it is added to the list. [OPEN] The
+  order in which further tiles join the list. Recommended until answered: the visited tile is
+  appended (tiles join in the order the zone manager's shuffled pass visits them, §4 "Scan
+  order").
 * **Decay.** `SC3Tune.ini [LandfillZoneDeveloper] LandfillDecayRate` (per 10 000, capped at
-  10 000; shipped 490 ≈ 4.9 %). On each visit to a landfill tile holding garbage amount `g > 0`:
-  `d = max(1, round(g × LandfillDecayRate / 10000))`; `g := g − d`. When `g` reaches 0 the
-  tile's landfill state is cleared and it is removed from the developer's list of active
-  tiles. If the tile still counts toward landfill capacity [INFERRED], `d` is credited back as
-  garbage capacity (`16-sim-utilities.md`). [STATIC]
+  10 000; shipped 490 ≈ 4.9 %). On each visit to a landfill tile holding `g > 0`:
+  `d = max(1, round(g × LandfillDecayRate / 10000))`; `g := g − d`. When `g` reaches 0 the tile's
+  landfill piece state is cleared and it is removed from the active list. If the tile is
+  registered, `d` is credited back as room: the store's `D += d`. [STATIC]
+  Test vector: `g` = 20 000 → `d` = 980, `g` = 19 020, store `D` += 980; `g` = 10 → `d` = 1
+  (round(0.49) = 0, raised to 1).
+* **Default behaviour of the three developers without a category list** [STATIC]. Zones 14, 15
+  and 17 have descriptions without categories (`14=0xc1f81e7e,3000`, `15=0x82d2d72b,0`,
+  `17=0x82348de5,0`); their developers do not use §4.3 or the category rules:
+  * airport (14): demand valve 5001 (`V`, `P` and `Max` of that valve); builds only through its
+    two rules of §5.5 when `V − P > 0`; lots are processed like empty tiles of §4.3 for power,
+    transport and radiation [INFERRED for the shared checks];
+  * seaport (15): demand valve 8001, rules pier and yard of §5.5, same conditions;
+  * landfill (17): no valve demand test; every visit runs decay, registration and filling above.
+  None of them produces result codes 8, 9 or 17 [INFERRED: no code path sets them].
 
 ## Persisted state
 
@@ -877,14 +1165,21 @@ mapping (§3.5). This document owns the record. Its byte layout, as far as it is
 
 * Zone-manager position within the day (§4 "Rate"): after the daily area work is inferred.
 * `unfit` = failed trip (§4.2) is inferred; confirm against the original.
-* Non-scatter rules (§5.5): housing-project layouts B/C, estates, row houses, farm field tiling,
-  airport arrangement step (2) and the seaport pier.
-* Who sets the valve `capPct`, and how valves 3001/5001/8001 feed back into R/C/I growth (§3.1,
-  §3.2).
-* The workforce fraction `w` (§3.4).
+* Source of the extra demand on valves 5001 and 8001 (§3.3, "Amenity demand of commerce and
+  industry"): saved `Dlast` is 1.3–2.1 × the building sum. Interim: carry the saved ratio.
+* Non-scatter rules (§5.5): the seaport pier piece order, the farm field tiling, the airport
+  buildings arrangement step (2), and the exact flag bits of the estate member lists. Housing
+  projects A/B/C, row houses, estates and the runway sequence are now specified.
 * What sets the clean-industry flag (§4.5 step 3).
-* The city-centre location (§6.3 step 6b) and the terrain statistic behind `Href` (§6.3).
+* Whether network pieces and flora are part of the modifier-map iteration (§6.4 step 2;
+  INFERRED medium-high that they are).
 * Occupant attributes 0x72 bits, 0xC9, 0x7B and the CSATTRIB trailer (`13-buildings-occupants.md`):
   growth does not use them; their meaning is unknown.
-* Landfill: the spread order of new landfill tiles (§7).
-* Result codes 8, 9 and 17 (§4.3): whether the airport, seaport or landfill developers produce them.
+* Landfill: the order in which new tiles join the active list (§7).
+
+Closed in this revision: `capPct` and the amenity feedback (§3.2 cap rule, [STATIC]); valve
+smoothing (§3.2, [STATIC]); the occupied-lot land-value test (§4.3 step 4: `minLV/2`, [STATIC]);
+the workforce fraction (§3.4, [STATIC]); the industrial EQ input (§4.5, Q(20, 65), [STATIC]);
+the LV population (§6.3, valve 3000 `Slast`, [STATIC]); the city centre (§6.3 step 6b, building
+centroid, [STATIC]); `Href` (§6.3, [STATIC]); the landfill store (§7, [STATIC]); result codes 8,
+9 and 17 (never produced, [INFERRED]).
