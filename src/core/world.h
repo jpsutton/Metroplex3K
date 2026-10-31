@@ -61,6 +61,9 @@ struct World {
   uint8_t seaLevel = 30;
   std::vector<uint8_t> alt;    // (W+1)*(H+1)
   std::vector<uint8_t> water;  // (W+1)*(H+1) water surface altitude per vertex
+  // Per-vertex sea flag handed over by the terrain generator (spec 11 s3.4 step 10); empty for loaded files. Not saved:
+  // the city turns it into the pollution cells' sea-water flag (bit 30, spec 11 s5), which is.
+  std::vector<uint8_t> seaVertex;
   std::vector<uint8_t> tileBits;  // W*H/8 bytes, preserved verbatim
   std::vector<uint8_t> flora;  // W*H: kind*16+level
   std::vector<uint8_t> zone;   // W*H zone type

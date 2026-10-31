@@ -135,7 +135,7 @@ void Game::buildBudgetView(BudgetView& v) {
   uint64_t np = 0;
   for (const auto& n : c.neighbours.neighbours) np += n.population;
   ind.nationalPop = uint32_t(np);
-  ind.unemployment = std::max(0, std::min(100, c.pop.unemploymentPercent()));
+  ind.unemployment = std::max(0, std::min(100, c.valves.unemploymentPct()));
   ind.pollution = std::min(100, int(c.pollution.avgAir) * 100 / 255);
   ind.commerce = std::min(100, int(in.zoneTotals[1] / 50));
   ind.industry = std::min(100, int(in.zoneTotals[2] / 50));

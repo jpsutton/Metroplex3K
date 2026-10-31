@@ -149,9 +149,13 @@ class GrowthCity {
   virtual void setLandfillGarbage(int, int, int) {}
   virtual void placeLandfillPiece(int, int) {}
   virtual void clearLandfillTile(int, int) {}
-  virtual void creditGarbageCapacity(int) {}
-  virtual int takePendingLandfillGarbage() { return 0; }
-  virtual void returnLandfillGarbage(int) {}
+  // Landfill store 0xA2C9E821 (spec 16 s4.4): registration adds the tile's free room, decay credits room back,
+  // placing garbage moves it from the pending amount S onto the tile (and out of the room D).
+  virtual bool landfillRegistered(int, int) const { return false; }
+  virtual void registerLandfill(int, int) {}
+  virtual void creditLandfillRoom(int) {}
+  virtual int64_t landfillPending() const { return 0; }
+  virtual void landfillPlaced(int) {}
   virtual void landfillTilesChanged(const std::vector<std::pair<int, int>>&) {}
 };
 
@@ -190,6 +194,8 @@ class ZoneManager {
   using ResultMap = std::map<std::pair<uint8_t, uint8_t>, uint32_t>;
 
   void init(int W, int H, CrtRand& crt);          // new-city state: shuffled list, index 1
+  // One developer rule on a found lot (spec 15 s5.4-5.5); returns the number of buildings placed. Public for tests.
+  int runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const Rect& lot, const Category& cat, int V, int P, int Max, int maxDist);
   void setConfig(const GrowthConfig* cfg) { cfg_ = cfg; landfill.decayRate = cfg ? cfg->landfillDecayRate : 490; }
 
   // One daily tick: K = W*H/30 visits (section 4 "Rate").
@@ -241,7 +247,6 @@ class ZoneManager {
   void refreshCleanCurve(int year);
   bool startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, int cat, uint32_t replacedAgent, int V, int P, int Max, bool skipPower);
   bool startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, const Category& cat, uint32_t replaced, int V, int P, int Max, bool skipPower);
-  int runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const Rect& lot, const Category& cat, int V, int P, int Max, int maxDist);
   int place(GrowthCity& c, const BuildingChoice& b, int x, int z);
   void removeLot(GrowthCity& c, const LotInfo& lot);
 

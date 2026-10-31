@@ -393,7 +393,7 @@ static void testPollutionRun() {
     CHECK(L.garbageSource[2 * 8 + 2] == 16);
     runSweep(L, env, 4);
     CHECK(L.standingGarbageAt(4, 4) == 4 && L.standingGarbageAt(5, 5) == 4);
-    CHECK(L.disp.stats[0] == 16);
+    CHECK(L.disp.month[0] == 16);
     CHECK(L.garbagePolluted(4, 4) == (4 >= p.garbageThreshold));
   }
   {   // Incinerator burns it (3000/30 = 100 per run)
@@ -402,7 +402,15 @@ static void testPollutionRun() {
     SimOccupant inc; inc.agentType = 12852; inc.x = 10; inc.z = 10;
     L.addOccupant(g); L.addOccupant(inc);
     runSweep(L, env, 4);
-    CHECK(L.standingGarbageAt(4, 4) == 0 && L.disp.stats[4] == 16);
+    CHECK(L.standingGarbageAt(4, 4) == 0 && L.disp.month[4] == 16);
+  }
+  {   // Recycling ratio (spec 16 s4.3 test vectors)
+    using RC = PollutionLayer::RecyclingCentre;
+    CHECK(std::fabs(PollutionLayer::recyclingRatio({RC{45, 50000}, RC{45, 50000}}, 100000) - 0.45f) < 1e-6f);
+    CHECK(std::fabs(PollutionLayer::recyclingRatio({RC{45, 50000}}, 100000) - 0.225f) < 1e-6f);
+    CHECK(PollutionLayer::recyclingRatio({}, 100000) == 0.0f);
+    // sorted by percent: the 60% centre is used first, the walk stops once served >= P
+    CHECK(std::fabs(PollutionLayer::recyclingRatio({RC{20, 100000}, RC{60, 100000}}, 100000) - 0.6f) < 1e-6f);
   }
   {   // Export deal swallows remainder
     PollutionLayer L; L.init(16, 16, p, &h);
@@ -410,7 +418,7 @@ static void testPollutionRun() {
     L.addOccupant(g);
     PollutionEnv e2; e2.exportDeal = true;
     runSweep(L, e2, 4);
-    CHECK(L.standingGarbageAt(4, 4) == 0 && L.disp.stats[1] == 16);
+    CHECK(L.standingGarbageAt(4, 4) == 0 && L.disp.month[2] == 16);
   }
   {   // Backyard composting only for zone 1-2 tiles; zone 3 (high-density res) not included.
     PollutionLayer L; L.init(16, 16, p, &h);
@@ -474,10 +482,10 @@ static void fillPollution(PollutionLayer& L, const PollutionParams& p) {
   PollutionEnv env;
   for (int i = 0; i < 7; i++) L.run(env);
   L.avgAir = 5; L.avgWater = 6; L.unk16 = 0; L.unk8 = 0; L.ratio = 0.43f; L.unk32 = 9;
-  L.garbageStore[3] = 0x44; L.garbageStore[36] = 0x55;
-  L.garbageMonth[2] = -12345678901LL; L.garbageHistory[11][6] = 99;
+  L.disp.store.D = 0x44000000; L.disp.store.Dbase = 0x55000000;
+  L.disp.month[2] = -12345678901LL; L.disp.history[11][6] = 99;
   L.chart.monthly[1] = 8; L.landfillTiles = 2; L.standing[5] |= 0x8000;
-  L.disp.stats[6] = 77;
+  L.disp.totals[6] = 77;
   (void)p;
 }
 
@@ -500,8 +508,8 @@ static void testPollutionRecord() {
     d.parse(b.data(), b.size(), 16, 16);
     CHECK(d.state == L.state && d.standing == L.standing && d.order == L.order && d.table == L.table);
     CHECK(d.waterSource == L.waterSource && d.airSource == L.airSource && d.garbageSource == L.garbageSource);
-    CHECK(d.garbageMonth[2] == -12345678901LL && d.garbageHistory[11][6] == 99 && d.disp.stats[6] == 77);
-    CHECK(d.ratio == 0.43f && d.garbageStore[36] == 0x55 && d.garbageStore[3] == 0x44);
+    CHECK(d.disp.month[2] == -12345678901LL && d.disp.history[11][6] == 99 && d.disp.totals[6] == 77);
+    CHECK(d.ratio == 0.43f && d.disp.store.Dbase == 0x55000000 && d.disp.store.D == 0x44000000);
     CHECK(d.incinerators == L.incinerators && d.treatmentPlants == L.treatmentPlants);
     CHECK(d.chart == L.chart && d.cursorX == L.cursorX && d.cursorZ == L.cursorZ);
     CHECK(d.rawWaterSum == L.rawWaterSum && d.treatedLast == L.treatedLast);

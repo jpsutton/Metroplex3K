@@ -123,7 +123,7 @@ DisasterInputs inputsFor(City& c, bool enabled, const CheatRegistry& cheats) {
   in.year = c.clock.date().year;
   in.disastersEnabled = enabled;
   // spec 29 section 2.6 interim sources: U = unemployment %, A = city aura.
-  in.unrest = std::max(0, std::min(100, c.pop.unemploymentPercent()));
+  in.unrest = std::max(0, std::min(100, c.valves.unemploymentPct()));
   in.aura = int(c.aura.cityAura);
   in.ordCleanIndustry = c.ordinances.enacted(ord::CleanIndustry);
   in.ordIndPollutantFee = c.ordinances.enacted(ord::IndPollutantFee);
@@ -263,8 +263,8 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   {
     // [INFERRED] garbage capacity GC = what the disposal stages took this month plus what they could still take
     const auto& ps = c.pollution;
-    in.util.garbageProduced = ps.garbageMonth[0];
-    in.util.garbageCap = ps.garbageMonth[4] + ps.garbageMonth[5] + ps.garbageMonth[6] + ps.disp.wteBudget + ps.disp.incineratorBudget + ps.disp.landfillRoom();
+    in.util.garbageProduced = ps.disp.month[0];
+    in.util.garbageCap = ps.disp.month[4] + ps.disp.month[5] + ps.disp.month[6] + ps.disp.wteBudget + ps.disp.incineratorBudget + ps.disp.landfillRoom();
   }
   for (const auto& o : world_.occupants)
     if ((o.state & ~0x200u) == 1 && o.agentType >= 3000 && o.agentType < 10000 && !c.watered(o.x, o.z)) in.util.dryBuildings++;

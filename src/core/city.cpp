@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <sstream>
 
+#include "core/flora.h"
 #include "core/fsutil.h"
 #include "core/network_tools.h"
 #include "core/records.h"
@@ -215,6 +216,7 @@ bool CityConfig::load(GameData& g) {
   landValue.parse(ini.landValue);
   landValue.parseHierarchy(ini.citySim);
   for (const auto& kv : ini.citySim.section("AgentTypeHierarchy")) parent[parseIdNumber(kv.first)] = parseIdNumber(kv.second);
+  valve.parent = parent;
   for (int id = 1; id <= 31; id++) {
     ResourceRef r = g.db().find({0x81F53D09, 0x01F58D3D, uint32_t(id)});
     if (!r) continue;
@@ -258,11 +260,14 @@ class GrowthAdapter : public growth::GrowthCity {
   // decays it on each visit (credit back as capacity) and fills tiles from the garbage the disposal stage parked.
   int landfillGarbage(int x, int z) const override { return c_.world_->inTiles(x, z) ? c_.pollution.standingGarbageAt(x, z) : 0; }
   void setLandfillGarbage(int x, int z, int g) override { if (c_.world_->inTiles(x, z)) c_.pollution.setStandingGarbage(x, z, g); }
-  void creditGarbageCapacity(int d) override { c_.pollution.disp.landfillBalance -= d; }
-  int takePendingLandfillGarbage() override {
-    int64_t v = std::min<int64_t>(c_.pollution.disp.pendingLandfill, 0x7FFFFFFF); c_.pollution.disp.pendingLandfill -= v; return int(v);
+  bool landfillRegistered(int x, int z) const override { return c_.world_->inTiles(x, z) && c_.pollution.landfillRegistered(x, z); }
+  void registerLandfill(int x, int z) override { if (c_.world_->inTiles(x, z)) c_.pollution.registerLandfill(x, z); }
+  void creditLandfillRoom(int d) override { c_.pollution.disp.store.D += d; }
+  int64_t landfillPending() const override { return c_.pollution.disp.store.S; }
+  void landfillPlaced(int a) override {
+    auto& d = c_.pollution.disp;
+    d.store.S -= a; d.store.D -= a; d.month[us::GarbageDisposal::Landfilled] += a;
   }
-  void returnLandfillGarbage(int g) override { c_.pollution.disp.pendingLandfill += g; }
   int landValue(int x, int z) const override {
     if (c_.cfg_.synthetic) return 128;
     return std::max(1, c_.landValue.landValueAtTile(x, z));
@@ -297,7 +302,7 @@ class GrowthAdapter : public growth::GrowthCity {
   bool ordinanceEnacted(uint32_t id) const override { return c_.ordinances.enacted(id); }
   int year() const override { return c_.clock.date().year; }
   int month() const override { return c_.clock.date().month; }
-  int eq() const override { return c_.pop.cityEQ(); }
+  int eq() const override { return c_.pop.workingAgeEQ(); }   // Q(20, 65), spec 15 s4.5 [STATIC]
   bool canPlace(const growth::BuildingChoice& b, int x, int z) const override {
     for (int dx = 0; dx < b.sizeX; dx++)
       for (int dz = 0; dz < b.sizeZ; dz++) {
@@ -336,6 +341,9 @@ class GrowthAdapter : public growth::GrowthCity {
   City& c_;
 };
 
+// Agent type of flora occupants in [AgentIDModifiers] (spec 15 s6.3 calibration note 3).
+constexpr uint32_t kFloraAgentType = 300;
+
 class LandValueAdapter : public growth::LandValueCity {
  public:
   explicit LandValueAdapter(City& c) : c_(c) {}
@@ -347,19 +355,35 @@ class LandValueAdapter : public growth::LandValueCity {
   int garbage(int x, int z) const override { return c_.pollution.standingGarbageAt(x, z); }
   int crime(int x, int z) const override { return c_.crime.crimeAt(x, z); }
   int altitude(int x, int z) const override { return c_.world_->altAt(std::min(x, c_.world_->W), std::min(z, c_.world_->H)); }
+  int waterSurface(int x, int z) const override { return c_.world_->waterAt(std::min(x, c_.world_->W), std::min(z, c_.world_->H)); }
   int seaLevel() const override { return c_.world_->seaLevel; }
   bool radioactive(int x, int z) const override { return c_.radioactiveAt(x, z); }
   bool hasWater(int x, int z) const override {
     if (!c_.world_->inTiles(x, z)) return false;
     return c_.world_->waterAt(x, z) > c_.world_->altAt(x, z);
   }
-  // [OBSERVED] The centre-value curves (spec 15 s6.2) reproduce the saved land-value grids of the shipped cities only when
-  // read at about twice the resident count: with the plain count our blocks come out 10-25% low in every city tested
-  // (Madison, Liverpool, London, Sacramento, Seoul, Frankfurt), with ~1.9-2.0 the mean ratio to the saved grid is 1.00.
-  int64_t population() const override { return 2 * int64_t(c_.residents_); }
+  // Curves are read at valve 3000 Slast (spec 15 s6.3 cycle start step 1) [STATIC]; no factor 2.
+  int64_t population() const override { return c_.valves.v3000.Slast; }
   bool ordinanceEnacted(uint32_t id) const override { return c_.ordinances.enacted(id); }
+  // Static occupant set for the modifier maps (spec 15 s6.4 step 2): buildings (occupied: state 1 or 513), network pieces
+  // and flora (no lot state, always counted) [INFERRED medium-high for pieces and flora].
   void occupants(std::vector<growth::LvOccupant>& out) const override {
     for (const auto& o : c_.world_->occupants) out.push_back({o.x, o.z, o.sizeX, o.sizeZ, o.agentType, (o.state & ~0x200u) == 1});
+    if (c_.game_)
+      for (const auto* net : {&c_.world_->surface, &c_.world_->pipes, &c_.world_->subway})
+        for (const auto& p : *net)
+          if (const OccAttr* a = c_.game_->occupant(p.pieceId, true)) out.push_back({p.x, p.z, 1, 1, a->agentType, true});
+    const World& w = *c_.world_;
+    for (int x = 0; x < w.W; x++)
+      for (int z = 0; z < w.H; z++) {
+        uint8_t f = w.flora[size_t(w.tIdx(x, z))];
+        if (f && floraCellValid(f) && (f >> 4) != 0) out.push_back({x, z, 1, 1, kFloraAgentType, true});
+      }
+  }
+  void cityCentre(int& cx, int& cz) const override {
+    growth::BuildingCentroid bc;
+    for (const auto& o : c_.world_->occupants) bc.add(o.x, o.z, o.sizeX, o.sizeZ);
+    bc.get(c_.world_->W, c_.world_->H, cx, cz);
   }
 
  private:
@@ -450,14 +474,24 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
 
   rebuildIndex();
   const bool haveLv = w->raw && w->raw->findInner(keys::LandValue);
+  const bool havePollution = w->raw && w->raw->findInner(kPollutionKey);
   loadRecords();
+  if (!havePollution && w->seaVertex.size() == w->alt.size())   // generated terrain: sea surfaces flag their cells (spec 11 s5)
+    for (int x = 0; x <= W; x++)
+      for (int z = 0; z <= H; z++)
+        if (w->seaVertex[size_t(w->vIdx(x, z))]) pollution.markSeaVertex(x, z);
   if (!haveLv) landValue.recomputeAll(*lvView_);
   wire();
   refresh(true);
-  residents_ = countResidents();   // HUD and dialogs read this before the first month end
-  // A saved city carries the resident count of its last month end as the R valve's supply (Berlin: 794,278, the figure
-  // the original shows in its dialogs; counting operating buildings now gives 793,960). Prefer it until the next month end.
-  if (valves.v3000.Slast > 0 && std::abs(int64_t(valves.v3000.Slast) - residents_) * 20 < int64_t(valves.v3000.Slast)) residents_ = valves.v3000.Slast;
+  // City population = valve 3000 Slast (spec 20 s2) [DATA]; a city without a completed valve cycle counts its buildings.
+  residents_ = valves.v3000.Slast > 0 ? valves.v3000.Slast : countResidents();
+  {  // Spec 15 s3.3 interim [OPEN, narrowed]: carry the saved 5001/8001 demand ratio (saved Dlast / building sum).
+    int64_t d5 = 0, d8 = 0;
+    valves.amenityBuildingDemand(valveBuildings(), d5, d8);
+    auto ratio = [](int32_t saved, int64_t sum) { return saved > 0 && sum > 0 ? std::clamp(double(saved) / double(sum), 0.5, 4.0) : 1.0; };
+    valves.amenityDemandMul[0] = ratio(valves.v5001.Dlast, d5);
+    valves.amenityDemandMul[1] = ratio(valves.v8001.Dlast, d8);
+  }
   // Full monthly costs are normally supplied by the owning subsystem at the first month end, and health and education
   // have no modelled upkeep yet (issue #44). Until then reuse the loaded city's last monthly charge so the budget
   // window's year-end estimate and the next settlement start from the saved level.
@@ -1032,6 +1066,8 @@ int City::jailCapacity() const {
   return c > 0 ? c : 100;
 }
 void City::recomputeLandValue() { landValue.recomputeAll(*lvView_); }
+void City::lvCentre(int& cx, int& cz) const { lvView_->cityCentre(cx, cz); }
+std::string City::lvExplain(int x, int z) const { return landValue.explainBlock(*lvView_, x, z); }
 void City::dailyLandValue() { landValue.update(*lvView_); }
 void City::dailyZoneDev() { zones.tick(*growthView_, zoneRng_, zoneCrt_); }
 void City::dailyPollution() {
@@ -1105,22 +1141,27 @@ int City::countResidents() const {
   int residents = 0;
   for (const auto& o : world_->occupants) {
     if ((o.state & ~0x200u) != 1) continue;
-    auto it = cfg_.valve.agentEffects.find(o.agentType);
-    if (it != cfg_.valve.agentEffects.end())
-      for (const auto& vi : it->second) if (vi.valve == growth::kValveRes) residents += vi.supply * o.sizeX * o.sizeZ;
+    if (const auto* items = cfg_.valve.effectsFor(o.agentType))
+      for (const auto& vi : *items) if (vi.valve == growth::kValveRes) residents += vi.supply * o.sizeX * o.sizeZ;
   }
   return residents;
 }
 
-void City::monthlyValves() {
-  growth::ValveCityInput in;
+std::vector<growth::ValveBuilding> City::valveBuildings() const {
+  std::vector<growth::ValveBuilding> out;
+  out.reserve(world_->occupants.size());
   for (const auto& o : world_->occupants) {
     growth::ValveBuilding b;
     b.agentType = o.agentType; b.x = o.x; b.z = o.z; b.sizeX = o.sizeX; b.sizeZ = o.sizeZ;
-    b.operating = (o.state & ~0x200u) == 1;
-    in.buildings.push_back(b);
+    b.operating = (o.state & ~0x200u) == 1;   // states 1 and 513 count (spec 15 s3.3) [STATIC]
+    out.push_back(b);
   }
-  residents_ = countResidents();
+  return out;
+}
+
+void City::monthlyValves() {
+  growth::ValveCityInput in;
+  in.buildings = valveBuildings();
   in.connectionCount[0] = int(neighbours.conn[1].size());   // saved order: rail, road, pipe, power, highway, subway
   in.connectionCount[1] = int(neighbours.conn[0].size());
   in.connectionCount[2] = int(neighbours.conn[4].size());
@@ -1132,6 +1173,9 @@ void City::monthlyValves() {
   in.year = d.year; in.month = d.month;
   for (int g = 0; g < kTaxGroups; g++) in.taxRate[g] = budget.tax[g].rate;
   valves.monthlyUpdate(in);
+  // City population = valve 3000 Slast (spec 20 s2) [DATA 13/13: equals the newest population-chart sample].
+  residents_ = valves.v3000.Slast;
+  valves.worldMonthly(in.workforceFraction, d.month, d.year);
 }
 
 void City::monthlyOrdinances() {
@@ -1153,8 +1197,6 @@ void City::monthlyPopulation() {
   if (const Department* e = budget.dept(dept::Education)) in.educationFunding = e->funding;
   if (const Department* h = budget.dept(dept::Health)) in.healthFunding = h->funding;
   in.ordinanceEnacted = [this](uint32_t id) { return ordinances.enacted(id); };
-  in.jobsDemand = valves.valve(growth::kValveJobs).Dlast;
-  in.workersSupply = valves.valve(growth::kValveJobs).Slast;
   pop.monthly(in);
 }
 
@@ -1271,70 +1313,18 @@ void City::monthlyWater() {
       for (int dz = 0; dz < o.sizeZ; dz++)
         if (inMap(o.x + dx, o.z + dz)) pipes[idx(o.x + dx, o.z + dz)] = 1;
   }
-  // Salt vs fresh water: the sea flag is not persisted (spec 11 section 5), so derive it. A water body (4-connected
-  // wet tiles) is sea when it touches the map edge and is wide: some tile of it is at least kSeaWidth tiles from land.
-  // Rivers that run off the map edge, and inland lakes, stay fresh even when their surface equals the sea level (as in
-  // nearly every shipped file; Berlin's pumps beside an edge-crossing river are saved as working).
+  // Water tiles for the pump ring test (spec 16 s3.3): a tile is water when any of its four corners is ([OPEN] any or all
+  // corners; spec 11 "some corners under water" for shoreline tiles). Salt = the stored sea-water flag of the tile's
+  // pollution cell (bit 30), not the shape of the water body [STATIC]; the `Salt off` cheat ignores it. 1 = fresh, 2 = salt.
   std::vector<uint8_t> kind(size_t(world_->W) * world_->H, 0);
-  {
-    const int Wt = world_->W, Ht = world_->H;
-    // The generator treats a vertex as land only when altitude > water surface (spec 11 section 3), so a vertex whose
-    // altitude equals the surface is water; no shipped building stands on such tiles.
-    auto wet = [&](int x, int z) { return world_->waterAt(x, z) >= world_->altAt(x, z); };
-    auto deep = [&](int x, int z) { return world_->waterAt(x, z) > world_->altAt(x, z) && world_->waterAt(x, z) <= world_->seaLevel; };
-    for (int x = 0; x < Wt; x++)
-      for (int z = 0; z < Ht; z++)
-        if (wet(x, z)) kind[idx(x, z)] = 1;
-    if (!saltOff) {
-      // Distance to the nearest non-water tile (capped), by multi-source BFS.
-      constexpr int kSeaWidth = 8;
-      std::vector<uint8_t> dist(size_t(Wt) * Ht, 255);
-      std::vector<int> q;
-      for (int x = 0; x < Wt; x++)
-        for (int z = 0; z < Ht; z++)
-          if (!deep(x, z)) { dist[idx(x, z)] = 0; q.push_back(int(idx(x, z))); }
-      static const int d4[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-      for (size_t h = 0; h < q.size(); h++) {
-        int c = q[h], x = c / Ht, z = c % Ht;
-        if (dist[size_t(c)] >= kSeaWidth) continue;
-        for (auto& d : d4) {
-          int nx = x + d[0], nz = z + d[1];
-          if (nx < 0 || nz < 0 || nx >= Wt || nz >= Ht || dist[idx(nx, nz)] != 255) continue;
-          dist[idx(nx, nz)] = uint8_t(dist[size_t(c)] + 1); q.push_back(int(idx(nx, nz)));
-        }
-      }
-      std::vector<uint8_t> seen(size_t(Wt) * Ht, 0);
-      auto component = [&](int sx, int sz) {
-        std::vector<int> comp{int(idx(sx, sz))}; seen[idx(sx, sz)] = 1; bool wide = false;
-        for (size_t h = 0; h < comp.size(); h++) {
-          int c = comp[h], x = c / Ht, z = c % Ht;
-          if (dist[size_t(c)] >= kSeaWidth) wide = true;
-          for (auto& d : d4) {
-            int nx = x + d[0], nz = z + d[1];
-            if (nx < 0 || nz < 0 || nx >= Wt || nz >= Ht || seen[idx(nx, nz)] || !deep(nx, nz)) continue;
-            seen[idx(nx, nz)] = 1; comp.push_back(int(idx(nx, nz)));
-          }
-        }
-        if (wide) for (int c : comp) kind[size_t(c)] = 2;
-      };
-      auto edge = [&](int x, int z) { if (deep(x, z) && !seen[idx(x, z)]) component(x, z); };
-      for (int x = 0; x < Wt; x++) { edge(x, 0); edge(x, Ht - 1); }
-      for (int z = 0; z < Ht; z++) { edge(0, z); edge(Wt - 1, z); }
+  for (int x = 0; x < world_->W; x++)
+    for (int z = 0; z < world_->H; z++) {
+      bool wet = false;
+      for (int dx = 0; dx <= 1 && !wet; dx++)
+        for (int dz = 0; dz <= 1; dz++)
+          if (world_->waterAt(x + dx, z + dz) >= world_->altAt(x + dx, z + dz)) { wet = true; break; }
+      if (wet) kind[idx(x, z)] = (!saltOff && pollution.seaFlagAt(x, z)) ? 2 : 1;
     }
-  }
-  {  // A tile is water when any of its four corners is (spec 11: "some corners under water" for shoreline tiles), so
-     // pumps beside a shore see it at distance 1. Bit 0 = fresh, bit 1 = salt (a shoreline tile can be both).
-    std::vector<uint8_t> tile(kind.size(), 0);
-    for (int x = 0; x < world_->W; x++)
-      for (int z = 0; z < world_->H; z++) {
-        uint8_t m = 0;
-        for (int dx = 0; dx <= 1; dx++)
-          for (int dz = 0; dz <= 1; dz++)
-            if (x + dx < world_->W && z + dz < world_->H) { uint8_t k = kind[idx(x + dx, z + dz)]; m |= k == 1 ? 1 : k == 2 ? 2 : 0; }
-        tile[idx(x, z)] = m;
-      }
-    kind.swap(tile);
-  }
   auto consumers = simOccupants(true);
   us::WaterEnv env;
   env.nowAbsMonth = absMonthOf(clock);
@@ -1349,7 +1339,7 @@ void City::monthlyWater() {
 
 void City::monthlyPollution() {
   cal::Date d = clock.date();
-  pollution.monthEnd(d.month, d.year);
+  pollution.monthEnd(d.month, d.year, residents_);
 }
 void City::monthlyCrime() {
   cal::Date d = clock.date();

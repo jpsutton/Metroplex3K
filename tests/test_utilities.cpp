@@ -279,11 +279,11 @@ static void testWaterPumpRings() {
   f.kind[11 * 32 + 11] = 1;  // distance 1 (diagonal counts)
   f.L.monthlyUpdate(env);
   CHECK(f.L.facilities()[0].output == 2000 && f.L.facilities()[0].status == WaterFacility::Good);
-  // Salt water feeds pumps too [OBSERVED: computed per-pump outputs match the shipped saves only this way].
+  // Salt water (cell sea-water flag set) does not feed pumps (spec 16 s3.3).
   std::fill(f.kind.begin(), f.kind.end(), 0);
   f.kind[11 * 32 + 11] = 2;
   f.L.monthlyUpdate(env);
-  CHECK(f.L.facilities()[0].output == 2000);
+  CHECK(f.L.facilities()[0].output == 0 && f.L.facilities()[0].status == WaterFacility::NoWater);
   // No water at all => 0.
   std::fill(f.kind.begin(), f.kind.end(), 0);
   f.L.monthlyUpdate(env);
@@ -410,16 +410,26 @@ static void testGarbage() {
   GarbageDisposal g;
   g.abductionCap = 10;
   g.beginRun(5, 7, false);
-  g.landfillBalance = -4;           // 4 landfill room
+  g.store.V = 4;                    // 4 available landfill room: routed into the store's pending amount S
   CHECK(g.dispose(30) == 30 - 5 - 7 - 4 - 10);
-  CHECK(g.stats[5] == 5 && g.stats[4] == 7 && g.stats[6] == 4 && g.stats[2] == 10 && g.stats[1] == 0);
-  CHECK(g.landfillBalance == 0 && g.abducted == 10);
-  // Abduction capped cumulatively.
-  g.beginRun(0, 0, false);
+  CHECK(g.month[5] == 5 && g.month[4] == 7 && g.month[6] == 0 && g.month[2] == 0 && g.store.S == 4 && g.abducted == 10);
+  // Abduction is capped per month and resets at the month end.
+  g.beginRun(0, 0, false); g.store.V = 0;
   CHECK(g.dispose(3) == 3);
+  g.month[0] = 100;
+  g.monthEnd();
+  CHECK(g.abducted == 0 && g.history[0][0] == 90 && g.history[0][5] == 5 && g.totals[4] == 7 && g.month[5] == 0);
+  g.beginRun(0, 0, false); g.store.V = 0;
+  CHECK(g.dispose(3) == 0 && g.abducted == 3);
   // Export swallows everything left after burners and landfill.
   GarbageDisposal e; e.beginRun(2, 0, true);
-  CHECK(e.dispose(100) == 0 && e.stats[1] == 98 && e.stats[2] == 0);
+  CHECK(e.dispose(100) == 0 && e.month[2] == 98 && e.abducted == 0);
+  // Landfill store: V = D - S at the monthly update; 37-byte block round trip.
+  LandfillStore st; st.D = 1000; st.S = 300; st.monthly();
+  CHECK(st.V == 700 && st.Dlast == 1000 && st.Slast == 300);
+  uint8_t blk[37]; st.f1 = 0.5f; st.capPct = 7; st.Dbase = -3; st.write(blk);
+  LandfillStore st2; st2.parse(blk);
+  CHECK(st2.S == 300 && st2.D == 1000 && st2.V == 700 && st2.f1 == 0.5f && st2.capPct == 7 && st2.Dbase == -3);
   CHECK(reduceByPercent(100, 25) == 75 && reduceByPercent(7, 50) == 4);
   RunBudget rb;
   int64_t tot = 0;

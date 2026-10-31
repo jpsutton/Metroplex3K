@@ -1,6 +1,7 @@
 #include "core/landvalue.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include "core/records.h"
 
@@ -114,6 +115,29 @@ const LvAgentMod* LandValueTuning::modFor(uint32_t t) const {
   return nullptr;
 }
 
+void BuildingCentroid::add(int x0, int z0, int sizeX, int sizeZ, int sign) {
+  int64_t dx = sizeX - 1, dz = sizeZ - 1, a = (dx + 1) * (dz + 1);
+  int64_t ax = (dx / 2 + x0) * a, az = (dz / 2 + z0) * a;
+  if (dx % 2 == 0) ax += dx * (dz + 1) / 2;
+  if (dz % 2 == 0) az += dz * (dx + 1) / 2;
+  sumX += sign * ax; sumZ += sign * az; n += sign * a;
+}
+void BuildingCentroid::get(int mapW, int mapH, int& cx, int& cz) const {
+  if (n <= 0) { cx = mapW / 2; cz = mapH / 2; return; }
+  cx = int(sumX / n); cz = int(sumZ / n);
+}
+
+int hillReferenceOf(const LandValueCity& c) {
+  int64_t tot = 0, n = 0;
+  const int sea = c.seaLevel();
+  for (int x = 0; x <= c.mapW(); x++)
+    for (int z = 0; z <= c.mapH(); z++) {
+      int a = c.altitude(x, z);
+      if (a > c.waterSurface(x, z)) { tot += a - sea; n++; }
+    }
+  return n ? int((tot / n) & 0xFF) : 0;
+}
+
 // ---------------- layer ----------------
 void LandValueLayer::init(int w, int h, const LandValueTuning& t) {
   W = w; H = h; tune_ = t;
@@ -182,23 +206,20 @@ void LandValueLayer::cycleStart(const LandValueCity& c, bool rollStats) {
     sum = 0; count = 0;
   }
   int h = c.hillReference();
-  if (h < 0) {  // mean height above sea level over land tiles
-    int64_t tot = 0, n = 0;
-    for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) { int a = c.altitude(x, z) - c.seaLevel(); if (a > 0) { tot += a; n++; } }
-    h = n ? int(tot / n) : 0;
-  }
+  if (h < 0) h = hillReferenceOf(c);
   href_ = std::max(0, std::min(h, 255));
   derivedValid_ = true;
 }
 
-void LandValueLayer::computeBlock(const LandValueCity& c, int x, int y, int cx, int cy) {
+void LandValueLayer::computeBlock(const LandValueCity& c, int x, int y, int cx, int cy, std::string* dbg) {
   int bh = H / 2;
   int rw = tune_.waterRadiusBlocks;
   // 1 water bonus
   int dist = waterDist_.empty() ? 255 : waterDist_[size_t(x / 2) * bh + y / 2];
   int wb = (dist <= rw) ? (rw - dist + 1) * tune_.waterEffect / (rw + 1) : 0;
-  // 2 hill bonus
-  int h = c.altitude(x, y) - c.seaLevel();
+  // 2 hill bonus: 8-bit difference, so vertices below the sea level wrap to ~226-255 and get the full bonus (original
+  // defect, spec 15 s6.3 step 2) [STATIC]
+  int h = (c.altitude(x, y) - c.seaLevel()) & 0xFF;
   int hb = 0;
   if (h > href_) { int d8 = href_ == 0 ? 1 : 8 * href_; hb = tune_.hillEffect * std::min(h, d8) / d8; }
   float Wf = float(wb + hb) / 100.0f;
@@ -264,10 +285,31 @@ void LandValueLayer::computeBlock(const LandValueCity& c, int x, int y, int cx, 
     float B = float(rne(double(base * (1.0f + Wf))));
     int T = rne(double((1.0f + q + p + m + s) * B));
     totalT += T;
+    if (dbg) { char b[200]; std::snprintf(b, sizeof b, " [cls %d base %.0f W %.2f B %.0f q %.3f p %.3f m %.2f s %.2f T %d]", cls, base, Wf, B, q, p, m, s, T); *dbg += b; }
+    if (dbg) continue;
     if (cls != kLvNone) { sum += T; count++; }
   }
+  if (dbg) return;
   int64_t v = totalT / 4;
   lv[size_t(x / 2) * bh + y / 2] = uint8_t(v < 1 ? 1 : (v > 255 ? 255 : v));
+}
+
+std::string LandValueLayer::explainBlock(const LandValueCity& c, int x, int y) const {
+  int bh = H / 2, cw = W / 4, ch = H / 4;
+  int dist = waterDist_.empty() ? 255 : waterDist_[size_t(x / 2) * bh + y / 2];
+  int h = (c.altitude(x, y) - c.seaLevel()) & 0xFF;
+  size_t mi = size_t(std::min(x / 4, cw - 1)) * ch + std::min(y / 4, ch - 1);
+  int cx, cy; c.cityCentre(cx, cy);
+  int ddx = std::abs(cx - x), ddz = std::abs(cy - y);
+  char buf[400];
+  std::snprintf(buf, sizeof buf, "zone %d/%d/%d/%d waterDist %d h %d dc %d mods A%d R%d C%d I%d crime %d air %d wat %d garb %d cR %d cC %d",
+                c.zoneAt(x, y), c.zoneAt(x + 1, y), c.zoneAt(x, y + 1), c.zoneAt(x + 1, y + 1), dist, h,
+                std::max(ddx, ddz) + std::min(ddx, ddz) / 2, modAll_.empty() ? 0 : modAll_[mi], modR_.empty() ? 0 : modR_[mi],
+                modC_.empty() ? 0 : modC_[mi], modI_.empty() ? 0 : modI_[mi], c.crime(x, y), c.airPollution(x, y), c.waterPollution(x, y),
+                c.garbage(x, y), cr_, cc_);
+  std::string out = buf;
+  const_cast<LandValueLayer*>(this)->computeBlock(c, x, y, cx, cy, &out);
+  return out;
 }
 
 void LandValueLayer::recomputeAll(const LandValueCity& c) {

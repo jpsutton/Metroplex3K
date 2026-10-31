@@ -55,16 +55,31 @@ class LandValueCity {
   virtual int waterPollution(int, int) const { return 0; }   // 0..32767
   virtual int garbage(int, int) const { return 0; }          // 0..32767
   virtual int crime(int, int) const { return 0; }            // 0..255
-  virtual int altitude(int x, int z) const = 0;              // terrain altitude units
+  virtual int altitude(int x, int z) const = 0;              // terrain altitude of vertex (x, z), 0..W x 0..H
+  virtual int waterSurface(int x, int z) const { return seaLevel(); }   // water-surface altitude of vertex (x, z)
   virtual int seaLevel() const = 0;                          // base (water) level
   virtual bool hasWater(int x, int z) const = 0;             // tile has water
   virtual int64_t population() const { return 0; }
   virtual bool ordinanceEnacted(uint32_t) const { return false; }
   virtual void occupants(std::vector<LvOccupant>&) const {}
-  virtual void cityCentre(int& cx, int& cz) const { cx = mapW() / 2; cz = mapH() / 2; }  // [OPEN] default: map centre
-  // Reference height Href; default (-1) = computed: mean height above sea level of land tiles.
+  // City centre (spec 15 s6.3 step 6b) [STATIC]: area-weighted centroid of the lot-bearing occupants (see
+  // buildingCentroid); the map centre when there are none.
+  virtual void cityCentre(int& cx, int& cz) const { cx = mapW() / 2; cz = mapH() / 2; }
+  // Reference height Href; default (-1) = computed (spec 15 s6.3 cycle start step 4).
   virtual int hillReference() const { return -1; }
 };
+
+// Area-weighted centroid of building footprints with the original's rounding quirk (spec 15 s6.3 step 6b) [STATIC].
+// Footprint [x0..x0+sizeX-1] x [z0..z0+sizeZ-1]. Order-independent.
+struct BuildingCentroid {
+  int64_t sumX = 0, sumZ = 0, n = 0;
+  void add(int x0, int z0, int sizeX, int sizeZ, int sign = 1);
+  void get(int mapW, int mapH, int& cx, int& cz) const;
+};
+
+// Href (spec 15 s6.3 cycle start step 4) [STATIC]: over all (W+1) x (H+1) vertices whose altitude is above the
+// vertex's water surface, mean of (altitude - sea level), integer division, low 8 bits; 0 when no vertex is dry.
+int hillReferenceOf(const LandValueCity& c);
 
 class LandValueLayer {
  public:
@@ -95,10 +110,12 @@ class LandValueLayer {
 
   static const int kPhaseOffsets[16][2];
   int hillRef() const { return href_; }
+  // Diagnostic: the inputs of one block's computation (tools).
+  std::string explainBlock(const LandValueCity& c, int x, int y) const;
   int centreValue(int cls) const { return cls == kLvRes ? cr_ : cls == kLvCom ? cc_ : ci_; }
 
  private:
-  void computeBlock(const LandValueCity& c, int x, int y, int cx, int cy);
+  void computeBlock(const LandValueCity& c, int x, int y, int cx, int cy, std::string* dbg = nullptr);
   void buildWaterDist(const LandValueCity& c);
   void buildModMaps(const LandValueCity& c);
   LandValueTuning tune_;

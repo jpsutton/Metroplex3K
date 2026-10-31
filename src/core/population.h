@@ -42,8 +42,6 @@ struct PopulationConfig {
   uint8_t minAcceptableEducationRating = 2, minAcceptableHealthRating = 2;
   uint8_t educationStrikeEfficiency = 50, healthStrikeEfficiency = 50;   // raw byte, used UNSCALED (defect)
   uint32_t maxEducationStrikeDuration = 6, maxHealthStrikeDuration = 6;
-  // Workforce fraction [OPEN]: working-age band used for w (spec 20 s6, spec 29 2.1)
-  int workAgeMin = 18, workAgeMax = 64;
 
   static PopulationConfig fromIni(const IniFile& resLayer);
 };
@@ -73,8 +71,6 @@ struct PopulationInput {
   std::vector<EduFacility> education;
   std::vector<Hospital> hospitals;
   uint32_t museumCapacity = 0, libraryCapacity = 0;  // recorded sums (optional; derived if 0)
-  // Jobs valve totals of the last cycle (demand D = jobs, supply S = workers).
-  int32_t jobsDemand = 0, workersSupply = 0;
 };
 
 enum StrikeKind { StrikeHealth = 0, StrikeSchool = 1, StrikeCollege = 2 };
@@ -105,7 +101,6 @@ class Population {
   uint32_t teachers = 0, professors = 0, doctors = 0;
   // Not persisted.
   int oldestAge = 64;       // A*
-  int employment = 0;       // percent
   float healthGain = 0;     // x of the last run
 
   // New-city initial distribution (spec 20 s3.1) and empty charts.
@@ -118,10 +113,12 @@ class Population {
   uint8_t qEQ(int lo, int hi) const;          // spec 4.5: unweighted mean over ages with share > 0
   uint8_t cityEQ() const { return qEQ(0, 89); }
   uint8_t cityLifeExpectancy() const;
-  float workforceFraction() const;            // w
+  // Workforce fraction w = p[20] + ... + p[65] (spec 20 s6) [STATIC]: no normalisation or weighting.
+  float workforceFraction() const;
   int32_t workers(int32_t residents) const;   // round(n * w)
-  static int employmentPercent(int32_t jobsDemand, int32_t workersSupply);   // spec 6
-  int unemploymentPercent() const { return 100 - employment; }
+  static constexpr int kWorkAgeMin = 20, kWorkAgeMax = 65;
+  // Industrial developer EQ input: working-age EQ Q(20, 65) (spec 20 s4.5, spec 15 s4.5) [STATIC].
+  uint8_t workingAgeEQ() const { return qEQ(kWorkAgeMin, kWorkAgeMax); }
   float shareSum() const;
   // Number of people of an age for a given city population.
   double peopleAt(int age, uint32_t population) const { return double(population) * share[age]; }

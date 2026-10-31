@@ -50,6 +50,9 @@ struct Valve {
   static Valve read(Reader& r);
 };
 
+// Cap rule of spec 15 s3.2: capPct of a family valve from Slast/Dlast of its amenity valve.
+uint8_t capFromAmenity(const Valve& amenity);
+
 struct ValveItem { int valve = 0, supply = 0, demand = 0; };
 struct OrdinanceValveEffect { int valve = 0, permille = 0; };
 
@@ -67,6 +70,13 @@ struct ValveTuning {
   struct Cycle { int duration = 0, pct = 0; };
   std::map<int, std::vector<Cycle>> worldCycles;  // [ListOfWorldValveMapping]
   int externalFunSupply = 0, comInitialConnection = 0, indInitialConnection = 0;
+  // SC3IndLayer.ini [TuningParameters] PowerConservationOrdEffect / WaterConservationOrdEffect (spec 15 s3.2
+  // "Industrial ordinance demand cut"; shipped 3).
+  int powerConservationOrdEffect = 0, waterConservationOrdEffect = 0;
+  // CitySim.ini [AgentTypeHierarchy] (child -> parent): a building without its own [AgentValveEffects] entry uses the
+  // entry of its nearest ancestor (spec 15 s3.3).
+  std::map<uint32_t, uint32_t> parent;
+  const std::vector<ValveItem>* effectsFor(uint32_t agentType) const;
   struct TaxBreak { int pop = 0; std::array<float, 23> e{}; };
   std::vector<TaxBreak> taxTable;  // sorted by pop
 
@@ -92,7 +102,7 @@ struct ValveBuilding {
   uint32_t agentType = 0;
   int x = 0, z = 0, sizeX = 1, sizeZ = 1;  // footprint from (x,z)
   int serviceMul = 1;      // 0/1 service multiplier for valve sums (not for the unit maps)
-  bool operating = true;   // false for abandoned / construction / damaged: contributes nothing
+  bool operating = true;   // lot state with 0x200 removed is 1 (spec 15 s3.3); otherwise contributes nothing
   int family = 0;          // 0 = derive from agentType (3xxx -> 3000, 5xxx -> 5000, 8xxx -> 8000)
 };
 
@@ -160,9 +170,20 @@ class ValveLayer {
     bool hadV0 = true;  // version 1 lacks v0; kept so it can be reported
   } world;
   bool parseWorld(const uint8_t* p, size_t n);
+  // Monthly world-layer work after the valve update: v0..v2 = jobs valve Slast, Dlast, ExternalJobDemand (spec 10
+  // s6.13) and the unemployment sample of chart 4 (spec 20 s6). `w` = workforce fraction.
+  void worldMonthly(double w, int month, int year);
+  int unemploymentPct() const { return int(world.charts[3].w[0]); }
   Bytes writeWorld(bool markers = false) const;
 
   Valve v3000, v3001, v5000, v5001, v8000, v8001, v7000;
+
+  // Spec 15 s3.3 [OPEN, narrowed]: the saved Dlast of 5001/8001 is 1.3-2.1x the building sum and the source of the
+  // extra demand is unknown. Interim (spec recommendation): a loaded city carries the saved ratio as a multiplier on the
+  // building demand of these two valves. 1 = no adjustment (new cities). Not saved.
+  double amenityDemandMul[2] = {1.0, 1.0};   // [0] 5001, [1] 8001
+  // Building demand of 5001 / 8001 (before the multiplier) for a set of buildings; used to derive the ratio on load.
+  void amenityBuildingDemand(const std::vector<ValveBuilding>& b, int64_t& d5001, int64_t& d8001) const;
 
  private:
   void finishCycle();
@@ -172,6 +193,9 @@ class ValveLayer {
   int64_t sumC_ = 0, sumI_ = 0;
   double wf_ = 0;  // current workforce fraction
 };
+
+// Unemployment percentage (spec 20 s6) [STATIC]: R = valve 3000 Slast, w = workforce fraction, J = jobs valve Dlast.
+int unemploymentPercent(int64_t R, double w, int64_t J);
 
 // Defaults for new-city records (replaceable by templates, see records.h).
 Bytes defaultWorldRecord();

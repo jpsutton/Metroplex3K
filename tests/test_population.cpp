@@ -73,7 +73,6 @@ static void testMonthlyBasics() {
   Population z;
   z.monthly(baseInput(0));
   CHECK(z.eqChart.monthly[0] == 0 && z.leChart.monthly[0] == 0 && z.popChart.monthly[0] == 0);
-  CHECK(z.employment == 0);
   // charts roll in January and decade years
   Population j;
   PopulationInput jan = baseInput(50000);
@@ -346,29 +345,20 @@ static void testStrikes() {
 }
 
 static void testWorkforce() {
-  CHECK(Population::employmentPercent(0, 500) == 0);
-  CHECK(Population::employmentPercent(1000, 500) == 100);   // fewer workers than jobs
-  CHECK(Population::employmentPercent(500, 1000) == 50);
-  CHECK(Population::employmentPercent(333, 1000) == 33);
-  CHECK(Population::employmentPercent(1000, 1000) == 100);
+  // spec 20 s6: w = p[20] + ... + p[65], no normalisation.
   Population p;
-  PopulationInput in = baseInput(10000);
-  in.jobsDemand = 600;
-  in.workersSupply = 800;
-  p.monthly(in);
-  CHECK(p.employment == 75 && p.unemploymentPercent() == 25);
-  float w = p.workforceFraction();
-  CHECK(w > 0.4f && w < 0.8f);
-  CHECK(p.workers(1000) == int32_t(std::nearbyint(1000.0 * w)));
-  // configurable band
-  p.cfg.workAgeMin = 0;
-  p.cfg.workAgeMax = 89;
-  CHECK(near(p.workforceFraction(), 1.0f, 1e-4f));
-  p.cfg.workAgeMin = 200; p.cfg.workAgeMax = 300;
+  float expect = 0;
+  for (int a = 20; a <= 65; a++) expect += p.share[a];
+  CHECK(near(p.workforceFraction(), expect, 1e-6f));
+  CHECK(p.workers(1000) == int32_t(std::nearbyint(1000.0 * p.workforceFraction())));
+  for (auto& s : p.share) s = 0;
+  p.share[19] = 0.5f; p.share[66] = 0.5f;
   CHECK(p.workforceFraction() == 0.0f);
-  Population empty;
-  for (auto& s : empty.share) s = 0;
-  CHECK(empty.workforceFraction() == 0.0f);
+  p.share[20] = 0.25f; p.share[65] = 0.25f;
+  CHECK(near(p.workforceFraction(), 0.5f, 1e-6f));
+  // industrial EQ input is Q(20, 65)
+  for (int a = 0; a < kAges; a++) p.eq[a] = a < 20 ? 50.0f : 120.0f;
+  CHECK(p.workingAgeEQ() == 120);
 }
 
 static void testRecords() {

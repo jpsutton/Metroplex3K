@@ -290,6 +290,7 @@ void generateTerrain(World& world, int W, int H, const TerrainGenOptions& opt) {
   world.seaLevel = uint8_t(L);
   world.alt = z.g;
   world.water = z.w;
+  world.seaVertex = z.m;
   for (int x = 0; x < W; x++)
     for (int zz = 0; zz < H; zz++) {
       int d = z.t[size_t(x) * C + zz];

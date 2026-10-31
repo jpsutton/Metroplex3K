@@ -157,6 +157,9 @@ class City {
   void markOccupantsDirty() { occDirty_ = true; }
   int jailCapacity() const;
   void recomputeLandValue();   // recompute every land-value block now (tools / tests)
+  void lvCentre(int& cx, int& cz) const;
+  std::string lvExplain(int x, int z) const;   // city centre used by the land-value pass (tools)
+  void runMonthlyWater() { monthlyWater(); }   // one water update now (tools)
   std::optional<size_t> evaluateBusinessDeals(const BusinessDeals::Inputs& in) { return business.weeklyEvaluate(in, rng_); }
   // Fall-out marks (disaster MarkRadiation): the tile blocks development and lowers land value. Session-only, not saved.
   void markRadiation(int x, int z) { if (inMap(x, z)) radiation_[idx(x, z)] = 1; }
@@ -236,6 +239,7 @@ class City {
   uint32_t nextUid_ = 1;
   std::vector<uint8_t> radiation_;
   int countResidents() const;
+  std::vector<growth::ValveBuilding> valveBuildings() const;
   std::map<std::pair<int, int>, int> plantAt_, waterFacAt_;      // anchor -> layer id
   std::map<std::pair<int, int>, std::pair<int, int>> stationAt_;  // anchor -> (kind 0 police 1 fire 2 jail, id)
   int roadUpkeep_ = 0, transitUpkeep_ = 0;

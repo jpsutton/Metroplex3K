@@ -49,8 +49,6 @@ PopulationConfig PopulationConfig::fromIni(const IniFile& ini) {
   c.healthStrikeEfficiency = uint8_t(gi("HealthStrikeEfficiency", c.healthStrikeEfficiency));
   c.maxEducationStrikeDuration = uint32_t(gi("MaxEducationStrikeDuration", c.maxEducationStrikeDuration));
   c.maxHealthStrikeDuration = uint32_t(gi("MaxHealthStrikeDuration", c.maxHealthStrikeDuration));
-  c.workAgeMin = int(gi("WorkAgeMin", c.workAgeMin));   // not an original key: configurable [OPEN]
-  c.workAgeMax = int(gi("WorkAgeMax", c.workAgeMax));
   return c;
 }
 
@@ -74,7 +72,6 @@ void Population::newCity() {
   schoolDesks = collegeDesks = hospitalBeds = museumCapacity = libraryCapacity = 0;
   teachers = professors = doctors = 0;
   unknown1BE = 0;
-  employment = 0;
   healthGain = 0;
   const float N = cfg.newbornPopPct, D = cfg.ageCohortDecay;
   for (int a = 0; a < kAges; a++) share[a] = 0;
@@ -122,22 +119,13 @@ float Population::shareSum() const {
 }
 
 float Population::workforceFraction() const {
-  float total = 0, work = 0;
-  for (int a = 0; a < kAges; a++) {
-    total += share[a];
-    if (a >= cfg.workAgeMin && a <= cfg.workAgeMax) work += share[a];
-  }
-  return total > 0 ? work / total : 0.0f;
+  float w = 0;
+  for (int a = kWorkAgeMin; a <= kWorkAgeMax && a < kAges; a++) w += share[a];
+  return w;
 }
 
 int32_t Population::workers(int32_t residents) const {
   return int32_t(std::nearbyint(double(residents) * workforceFraction()));
-}
-
-int Population::employmentPercent(int32_t D, int32_t S) {
-  if (D == 0) return 0;
-  if (S < D) return 100;
-  return int(int64_t(100) * D / S);
 }
 
 PopulationResult Population::monthly(const PopulationInput& in) {
@@ -145,8 +133,7 @@ PopulationResult Population::monthly(const PopulationInput& in) {
   const float N = float(in.population);
   const bool january = in.month == 1;
 
-  // 1. employment
-  employment = employmentPercent(in.jobsDemand, in.workersSupply);
+  // 1. The cap of valve 3000 from valve 3001 (spec 20 s3.2 step 1) is set by the valve layer (growth::ValveLayer).
 
   // 2. facility totals (funding is already folded into the facilities' effects by the caller)
   schoolDesks = collegeDesks = museumCapacity = libraryCapacity = hospitalBeds = 0;

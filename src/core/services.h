@@ -227,7 +227,8 @@ struct PollutionParams {
   int treatmentCap = 0;           // SC3Tune [WaterTreatment] OptimalPollutionCap
   int incineratorCap = 0;         // SC3Tune [Incinerator] OptimalGarbageCap
   int wteCap = 0;                 // SC3PowerLayer [WasteToEnergyPowerPlant] OptimalGarbageCap
-  int recyclingCap = 0;           // [OPEN] garbage removed per month per recycling centre (spec 29 2.7)
+  // SC3Tune [RecyclingCenter] OptimalPctReduction / OptimalPopServed: inputs of the recycling ratio (spec 16 s4.3).
+  int recyclingPct = 0, recyclingPopServed = 0;
   std::map<uint32_t, PollutionEntry> table;
   // pollution = SC3Pollution.ini; tune = SC3Tune.ini; power = SC3PowerLayer.ini (any may be null)
   static PollutionParams fromIni(const IniFile& pollution, const IniFile* tune = nullptr, const IniFile* power = nullptr);
@@ -258,26 +259,38 @@ class PollutionLayer {
   bool airPolluted(int x, int z) const { return airAt(x, z) >= params_.airThreshold; }
   bool waterPolluted(int x, int z) const { return waterAt(x, z) >= params_.waterThreshold; }
   bool garbagePolluted(int x, int z) const { return standingGarbageAt(x, z) >= params_.garbageThreshold; }
-  void monthEnd(int month, int year) { chartMonthEnd(chart, uint32_t(avgAir), month, year); }
+  // Month end: chart, garbage counters and history (spec 16 s4.5), landfill store update (s4.4) and the recycling
+  // ratio for `population` (s4.3). `recyclingFunding` in percent.
+  void monthEnd(int month, int year, int64_t population = 0, int recyclingFunding = 100);
+  // Recycling ratio r (spec 16 s4.3) [STATIC]: centres sorted by reduction percent, walked while served < P.
+  struct RecyclingCentre { int64_t pct = 0, popServed = 0; };
+  static float recyclingRatio(std::vector<RecyclingCentre> centres, int64_t population);
+  // Landfill registration (spec 15 s7, spec 17 s7.2.5): sets bit 15 of the standing word, adds 32767 - g of room.
+  // Sea-water (salt) flag of the tile's 2 x 2 cell: bit 30 of the cell state (spec 17 s7.2.1) [STATIC].
+  bool seaFlagAt(int x, int z) const { return (state[size_t(x / 2) * nz_ + z / 2] & 0x40000000u) != 0; }
+  // The terrain writing a sea surface at vertex (x, z) flags the cells of the up to four tiles sharing it (spec 11 s5).
+  void markSeaVertex(int x, int z) {
+    for (int dx = -1; dx <= 0; dx++) for (int dz = -1; dz <= 0; dz++) {
+      int tx = x + dx, tz = z + dz;
+      if (tx >= 0 && tz >= 0 && tx < W_ && tz < H_) state[size_t(tx / 2) * nz_ + tz / 2] |= 0x40000000u;
+    }
+  }
+  bool landfillRegistered(int x, int z) const { return (standing[size_t(x) * H_ + z] & 0x8000) != 0; }
+  void registerLandfill(int x, int z);
 
   // ---- record state (spec 17 7.4) ----
   uint16_t recVersion = 3, streamVersion = 2;
   std::vector<uint32_t> state;               // cells x*nz+z
-  uint8_t garbageStore[37] = {};
-  int64_t loadedBalance_ = 0;      // landfill balance as loaded (garbageStore is re-patched only when it changed)
   std::vector<uint16_t> standing;            // tiles x*H+z
-  GarbageDisposal disp;                      // disp.stats == garbageTotals
+  GarbageDisposal disp;                      // counters, history, totals and the landfill store (garbageStore)
   uint32_t avgAir = 0, avgWater = 0;
   uint16_t unk16 = 0;
   int32_t sumAir = 0, sumWater = 0;
   uint32_t totalStanding = 0, pollutedCount = 0;
   Chart chart = Chart::fresh(0, 260);
-  int64_t garbageMonth[7] = {};
-  int64_t garbageHistory[12][7] = {};
   uint8_t unk8 = 0;
   uint32_t burnCapA = 0, burnCapB = 0;
   float ratio = 0; uint32_t unk32 = 0;
-  size_t recyclingSeen_ = SIZE_MAX;   // recycling-centre count `ratio` was last matched to (SIZE_MAX = just loaded)
   uint32_t cursorX = 0, cursorZ = 0;
   int32_t rawWaterSum = 0, rawWaterLast = 0, treatedSum = 0, treatedLast = 0;
   SweepOrder order;

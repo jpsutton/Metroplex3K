@@ -14,7 +14,8 @@ struct TestCity : GrowthCity {
   std::map<int, ValveReading> valves;
   std::set<uint32_t> ords;
   std::map<std::pair<int, int>, int> garbage;
-  int pending = 0, returned = 0, credited = 0, runwaySide = -1, runwayCalls = 0, eqv = 100, yr = 1900, mo = 1;
+  int64_t pending = 0;
+  int returned = 0, credited = 0, runwaySide = -1, runwayCalls = 0, eqv = 100, yr = 1900, mo = 1;
   std::vector<std::pair<int, int>> landfillPieces;
   TestCity(int w, int h) : W(w), H(h), zone(size_t(w) * h, 0), lv(size_t(w) * h, 100), pw(size_t(w) * h, 1), wt(size_t(w) * h, 1),
       rad(size_t(w) * h, 0), road(size_t(w) * h, 0), trip(size_t(w) * h, 0) {
@@ -57,9 +58,13 @@ struct TestCity : GrowthCity {
   void setLandfillGarbage(int x, int z, int g) override { garbage[{x, z}] = g; }
   void placeLandfillPiece(int x, int z) override { landfillPieces.push_back({x, z}); }
   void clearLandfillTile(int x, int z) override { garbage.erase({x, z}); }
-  void creditGarbageCapacity(int d) override { credited += d; }
-  int takePendingLandfillGarbage() override { int p = pending; pending = 0; return p; }
-  void returnLandfillGarbage(int r) override { returned += r; }
+  std::set<std::pair<int, int>> registered;
+  int64_t room = 0, placed = 0;
+  bool landfillRegistered(int x, int z) const override { return registered.count({x, z}) != 0; }
+  void registerLandfill(int x, int z) override { if (registered.insert({x, z}).second) room += 32767 - landfillGarbage(x, z); }
+  void creditLandfillRoom(int d) override { credited += d; room += d; }
+  int64_t landfillPending() const override { return pending; }
+  void landfillPlaced(int a) override { pending -= a; room -= a; placed += a; }
 };
 
 static BuildingChoice bc(uint32_t occ, uint32_t agent, int sx = 1, int sz = 1, uint32_t flags = 0) {
@@ -268,12 +273,59 @@ int main() {
   {
     Fixture f; ZoneManager zm; zm.setConfig(&f.cfg);
     TestCity c(16, 16); c.fillZone(10, 5, 12, 5, 17); c.pending = 40000; SimRand rng;
-    zm.visitTile(c, rng, 10, 5);
-    CHECK(c.landfillGarbage(10, 5) == 32767 && c.landfillGarbage(11, 5) == 7233 && c.landfillPieces.size() == 2 && c.returned == 0);
-    zm.visitTile(c, rng, 10, 5);   // decay: round(32767 * 490 / 10000) = 1606
+    zm.visitTile(c, rng, 10, 5);   // registers (+32767 room), appends itself and fills
+    CHECK(c.landfillRegistered(10, 5) && c.landfillGarbage(10, 5) == 32767 && c.pending == 7233 && c.placed == 32767 && c.room == 0);
+    CHECK(c.landfillPieces.size() == 1);
+    zm.visitTile(c, rng, 11, 5);   // the full tile takes nothing; the visited tile joins the list
+    CHECK(c.landfillGarbage(11, 5) == 7233 && c.pending == 0 && c.room == 32767 - 7233 && c.landfillPieces.size() == 2);
+    zm.visitTile(c, rng, 10, 5);   // decay: round(32767 * 490 / 10000) = 1606, credited as room (registered)
     CHECK(c.landfillGarbage(10, 5) == 32767 - 1606 && c.credited == 1606);
     c.garbage[{12, 5}] = 1; zm.visitTile(c, rng, 12, 5); CHECK(c.landfillGarbage(12, 5) == 0 && c.garbage.count({12, 5}) == 0);
-    c.pending = 3 * 32767; zm.visitTile(c, rng, 10, 5); CHECK(c.returned > 0);  // runs out of zone-17 tiles
+    // spec 15 s7 test vector: g = 20000 -> d = 980
+    c.garbage[{11, 5}] = 20000; int cr = c.credited; zm.visitTile(c, rng, 11, 5);
+    CHECK(c.landfillGarbage(11, 5) == 19020 && c.credited - cr == 980);
+  }
+  // ---- housing projects layout B, row houses (spec 15 s5.5) ----
+  {
+    Fixture f; ZoneManager zm; zm.setConfig(&f.cfg);
+    DevRule hp; hp.id = 0x630EA608;
+    hp.lists[3700].large.push_back(bc(1, 3700, 2, 2));
+    hp.lists[3700].filler.push_back(bc(2, 3700, 1, 1, 0x100));
+    Category k; k.agentType = 3700;
+    // seed search: find a draw sequence that picks layout B (33 <= r < 66) on side 0
+    bool sawB = false;
+    for (uint32_t seed = 1; seed < 400 && !sawB; seed++) {
+      TestCity c(32, 32);
+      for (int x = 10; x <= 15; x++) c.road[c.ix(x, 19)] = 1;   // frontage along the low-z side of the lot
+      Rect lot{10, 20, 15, 22};
+      SimRand probe(seed); probe.rand(1); int sel = probe.rand(100); int side = probe.rand(4);
+      if (!(sel >= 33 && sel < 66)) continue;
+      SimRand rng(seed);
+      int n = zm.runRule(c, rng, hp, lot, k, 2000, 0, 2000, 3);
+      if (side != 0 && n == 0) continue;   // other sides have no frontage; the loop moves on to side 0
+      sawB = true;
+      CHECK(n == 9);
+      std::set<std::pair<int, int>> anchors, fill;
+      for (const auto& l : c.lots) (l.sizeX == 2 ? anchors : fill).insert({l.ax, l.az});
+      CHECK(anchors == (std::set<std::pair<int, int>>{{10, 21}, {12, 20}, {14, 21}}));
+      CHECK(fill == (std::set<std::pair<int, int>>{{10, 20}, {11, 20}, {14, 20}, {15, 20}, {12, 22}, {13, 22}}));
+    }
+    CHECK(sawB);
+
+    DevRule rh; rh.id = 0x61F44687;
+    rh.lists[3900].large.push_back(bc(10, 3900, 2, 2, 0xFF));
+    rh.lists[3900].filler.push_back(bc(11, 3900, 1, 1, 0x100));
+    Category k2; k2.agentType = 3900;
+    TestCity c(32, 32);
+    for (int x = 9; x <= 18; x++) { c.road[c.ix(x, 9)] = 1; c.road[c.ix(x, 16)] = 1; }
+    for (int z = 9; z <= 16; z++) { c.road[c.ix(9, z)] = 1; c.road[c.ix(18, z)] = 1; }
+    SimRand rng(3);
+    int n = zm.runRule(c, rng, rh, Rect{10, 10, 17, 15}, k2, 2000, 0, 2000, 3);   // 8 x 6 block, roads on all sides
+    int big = 0, small = 0;
+    for (const auto& l : c.lots) (l.sizeX == 2 ? big : small)++;
+    CHECK(big == 4 + 2 + 2 + 1 + 1 && small == 4 * 2 && n == big + small);   // corners, x-edge runs, z-edge runs, courtyard
+    TestCity odd(32, 32);
+    CHECK(zm.runRule(odd, rng, rh, Rect{10, 10, 16, 15}, k2, 2000, 0, 2000, 3) == 0);   // odd width
   }
   // ---- airport runway ----
   {

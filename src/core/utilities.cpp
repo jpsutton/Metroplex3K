@@ -1,6 +1,7 @@
 #include "core/utilities.h"
 
 #include <algorithm>
+#include <cstring>
 #include <cmath>
 #include <deque>
 
@@ -415,10 +416,9 @@ void WaterLayer::monthlyUpdate(const WaterEnv& env) {
     int64_t out = 0;
     if (f.kind == WaterKind::Tower) { out = cap; f.status = WaterFacility::Good; }
     else if (f.kind == WaterKind::Pump) {
-      // [OBSERVED] pumps accept any adjacent water, salt included: with this rule the computed per-pump outputs match the
-      // saved ones (spec 16 s3.3 says fresh only; that makes coastal pumps in Liverpool produce nothing).
-      if (ringAny(W, H, f.x - 1, f.z - 1, f.x + 1, f.z + 1, env.waterKind, 3)) { out = cap; f.status = WaterFacility::Good; }
-      else if (ringAny(W, H, f.x - 2, f.z - 2, f.x + 2, f.z + 2, env.waterKind, 3)) {
+      // Pumps need fresh water: a water tile whose cell has no sea-water flag (spec 16 s3.3) [STATIC].
+      if (ringAny(W, H, f.x - 1, f.z - 1, f.x + 1, f.z + 1, env.waterKind, 1)) { out = cap; f.status = WaterFacility::Good; }
+      else if (ringAny(W, H, f.x - 2, f.z - 2, f.x + 2, f.z + 2, env.waterKind, 1)) {
         out = int64_t(cap) * params_.pumpDistanceFactor / 100; f.status = WaterFacility::Far;
       } else f.status = WaterFacility::NoWater;
     } else {
@@ -595,30 +595,52 @@ void WaterLayer::parse(const uint8_t* p, size_t len) {
 }
 
 // ======================= Garbage =======================
-int64_t GarbageDisposal::dispose(int64_t amount) {
+int64_t GarbageDisposal::dispose(int64_t amount, bool landfill) {
   int64_t rem = amount;
   if (rem <= 0) return 0;
   auto take = [&](int64_t& budget, int slot) {
     int64_t t = std::min(rem, std::max<int64_t>(0, budget));
-    budget -= t; rem -= t; stats[slot] += t;
+    budget -= t; rem -= t; month[slot] += t;
   };
-  // Statistic slots as laid out by the original's saves [OBSERVED]: 4 = incinerators (3 x 45,000/month in Liverpool), 5 = WTE
-  // (Madison's whole remainder), 6 = landfill (Berlin, Moscow). Slots 1 and 2 are used here for export and abduction (OPEN).
-  take(wteBudget, 5);
-  take(incineratorBudget, 4);
-  if (rem > 0) {
-    int64_t t = std::min(rem, landfillRoom());
-    landfillBalance += t; pendingLandfill += t; rem -= t; stats[6] += t;
+  take(wteBudget, Wte);
+  take(incineratorBudget, Incinerated);
+  if (rem > 0 && landfill && store.V > 0) {   // routed to the store; placed on tiles (and counted) by the landfill developer
+    int64_t t = std::min<int64_t>(rem, store.V);
+    store.S += t; rem -= t;
   }
-  if (rem > 0 && exportDeal) { stats[1] += rem; rem = 0; }
+  if (rem > 0 && exportDeal) { month[Exported] += rem; rem = 0; }
   if (rem > 0) {
     int64_t room = abductionCap - abducted;
-    if (room > 0) {
-      int64_t t = std::min(rem, room);
-      abducted += t; rem -= t; stats[2] += t;
-    }
+    if (room > 0) { int64_t t = std::min(rem, room); abducted += t; rem -= t; }
   }
   return rem;
+}
+
+void GarbageDisposal::monthEnd() {
+  for (int m = 11; m > 0; m--) for (int i = 0; i < 7; i++) history[m][i] = history[m - 1][i];
+  for (int i = 0; i < 7; i++) history[0][i] = month[i];
+  history[0][Produced] = month[Produced] - abducted;
+  for (int i = 0; i < 7; i++) { totals[i] = 0; for (int m = 0; m < 12; m++) totals[i] += history[m][i]; }
+  for (auto& v : month) v = 0;
+  abducted = 0;
+}
+
+void LandfillStore::monthly() {
+  Slast = int32_t(std::max<int64_t>(INT32_MIN, std::min<int64_t>(INT32_MAX, S)));
+  Dlast = int32_t(std::max<int64_t>(INT32_MIN, std::min<int64_t>(INT32_MAX, D)));
+  V = int32_t(std::max<int64_t>(INT32_MIN, std::min<int64_t>(INT32_MAX, D - S)));
+}
+void LandfillStore::parse(const uint8_t* p) {
+  auto s32 = [&](int o) { int32_t v; std::memcpy(&v, p + o, 4); return v; };
+  Slast = s32(0); Dlast = s32(4); S = s32(8); D = s32(12);
+  std::memcpy(&f1, p + 16, 4); std::memcpy(&f2, p + 20, 4);
+  capPct = p[24]; V = s32(25); Sbase = s32(29); Dbase = s32(33);
+}
+void LandfillStore::write(uint8_t* p) const {
+  auto put = [&](int o, int64_t v) { int32_t x = int32_t(std::max<int64_t>(INT32_MIN, std::min<int64_t>(INT32_MAX, v))); std::memcpy(p + o, &x, 4); };
+  put(0, Slast); put(4, Dlast); put(8, S); put(12, D);
+  std::memcpy(p + 16, &f1, 4); std::memcpy(p + 20, &f2, 4);
+  p[24] = capPct; put(25, V); put(29, Sbase); put(33, Dbase);
 }
 
 }}  // namespace m3k::us

@@ -580,6 +580,8 @@ PollutionParams PollutionParams::fromIni(const IniFile& f, const IniFile* tune, 
     IniReader t{tune};
     p.treatmentCap = int(t.num("WaterTreatment", "OptimalPollutionCap", 0));
     p.incineratorCap = int(t.num("Incinerator", "OptimalGarbageCap", 0));
+    p.recyclingPct = int(t.num("RecyclingCenter", "OptimalPctReduction", 0));
+    p.recyclingPopServed = int(t.num("RecyclingCenter", "OptimalPopServed", 0));
   }
   if (power) {
     IniReader t{power};
@@ -705,10 +707,9 @@ void PollutionLayer::processCell(int tx, int tz, const PollutionEnv& env, int64_
     size_t ti = size_t(t[0]) * H_ + t[1];
     if (zoneOf(t[0], t[1]) != 17) {
       n++;
-      if (standing[ti] & 0x8000) { standing[ti] &= 0x7FFF; if (landfillTiles) landfillTiles--; disp.landfillBalance += 32767; }
-    } else if (!(standing[ti] & 0x8000)) {   // registration [INFERRED]
-      standing[ti] |= 0x8000; landfillTiles++; disp.landfillBalance -= 32767;
-    }
+      // a non-landfill tile that still carries the landfill flag loses it; 32767 leaves the store's room (spec 17 s7.2.4)
+      if (standing[ti] & 0x8000) { standing[ti] &= 0x7FFF; if (landfillTiles) landfillTiles--; disp.store.D -= 32767; }
+    }   // registration of zone-17 tiles is done by the landfill developer (spec 15 s7)
   }
   // 3. per-tile terms
   int64_t SA = a, SW = w;
@@ -733,22 +734,28 @@ void PollutionLayer::processCell(int tx, int tz, const PollutionEnv& env, int64_
     int64_t T = env.traffic ? (*env.traffic)[ti] : 0;
     SA += T * P.trafficAirFactor;
     if (O.active(ord::CarSmogging)) SA -= (int64_t(P.carSmogging) * T * P.trafficAirFactor) / 400;
-    if (zt != 17 && n) {
+    if (zt != 17 && n) {   // spec 16 s4.3 "Per tile"
       int64_t q = g / n;
-      disp.stats[0] += q;
-      if (ratio > 0 && q > 0) {
+      disp.month[GarbageDisposal::Produced] += q;
+      if (ratio > 0 && q > 0) {   // recycling ratio r
         double qs = double(q) * double(ratio);
         if ((i == 1 || i == 3) && qs > 0.5) qs -= 0.5;
         int64_t k = std::min<int64_t>(q, int64_t(std::llround(qs)));
-        q -= k; disp.stats[3] += k;
+        q -= k; disp.month[GarbageDisposal::Recycled] += k;
       }
       q += Gt;
       standing[ti] &= 0x8000;
-      int64_t rem = disp.dispose(q);
-      if (rem > 0) {
-        int64_t keep = std::min<int64_t>(rem, 32767);
+      int64_t left = disp.dispose(q);
+      if (left > 0) {
+        LandfillStore& st = disp.store;
+        int64_t keep;
+        if (left < 32767 && st.V < 0) {   // the tile takes back part of the backlog
+          int64_t t = std::min<int64_t>(-int64_t(st.V), g == 0 ? 1 : g / n);
+          t = std::min<int64_t>({t, 32767 - left, std::max<int64_t>(0, st.S)});
+          st.S -= t; keep = left + t;
+        } else if (left < 32768) keep = left;
+        else { keep = 32767; st.S += left - 32767; }
         standing[ti] = uint16_t((standing[ti] & 0x8000) | keep);
-        disp.landfillBalance += rem - keep;
       }
     }
   }
@@ -788,19 +795,6 @@ void PollutionLayer::processCell(int tx, int tz, const PollutionEnv& env, int64_
 
 void PollutionLayer::run(const PollutionEnv& env) {
   const PollutionParams& P = params_;
-  // Garbage scaling factor (spec 17 7.2.4 step 3). The saved `ratio` float is its live value: 0 in every shipped city without a
-  // recycling centre, 0.06-0.45 with them (equal to the scaled-away share of production in the saved history). A loaded city
-  // keeps it; when centres appear, disappear or change in number it follows them. [OBSERVED; the exact rule is still open]
-  {
-    const size_t n = recyclingCentres.size();
-    if (n != recyclingSeen_) {
-      if (n == 0) ratio = 0;
-      else if (recyclingSeen_ == SIZE_MAX) { if (ratio <= 0) ratio = float(std::min(0.45, 0.1 * double(n))); }
-      else if (recyclingSeen_ > 0 && ratio > 0) ratio = float(std::min(0.45, double(ratio) * double(n) / double(recyclingSeen_)));
-      else ratio = float(std::min(0.45, 0.1 * double(n)));
-      recyclingSeen_ = n;
-    }
-  }
   int64_t wteN = int64_t(wtePlants.size()), incN = int64_t(incinerators.size()), trN = int64_t(treatmentPlants.size());
   // [OBSERVED] OptimalGarbageCap is a per-run (daily) figure: with it the monthly burn of shipped cities is 30x the INI value
   // (WTE 1,750 -> 52,500 per plant, incinerator 1,500 -> 45,000), which is what the saved garbage histories show (Madison
@@ -811,7 +805,11 @@ void PollutionLayer::run(const PollutionEnv& env) {
   burnCapA = uint32_t(incBud); burnCapB = uint32_t(wteBud);
   disp.abductionCap = P.garbageAbduction;
   disp.beginRun(wteBud, incBud, env.exportDeal);
-  if (env.importMonthly > 0) disp.dispose(env.importMonthly / 30);   // imported garbage enters first
+  if (env.importMonthly > 0) {   // imported garbage (deal kind 5) enters first; what is not disposed waits in the store
+    int64_t i = env.importMonthly / 30;
+    disp.month[GarbageDisposal::Produced] += i; disp.month[GarbageDisposal::Imported] += i;
+    disp.store.S += disp.dispose(i);
+  }
   int64_t N = int64_t(W_) * H_ / (4 * int64_t(P.updatePeriod));
   int64_t cells = 0;
   int64_t treatLeft = trBud;
@@ -827,9 +825,42 @@ void PollutionLayer::run(const PollutionEnv& env) {
     uint16_t e = order.list[size_t(order.index++)];
     cursorX = uint32_t((e >> 8) * 2); cursorZ = uint32_t((e & 255) * 2);
   }
+  if (disp.store.V < 0) {   // the backlog goes through the stages once more (spec 16 s4.3 step 6)
+    int64_t b = std::min<int64_t>(-int64_t(disp.store.V), std::max<int64_t>(0, disp.store.S));
+    disp.store.S -= b - disp.dispose(b, false);
+  }
   uint32_t ts = 0;
   for (auto v : standing) ts += v & 0x7FFF;
   totalStanding = ts;
+}
+
+void PollutionLayer::registerLandfill(int x, int z) {
+  uint16_t& w = standing[size_t(x) * H_ + z];
+  if (w & 0x8000) return;
+  w |= 0x8000; landfillTiles++;
+  disp.store.D += 32767 - (w & 0x7FFF);
+}
+
+float PollutionLayer::recyclingRatio(std::vector<RecyclingCentre> cs, int64_t P) {
+  if (cs.empty() || P <= 0) return 0;
+  std::stable_sort(cs.begin(), cs.end(), [](const RecyclingCentre& a, const RecyclingCentre& b) { return a.pct > b.pct; });
+  double served = 0, w = 0;
+  for (const auto& c : cs) {
+    if (served >= double(P)) break;
+    served += double(c.popServed); w += double(c.pct) * double(c.popServed) / 100.0;
+  }
+  if (served <= 0) return 0;
+  return float(served < double(P) ? w / double(P) : w / served);
+}
+
+void PollutionLayer::monthEnd(int month, int year, int64_t population, int recyclingFunding) {
+  chartMonthEnd(chart, uint32_t(avgAir), month, year);
+  disp.monthEnd();
+  disp.store.monthly();
+  // [INFERRED] funding scales both centre values (spec 16 s4.3).
+  std::vector<RecyclingCentre> cs(recyclingCentres.size(),
+                                  {int64_t(params_.recyclingPct) * recyclingFunding / 100, int64_t(params_.recyclingPopServed) * recyclingFunding / 100});
+  ratio = recyclingRatio(cs, population);
 }
 
 Bytes PollutionLayer::serialize() const {
@@ -838,21 +869,14 @@ Bytes PollutionLayer::serialize() const {
   const bool markers = streamVersion >= 3;
   if (markers) putStr(b, "Pollution Layer Start");
   for (auto v : flipRows(state, nx_, nz_)) put32(b, v);
-  {  // [OBSERVED] u32 at +4 (repeated at +12) is the spare landfill room; keep the saved bytes unless the room changed
-    uint8_t gs[37]; std::memcpy(gs, garbageStore, 37);
-    if (disp.landfillBalance != loadedBalance_) {
-      uint32_t room = uint32_t(std::max<int64_t>(0, std::min<int64_t>(0xFFFFFFFFll, -disp.landfillBalance)));
-      std::memcpy(gs + 4, &room, 4); std::memcpy(gs + 12, &room, 4);
-    }
-    b.insert(b.end(), gs, gs + 37);
-  }
+  { uint8_t gs[37]; disp.store.write(gs); b.insert(b.end(), gs, gs + 37); }
   for (auto v : flipRows(standing, W_, H_)) put16(b, v);
-  for (int i = 0; i < 7; i++) put64(b, disp.stats[i]);
+  for (int i = 0; i < 7; i++) put64(b, disp.totals[i]);
   put32(b, avgAir); put32(b, avgWater); put16(b, unk16);
   putS32(b, sumAir); putS32(b, sumWater); put32(b, totalStanding); put32(b, pollutedCount);
   chart.write(b);
-  for (int i = 0; i < 7; i++) put64(b, garbageMonth[i]);
-  for (int m = 0; m < 12; m++) for (int i = 0; i < 7; i++) put64(b, garbageHistory[m][i]);
+  for (int i = 0; i < 7; i++) put64(b, disp.month[i]);
+  for (int m = 0; m < 12; m++) for (int i = 0; i < 7; i++) put64(b, disp.history[m][i]);
   b.push_back(unk8);
   put32(b, burnCapA); put32(b, burnCapB);
   uint32_t fr; std::memcpy(&fr, &ratio, 4); put32(b, fr);
@@ -887,19 +911,15 @@ void PollutionLayer::parse(const uint8_t* p, size_t n, int W, int H) {
   const size_t cells = size_t(nx_) * nz_, tiles = size_t(W) * H;
   std::vector<uint32_t> sf(cells); for (auto& v : sf) v = r.u32();
   state = flipRows(sf, nx_, nz_);
-  { Bytes gs = r.bytes(37); std::memcpy(garbageStore, gs.data(), 37); }
-  {  // spare landfill room = 32767 per landfill tile minus what has been filled (Madison: 9 tiles, room 294,903)
-    uint32_t room; std::memcpy(&room, garbageStore + 4, 4);
-    disp.landfillBalance = loadedBalance_ = -int64_t(room);
-  }
+  { Bytes gs = r.bytes(37); disp.store.parse(gs.data()); }
   std::vector<uint16_t> st(tiles); for (auto& v : st) v = r.u16();
   standing = flipRows(st, W, H);
-  for (int i = 0; i < 7; i++) disp.stats[i] = rd64(r);
+  for (int i = 0; i < 7; i++) disp.totals[i] = rd64(r);
   avgAir = r.u32(); avgWater = r.u32(); unk16 = r.u16();
   sumAir = r.s32(); sumWater = r.s32(); totalStanding = r.u32(); pollutedCount = r.u32();
   chart.parse(r);
-  for (int i = 0; i < 7; i++) garbageMonth[i] = rd64(r);
-  for (int m = 0; m < 12; m++) for (int i = 0; i < 7; i++) garbageHistory[m][i] = rd64(r);
+  for (int i = 0; i < 7; i++) disp.month[i] = rd64(r);
+  for (int m = 0; m < 12; m++) for (int i = 0; i < 7; i++) disp.history[m][i] = rd64(r);
   unk8 = r.u8();
   burnCapA = r.u32(); burnCapB = r.u32();
   { uint32_t fr = r.u32(); std::memcpy(&ratio, &fr, 4); }

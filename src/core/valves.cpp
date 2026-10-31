@@ -132,7 +132,24 @@ void ValveTuning::parseWorldLayer(const IniFile& ini) {
 }
 void ValveTuning::parseResLayer(const IniFile& ini) { std::string s; if (ini.get("TuningParameters", "ExternalFunSupply", s)) externalFunSupply = toInt(s); }
 void ValveTuning::parseComLayer(const IniFile& ini) { std::string s; if (ini.get("TuningParameters", "InitialConnectionSupply", s)) comInitialConnection = std::max(0, toInt(s)); }
-void ValveTuning::parseIndLayer(const IniFile& ini) { std::string s; if (ini.get("TuningParameters", "InitialConnectionSupply", s)) indInitialConnection = std::max(0, toInt(s)); }
+void ValveTuning::parseIndLayer(const IniFile& ini) {
+  std::string s;
+  if (ini.get("TuningParameters", "InitialConnectionSupply", s)) indInitialConnection = std::max(0, toInt(s));
+  if (ini.get("TuningParameters", "PowerConservationOrdEffect", s)) powerConservationOrdEffect = toInt(s);
+  if (ini.get("TuningParameters", "WaterConservationOrdEffect", s)) waterConservationOrdEffect = toInt(s);
+}
+const std::vector<ValveItem>* ValveTuning::effectsFor(uint32_t t) const {
+  // Exact agent type, else the nearest ancestor that has an entry; only one entry applies (spec 15 s3.3) [STATIC].
+  uint32_t cur = t;
+  for (int hop = 0; hop < 32; hop++) {
+    auto it = agentEffects.find(cur);
+    if (it != agentEffects.end()) return &it->second;
+    auto p = parent.find(cur);
+    if (p == parent.end() || p->second == cur) return nullptr;
+    cur = p->second;
+  }
+  return nullptr;
+}
 
 void ValveTuning::parseTaxation(const std::string& text) {
   taxTable.clear();
@@ -161,6 +178,13 @@ bool ValveTuning::taxEffects(int64_t pop, std::array<float, 23>& out) const {
   return true;
 }
 
+uint8_t capFromAmenity(const Valve& amenity) {
+  int64_t S = amenity.Slast, D = amenity.Dlast;
+  if (D == 0) return 0;
+  if (S < D) return 100;
+  return uint8_t(std::max<int64_t>(0, std::min<int64_t>(100, 100 * D / S)));
+}
+
 // ---------------- ValveLayer ----------------
 void ValveLayer::init(int w, int h, const ValveTuning& t) {
   W = w; H = h; tune_ = t;
@@ -186,9 +210,9 @@ void ValveLayer::init(int w, int h, const ValveTuning& t) {
 void ValveLayer::applyLimits() {
   for (Valve* v : {&v3000, &v5000, &v8000, &v7000}) v->setLimits(2000, -2000);
   for (Valve* v : {&v3001, &v5001, &v8001}) v->setLimits(INT32_MAX, INT32_MIN);
-  // [OBSERVED] The R/C/I demand valves move gradually (spec 15 s3.2 step 5, 'smooth'): the saved industrial valves sit exactly
-  // on the smoothing path (Berlin V = -1680 = 0 - 6 * 280 while D - S clamps to -2000; Liverpool V = -280 while D - S = -1618).
-  for (Valve* v : {&v3000, &v5000, &v8000}) v->smooth = true;
+  // Spec 15 s3.2 "Smoothing" [STATIC]: the smooth flag is set on every valve when it is created and never cleared (not
+  // saved). Step = 7% of (Max - Min): 280 for the +-2000 valves, 300,647,710 for the unbounded ones.
+  for (Valve* v : {&v3000, &v3001, &v5000, &v5001, &v8000, &v8001, &v7000}) v->smooth = true;
 }
 Valve& ValveLayer::valve(int id) {
   switch (id) { case 3000: return v3000; case 3001: return v3001; case 5000: return v5000; case 5001: return v5001; case 8000: return v8000; case 8001: return v8001; default: return v7000; }
@@ -238,13 +262,29 @@ void ValveLayer::addJobsDemand(int64_t n) {
   v3000.Dacc += int32_t(int64_t(std::max(1, tune_.jobToResFactor)) * n);
 }
 
+void ValveLayer::amenityBuildingDemand(const std::vector<ValveBuilding>& bs, int64_t& d5, int64_t& d8) const {
+  d5 = d8 = 0;
+  for (const auto& b : bs) {
+    if (!b.operating) continue;
+    const std::vector<ValveItem>* items = tune_.effectsFor(b.agentType);
+    if (!items) continue;
+    int64_t tiles = int64_t(b.sizeX) * b.sizeZ;
+    for (const ValveItem& vi : *items) {
+      if (vi.valve == kValveComConn) d5 += tiles * vi.demand * b.serviceMul;
+      else if (vi.valve == kValveIndConn) d8 += tiles * vi.demand * b.serviceMul;
+    }
+  }
+}
+
 void ValveLayer::addBuilding(const ValveBuilding& b) {
   if (!b.operating) return;
-  auto it = tune_.agentEffects.find(b.agentType);
-  if (it == tune_.agentEffects.end()) return;
+  const std::vector<ValveItem>* items = tune_.effectsFor(b.agentType);
+  if (!items) return;
   int64_t tiles = int64_t(b.sizeX) * b.sizeZ;
-  for (const ValveItem& vi : it->second) {
+  for (const ValveItem& vi : *items) {
     int64_t s = tiles * vi.supply * b.serviceMul, d = tiles * vi.demand * b.serviceMul;
+    if (vi.valve == kValveComConn) d = int64_t(std::llround(double(d) * amenityDemandMul[0]));
+    else if (vi.valve == kValveIndConn) d = int64_t(std::llround(double(d) * amenityDemandMul[1]));
     bool mapped = vi.valve == 3000 || vi.valve == 5000 || vi.valve == 8000, jobs = vi.valve == 7000;
     if (mapped || jobs) {
       int add = jobs ? vi.demand : vi.supply;
@@ -304,17 +344,19 @@ void ValveLayer::monthlyUpdate(const ValveCityInput& in) {
       v.Dacc += truncF(float(v.Dlast) * float(e.permille) / 1000.0f, INT32_MIN, INT32_MAX);
     }
   }
-  // [OBSERVED] cap percentage of a demand valve = demand / supply of its amenity valve (3001, 5001, 8001), at most 100:
-  // Berlin R 786,233 / 1,809,500 = 43 (saved capPct 43), Madison R 20, Liverpool R 61, Berlin C 56, I 17; Craterville, whose amenity
-  // supply is only the base, has 100 for C and I. Computed from the cycle being closed.
-  auto capOf = [](const Valve& amenity) {
-    int64_t S = amenity.Sacc, D = amenity.Dacc;
-    if (S <= 0) return D > 0 ? 100 : 0;
-    return int(std::max<int64_t>(0, std::min<int64_t>(100, D * 100 / S)));
-  };
-  v3000.capPct = uint8_t(capOf(v3001)); v5000.capPct = uint8_t(capOf(v5001)); v8000.capPct = uint8_t(capOf(v8001));
   for (Valve* v : {&v3000, &v3001, &v5000, &v5001, &v8000, &v8001}) v->update();
   v7000.update();
+  // Cap rule (spec 15 s3.2) [STATIC]: after the valve update, from Slast/Dlast of the amenity valve (3001, 5001, 8001);
+  // takes effect at the next monthly update.
+  v3000.capPct = capFromAmenity(v3001); v5000.capPct = capFromAmenity(v5001); v8000.capPct = capFromAmenity(v8001);
+  // Industrial ordinance demand cut (spec 15 s3.2) [STATIC]: directly after the industrial cap, applied next cycle.
+  if (v8000.Dlast > 0) {
+    auto cut = [&](uint32_t ord, int effect) {
+      if (in.enactedOrdinances.count(ord)) v8000.Dacc += int32_t(int64_t(effect) * v8000.Dlast / -100);   // truncates toward 0
+    };
+    cut(0x82B9999B, tune_.powerConservationOrdEffect);
+    cut(0x02BF1DFA, tune_.waterConservationOrdEffect);
+  }
   finishCycle();
   startJobsCycle();
 }
@@ -412,6 +454,8 @@ bool ValveLayer::parseWorld(const uint8_t* p, size_t n) {
     for (auto& c : w.charts) c.read(r);
     w.last = r.u32();
     world = w;
+    // v0, v1 = jobs valve Slast, Dlast (spec 10 s6.13) [STATIC]; the jobs valve has no record of its own.
+    if (w.hadV0) { v7000.Slast = w.v[0]; v7000.Dlast = w.v[1]; }
     return true;
   } catch (const FormatError&) { return false; }
 }
@@ -424,6 +468,21 @@ Bytes ValveLayer::writeWorld(bool m) const {
   put32(d, world.last);
   putMarkerStr(d, m, "World Layer End");
   return d;
+}
+
+int unemploymentPercent(int64_t R, double w, int64_t J) {
+  int64_t K = int64_t(std::nearbyint(double(R) * w));   // resident workers, without ExternalJobDemand
+  if (R == 0 || K <= J) return 0;
+  if (J <= 0) return 100;
+  return int((uint64_t(100) * uint64_t(K) - uint64_t(100) * uint64_t(J)) / (uint64_t(2) * uint64_t(K)));
+}
+
+void ValveLayer::worldMonthly(double w, int month, int year) {
+  world.v[0] = v7000.Slast; world.v[1] = v7000.Dlast; world.v[2] = tune_.externalJobDemand;
+  uint32_t u = uint32_t(unemploymentPercent(v3000.Slast, w, v7000.Dlast));
+  auto push = [&](int base, int n) { auto& a = world.charts[3].w; for (int i = n - 1; i > 0; i--) a[size_t(base + i)] = a[size_t(base + i - 1)]; a[size_t(base)] = u; };
+  push(0, 12);
+  if (month == 1) { push(12, 10); if (year % 10 == 0) push(22, 10); }
 }
 
 Bytes defaultWorldRecord() {

@@ -15,6 +15,7 @@ void World::init(int w, int h) {
   flora.assign(size_t(W) * H, 0);
   zone.assign(size_t(W) * H, 0);
   occupants.clear(); surface.clear(); pipes.clear(); subway.clear();
+  seaVertex.clear();
 }
 
 void InnerDb::parse(Bytes data) {

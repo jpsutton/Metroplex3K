@@ -226,23 +226,41 @@ class RunBudget {
   int64_t acc_ = 0;
 };
 
-// Disposal pipeline (spec 4.3): WTE -> incinerators -> landfill -> neighbour export -> abduction
-// -> standing garbage. Statistics slots (garbageTotals in the pollution record):
-// [0] produced [1] WTE [2] incinerator [3] scaled away [4] landfill [5] exported [6] abducted.
+// Landfill store 0xA2C9E821 (spec 16 s4.4, spec 15 s7): the 37-byte garbageStore block of the pollution record, in the
+// valve layout without the ID. D = spare landfill room, S = garbage routed to landfill and not yet placed on tiles,
+// V = D - S as of the last monthly update. Dlast = Dacc and Slast = Sacc in every played city (live values) [DATA].
+struct LandfillStore {
+  int64_t S = 0, D = 0;            // Sacc, Dacc (live)
+  int32_t Slast = 0, Dlast = 0;
+  float f1 = 0, f2 = 0;
+  uint8_t capPct = 0;
+  int32_t V = 0, Sbase = 0, Dbase = 0;
+  void monthly();                  // Slast/Dlast copy the live values; V = D - S (the unbounded valve's step makes it exact)
+  void parse(const uint8_t* p);    // 37 bytes
+  void write(uint8_t* p) const;
+};
+
+// Disposal stages (spec 16 s4.3): waste-to-energy -> incinerators -> landfill (routed into the store) -> neighbour export
+// -> abduction. Counter slots (spec 16 s4.5) [STATIC]: [0] produced (incl. imports), [1] imported, [2] exported,
+// [3] recycled, [4] incinerated, [5] waste-to-energy, [6] placed on landfill tiles.
 class GarbageDisposal {
  public:
+  enum Slot { Produced = 0, Imported = 1, Exported = 2, Recycled = 3, Incinerated = 4, Wte = 5, Landfilled = 6 };
   int64_t wteBudget = 0, incineratorBudget = 0;
   bool exportDeal = false;
-  int64_t abductionCap = 0;         // GarbageAbductionAmount
-  int64_t abducted = 0;             // cumulative counter (never reset: OPEN)
-  int64_t landfillBalance = 0;      // negative = spare room (spec 7.2.4 step 3)
-  int64_t pendingLandfill = 0;      // garbage accepted by the landfill stage, not yet placed on a landfill tile
-  int64_t stats[7] = {};
+  int64_t abductionCap = 0;         // GarbageAbductionAmount, per month
+  int64_t abducted = 0;             // this month; reset at every month end
+  LandfillStore store;
+  int64_t month[7] = {};            // current month
+  int64_t history[12][7] = {};      // newest first
+  int64_t totals[7] = {};           // sum of the 12 history entries
 
   void beginRun(int64_t wte, int64_t inc, bool exportDealPresent) { wteBudget = wte; incineratorBudget = inc; exportDeal = exportDealPresent; }
-  // Returns the amount left over (standing garbage).
-  int64_t dispose(int64_t amount);
-  int64_t landfillRoom() const { return landfillBalance < 0 ? -landfillBalance : 0; }
+  // Runs `amount` through the stages; returns the remainder. `landfill` = false skips the landfill stage.
+  int64_t dispose(int64_t amount, bool landfill = true);
+  // Month end (spec 16 s4.5): history (slot [0] stored as produced - abducted), totals, counters and abduction reset.
+  void monthEnd();
+  int64_t landfillRoom() const { return store.V > 0 ? store.V : 0; }
 };
 
 }}  // namespace m3k::us

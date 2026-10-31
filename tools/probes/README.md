@@ -9,6 +9,8 @@ Point each at the install with the first argument or `$M3K_GAME_DIR`.
 | Probe | What it checks | Issue |
 |---|---|---|
 | `probe_city_decline GAME [city...]` | Load saved cities, run 450 days, print population, building states and valves; also saved vs recomputed valve supply/demand after the first month. A healthy city stays roughly flat. | #78 |
+| `probe_spec_checks GAME [city...]` | Without running the sim forward: land value recomputed vs saved grid (ratio, correlation, Href, centre), valve cap rule, unemployment, recycling ratio and pump outputs vs saved values. `M3K_LV_EXPLAIN=1` prints the worst land-value blocks, `M3K_GARBAGE=1` the garbage counters and landfill store. | #78 #10 #12 #13 |
+| `probe_rule_members GAME [ruleIdHex...]` | Members (size, building flag word) of the non-scatter developer rules, for checking the member-list filing of spec 15 s5.5. | #14 |
 | `probe_retile GAME [city...]` | Re-run the network tiler over each saved road/rail/power network and diff against the stored pieces. | #47 |
 | `probe_xa GAME` | Decode every shipped `.xa`; compare with `ffmpeg` when it is on `PATH`. | #66 |
 | `probe_disasters GAME [city]` | Start each disaster in a loaded city and report how it ends and what it damages. | #35 #37 |

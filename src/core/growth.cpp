@@ -191,46 +191,40 @@ Rect findLot(const GrowthCity& c, int x, int z, int minLV, uint32_t replaced, in
 
 // ---------------- landfill ----------------
 void LandfillDeveloper::visit(GrowthCity& c, int x, int z) {
+  // Spec 15 s7 [STATIC]: (1) decay, (2) registration, (3) filling from the store's pending garbage.
   std::vector<std::pair<int, int>> changed;
+  auto inList = [&](int tx, int tz) { return std::find(active.begin(), active.end(), std::make_pair(tx, tz)) != active.end(); };
   int g = c.landfillGarbage(x, z);
   if (g > 0) {
-    if (std::find(active.begin(), active.end(), std::make_pair(x, z)) == active.end()) active.push_back({x, z});
+    if (!inList(x, z)) active.push_back({x, z});
     int d = std::max(1, rne(double(g) * decayRate / 10000.0));
     g = std::max(0, g - d);
-    c.setLandfillGarbage(x, z, g); c.creditGarbageCapacity(d);
+    c.setLandfillGarbage(x, z, g);
+    if (c.landfillRegistered(x, z)) c.creditLandfillRoom(d);
     if (g == 0) {
       c.clearLandfillTile(x, z);
       active.erase(std::remove(active.begin(), active.end(), std::make_pair(x, z)), active.end());
     }
     changed.push_back({x, z});
   }
-  int remaining = c.takePendingLandfillGarbage();
-  size_t i = 0;
-  while (remaining > 0) {
-    if (i >= active.size()) {  // extend: nearest zone-17 tile (Chebyshev) to the last tile, ties row-major
-      int lx = active.empty() ? x : active.back().first, lz = active.empty() ? z : active.back().second;
-      int bx = -1, bz = -1, bd = 1 << 30;
-      for (int xx = 0; xx < c.mapW(); xx++) for (int zz = 0; zz < c.mapH(); zz++) {
-        if (c.zoneAt(xx, zz) != 17) continue;
-        if (std::find(active.begin(), active.end(), std::make_pair(xx, zz)) != active.end()) continue;
-        if (c.landfillGarbage(xx, zz) >= 32767) continue;
-        int d = std::max(std::abs(xx - lx), std::abs(zz - lz));
-        if (d < bd) { bd = d; bx = xx; bz = zz; }
-      }
-      if (bx < 0) break;
-      active.push_back({bx, bz});
-    }
-    auto t = active[i];
-    int cur = c.landfillGarbage(t.first, t.second);
-    int take = std::min(remaining, 32767 - cur);
-    if (take > 0) {
-      if (cur == 0) c.placeLandfillPiece(t.first, t.second);
-      c.setLandfillGarbage(t.first, t.second, cur + take);
-      remaining -= take; changed.push_back(t);
-    }
-    i++;
+  if (c.zoneAt(x, z) == 17 && !c.landfillRegistered(x, z)) c.registerLandfill(x, z);
+  auto fill = [&](int tx, int tz) {
+    int64_t S = c.landfillPending();
+    if (S <= 0 || !c.landfillRegistered(tx, tz)) return;
+    int cur = c.landfillGarbage(tx, tz);
+    int amt = int(std::min<int64_t>(S, 32767 - cur));
+    if (amt <= 0) return;
+    if (cur == 0) c.placeLandfillPiece(tx, tz);
+    c.setLandfillGarbage(tx, tz, cur + amt);
+    c.landfillPlaced(amt);
+    changed.push_back({tx, tz});
+  };
+  for (size_t i = 0; i < active.size() && c.landfillPending() > 0; i++) fill(active[i].first, active[i].second);
+  // [OPEN] order in which new tiles join the list; spec interim: the visited tile is appended.
+  if (c.landfillPending() > 0 && !inList(x, z) && c.landfillRegistered(x, z) && c.landfillGarbage(x, z) < 32767) {
+    active.push_back({x, z});
+    fill(x, z);
   }
-  if (remaining > 0) c.returnLandfillGarbage(remaining);
   if (!changed.empty()) c.landfillTilesChanged(changed);
 }
 
@@ -443,14 +437,69 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
   };
   int placed = 0;
   switch (rule.id) {
-    case 0x630EA608: {  // housing projects; layouts B and C are [OPEN]: layout A is used for all
+    case 0x630EA608: {  // housing projects (spec 15 s5.5): layout A (r < 33), B (33..65), C (66..99)
       if (uncommitted * 100 / std::max(1, Max) <= 0) return 0;
       const BuildingChoice* b = pickFrom(L.large);
       if (!b) return 0;
       int e = std::max(b->sizeX, b->sizeZ);
-      rng.rand(100);  // layout selector draw (A for r<33; B/C [OPEN] fall back to A)
-      if (r.w() < 2 * e || r.h() < 2 * e) return 0;
+      int sel = rng.rand(100);
       used.assign(size_t(r.w()) * r.h(), 0);
+      std::vector<BuildingChoice> fill1;
+      for (const auto& f : L.filler) if (f.sizeX == 1 && f.sizeZ == 1) fill1.push_back(f);
+      auto putFiller = [&](int x, int z) {
+        const BuildingChoice* fb = pickFrom(fill1);
+        if (fb && canAt(*fb, x, z)) placed += putAt(*fb, x, z);
+      };
+      if (sel >= 33) {
+        // Layouts B and C: a lot side, tried from rand(4) in turn, with room and an entirely fronted frontage strip.
+        // Lot frame of side s: `a` runs along the side, `d` away from it (row 0 against the side).
+        const bool layoutB = sel < 66;
+        const int needAlong = layoutB ? 3 * e : 2 * e + 1, needDepth = layoutB ? e + 1 : e, front = layoutB ? 3 * e : 2 * e;
+        auto toXZ = [&](int s, int a, int d, int& x, int& z) {
+          switch (s) {
+            case 0: x = r.x0 + a; z = r.z0 + d; break;   // low-z side, along +x
+            case 1: x = r.x1 - d; z = r.z0 + a; break;   // high-x side, along +z
+            case 2: x = r.x1 - a; z = r.z1 - d; break;   // high-z side, along -x
+            default: x = r.x0 + d; z = r.z1 - a; break;  // low-x side, along -z
+          }
+        };
+        auto fronted = [&](int s, int a) {  // the tile just outside the side at position a
+          int x, z; toXZ(s, a, 0, x, z);
+          switch (s) { case 0: z--; break; case 1: x++; break; case 2: z++; break; default: x--; break; }
+          return c.isTransport(x, z);
+        };
+        // Building whose frame square starts at (a, d): its world anchor is the low corner of the mapped square.
+        auto building = [&](int s, int a, int d) {
+          int xa, za, xb, zb; toXZ(s, a, d, xa, za); toXZ(s, a + e - 1, d + e - 1, xb, zb);
+          int x = std::min(xa, xb), z = std::min(za, zb);
+          if (canAt(*b, x, z)) placed += putAt(*b, x, z);
+        };
+        auto filler = [&](int s, int a, int d) { int x, z; toXZ(s, a, d, x, z); putFiller(x, z); };
+        int start = rng.rand(4);
+        for (int k = 0; k < 4; k++) {
+          int s = (start + k) % 4;
+          int along = (s & 1) ? r.h() : r.w(), depth = (s & 1) ? r.w() : r.h();
+          if (along < needAlong || depth < needDepth) continue;
+          bool ok = true;
+          for (int a = 0; a < front && ok; a++) ok = fronted(s, a);
+          if (!ok) continue;
+          if (layoutB) {   // staggered triple: the middle building on the road, the outer two set back behind filler
+            for (int a = 0; a < e; a++) filler(s, a, 0);
+            building(s, 0, 1);
+            building(s, e, 0);
+            for (int a = e; a < 2 * e; a++) filler(s, a, e);
+            for (int a = 2 * e; a < 3 * e; a++) filler(s, a, 0);
+            building(s, 2 * e, 1);
+          } else {         // pair with a one-tile filler path between them
+            building(s, 0, 0);
+            for (int d = 0; d < e; d++) filler(s, e, d);
+            building(s, e + 1, 0);
+          }
+          break;
+        }
+        return placed;
+      }
+      if (r.w() < 2 * e || r.h() < 2 * e) return 0;
       Frontage f{c, r};
       int start = rng.rand(4);
       for (int k = 0; k < 4; k++) {
@@ -462,7 +511,6 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
         if (!f.stretch(cn.e1, fromHigh(cn.e1), 2 * e) || !f.stretch(cn.e2, fromHigh(cn.e2), 2 * e)) continue;
         int ox = cn.hiX ? r.x1 - 2 * e + 1 : r.x0, oz = cn.hiZ ? r.z1 - 2 * e + 1 : r.z0;
         for (int qx = 0; qx < 2; qx++) for (int qz = 0; qz < 2; qz++) {
-          bool cornerQ = (qx == (cn.hiX ? 1 : 0)) && (qz == (cn.hiZ ? 1 : 0));
           bool opposite = (qx != (cn.hiX ? 1 : 0)) && (qz != (cn.hiZ ? 1 : 0));
           int qx0 = ox + qx * e, qz0 = oz + qz * e;
           if (opposite) {
@@ -470,10 +518,52 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
               const BuildingChoice* fb = pickFrom(L.filler);
               if (fb && canAt(*fb, xx, zz)) placed += putAt(*fb, xx, zz);
             }
-          } else if (canAt(*b, qx0, qz0)) { (void)cornerQ; placed += putAt(*b, qx0, qz0); }
+          } else if (canAt(*b, qx0, qz0)) placed += putAt(*b, qx0, qz0);
         }
         break;
       }
+      return placed;
+    }
+    case 0x61F44687: {  // row houses (spec 15 s5.5) [STATIC]
+      if (uncommitted * 50 / std::max(1, Max) < 1) return 0;
+      if (r.w() < 6 || r.h() < 6 || (r.w() & 1) || (r.h() & 1)) return 0;
+      if (r.w() > 8) r.x1 = r.x0 + 7;
+      if (r.h() > 8) r.z1 = r.z0 + 7;
+      used.assign(size_t(r.w()) * r.h(), 0);
+      // Member lists by building flag bit (attribute 0xCA) and edge; a member may be in several lists.
+      std::vector<BuildingChoice> C1, C2, C3, C4, E1, E2, E3, E4, F;
+      for (const auto* v : {&L.filler, &L.small, &L.large})
+        for (const auto& m : *v) {
+          const uint32_t fw = m.flagWord;
+          if (m.sizeX == 2 && m.sizeZ == 2) {
+            if (fw & 0x1) C1.push_back(m);
+            if (fw & 0x2) C2.push_back(m);
+            if (fw & 0x4) C3.push_back(m);
+            if (fw & 0x8) C4.push_back(m);
+            if (fw & 0x20) E1.push_back(m);
+            if (fw & 0x80) E2.push_back(m);
+            if (fw & 0x10) E3.push_back(m);
+            if (fw & 0x40) E4.push_back(m);
+          } else if (m.sizeX == 1 && m.sizeZ == 1 && (fw & 0x100)) F.push_back(m);
+        }
+      const int x0 = r.x0, x1 = r.x1, z0 = r.z0, z1 = r.z1;
+      auto fr = [&](int x, int z) { return nearTransport(c, x, z); };
+      auto put = [&](const std::vector<BuildingChoice>& lst, int x, int z) {
+        const BuildingChoice* m = pickFrom(lst);
+        if (m && canAt(*m, x, z)) { placed += putAt(*m, x, z); return true; }
+        return false;
+      };
+      bool c1 = fr(x0 + 1, z0) && fr(x0, z0 + 1) && put(C1, x0, z0);
+      bool c2 = fr(x1, z1 - 1) && fr(x1 - 1, z1) && put(C2, x1 - 1, z1 - 1);
+      bool c3 = fr(x0 + 1, z1) && fr(x0, z1 - 1) && put(C3, x0, z1 - 1);
+      bool c4 = fr(x1, z0 + 1) && fr(x1 - 1, z0) && put(C4, x1 - 1, z0);
+      if (!c1 && !c2 && !c3 && !c4) return 0;
+      if (c1 && c3) for (int z = z0 + 2; z < z1 - 1; z += 2) put(E1, x0, z);
+      if (c1 && c4) for (int x = x0 + 2; x < x1 - 1; x += 2) put(E3, x, z0);
+      if (c2 && c3) for (int x = x0 + 2; x < x1 - 1; x += 2) put(E2, x, z1 - 1);
+      if (c2 && c4) for (int z = z0 + 2; z < z1 - 1; z += 2) put(E4, x1 - 1, z);
+      if (c1 && c2 && c3 && c4)
+        for (int x = x0 + 2; x < x1 - 1; x++) for (int z = z0 + 2; z < z1 - 1; z++) put(F, x, z);
       return placed;
     }
     case 0xA2C1EDA3: {  // farm (approximation of the [INFERRED] field tiling)
@@ -585,8 +675,8 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
       if (b3 && canAt(*b3, rx, rz)) return putAt(*b3, rx, rz);
       return 0;
     }
-    case 0xC2D3FD7E: case 0xE22F4A83: case 0x61F44687:
-      return 0;  // seaport pier, estates, row houses: placement [OPEN]
+    case 0xC2D3FD7E: case 0xE22F4A83:
+      return 0;  // seaport pier (piece order [OPEN]) and estates (member-list flag bits [OPEN], spec 15 s5.5)
     default: break;
   }
   // Scatter rules (section 5.4)
@@ -733,9 +823,8 @@ int ZoneManager::visitRCI(GrowthCity& c, SimRand& rng, int x, int z, const ZoneD
   }
   if (I && farm && (c.airPollution(x, z) > cfg_->ind.maxAgAirPollution || c.waterPollution(x, z) > cfg_->ind.maxAgWaterPollution)) return abandon(kAbFarmPollution);
   if (V < 0 && !field && rng.rand(-int64_t(Min)) < -(int64_t(V - P) / tiles)) return abandon(kAbNegDemand);
-  // Spec 15 section 4.3 step 4 says maxLV / 2, but on the shipped cities only 40-60% of the buildings satisfy that
-  // (the loaded cities then lose most of their lots in the first month) while 99.7% satisfy minLV / 2, and the saved
-  // zone-pass statistics show no land-value abandonments. [OBSERVED] threshold: the category's minLV / 2.
+  // Spec 15 section 4.3 steps 4-5 [STATIC]: the lot keeps its land value while floor(minLV / 2) <= LV (all three
+  // developers compare the category's minimum, the fourth number of [ZoneDeveloperDescriptions]).
   const bool adequate = cat < 0 || zd.cats[size_t(cat)].minLV / 2 <= LV;
   if (!adequate) return abandon(kAbLowLV);  // rule L never finds a category (original defect)
   const bool flagged = lot.flagged();
