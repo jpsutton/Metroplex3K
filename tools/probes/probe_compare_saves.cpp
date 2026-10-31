@@ -91,7 +91,17 @@ int main(int argc, char** argv) {
         if ((fa | fb) & 0x0002) sh.add(A.snapHighway[i], B.snapHighway[i]);
         if (A.tripTried[i] || B.tripTried[i]) { tok.add(A.tripOk[i], B.tripOk[i]); ttr.add(A.tripTried[i], B.tripTried[i]); }
       }
-    for (const Stat* s : {&ss, &sh, &ls, &tok, &ttr}) s->print();
+    { Stat em{"effect map"}; size_t n = std::min(c.valves.effectMap.size(), t.valves.effectMap.size());
+      for (size_t i = 0; i < n; i++) if (c.valves.effectMap[i] || t.valves.effectMap[i]) em.add(c.valves.effectMap[i], t.valves.effectMap[i]);
+      em.print(); }
+    Stat sroad{"snap road only"}, srail{"snap rail/stn"};
+    for (int x = 0; x < W; x++)
+      for (int z = 0; z < H; z++) {
+        size_t i = size_t(x) * H + z; uint16_t fb = t.traffic->flags(x, z);
+        if ((fb & 0x0001) && !(fb & 0x0014)) sroad.add(A.snapSurface[i], B.snapSurface[i]);
+        else if (fb & 0x0014) srail.add(A.snapSurface[i], B.snapSurface[i]);
+      }
+    for (const Stat* s : {&ss, &sroad, &srail, &sh, &ls, &tok, &ttr}) s->print();
     std::printf("   trips attempted/failed ours %u/%u theirs %u/%u; failure ratio ours %.3f theirs %.3f\n", A.tripsAttempted, A.tripsFailed,
                 B.tripsAttempted, B.tripsFailed, A.failureRatio, B.failureRatio);
     {  // trip generator census of their city: spec 18 4.1 categories by parent chain vs our type/1000 rule
@@ -113,6 +123,7 @@ int main(int argc, char** argv) {
       for (int k = -1; k < 4; k++) std::printf(" %d", specFunctional[k]);
       std::printf(") | ours");
       for (int k = -1; k < 4; k++) std::printf(" %d", mine[k]);
+      std::printf("; transit funding ours %d theirs %d, mass chance %d", c.traffic->transitFunding(), t.traffic->transitFunding(), t.traffic->massChance());
       std::printf("; TrafficTripThresholdPercent %d; radii R/C/I/D %d/%d/%d/%d\n", t.traffic->params().tripThresholdPercent, t.traffic->radius(0), t.traffic->radius(1), t.traffic->radius(2), t.traffic->radius(3));
     }
     if (std::getenv("M3K_NETCENSUS")) {  // occupant types with a transport ancestor, and network piece ids, in their city
@@ -228,6 +239,14 @@ int main(int argc, char** argv) {
     return m;
   };
   auto lo = lots(w), lt = lots(theirs.game.world());
+  {  // abandoned (state 2) lots by agent type
+    std::map<uint32_t, std::pair<int, int>> ab;
+    for (const auto& o : w.occupants) if ((o.state & ~0x200u) == 2) ab[o.agentType].first++;
+    for (const auto& o : theirs.game.world().occupants) if ((o.state & ~0x200u) == 2) ab[o.agentType].second++;
+    std::printf("   abandoned by type (ours/theirs):");
+    for (auto& kv : ab) std::printf(" %u:%d/%d", kv.first, kv.second.first, kv.second.second);
+    std::printf("\n");
+  }
   std::printf("   R/C/I lots by state (ours/theirs):");
   for (int st : {1, 2, 4, 8, 16}) std::printf(" %d:%d/%d", st, lo[st], lt[st]);
   std::printf("\n");

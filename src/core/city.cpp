@@ -1197,6 +1197,10 @@ void City::rebuildTraffic() {
     o.touristPromotion = ordinances.enacted(kOrdTourist); o.subsidizedTransit = ordinances.enacted(kOrdSubsidizedTransit);
     o.shuttleService = ordinances.enacted(kOrdShuttle);
     traffic->applyOrdinances(o);
+    // Road and transit funding from the budget at load (spec 18 s8.1 "recomputed after load"): the mass-transit chance
+    // depends on the transit efficiency, which was 100 % until the first month end.
+    if (const Department* r = budget.dept(dept::Roads)) traffic->setRoadFunding(r->funding);
+    if (const Department* tr = budget.dept(dept::Transit)) traffic->setTransitFunding(tr->funding);
   }
   // Station occupants (spec 18 s3.1) [STATIC]: bus stops, rail, subway and subway-rail stations OR their flags into every
   // tile of the footprint.

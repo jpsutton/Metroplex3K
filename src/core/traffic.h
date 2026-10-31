@@ -238,6 +238,7 @@ class TrafficSim {
   void setTransitFunding(int f) { transitFunding_ = f; recomputeEffective(); }
   int roadFunding() const { return roadFunding_; }
   int transitFunding() const { return transitFunding_; }
+  int massChance() const { return massChance_; }
   float roadEfficiency() const;
   float transitEfficiency() const;
   // Section 8.3 upkeep.
