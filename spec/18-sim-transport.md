@@ -345,6 +345,7 @@ not been visited:
 | anything else | not a candidate (the tile is marked visited) |
 
 The rows are tested top to bottom. A trip can never start directly on a highway or on track.
+A trip without an origin occupant (a tile-origin trip, §9.2) uses the default radius [STATIC].
 
 ### 5.3 Choosing among candidates (all modes except highway-like modes)
 
@@ -756,6 +757,7 @@ state 1. The bits are cleared for the lot when the building is removed (§11).
 |---|---|
 | Zone developer (`15-sim-growth.md`) | Result 1 is the developer's `unfit` input (`15-sim-growth.md` §4.2): for a built R/C/I building it causes an abandonment roll with the zone type's `NoServicePercentage` (`SC3Tune.INI`, `[ResidentialZoneDeveloper]` / `[CommercialZoneDeveloper]` / `[IndustrialZoneDeveloper]`), result code 6, and no redevelopment or upgrade on that visit; an abandoned lot with result 1 is not re-occupied. Results 0 and 2 do not block anything [STATIC for the effect; rule details owned by 15] |
 | Garbage facilities (`16-sim-utilities.md` §4.3) | If a garbage facility's lot has result 1, the facility immediately routes a fresh **uncounted** trip with destination "any", trip-length factor 255 (budget = 255 × `TripCellCostBaseRoad`), and only rail permitted besides cars. If that trip fails, the facility's disposal capacity is 0 for the month [STATIC]. Power plants and water facilities do not use the trip result [STATIC for the water and power rules of 16] |
+| Landfill developer (`15-sim-growth.md` §7) | On every visit of a landfill-zoned tile it routes a **tile-origin** trip from that tile: no occupant, origin rectangle = the 1 × 1 tile, walking radius = the default radius (6, §2.1), destination "any", uncounted, trip-length factor = map size, cars and rail allowed. Failure gives result code 16. The trip writes the tile's result bits like any other trip [STATIC]. Landfill pieces (agent type 12850, group 12005 Garbage) are also category-3 trip makers through the generators (§4.1). **Open:** in Berlin the original records success for 14 landfill tiles (row z = 99, x 4–17) that have no road piece inside the radius-6 search area and no destination bits, and it never reports code 16 on zone 17. Interim until traced: treat trips whose origin is a landfill tile, or a landfill piece, as successful [INFERRED from DATA] |
 | Query tool (`09-ui-screens.md`) | Result 1 adds a "can't reach destinations" line to the building query [STATIC] |
 
 `MaxDistFromTransport` (in the same `SC3Tune.INI` sections) is **not** part of the traffic model.

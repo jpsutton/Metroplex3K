@@ -1215,8 +1215,12 @@ families; it places landfill pieces (occupants 10006–10015, agent type 12850) 
   Result code 9 comes from the airport developer and from the landfill developer (below); 17
   comes from the seaport developer (§4.3 table); 8 is never produced [INFERRED].
   **Landfill tile test** [STATIC]: on each visit to a landfill tile the developer first checks
-  for a transport piece within **10** tiles and then a second transport-layer test on the tile
-  (identity not traced); if either fails it reports code 16. Then the tile qualifies for registration only if it is one corner of a
+  for a transport piece within **10** tiles and then routes a **tile-origin trip** from the visited
+  tile (`18-sim-transport.md` §9.2: destination "any", uncounted, trip-length factor = map size,
+  cars and rail allowed); if either fails it reports code 16. The trip writes the tile's trip
+  result bits, so empty landfill-zoned tiles also carry results. DATA: Berlin's saved passes
+  report no code 16 on zone 17, and all of its landfill tiles (including the empty zoned ones)
+  carry "tried, succeeded" in every save of a 480-day run. Then the tile qualifies for registration only if it is one corner of a
   2 × 2 square of landfill-zoned (17) tiles, each with a transport piece within 10 tiles, in
   any of the four orientations. Otherwise it reports code 9 and is not registered. DATA:
   Seoul's saved pass has code 9 on 2 airport tiles and 2 landfill tiles (total 4).
