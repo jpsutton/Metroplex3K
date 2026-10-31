@@ -1056,15 +1056,10 @@ recomputation** runs. [STATIC]
    e. `s = HomelessShelterOrdEffect / 100` if that ordinance is enacted, else 0.
    f. `B = round(base × (1 + W))`; tile value `T = round((1 + q + p + m + s) × B)`.
    g. If the tile has a class, add `T` to the city LV sum and count.
-   Note [OPEN, narrowed]: some saved blocks whose four tiles are all zone 0 hold high values
-   (Moscow 256 such blocks above 10, e.g. tiles (112..118, 96..106) at 255; Europolis 1 015, almost
-   all under civic buildings; Madrid 348), although by this rule an unclassed block cannot exceed
-   about 6. 80–93 % of them were recomputed during the pass in progress when the city was saved,
-   so they are not simply stale. No code path that gives an unzoned tile a class was found: the
-   class comes only from the zone byte. Interim: keep the saved byte for such blocks until the
-   tile's zone or occupant changes. Settling observation: load Moscow, query one of the tiles
-   above with the zone query tool, run 61 days without editing, save, and compare the zone grid and
-   land value of those blocks.
+   Note [OBSERVED]: some shipped files hold high values on blocks whose four tiles are all zone 0
+   (Moscow 256 such blocks above 10, e.g. tile (114, 102) at 255). These bytes are stale: in a run
+   of the original from the shipped Moscow file they are 1 by day 71, and none remain after the
+   first full pass (`28-conformance.md` §5.1). Recompute them by the rule; no interim is needed.
 7. Block LV `= clamp(ΣT / 4, 1, 255)` (integer division; values ≤ 0 become 1).
 
 All "round" operations are round-half-to-even float-to-int conversions. [STATIC]
@@ -1259,7 +1254,6 @@ mapping (§3.5). This document owns the record. Its byte layout, as far as it is
   buildings arrangement step (2), and the exact flag bits of the estate member lists. Housing
   projects A/B/C, row houses, estates and the runway sequence are now specified.
 * What sets the clean-industry flag (§4.5 step 3).
-* High land value on blocks whose tiles are all zone 0 (§6.3 step 6g note).
 * Whether network pieces and flora are part of the modifier-map iteration (§6.4 step 2; the
   clean-side fit supports it).
 * Occupant attributes 0x72 bits, 0xC9, 0x7B and the CSATTRIB trailer (`13-buildings-occupants.md`):
