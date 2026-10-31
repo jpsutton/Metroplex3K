@@ -923,11 +923,58 @@ tile, x-major then y: if it is free and has transport access, choose a random no
 of the category when `rand(100) < d`, else a random filler member; if its footprint (edge `e`)
 fits inside the cut lot from this tile, try to place it and mark its `e × e` tiles used.
 
-**Seaport pier `0xC2D3FD7E`** (zone 15): [OPEN, narrowed] lays pier pieces from the lot into
-adjacent water; while doing so it increments the spacing grid `01FD7A8C` (5 × 5-block counters,
-`10-save-format.md` §6.3) for each run of decoration it places at intervals of at least 5 tiles.
-The piece order is not decoded. Interim: lay one straight pier, one tile wide, from the lot edge
-that touches water, perpendicular to the shore, up to 6 tiles or until the water ends.
+**Seaport pier `0xC2D3FD7E`** (zone 15) [STATIC]. Lot rectangle [x0..x1] × [z0..z1] (inclusive).
+
+*Member lists* (family registration). A member is used only if its edge is 1 and its flag word
+(attribute 0xCA) has `0x200`. Its puzzle-part index (attribute 0x1F4) and flag bits file it as
+follows. A member with both `0x400` and `0x800` goes only to the `0x400` list. A member is entered
+as many times as its weight in the family (the same weighting as the other rules' random picks):
+
+| Part | `0x400` | `0x800` |
+|---|---|---|
+| 7 | shore Z (Q0) | shore X (Q1) |
+| 8 | pier head Z (H0) | pier head X (H1) |
+| 9 | pier body X (B1) | pier body Z (B0) |
+
+A family is registered only if B0, B1, H0 and H1 are all non-empty and at least one of Q0, Q1 is.
+The rule fails if no family is registered.
+
+*1. Choosing the shore run.* Each of the four lot sides is scanned tile by tile along the edge, in
+this order: low-z side (outward direction (0, −1)), high-z side (0, +1), high-x side (+1, 0), low-x
+side (−1, 0). A side tile (x, z) on the edge qualifies when the 5 tiles outward from it,
+(x, z) + k·d for k = 1…5, all lie on the map, are water, and hold no occupant. In addition, a
+terrain query at the 5th tile must succeed [INFERRED: a water-depth/navigability test]. The
+rule keeps the longest run of consecutive qualifying tiles over all four sides. Only a strictly
+longer run replaces the best one, so on ties the earlier side and the earlier run win. If the
+best run is shorter than 5 tiles, nothing is built. If it is longer than 12, it is cut to its
+first 12 tiles. Let L be the run length.
+*2. Pieces.* Pick a family with `Rand(number of families)`. Then pick (each with `Rand(list size)`):
+
+| Side | Shore piece (rotation) | Pier head (rotation) | Pier body |
+|---|---|---|---|
+| low z | Q0 (180°), or if Q0 is empty Q1 (270°) | H0 (180°) | B0 |
+| high z | Q0 (0°), else Q1 (90°) | H0 (0°) | B0 |
+| high x | Q1 (0°), else Q0 (90°) | H1 (0°) | B1 |
+| low x | Q1 (180°), else Q0 (270°) | H1 (180°) | B1 |
+
+The pier body uses the head's rotation. These choices are made once per rule call; every tile
+uses the same shore, head and body piece.
+*3. Laying.* Keep counters: gap g = 5 (tiles since the last pier), placed n = 0, piers p = 0,
+and a flag "last was a pier" = false. For each run tile in order, the target is the first
+outward tile T = (x, z) + d:
+* if g ≥ 5, draw r = `Rand(L)`. The tile is a **pier** if r ≥ L − n − 1 + p, otherwise a shore
+  tile. If g < 5 it is a shore tile;
+* if T holds an occupant, or placing the chosen piece (head for a pier, shore piece otherwise) at T
+  with its rotation fails, nothing changes for this tile;
+* otherwise the piece is placed and n ← n + 1. If the tile is a pier, the previous placed tile was
+  not a pier, and the spacing grid `01FD7A8C` accepts T [INFERRED: test-and-increment of
+  the 5 × 5-block counter, `10-save-format.md` §6.3], then: for k = 2…5 a body piece is placed
+  at (x, z) + k·d wherever that tile holds no occupant; g ← 0, p ← p + 1, "last was a pier" ←
+  true. Otherwise (shore piece, or a head whose extension was refused, which stays as placed):
+  g ← g + 1 and "last was a pier" ← false.
+
+The rule never reports success. Correction: the previous revision left the piece order OPEN with
+a single-straight-pier interim.
 
 ## 6. Land value
 
@@ -1320,7 +1367,7 @@ mapping (§3.5). This document owns the record. Its byte layout, as far as it is
 * `unfit` = failed trip (§4.2) is inferred; confirm against the original.
 * Source of the extra demand on valves 5001 and 8001 (§3.3, "Amenity demand of commerce and
   industry"): saved `Dlast` is 1.3–2.1 × the building sum. Interim: carry the saved ratio.
-* Non-scatter rules (§5.5): the seaport pier piece order, the farm field tiling, the airport
+* Non-scatter rules (§5.5): the farm field tiling, the airport
   buildings arrangement step (2), and the exact flag bits of the estate member lists. Housing
   projects A/B/C, row houses, estates and the runway sequence are now specified.
 * What sets the clean-industry flag (§4.5 step 3).
