@@ -272,6 +272,46 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   in.safety.curfewEnacted = c.ordinances.enacted(ord::YouthCurfew);
   in.safety.youthSportsEnacted = c.ordinances.enacted(ord::YouthSports);
   in.demo.healthStrike = c.pop.healthStrike; in.demo.schoolStrike = c.pop.schoolStrike; in.demo.collegeStrike = c.pop.collegeStrike;
+  // Indices on the graph scales (spec 22 s3.8/3.9/3.10.1, metric identities INFERRED there): city-wide air and water
+  // pollution, crime, road traffic and transit usage as the subsystems' monthly averages.
+  in.env.airPollution = int(c.pollution.avgAir); in.env.waterPollution = int(c.pollution.avgWater);
+  in.plan.airPollution = in.env.airPollution; in.plan.waterPollution = in.env.waterPollution;
+  in.safety.crime = int(c.crime.avgCrime);
+  in.safety.policeStrike = c.police.strike.striking; in.safety.fireStrike = c.fire.strike.striking;
+  in.safety.policeWarn = int(c.police.strike.counter); in.safety.fireWarn = int(c.fire.strike.counter);
+  for (const auto& j : c.police.jails()) { in.safety.jailInmates += j.inmates; in.safety.jailCapacity += j.capacity; }
+  in.safety.policeCoverage = int(c.police.pctCovered);
+  in.demo.lifeExpectancy = c.pop.cityLifeExpectancy(); in.demo.eq = c.pop.cityEQ();
+  in.plan.lifeExpectancy = c.pop.cityLifeExpectancy(); in.plan.eq = c.pop.cityEQ();
+  if (c.traffic) {
+    const auto& tr = c.traffic->rec();
+    in.trans.roadTraffic = int(tr.avgRoad); in.trans.railUsage = int(tr.avgTransit);
+    in.trans.failedCommutes = double(tr.failureRatio);
+    in.trans.transitStrike = tr.strikeState == STRIKE_STRIKING;
+    in.trans.transitWarn = int(tr.strikeMonths);
+    for (int x = 0; x < world_.W; x++)
+      for (int z = 0; z < world_.H; z++) {
+        uint16_t f = c.traffic->flags(x, z);
+        if (f & TF_RAIL) in.trans.railTiles++;
+        if (f & TF_SUBWAY) in.trans.subwayTiles++;
+        if (f & TF_HIGHWAY) in.trans.hasHighway = true;
+      }
+    in.trans.nTransit = in.trans.railTiles + in.trans.subwayTiles;
+  }
+  in.trans.carpoolEnacted = c.ordinances.enacted(ord::Carpool);
+  in.trans.crossingGuardsEnacted = c.ordinances.enacted(ord::CrossingGuards);
+  for (auto z : world_.zone) if (z == 14) in.trans.airportZoneTiles++;
+  for (const auto& o : world_.occupants) {
+    if (o.agentType == 12810 || o.agentType == 12840 || o.agentType == 12830) in.env.hasWaterSystem = true;
+  }
+  {  // neighbour sides with any / road / rail connection
+    for (const auto& nb : c.neighbours.neighbours) {
+      if (nb.nRoad + nb.nRail + nb.nPower + nb.nPipe + nb.nHighway + nb.nSubway > 0) in.plan.K++;
+      if (nb.nRoad + nb.nHighway > 0) in.plan.Kr++;
+      if (nb.nRail > 0) in.plan.Kt++;
+    }
+  }
+  in.dreary = 0;   // dreary rating: no source yet (spec 22 lists it as an advisor input only)
   for (auto z : world_.zone) {
     if (z >= 1 && z <= 3) in.plan.zoned[0]++; else if (z >= 5 && z <= 7) in.plan.zoned[1]++; else if (z >= 9 && z <= 11) in.plan.zoned[2]++;
   }
