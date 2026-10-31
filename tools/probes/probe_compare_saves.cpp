@@ -117,6 +117,13 @@ int main(int argc, char** argv) {
         si += implied; so += ourTerm; m++;
         ratioHist[int(std::lround(implied / ourTerm * 10))]++;
       }
+    { int ji = 0, jc = 0; for (const auto& j : c.police.jails()) { ji += j.inmates; jc += j.capacity; }
+      int ti = 0, tc = 0; for (const auto& j : t.police.jails()) { ti += j.inmates; tc += j.capacity; }
+      std::printf("   police jails ours %zu inmates %d/%d unjailed %d | theirs %zu inmates %d/%d unjailed %d\n", c.police.jails().size(), ji, jc, c.police.unjailed,
+                  t.police.jails().size(), ti, tc, t.police.unjailed); }
+    { us::IniReader pr{&c.config().ini.police}; std::printf("   SC3Police NoJailPenalty %lld ConvictionRate %lld DailyJailReleaseRate %lld MaxJailOvercrowding %lld\n",
+        (long long)pr.num("TuningParameters", "NoJailPenalty", -1), (long long)pr.num("TuningParameters", "ConvictionRate", -1),
+        (long long)pr.num("TuningParameters", "DailyJailReleaseRate", -1), (long long)pr.num("TuningParameters", "MaxJailOvercrowding", -1)); }
     std::printf("   police: ours striking %d prisoners-unjailed? / theirs striking %d; funding ours %d theirs %d; stations %d/%d\n", c.police.strike.striking ? 1 : 0,
                 t.police.strike.striking ? 1 : 0, c.police.funding(), t.police.funding(), c.police.stationCount(), t.police.stationCount());
     std::printf("   police term (sum of 4 tiles / PoliceFactor): implied %.1f vs ours %.1f over %lld cells; ratio x10 histogram:", m ? si / m : 0, m ? so / m : 0, m);
