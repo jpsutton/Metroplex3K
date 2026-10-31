@@ -174,8 +174,10 @@ Given a seed tile: [STATIC]
 9. If the scan completes, leftover *L* = trunc(*B* × *k*); consumed += *S* + *D* − *L*.
    **Reported draw** [STATIC]: after distribution the layer reports to the deal manager, for
    kind 0, Σ over buy slots of (slot amount − amount left in the slot), i.e. the power actually
-   drawn from neighbours; the buy deal's `units` is overwritten with it, so the bill follows the
-   draw (`19-sim-economy.md` §10.4). For kind 1 it reports the amount actually sold; a sell slot
+   drawn from neighbours (`19-sim-economy.md` §10.4). [OBSERVED] In a 480-day run of Moscow the
+   saved buy deals kept `units` 12 600 (power) and 5 100 (water) and the same monthly amount in
+   every save, so the reported draw does **not** visibly change the saved deal; how the report is
+   used is [OPEN]. Bill the deal by its saved monthly amount. For kind 1 it reports the amount actually sold; a sell slot
    with power left undelivered terminates the sell deal. Test (Moscow, saved month): produced
    128 000, consumed 140 800 → drawn ≈ 12 800 (deal `units` saved 12 600 from the previous
    month). The leftover is
