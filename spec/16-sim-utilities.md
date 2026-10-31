@@ -248,7 +248,11 @@ For each facility, in list order: [STATIC]
    (e) the facility's trip failed twice (`18-sim-transport.md` §9.2 "utility facility"
    [INFERRED for water facilities; STATIC for garbage facilities and recycling centres]). The saved status property (`10-save-format.md` §6.2.5,
    `8351FDF5`) is only written by the ring test, so a pump zeroed by (a), (b), (d) or (e) keeps
-   status 0 ("good"). DATA: Madrid has 40 pumps with output 0 and status 0, all built on the same
+   status 0 ("good"). The power test reads the powered bit of the facility's **anchor** tile
+   [STATIC]. Under a power shortage the brown-out rule of §2.7 leaves the tiles with the largest z
+   unpowered first, so facilities at the high-z map edge go dry first; this is the most likely
+   cause of the Madrid edge pumps switching off in the original's runs (`28-conformance.md`
+   §5.1) [INFERRED]. DATA: Madrid has 40 pumps with output 0 and status 0, all built on the same
    day as 42 producing pumps, so age is not the cause; check (b), (d) and (e).
 4. Desalination plants: examine the border of the box from (x − 1, z − 1) to (x + 3, z + 3) (the ring
    around its 3 × 3 lot anchored at (x, z)); any **salt** water tile → full capacity, else 0.
@@ -280,6 +284,22 @@ Towers need neither water adjacency nor anything but power. [STATIC]
    vertically. When the front first reaches a building, the building is marked watered and its
    consumption (3.1) is charged against the budget trunc(*S* / *k*). When the budget reaches 0 the
    spread stops; buildings not yet reached are dry. [STATIC; exact sweep tie-breaking OPEN]
+
+**Spreading front** [STATIC for steps 1, 2, 4 and 5; INFERRED for the exact growth per sweep in step 3]: (1) the component mask (pipe flood fill, at most 500
+expansion passes) is dilated by `WaterFromPipe` tiles to give the serviceable mask; (2) the wet
+mask starts as the producing facilities' tiles and the active row range is their rows; (3) each
+iteration runs a down sweep then an up sweep over the active rows; each sweep grows the wet mask by
+one tile horizontally and vertically inside the serviceable mask, then the row range widens by
+one row each way; (4) whenever a newly wet tile is the anchor of a building that needs water, the
+building's consumption `c` is charged: if the remaining budget is ≤ `c`, the budget becomes 0 and
+spreading stops; otherwise the budget drops by `c` and the building is watered; (5) the loop ends
+when neither sweep added a tile or the budget is below 1. A component containing a water buy
+deal's connection gets an unlimited budget. Only the 500-pass cap of the pipe flood exists; the
+front itself has no pass cap.
+**Observed result** [OBSERVED, `28-conformance.md` §5.1]: one month after load the original
+leaves **0** occupied R/C/I lots without water service at their anchor in Berlin (4 in the
+shipped file) and **1** in Madrid (9 399 in the shipped file), so whenever supply exceeds use the
+front reaches every building in the serviceable area.
 
 **At load** [INFERRED, high]: the per-tile water-service bitmap saved in the water record is
 restored as is, and it is what the zone developers read as `watered` until the next month-start
