@@ -365,7 +365,10 @@ int ZoneManager::place(GrowthCity& c, const BuildingChoice& b, int x, int z) {
 
 bool ZoneManager::startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, int cat, uint32_t replaced, int V, int P, int Max, bool skipPower) {
   if (cat < 0) return false;
-  const Category& k = zd.cats[size_t(cat)];
+  return startDevelopment(c, rng, x, z, zd, zd.cats[size_t(cat)], replaced, V, P, Max, skipPower);
+}
+
+bool ZoneManager::startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, const Category& k, uint32_t replaced, int V, int P, int Max, bool skipPower) {
   int maxDist = (zd.developerClass == kDevIndustrial ? cfg_->ind : zd.developerClass == kDevCommercial ? cfg_->com : cfg_->res).maxDistFromTransport;
   if (c.ordinanceEnacted(0xA2BF1DE5)) maxDist++;
   Rect lot = findLot(c, x, z, k.minLV, replaced, maxDist, skipPower);
@@ -767,9 +770,12 @@ int ZoneManager::visitPort(GrowthCity& c, SimRand& rng, int x, int z, const Zone
     return 0;
   }
   if (vr.V < 1 || vr.V - P < 1) return 0;
-  int cat = pickCategoryE(zd, c.landValue(x, z), true);
-  if (cat < 0) return 0;
-  startDevelopment(c, rng, x, z, zd, cat, 0, vr.V, P, vr.Max, true);
+  // Airport and seaport zones have no category list; the rules' families are filed under the port agent types
+  // (12310 airport, 12330 seaport; spec 15 s5.5), which is the key of DevRule::lists.
+  Category k;
+  k.agentType = zd.developerClass == kDevAirport ? 12310 : 12330;
+  k.minLV = 0; k.maxLV = 255;
+  startDevelopment(c, rng, x, z, zd, k, 0, vr.V, P, vr.Max, true);
   return 0;
 }
 

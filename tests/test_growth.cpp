@@ -73,7 +73,7 @@ struct Fixture {
     cfg.zones[1] = ZoneDescription::parse(1, "0x619BA64E,3000:3100,1,200,30;3200,2,255,100");
     cfg.zones[5] = ZoneDescription::parse(5, "0x41A3ADC1,5000:5100,1,200,30");
     cfg.zones[9] = ZoneDescription::parse(9, "0xE1A53B30,8000:8100,D,1,255,10;8200,C,1,255,10;9300,A,1,255,10");
-    cfg.zones[14] = ZoneDescription::parse(14, "0xC1F81E7E,12310:12310,1,255,0");
+    cfg.zones[14] = ZoneDescription::parse(14, "0xC1F81E7E,3000");   // as shipped: no category list
     cfg.zones[17] = ZoneDescription::parse(17, "0x82348DE5,12850:");
     cfg.res.noServicePercentage = 100; cfg.res.constructionTimeFactor = 100000; cfg.res.maxDistFromTransport = 3;
     cfg.res.higherLandValuePct = 100; cfg.res.higherDensityPct = 100; cfg.res.anarchyFactor = 0;

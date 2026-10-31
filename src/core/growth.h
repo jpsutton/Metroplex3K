@@ -240,6 +240,7 @@ class ZoneManager {
   IndPick pickIndustrial(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, int lv, bool watered, bool allowAg);
   void refreshCleanCurve(int year);
   bool startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, int cat, uint32_t replacedAgent, int V, int P, int Max, bool skipPower);
+  bool startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, const Category& cat, uint32_t replaced, int V, int P, int Max, bool skipPower);
   int runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const Rect& lot, const Category& cat, int V, int P, int Max, int maxDist);
   int place(GrowthCity& c, const BuildingChoice& b, int x, int z);
   void removeLot(GrowthCity& c, const LotInfo& lot);
