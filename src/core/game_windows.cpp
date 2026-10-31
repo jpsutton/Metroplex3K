@@ -6,6 +6,7 @@
 
 #include "core/game.h"
 #include "core/game_scenario.h"
+#include "core/overview.h"
 
 namespace m3k {
 
@@ -79,10 +80,19 @@ void Game::openWindow(const std::string& name) {
   else if (name == "ordinances") { showOrd_ = true; ordWin_.scroll = 0; }
   else if (name == "neighbours" || name == "neighbors") {
     showNeigh_ = true;
-    // Centre of the region map: the city's overview thumbnail from its file's preview record.
-    neighMap_ = Image();
-    Bytes b; CityPreview cp;
-    if (!currentFile_.empty() && readFile(currentFile_, b) && readCityPreview(b, cp)) neighMap_ = cp.image;
+    // Region image (spec 11 section 9): the city's heights in the middle, deterministic invented terrain around it,
+    // coloured with row 3 of the map ramp 000005E5:21.
+    std::array<uint32_t, 12> ramp = neighbourRegionDefaultRamp();
+    if (haveData_)
+      if (ResourceRef rr = data_.db().find({T_UI_IMAGE, 0x5E5, 0x21})) {
+        try {
+          Image im = decodeUiImage(rr.data, rr.available, false);
+          if (im.w >= 12 && im.h >= 4) for (int k = 0; k < 12; k++) ramp[size_t(k)] = im.px[size_t(3) * im.w + k] | 0xFF000000u;
+        } catch (const FormatError&) {}
+      }
+    const City& cc = sim_.city();
+    auto edges = neighbourSeaEdges(world_, [&cc](int x, int z) { return cc.pollution.seaWaterAt(x, z); });
+    neighRegion_ = neighbourRegionImage(world_, edges, ramp);
   }
   else if (name == "deals") showDeals_ = true;
   else if (name == "advisors") { advWin_.open(0); advWin_.ordinances = &sim_.city().ordinances; showAdv_ = true; }
@@ -315,7 +325,8 @@ void Game::drawWindows(uint32_t dtMs) {
       for (const auto& nb : city.neighbours.neighbours) np += nb.population;
     }
     neighWin_.nationalPop = np;
-    neighWin_.centreMap = neighMap_.empty() ? nullptr : &neighMap_;
+    neighWin_.regionMap = neighRegion_.empty() ? nullptr : &neighRegion_;
+    neighWin_.viewRotation = cam_.rot;
     finish(neighWin_.draw(ui_, E, city.neighbours), showNeigh_);
   }
   if (showGoals_) {

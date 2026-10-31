@@ -253,6 +253,11 @@ class PollutionLayer {
 
   int airAt(int x, int z) const { return (state[size_t(x / 2) * nz_ + z / 2] >> 15) & 0x7FFF; }
   int waterAt(int x, int z) const { return state[size_t(x / 2) * nz_ + z / 2] & 0x7FFF; }
+  // Sea-water (salt) flag of the tile's cell: state bit 30, set by the terrain (spec 11 section 5, 17 7.2.1).
+  bool seaWaterAt(int x, int z) const {
+    size_t i = size_t(x / 2) * nz_ + z / 2;
+    return x >= 0 && z >= 0 && i < state.size() && (state[i] >> 30 & 1);
+  }
   int standingGarbageAt(int x, int z) const { return standing[size_t(x) * H_ + z] & 0x7FFF; }
   void setStandingGarbage(int x, int z, int g) { uint16_t& w = standing[size_t(x) * H_ + z]; w = uint16_t((w & 0x8000) | (g & 0x7FFF)); }
   bool airPolluted(int x, int z) const { return airAt(x, z) >= params_.airThreshold; }

@@ -632,7 +632,9 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
     ui.fill({r.x + b.x, r.y + b.y, b.w, b.h}, rgb(0x7B, 0x92, 0xFF));
   // Region diamond.
   const double cx = r.x + 182.5, cy = r.y + 191.5;
-  auto inDia = [&](double px, double py, double ox, double oy, double h) { return std::abs(px - (cx + ox)) + std::abs(py - (cy + oy)) <= h; };
+  const int rot = viewRotation & 3;
+  const double phi = (45.0 - 90.0 * rot) * 3.14159265358979323846 / 180.0, cphi = std::cos(phi), sphi = std::sin(phi);
+  const double side = 302.0 / std::sqrt(2.0);   // image side in screen pixels
   for (int y = r.y + 39; y <= r.y + 345; y++)
     for (int x = r.x + 30; x <= r.x + 336; x++) {
       double px = x + 0.5, py = y + 0.5, d = std::abs(px - cx) + std::abs(py - cy);
@@ -640,22 +642,30 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
       uint32_t c;
       if (d > 151) c = px < cx ? rgb(0x7B, 0x8A, 0xFF) : rgb(0xFF, 0xF3, 0xFF);
       else {
-        int cell = int(std::floor((px - cx + py - cy) / 100.0 + 1.5)) * 3 + int(std::floor((py - cy - (px - cx)) / 100.0 + 1.5));
-        static const uint32_t pal[5] = {rgb(0x8C, 0x9E, 0x6B), rgb(0x7B, 0x92, 0x6B), rgb(0x9C, 0xA2, 0x73), rgb(0x94, 0x86, 0x63), rgb(0x84, 0x71, 0x5A)};
-        c = pal[(cell % 5 + 5) % 5];
-        if (centreMap && inDia(px, py, 0, 0, 50)) {
-          // City thumbnail (column = x, row = H-1-z) mapped into the centre cell like the load dialog's diamond.
-          int N = std::max(centreMap->w, centreMap->h);
-          double s = N / 100.0, dx = px - cx, dy = py - cy;
-          int u = int((dy - dx) * s + N * 0.5), v = int((dy + dx) * s + N * 0.5);
-          int col = std::max(0, std::min(centreMap->w - 1, u)), row = std::max(0, std::min(centreMap->h - 1, centreMap->h - 1 - v));
-          c = centreMap->px[size_t(row) * centreMap->w + col];
+        if (regionMap) {
+          // Region image (spec 11 section 9.7) turned by phi clockwise so its diagonals span the 302 px widget;
+          // phi = 45 degrees at view rotation 0, each further rotation turns it 90 degrees back. Nearest pixel. The
+          // image centre sits one pixel right of and below the outline's centre: best fit to the original's Berlin
+          // screenshot (palette-index agreement 92.9 % against 90.8 % unshifted).
+          int N = regionMap->w;
+          double ex = px - cx - 1, ey = py - cy - 1;
+          double ix = ex * cphi + ey * sphi, iy = -ex * sphi + ey * cphi;
+          int col = int(std::floor(ix * N / side + N * 0.5)), row = int(std::floor(iy * N / side + N * 0.5));
+          col = std::max(0, std::min(N - 1, col)); row = std::max(0, std::min(regionMap->h - 1, row));
+          c = regionMap->px[size_t(row) * N + col];
+        } else {
+          int cell = int(std::floor((px - cx + py - cy) / 100.0 + 1.5)) * 3 + int(std::floor((py - cy - (px - cx)) / 100.0 + 1.5));
+          static const uint32_t pal[5] = {rgb(0x8C, 0x9E, 0x6B), rgb(0x7B, 0x92, 0x6B), rgb(0x9C, 0xA2, 0x73), rgb(0x94, 0x86, 0x63), rgb(0x84, 0x71, 0x5A)};
+          c = pal[(cell % 5 + 5) % 5];
         }
       }
       ui.fill({x, y, 1, 1}, c);
     }
   // Neighbour cells: outlines (blue, the selected one red), click to select, names and populations in white.
-  const int offs[4][2] = {{50, -50}, {-50, -50}, {-50, 50}, {50, 50}};   // neighbour 0 top-right, 1 top-left, 2 bottom-left, 3 bottom-right (observed)
+  // At view rotation 0: neighbour 0 top-right, 1 top-left, 2 bottom-left, 3 bottom-right (observed); each further
+  // rotation turns them 90 degrees anticlockwise with the region image.
+  int offs[4][2] = {{50, -50}, {-50, -50}, {-50, 50}, {50, 50}};
+  for (int k = 0; k < rot; k++) for (auto& o : offs) { int t = o[0]; o[0] = o[1]; o[1] = -t; }
   auto outline = [&](double ox, double oy, double h, double w, uint32_t col) {
     for (int y = int(cy + oy - h - w); y <= int(cy + oy + h + w); y++)
       for (int x = int(cx + ox - h - w); x <= int(cx + ox + h + w); x++) {
@@ -672,6 +682,27 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
     if (!nb.exists && nb.cityName.empty()) continue;
     outline(ox, oy, 47, 2, rgb(0x6B, 0x92, 0xF7));
     if (selected == i) outline(ox, oy, 45.5, 3, rgb(255, 0, 0));
+    const int ncx = int(cx + ox), ncy = int(cy + oy);
+    // A neighbour without a land link (`exists` 0) gets an arrow pointing out of the map (000005E5:28 up-left, 2B up-right,
+    // 29 down-left, 23 down-right), under its name. Placement measured for the up-left arrow (Hawkin's Creek in
+    // Berlin): top-left at (-22, -16) from the cell centre; the others mirror it.
+    if (!nb.exists) {
+      bool left = ox < 0, up = oy < 0;
+      uint32_t inst = up ? (left ? 0x28 : 0x2B) : (left ? 0x29 : 0x23);
+      if (const Image* im = E.img(0x5E5, inst)) ui.blit(*im, left ? ncx - 22 : ncx + 4, up ? ncy - 16 : ncy - 2);
+    }
+    // Active deals with this neighbour: one icon per commodity (power 000005E5:27, water 22, garbage 24), in a row
+    // below the population. One icon's top-left is at (-8, +12) from the cell centre (Upper Marazan's garbage deal
+    // in Berlin); several are spaced 14 px apart around that spot.
+    {
+      bool kind[3] = {};
+      for (const Deal& d : n.active)
+        if (d.neighbourIndex == i && !d.terminated() && d.dealType < kDealTypes) kind[d.dealType / 2] = true;
+      static const uint32_t dealIcon[3] = {0x27, 0x22, 0x24};
+      int count = int(kind[0]) + int(kind[1]) + int(kind[2]), x = ncx - 8 - (count - 1) * 7;
+      for (int k = 0; k < 3; k++)
+        if (kind[k]) { if (const Image* im = E.img(0x5E5, dealIcon[k])) ui.blit(*im, x, ncy + 12); x += 14; }
+    }
     std::string nm = nb.cityName.empty() ? "Neighbour " + std::to_string(i + 1) : nb.cityName;
     std::string pop = groupDigits(nb.population);
     ui.text(int(cx + ox) - ui.textWidth(nm, "main9") / 2, int(cy + oy) - 22, nm, "main9", white);
@@ -683,25 +714,34 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
     ui.text(int(cx) - ui.textWidth(cityName, "main9") / 2, int(cy) - 11, cityName, "main9", white);
     ui.text(int(cx) - ui.textWidth(pop, "main9") / 2, int(cy) + 10, pop, "main9", white);
   }
-  // Compass (drawn): blue disc, four-pointed star, N W E S.
+  // Compass: disc and star image 000005E5:0D at (20, 50), letters N W E S drawn over it (measured on the original's
+  // Berlin screenshot, view rotation 0). With the view turned, the letters move round the disc with the map.
   {
-    const double kx = r.x + 49.5, ky = r.y + 79.5;
-    for (int y = int(ky - 30); y <= int(ky + 30); y++)
-      for (int x = int(kx - 30); x <= int(kx + 30); x++)
-        if ((x + 0.5 - kx) * (x + 0.5 - kx) + (y + 0.5 - ky) * (y + 0.5 - ky) <= 29.5 * 29.5) ui.fill({x, y, 1, 1}, rgb(0x7B, 0x92, 0xFF));
-    const int sx = r.x + 50, sy = r.y + 80;
-    const uint32_t dk = rgb(0x18, 0x20, 0x6B), lt = rgb(0xD6, 0xDB, 0xFF);
-    for (int k = 0; k <= 12; k++) {
-      int w = std::max(0, 3 - k / 4);
-      ui.fill({sx - w, sy - k, w, 1}, dk); ui.fill({sx, sy - k, w, 1}, lt);       // north arm
-      ui.fill({sx - k, sy - w, 1, w}, dk); ui.fill({sx - k, sy, 1, w}, lt);       // west arm
-      ui.fill({sx + k, sy - w, 1, w}, lt); ui.fill({sx + k, sy, 1, w}, dk);       // east arm
-      ui.fill({sx - w, sy + k, w, 1}, lt); ui.fill({sx, sy + k, w, 1}, dk);       // south arm
+    const int kx = r.x + 50, ky = r.y + 80;   // disc centre
+    const uint32_t lt = rgb(0xDE, 0xDF, 0xFF);
+    if (const Image* im = E.img(0x5E5, 0x0D)) ui.blit(*im, kx - 30, ky - 30);
+    else {
+      for (int y = ky - 30; y < ky + 30; y++)
+        for (int x = kx - 30; x < kx + 30; x++)
+          if ((x + 0.5 - kx) * (x + 0.5 - kx) + (y + 0.5 - ky) * (y + 0.5 - ky) <= 29.5 * 29.5) ui.fill({x, y, 1, 1}, rgb(0x7B, 0x92, 0xFF));
+      const uint32_t dk = rgb(0x18, 0x20, 0x6B);
+      for (int k = 0; k <= 12; k++) {
+        int w = std::max(0, 3 - k / 4);
+        ui.fill({kx - w, ky - k, w, 1}, dk); ui.fill({kx, ky - k, w, 1}, lt);
+        ui.fill({kx - k, ky - w, 1, w}, dk); ui.fill({kx - k, ky, 1, w}, lt);
+        ui.fill({kx + k, ky - w, 1, w}, lt); ui.fill({kx + k, ky, 1, w}, dk);
+        ui.fill({kx - w, ky + k, w, 1}, lt); ui.fill({kx, ky + k, w, 1}, dk);
+      }
     }
-    ui.text(r.x + 45, r.y + 52, E.win(0x11D, "N"), "title9", lt);
-    ui.text(r.x + 25, r.y + 72, E.win(0x11E, "W"), "title9", lt);
-    ui.text(r.x + 67, r.y + 71, E.win(0x11F, "E"), "title9", lt);
-    ui.text(r.x + 46, r.y + 90, E.win(0x120, "S"), "title9", lt);
+    // Letter centres relative to the disc centre at rotation 0 (twice the offset, to keep the half pixels).
+    struct L { uint32_t id; const char* fb; int dx2, dy2; };
+    const L letters[4] = {{0x11D, "N", 0, -37}, {0x11E, "W", -39, 1}, {0x11F, "E", 40, 0}, {0x120, "S", -2, 39}};
+    for (const L& l : letters) {
+      int dx2 = l.dx2, dy2 = l.dy2;
+      for (int k = 0; k < rot; k++) { int t = dx2; dx2 = dy2; dy2 = -t; }
+      std::string t = E.win(l.id, l.fb);
+      ui.text(kx + (dx2 - ui.textWidth(t, "title9")) / 2, ky + (dy2 - 19) / 2, t, "title9", lt);
+    }
   }
   ui.text(r.x + 242, r.y + 52, E.win(0x165, "Nat'l Pop"), "main9", lav);
   ui.text(r.x + 242, r.y + 66, groupDigits(int64_t(nationalPop)), "main9", lav);

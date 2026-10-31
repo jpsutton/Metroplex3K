@@ -1530,8 +1530,30 @@ Written by the city for the load dialogs [STATIC]: application version, then (ci
 population, treasury, 0, day of year, year, mayor name, city name, then image version 2 and a
 thumbnail of W × H pixels for a W × H city, 16 bits per pixel in the current display pixel format
 (code 5 or 7), compressed like the segment block (u32 length + RefPack). The thumbnail is the city
-overview map, one pixel per tile [INFERRED from its dimensions; colour mapping OPEN, see
-`25-rendering.md` / `09-ui-screens.md`].
+overview map, one pixel per tile: pixel column x, row H − 1 − z shows tile (x, z).
+
+Colour of tile (x, z) [DATA: reproduces every pixel of the 37 shipped .sc3/.sct thumbnails, up to
+16-bit rounding; `tools/probes/probe_overview`]:
+
+1. Zone type ≠ 0 with a colour below: that colour, even over water. 1/2/3 (0,255,0) (0,205,0)
+   (0,148,0); 5/6/7 (0,0,255) (0,0,205) (0,0,148); 9/10/11 (255,255,0) (205,205,0) (148,148,0);
+   14 (49,206,255); 15 (49,255,156); 17 (156,98,49); 22 (238,90,0).
+2. Else water (106,105,156) when any of the tile's four corners has altitude ≤ its water surface.
+3. Else land: d = alt(x, z) − water(x, z) of the tile's (x, z) corner selects a band starting at
+   d = 1, 2, 4, 6, 8, 26, 52, 77, 103, 128, 154. Band colours per landscape (§3.7 scheme selection):
+
+| Landscape | Band colours, lowest first |
+|---|---|
+| 0 (default) | (123,148,106) (139,157,106) (156,161,115) (156,149,115) (148,133,98) (131,113,90) (123,101,90) (115,101,90) (106,97,98) (115,109,115) (123,121,123) |
+| `C55A6D62` | (213,214,222) (197,210,222) (164,186,213) (148,165,197) (131,145,180) (123,131,156) (115,115,131) |
+| `C55A6D84` | (139,93,65) (156,117,74) (180,145,90) (189,165,106) (180,170,106) |
+| `655B8076` | (139,117,41) (139,117,49) (139,115,49) (148,125,49) (139,121,49) (131,105,57) |
+| `E55B8055` | (82,153,74) (74,137,65) (65,121,57) (57,117,57) (65,117,57) (82,117,57) |
+
+Higher bands of the shorter rows do not occur in shipped files [OPEN]. Buildings, networks and
+flora on unzoned tiles are not drawn. The navigator mini-map uses the same colours [OBSERVED]. The
+Neighbors Map uses its own region image (`11-world-terrain.md` §9); its colour ramp equals the
+default-landscape row above.
 
 ### 8.5 City information (§3.2)
 
@@ -1637,6 +1659,6 @@ when it creates a new city. The fields whose meaning is still open are:
    shipped file). (`99F47014:79F4702D` and `0525A6B9:4525A6E2` are now decoded.)
 5. §3.8: semantics of the view fields (centre units, zoom/rotation encoding) and the window-view u32.
 6. §8.1: exact extension-fixing rule for user-typed names (`.sc2` → `.sc3`).
-7. §8.4: colour mapping of the preview thumbnail.
+7. §8.4: preview colours of land bands not present in shipped files (high land in non-default landscapes).
 8. Whether the file kind written (§3.3) can be 4 when the game saves from the terrain editor; the
    retail save path observed always produces cities.
