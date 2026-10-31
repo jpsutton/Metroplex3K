@@ -34,6 +34,9 @@ struct OccAttr {
   uint32_t buildingFlags = 0;   // attr 0xCA
   int partIndex = 0;            // attr 0x1F4: puzzle-part index (airport/seaport parts); runway line number (spec 15 s5.5) [INFERRED]
   int powerAttr = -1;           // attr 0xC9 (u8): candidate for the building's power consumption (spec 12 s9.1); -1 = absent
+  uint32_t netAttr12D = 0;      // attr 0x12D: network piece bits; bit 0 = step cost x 0.7 (traffic flag 0x100/0x200, spec 18 s3.1)
+  uint32_t netMatrix[3] = {0, 0, 0};  // attrs 0x136/0x137/0x138: road/highway, rail, subway connection matrices (spec 18 s5.4)
+  bool hasNetMatrix = false;    // attr 0x136 present
   bool filler() const { return (buildingFlags & 0x100) != 0; }
   ResKey nameKey;               // attr 0x6D
   int sparseId = 0;             // attr 0x6F: [Sparse] sound ID (key instance), 0 = none (spec 06 s10.4)

@@ -38,6 +38,10 @@ OccAttr parseOccAttr(const uint8_t* p, size_t n) {
         case 0xCA: if (!nums.empty()) a.buildingFlags = nums[0]; break;
         case 0xC9: if (!nums.empty()) a.powerAttr = int(nums[0]); break;
         case 0x1F4: if (!nums.empty()) a.partIndex = int(nums[0]); break;
+        case 0x12D: if (!nums.empty()) a.netAttr12D = nums[0]; break;
+        case 0x136: if (!nums.empty()) { a.netMatrix[0] = nums[0]; a.hasNetMatrix = true; } break;
+        case 0x137: if (!nums.empty()) a.netMatrix[1] = nums[0]; break;
+        case 0x138: if (!nums.empty()) a.netMatrix[2] = nums[0]; break;
         case 0x6D: if (!keys.empty()) a.nameKey = keys[0]; break;
         case 0x6F: if (!keys.empty()) a.sparseId = int(keys[0].instance); break;
         case 0x64: if (!strs.empty()) a.designName = strs[0]; break;

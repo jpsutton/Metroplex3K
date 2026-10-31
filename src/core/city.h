@@ -240,6 +240,8 @@ class City {
   AgentHierarchy ecoHier_;
   std::vector<TripBuilding> tripBuildings_;
   std::map<uint32_t, int> tripSlot_;              // trip week slot per occupant type (spec 18 s4.1)
+  std::vector<uint32_t> hwyMatrix_;               // per tile: surface piece's 0x136 connection matrix (spec 18 s5.4)
+  std::vector<uint8_t> hwyRot_, hwyPiece_;         // per tile: piece rotation, piece-with-matrix marker
 
   std::vector<int32_t> occ_;
   std::vector<uint8_t> transport_, powerLine_, pipe_;

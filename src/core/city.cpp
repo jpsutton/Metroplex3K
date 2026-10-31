@@ -1119,15 +1119,72 @@ void City::syncFacilities() {
 
 void City::rebuildTraffic() {
   if (!traffic) return;
-  for (int x = 0; x < world_->W; x++)
-    for (int z = 0; z < world_->H; z++) {
-      uint8_t k = transport_[idx(x, z)];
-      traffic->flags(x, z) = k == 1 ? TF_ROAD : k == 4 ? TF_HIGHWAY : k == 2 ? TF_RAIL : 0;
+  const int W = world_->W, H = world_->H;
+  hwyMatrix_.assign(size_t(W) * H, 0); hwyRot_.assign(size_t(W) * H, 0); hwyPiece_.assign(size_t(W) * H, 0);
+  if (cfg_.haveTiling && game_) {
+    // Network flags from the surface pieces (spec 18 s3.1) [STATIC]: road/highway/rail by tiling-set membership (a piece
+    // may be in more than one set: on-ramps are highway-set members with or without road); 0x0040 on the on-ramp pieces
+    // 15130-15141; 0x0100 when bit 0 of the piece's attribute 0x12D is set. Spans (0x4000) are not restored on load
+    // (spec: OPEN), so loaded cities have none.
+    for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) traffic->flags(x, z) = 0;
+    for (const auto& p : world_->surface) {
+      if (!inMap(p.x, p.z)) continue;
+      uint16_t f = 0;
+      if (cfg_.tiling.inSet(netKindToTable(NK_ROAD), p.pieceId)) f |= TF_ROAD;
+      if (cfg_.tiling.inSet(netKindToTable(NK_HIGHWAY), p.pieceId)) f |= TF_HIGHWAY;
+      if (cfg_.tiling.inSet(netKindToTable(NK_RAIL), p.pieceId)) f |= TF_RAIL;
+      if (!f) continue;
+      if (p.pieceId >= 15130 && p.pieceId <= 15141) f |= TF_ACCESS;
+      const OccAttr* a = game_->occupant(p.pieceId, true);
+      if (a && (a->netAttr12D & 1)) f |= TF_PROP_A;
+      traffic->flags(p.x, p.z) |= f;
+      size_t i = size_t(p.x) * H + p.z;
+      if (a && a->hasNetMatrix) { hwyMatrix_[i] = a->netMatrix[0]; hwyRot_[i] = uint8_t(p.rot & 3); hwyPiece_[i] = 1; }
     }
-  // Subway pieces and station occupants (spec 18 s3.1) [STATIC]: subway tiles carry 0x0008; bus stops, rail, subway and
-  // subway-rail stations OR their flags into every tile of the footprint.
-  for (const auto& p : world_->subway)
-    if (inMap(p.x, p.z)) traffic->flags(p.x, p.z) |= TF_SUBWAY;
+    for (const auto& p : world_->subway) {
+      if (!inMap(p.x, p.z)) continue;
+      uint16_t f = TF_SUBWAY;
+      const OccAttr* a = game_->occupant(p.pieceId, true);
+      if (a && (a->netAttr12D & 1)) f |= TF_SUBWAY_PROP_A;
+      traffic->flags(p.x, p.z) |= f;
+    }
+    // Highway-like modes (spec 18 s5.4) [STATIC]: exits from the piece's 0x136 matrix, half chosen by the city-wide
+    // boolean B, row = last move d + 4 * rotation r. B's meaning is OPEN; M3K_HWY_B=0 selects bits 16-31.
+    static const uint8_t rows[16][4] = {{0, 1, 2, 3}, {4, 5, 6, 7}, {8, 9, 10, 11}, {12, 13, 14, 15}, {15, 12, 13, 14}, {3, 0, 1, 2},
+                                        {7, 4, 5, 6}, {11, 8, 9, 10}, {10, 11, 8, 9}, {14, 15, 12, 13}, {2, 3, 0, 1}, {6, 7, 4, 5},
+                                        {5, 6, 7, 4}, {9, 10, 11, 8}, {13, 14, 15, 12}, {1, 2, 3, 0}};
+    const char* bEnv = std::getenv("M3K_HWY_B");
+    const bool B = !(bEnv && bEnv[0] == '0');
+    traffic->highwayExits = [this, B, H](int x, int z, int d) -> unsigned {
+      size_t i = size_t(x) * H + z;
+      if (i >= hwyPiece_.size() || !hwyPiece_[i]) return 0;
+      uint32_t half = B ? (hwyMatrix_[i] & 0xFFFF) : (hwyMatrix_[i] >> 16);
+      const uint8_t* b = rows[(d & 3) + 4 * hwyRot_[i]];
+      // spec order (x-1, y-1, x+1, y+1) -> our exit bits (bit0 N(-z), 1 W(-x), 2 S(+z), 3 E(+x))
+      unsigned ex = 0;
+      if ((half >> b[0]) & 1) ex |= 2;   // x-1
+      if ((half >> b[1]) & 1) ex |= 1;   // z-1
+      if ((half >> b[2]) & 1) ex |= 8;   // x+1
+      if ((half >> b[3]) & 1) ex |= 4;   // z+1
+      return ex;
+    };
+  } else {
+    for (int x = 0; x < W; x++)
+      for (int z = 0; z < H; z++) {
+        uint8_t k = transport_[idx(x, z)];
+        traffic->flags(x, z) = k == 1 ? TF_ROAD : k == 4 ? TF_HIGHWAY : k == 2 ? TF_RAIL : 0;
+      }
+    for (const auto& p : world_->subway)
+      if (inMap(p.x, p.z)) traffic->flags(p.x, p.z) |= TF_SUBWAY;
+  }
+  // Counting-test density d (spec 18 s4.5) [STATIC]: the RCI development layer's valve-effect map (layer 0x80F1E6D3,
+  // last completed cycle) at the lot's first tile.
+  traffic->lotDensity = [this, H](int x, int z) -> int {
+    size_t i = size_t(x) * H + z;
+    return i < valves.effectMap.size() ? int(valves.effectMap[i]) : 0;
+  };
+  // Station occupants (spec 18 s3.1) [STATIC]: bus stops, rail, subway and subway-rail stations OR their flags into every
+  // tile of the footprint.
   for (const auto& o : world_->occupants)
     if (uint16_t sf = stationFlagsForType(o.agentType))
       for (int x = o.x; x < o.x + o.sizeX; x++)
@@ -1145,12 +1202,15 @@ void City::rebuildTraffic() {
   }
   tripBuildings_.clear();
   // Generators (spec 18 4.1) [STATIC]: category by the occupant's parent chain; week slot dealt per building *type* from one
-  // counter 0,1,2,3,... over the trip-making types in registry order. INFERRED: registry order = ascending type ID of
-  // CitySim.ini [AgentTypeHierarchy] (the spec does not define it). Before this, category came from type/1000 (missing
-  // ~1/3 of Berlin's generators, and all of category Other) and slots were dealt per building over 0..4.
+  // counter 0,1,2,3,... over the trip-making types in registry order = CitySim.ini [AgentTypes] by ascending unsigned ID.
   if (tripSlot_.empty()) {
+    std::vector<uint32_t> reg;
+    for (const auto& kv : cfg_.ini.citySim.section("AgentTypes")) reg.push_back(parseIdNumber(kv.first));
+    if (reg.empty()) reg = usHier_.types();
+    std::sort(reg.begin(), reg.end());
+    reg.erase(std::unique(reg.begin(), reg.end()), reg.end());
     int next = 0;
-    for (uint32_t ty : usHier_.types())
+    for (uint32_t ty : reg)
       if (categoryOfTypeChain(usHier_.chain(ty)) >= 0) tripSlot_[ty] = (next++) & 3;
   }
   for (const auto& o : world_->occupants) {
