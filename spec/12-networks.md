@@ -871,22 +871,46 @@ state). Monthly upkeep of roads/highways is driven by the transport funding keys
     (IEEE not-a-number; the original's floating-point exceptions are masked). See
     `22-advisors-news-petitioners.md` §3.10.1 for how a NaN behaves in the advisor tests.
 * **Setting a new condition** v (0–1, from `18-sim-transport.md` §8.4; it arrives as a whole
-  percentage and is divided by 100): count the road tiles N and the damaged pieces D, and let the
-  target be T = trunc(v × N).
-  * If T > D, damage k = T − D more road pieces. Walk the road pieces in map order with a skip
-    counter: the gap before each chosen piece is a random integer in [0, s), s = ⌊N ÷ k⌋ − 1 (no gap
-    if s < 1), drawn from the network subsystem's random generator; stop after k pieces. Each
-    chosen ordinary road piece is replaced in place by one of the three potholed road pieces
-    (occupant IDs 15040, 15041, 15042, chosen uniformly); a chosen road piece of the second
-    replaceable shape becomes occupant 9051. Other road pieces (crossings, bridges and so on) are
-    passed over.
-  * If T < D, repair D − T damaged pieces by the same spaced selection, restoring the matching
-    undamaged road piece.
-  * If T = D, nothing changes.
-* Damaged pieces carry the traffic-grid flag 0x80 (`18-sim-transport.md`). They are ordinary
-  network pieces in the save (§Persisted state), so the condition survives save and load.
-* `[OPEN]`: which road piece shapes are replaceable (the two shapes above) and the exact undamaged
-  piece restored on repair.
+  percentage and is divided by 100) [STATIC]:
+  1. Scan every tile of the map. N = tiles whose surface-layer piece is a road piece. D = tiles
+     whose surface-layer piece is potholed (road piece with ID 15040, 15041, 15042 or 9051).
+     T = trunc(N × v), computed in floating point. If T = D, stop.
+  2. **Damage (T > D).** k = T − D, s = max(0, ⌊N ÷ k⌋ − 1). Query all road pieces of the map, in
+     the occupant query's order (`map order`). Keep a skip counter c = 0 and a gap
+     g = `Rand(s)` (the network subsystem's generator, `16-sim-utilities.md` §1.1; g = 0 if
+     s < 1). For each piece in order:
+     * if c < g: c ← c + 1 (the piece is skipped; every road piece counts here, candidate or not);
+     * otherwise, if the piece is a **candidate**, collect it, draw a new g the same way and set
+       c ← 0. A non-candidate is just passed; c stays as it is;
+     * stop the walk once **k + 1** pieces have been collected (original off-by-one), or at the end
+       of the list.
+
+     A candidate is a road piece (flags 0x8000 and 0x800) whose occupant ID is **29, 35 or 11204**
+     and that passes the occupant's own validity check [INFERRED: true for every placed piece].
+     Then, for each collected piece in collection order:
+     * ID 29 → draw r = raw generator output mod 3 (the same value as `Rand(3)`). The new ID is
+       15040, 15041 or 15042 for r = 0, 1, 2;
+     * ID 35 → new ID 9051 (no draw);
+     * ID 11204 → nothing. It is collected and counts towards k + 1, but it is not converted
+       (original defect).
+
+     The piece is replaced in place: the old one is removed, and a new piece with the new ID is
+     created at the same placement and inserted. The new piece's **damaged flag is set**: piece
+     word bit 27 (`10-save-format.md` §6.2.6), which gives traffic flag 0x80.
+  3. **Repair (T < D).** k = D − T, s = max(0, ⌊D ÷ k⌋ − 1); the divisor here is D, not N. Query
+     all potholed pieces of the map in the same order and walk them with the same skip-and-gap
+     rule, collecting every piece reached when c ≥ g. There is **no limit of k**: the walk always
+     runs to the end of the list, so it typically repairs more than k pieces (original behaviour).
+     Each collected 15040, 15041 or 15042 is replaced by **29**, and 9051 by **35**. The new piece
+     is created with its damaged flag clear.
+* Shapes [DATA]: in the road piece IDs of `18-sim-transport.md` §3.1, 35 is a diagonal road piece
+  (it has attribute 0x12D bit 0). 29 is an orthogonal road piece; 11204 is a road piece that is a
+  candidate but is never converted. Sacramento (the only shipped city with potholes) has 15040, 15042
+  and 9051, each with piece-word bit 27 set.
+* Potholed pieces are ordinary network pieces in the save (§Persisted state), damaged flag
+  included, so the condition and the 0x80 flag survive save and load. Correction: the previous
+  revision left the shapes and the restore piece OPEN, stopped the damage walk after k pieces,
+  limited repair to D − T pieces, and used N as the repair divisor.
 
 ## Persisted state
 
