@@ -108,12 +108,9 @@ int main(int argc, char** argv) {
           const int W = s.game.world().W, H = s.game.world().H;
           std::vector<uint8_t> mask(size_t(W) * H, 0), filled(size_t(W) * H, 0);
           for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) mask[size_t(x) * H + z] = c.isPipe(x, z);
-          for (const auto& f : c.water.facilities()) {
-            int oi = c.occupantAt(f.x, f.z);
-            if (oi < 0) { mask[size_t(f.x) * H + f.z] = 1; continue; }
-            const auto& o = s.game.world().occupants[size_t(oi)];
-            for (int dx = 0; dx < o.sizeX; dx++) for (int dz = 0; dz < o.sizeZ; dz++) mask[size_t(o.x + dx) * H + o.z + dz] = 1;
-          }
+          for (const auto& o : s.game.world().occupants)   // every water-facility lot, as City::monthlyWater
+            if (o.agentType == 12810 || o.agentType == 12840 || o.agentType == 12830)
+              for (int dx = 0; dx < o.sizeX; dx++) for (int dz = 0; dz < o.sizeZ; dz++) mask[size_t(o.x + dx) * H + o.z + dz] = 1;
           std::vector<int> needH{fx * H + fz}, needV{fx * H + fz}; filled[size_t(fx) * H + fz] = 1;
           int passes = 0;
           for (; passes < 500; passes++) {
