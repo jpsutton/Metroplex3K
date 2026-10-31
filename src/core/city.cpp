@@ -1293,10 +1293,13 @@ std::vector<growth::ValveBuilding> City::valveBuildings() const {
 void City::monthlyValves() {
   growth::ValveCityInput in;
   in.buildings = valveBuildings();
-  in.connectionCount[0] = int(neighbours.conn[1].size());   // saved order: rail, road, pipe, power, highway, subway
-  in.connectionCount[1] = int(neighbours.conn[0].size());
-  in.connectionCount[2] = int(neighbours.conn[4].size());
-  in.connectionCount[3] = int(neighbours.conn[5].size());
+  // Connection counts per kind (road, rail, highway, subway) are the neighbours' connection counters (nRoad, ...), not
+  // the number of connection tiles [DATA: Berlin, the 5001 and 8001 supplies of the original's day-40 save are
+  // reproduced exactly (1,078,500 and 1,030,800); counting tiles gave +226,000 and +170,000].
+  for (const auto& n : neighbours.neighbours) {
+    in.connectionCount[0] += int(n.nRoad); in.connectionCount[1] += int(n.nRail);
+    in.connectionCount[2] += int(n.nHighway); in.connectionCount[3] += int(n.nSubway);
+  }
   for (const auto& kv : ordinances.catalogue()) if (ordinances.enacted(kv.first)) in.enactedOrdinances.insert(kv.first);
   in.workforceFraction = pop.workforceFraction();
   in.population = residents_;
