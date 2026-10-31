@@ -233,8 +233,10 @@ Q(lo, hi) is the **unweighted** mean of `EQ[a]` over the ages *a* in [lo, min(hi
 `p[a] > 0`. It is rounded to nearest and returned as a byte, or 0 if no age qualifies. [STATIC;
 DATA: in all 25 played shipped cities the newest EQ-chart sample equals Q(0, 89) ± 1]
 
-* City EQ (the chart value, the aura input in `17-sim-services.md` §8.4, and the advisors' EQ) is
-  Q(0, 89).
+* City EQ (the chart value and the aura input in `17-sim-services.md` §8.4) is Q(0, 89).
+* The health & education advisor reads Q(20, 65) instead, and likewise the LE mean over ages
+  20–65 (`22-advisors-news-petitioners.md` §3.12) [STATIC]. Correction: an earlier revision said
+  the advisors use Q(0, 89).
 * The parental term uses Q(20, 40).
 * The industrial developer's clean/dirty choice (`15-sim-growth.md` §4.5) uses Q(20, 65), the
   working-age EQ [STATIC].
@@ -275,7 +277,8 @@ Let *B* = Σ beds over all hospitals (each `OptimalBedCount`, not funding-depend
 
 **City life expectancy** is the unweighted mean of `LE[a]` over the ages with `p[a] > 0`, computed
 exactly like Q(0, 89) in §4.5. [STATIC; DATA 25/25 against the LE chart] It feeds the aura
-(`17-sim-services.md` §8.4) and the advisors.
+(`17-sim-services.md` §8.4). The health & education advisor uses the ages 20–65 mean instead
+(§4.5).
 
 Mortality: any age whose `LE[a]` is below the age itself loses 1/11 of its share every month
 (§3.3).
