@@ -733,24 +733,60 @@ buildings at (0,0) and (4,0); fillers (3,0) (3,1) (3,2).
 
 If no side qualifies, the layout builds nothing (the next rule is tried, §5.3).
 
-**Farm `0xA2C1EDA3`** [STATIC]. Parameters: `a` is raised to at least 4, `b` to at least `a`, both
-capped at 22; `c` and `d` capped at 32767.
-* `a` = minimum lot edge: the lot rectangle must be at least `a × a`.
-* `b` is parsed but **not used** by the placement.
-* `c` = maximum air pollution and `d` = maximum water pollution (same 0–32767 scales as
-  `17-sim-services.md`) allowed on the lot's border tiles (shipped 450 and 450).
-Procedure:
-1. Surroundings: every in-map tile of the one-tile ring just outside the lot must have zone type
-   0 (none), 1 (low residential), 5 (low commercial), 9 (low industrial) or 22; otherwise the
-   rule fails.
-2. Edges: for each of the four lot edges, walk its tiles excluding the two corner tiles; any tile
-   whose air pollution exceeds `c` or water pollution exceeds `d` fails the rule; count the tiles
-   with transport access. An edge with at least one such tile is a frontage edge.
-3. The farmstead is placed in a strip against a frontage edge: 3–8 tiles along the edge and 3–4
-   deep (sizes and the position along the edge are random within the lot), using a building from
-   the category's large list; the remaining lot tiles are covered with field pieces (the
-   `0x100`+`0x400` filler members, §4.3.2) [INFERRED from structure; exact field tiling OPEN,
-   interim: fill the remaining tiles row by row with uniformly random field pieces, one per tile].
+**Farm `0xA2C1EDA3`** [STATIC]. Parameters `a,b,c,d`: `a` is raised to at least 4, `b` to at least
+`a`, both capped at 22; `c` and `d` are capped at 32767.
+* `a` = minimum lot edge: both lot sides must be ≥ `a`.
+* `b` = maximum lot edge: a longer side is cut to `b` (step 4). Correction: the previous revision
+  said `b` is unused.
+* `c` = maximum air pollution, `d` = maximum water pollution (0–32767 scales of
+  `17-sim-services.md`) on the lot's edge tiles (shipped 450 and 450).
+
+*Member lists* (one set per family of the category; members are entered as often as their
+weight). Filler members (flag `0x100`) with edge 1 go to **fields**. Non-filler members go by
+edge: ≥ 3 → **farmhouse**, 2 → **outbuilding**, ≤ 1 → **yard piece**. A family is registered only
+if all four lists are non-empty. The rule fails if the category has no registered family.
+
+Procedure, with lot [x0..x1] × [z0..z1], W = x1 − x0 + 1, H = z1 − z0 + 1:
+1. W ≥ `a` and H ≥ `a`, else fail.
+2. **Surroundings.** Every in-map tile of the row z0 − 1 (x0…x1), column x0 − 1 (z0…z1),
+   column x1 + 1 (z0…z1) and row z1 + 1 (x0…x1) must have zone type 0, 1, 5, 9 or 22. The four
+   diagonal corner tiles of the ring are not checked. Otherwise fail.
+3. **Edges.** Each of the four lot edges is walked without its two corner tiles: edge 0 = row z0,
+   edge 1 = column x1, edge 2 = row z1, edge 3 = column x0. Any tile with air > `c` or water > `d`
+   fails the rule. n_i = number of tiles on edge i with transport access. The number of edges with
+   n_i > 0 must be **1 or 2**; with 0, or with 3 or more, the rule fails.
+4. **Cut.** If W > `b`: keep the high-x end (x0 = x1 − `b` + 1) when n_1 > 0, otherwise keep the low-x
+   end (x1 = x0 + `b` − 1); W = `b`. If H > `b`: keep the low-z end (z1 = z0 + `b` − 1) when n_0 > 0,
+   otherwise keep the high-z end (z0 = z1 − `b` + 1); H = `b`.
+5. **Farmstead side** s = the edge with the largest n_i. Edges are scanned 0…3 and only a strictly
+   larger count replaces the current one. Farmstead strip [xs..xe] × [zs..ze], with sizes
+   SX × SZ:
+   * s = 0: SX = clamp(⌊W/2⌋, 3, 8), SZ = clamp(⌊H/3⌋, 3, 4); xs = x0 + `Rand`(W − SX + 1), zs = z0.
+   * s = 1: SX = clamp(⌊W/3⌋, 3, 4), SZ = clamp(⌊H/2⌋, 3, 8); xs = x1 − SX + 1,
+     zs = z0 + `Rand`(H − SZ + 1).
+   * s = 2: SX = clamp(⌊W/2⌋, 3, 8), SZ = clamp(⌊H/3⌋, 3, 4); xs = x0 + `Rand`(W − SX + 1),
+     zs = z1 − SZ + 1.
+   * s = 3: SX = clamp(⌊W/3⌋, 3, 4), SZ = clamp(⌊H/2⌋, 3, 8); xs = x0,
+     zs = z0 + `Rand`(H − SZ + 1).
+
+   xe = xs + SX − 1, ze = zs + SZ − 1. A per-tile "used" grid over the lot starts clear.
+6. **Farmhouse.** Pick a farmhouse (`Rand(list size)`) with edge e. Anchor it at
+   (xs + `Rand`(SX − e + 1), zs + `Rand`(SZ − e + 1)), orientation 0. If placed, mark its e × e tiles
+   used.
+7. **Outbuildings.** Make up to 5 attempts, stopping after 2 successes. Each attempt picks an
+   outbuilding (edge e) and an anchor as in step 6. If any of its e × e tiles is already used,
+   the attempt is wasted. Otherwise it is placed and, if that succeeds, its tiles are marked used.
+8. **Yard.** For each tile of the strip (x from xs to xe, then z from zs to ze) that is not used,
+   place a random yard piece (orientation 0) and mark the tile used if placing succeeds.
+9. **Fields.** Rotation R = 90° if `Rand(100)` ≤ 50, else 0°. Pick a field piece P. Walk every tile
+   of the (cut) lot: when R = 0°, x is the outer loop (x0…x1) and z the inner loop (z0…z1); when
+   R = 90°, z is outer and x inner. For a tile that is not used: place P with rotation R and mark
+   the tile used whether or not placing succeeds; then, with `Rand(100)` < 30, pick a new P.
+   For a used tile, pick a new P. After the last tile the rule **succeeds**.
+
+All random draws use the zone layer's generator (`Rand` as in `16-sim-utilities.md` §1.1), in the
+order written. Correction: replaces the interim field tiling and the farmstead sizes inferred
+in the previous revision.
 
 **Airport runway `0x81FFC3CE`** (zone 14) [STATIC]. Used only when `V − P > 0` and the rule has
 families. The lot must be at least 3 × 3 with at least one edge ≥ 5. Each of the four sides of the
@@ -923,11 +959,58 @@ tile, x-major then y: if it is free and has transport access, choose a random no
 of the category when `rand(100) < d`, else a random filler member; if its footprint (edge `e`)
 fits inside the cut lot from this tile, try to place it and mark its `e × e` tiles used.
 
-**Seaport pier `0xC2D3FD7E`** (zone 15): [OPEN, narrowed] lays pier pieces from the lot into
-adjacent water; while doing so it increments the spacing grid `01FD7A8C` (5 × 5-block counters,
-`10-save-format.md` §6.3) for each run of decoration it places at intervals of at least 5 tiles.
-The piece order is not decoded. Interim: lay one straight pier, one tile wide, from the lot edge
-that touches water, perpendicular to the shore, up to 6 tiles or until the water ends.
+**Seaport pier `0xC2D3FD7E`** (zone 15) [STATIC]. Lot rectangle [x0..x1] × [z0..z1] (inclusive).
+
+*Member lists* (family registration). A member is used only if its edge is 1 and its flag word
+(attribute 0xCA) has `0x200`. Its puzzle-part index (attribute 0x1F4) and flag bits file it as
+follows. A member with both `0x400` and `0x800` goes only to the `0x400` list. A member is entered
+as many times as its weight in the family (the same weighting as the other rules' random picks):
+
+| Part | `0x400` | `0x800` |
+|---|---|---|
+| 7 | shore Z (Q0) | shore X (Q1) |
+| 8 | pier head Z (H0) | pier head X (H1) |
+| 9 | pier body X (B1) | pier body Z (B0) |
+
+A family is registered only if B0, B1, H0 and H1 are all non-empty and at least one of Q0, Q1 is.
+The rule fails if no family is registered.
+
+*1. Choosing the shore run.* Each of the four lot sides is scanned tile by tile along the edge, in
+this order: low-z side (outward direction (0, −1)), high-z side (0, +1), high-x side (+1, 0), low-x
+side (−1, 0). A side tile (x, z) on the edge qualifies when the 5 tiles outward from it,
+(x, z) + k·d for k = 1…5, all lie on the map, are water, and hold no occupant. In addition, a
+terrain query at the 5th tile must succeed [INFERRED: a water-depth/navigability test]. The
+rule keeps the longest run of consecutive qualifying tiles over all four sides. Only a strictly
+longer run replaces the best one, so on ties the earlier side and the earlier run win. If the
+best run is shorter than 5 tiles, nothing is built. If it is longer than 12, it is cut to its
+first 12 tiles. Let L be the run length.
+*2. Pieces.* Pick a family with `Rand(number of families)`. Then pick (each with `Rand(list size)`):
+
+| Side | Shore piece (rotation) | Pier head (rotation) | Pier body |
+|---|---|---|---|
+| low z | Q0 (180°), or if Q0 is empty Q1 (270°) | H0 (180°) | B0 |
+| high z | Q0 (0°), else Q1 (90°) | H0 (0°) | B0 |
+| high x | Q1 (0°), else Q0 (90°) | H1 (0°) | B1 |
+| low x | Q1 (180°), else Q0 (270°) | H1 (180°) | B1 |
+
+The pier body uses the head's rotation. These choices are made once per rule call; every tile
+uses the same shore, head and body piece.
+*3. Laying.* Keep counters: gap g = 5 (tiles since the last pier), placed n = 0, piers p = 0,
+and a flag "last was a pier" = false. For each run tile in order, the target is the first
+outward tile T = (x, z) + d:
+* if g ≥ 5, draw r = `Rand(L)`. The tile is a **pier** if r ≥ L − n − 1 + p, otherwise a shore
+  tile. If g < 5 it is a shore tile;
+* if T holds an occupant, or placing the chosen piece (head for a pier, shore piece otherwise) at T
+  with its rotation fails, nothing changes for this tile;
+* otherwise the piece is placed and n ← n + 1. If the tile is a pier, the previous placed tile was
+  not a pier, and the spacing grid `01FD7A8C` accepts T [INFERRED: test-and-increment of
+  the 5 × 5-block counter, `10-save-format.md` §6.3], then: for k = 2…5 a body piece is placed
+  at (x, z) + k·d wherever that tile holds no occupant; g ← 0, p ← p + 1, "last was a pier" ←
+  true. Otherwise (shore piece, or a head whose extension was refused, which stays as placed):
+  g ← g + 1 and "last was a pier" ← false.
+
+The rule never reports success. Correction: the previous revision left the piece order OPEN with
+a single-straight-pier interim.
 
 ## 6. Land value
 
@@ -1320,7 +1403,7 @@ mapping (§3.5). This document owns the record. Its byte layout, as far as it is
 * `unfit` = failed trip (§4.2) is inferred; confirm against the original.
 * Source of the extra demand on valves 5001 and 8001 (§3.3, "Amenity demand of commerce and
   industry"): saved `Dlast` is 1.3–2.1 × the building sum. Interim: carry the saved ratio.
-* Non-scatter rules (§5.5): the seaport pier piece order, the farm field tiling, the airport
+* Non-scatter rules (§5.5): the airport
   buildings arrangement step (2), and the exact flag bits of the estate member lists. Housing
   projects A/B/C, row houses, estates and the runway sequence are now specified.
 * What sets the clean-industry flag (§4.5 step 3).
