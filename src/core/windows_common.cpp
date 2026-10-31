@@ -51,8 +51,8 @@ std::string subst(const std::string& tpl, const std::vector<std::string>& args) 
 // ================================================================ wui helpers
 namespace wui {
 
-Rect centered(const Ui& ui, int w, int h) {
-  Rect r{(ui.W - w) / 2, (ui.H - h) / 2, w, h};
+Rect centered(Ui& ui, int w, int h) {
+  Rect r = ui.movable({(ui.W - w) / 2, (ui.H - h) / 2, w, h});
   ui.windowRects.push_back(r);
   return r;
 }

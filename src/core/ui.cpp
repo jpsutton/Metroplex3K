@@ -5,6 +5,44 @@
 
 namespace m3k {
 
+void Ui::begin(std::vector<uint32_t>* f, int w, int h, const Input& i) {
+  fb = f; W = w; H = h; in = i;
+  tooltip.clear(); idCounter_ = 0; windowRects.clear();
+  // Windows not drawn last frame were closed: forget their offsets so they reopen at home.
+  for (auto it = winOffsets_.begin(); it != winOffsets_.end();) {
+    if (!it->second.seen) it = winOffsets_.erase(it);
+    else { it->second.seen = false; ++it; }
+  }
+  // Last frame's press landed on a title bar not covered by a later window: that window follows the pointer now.
+  if (pressKey_) { dragKey_ = pressKey_; pressKey_ = 0; }
+  if (!in.down) dragKey_ = 0;
+}
+
+uint64_t Ui::windowKey(const char* name) {
+  uint64_t h = 1469598103934665603ull;   // FNV-1a; the top bit keeps it apart from size keys
+  for (const char* p = name; *p; p++) { h ^= uint8_t(*p); h *= 1099511628211ull; }
+  return h | (1ull << 63);
+}
+
+Rect Ui::movable(Rect home, uint64_t key, int barH) {
+  if (!key) key = (uint64_t(uint32_t(home.w)) << 32) | uint32_t(home.h);
+  if (barH <= 0) barH = skin ? 35 : 26;
+  WinOffset& o = winOffsets_[key];
+  o.seen = true;
+  if (key == dragKey_ && in.down) { o.dx = dragDx_ + in.mx - dragMx_; o.dy = dragDy_ + in.my - dragMy_; }
+  // Keep the title bar reachable: fully on screen vertically, at least 40 px of it horizontally.
+  const int grip = std::min(40, home.w);
+  o.dx = std::max(grip - home.w - home.x, std::min(W - grip - home.x, o.dx));
+  o.dy = std::max(-home.y, std::min(H - barH - home.y, o.dy));
+  Rect r{home.x + o.dx, home.y + o.dy, home.w, home.h};
+  if (in.pressed && r.contains(in.mx, in.my)) {
+    const bool title = in.my < r.y + barH && in.mx < r.x + r.w - 36;   // the close box sits in the last 36 px
+    pressKey_ = title ? key : 0;
+    if (title) { dragMx_ = in.mx; dragMy_ = in.my; dragDx_ = o.dx; dragDy_ = o.dy; }
+  }
+  return r;
+}
+
 void Ui::fill(Rect r, uint32_t c) {
   int x0 = std::max(0, r.x), y0 = std::max(0, r.y), x1 = std::min(W, r.x + r.w), y1 = std::min(H, r.y + r.h);
   for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) (*fb)[size_t(y) * W + x] = c;

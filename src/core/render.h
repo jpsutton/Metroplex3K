@@ -100,6 +100,12 @@ struct RenderOptions {
   // substitute (setSubstituteSprite) by footprint size if one exists.
   uint16_t ownImageFlags = 0x1F0;
   int animTick = 0;           // animation frame counter; < 0 disables overlay frames
+  // View City Layers filters (spec 09 7.2). Null predicates show everything.
+  std::function<bool(const NetPiece&)> showNet;        // surface network pieces (roads, rail, power lines)
+  std::function<bool(const Occupant&)> showOccupant;   // buildings
+  bool flora = true;
+  bool pipes = true, subways = true;                    // pieces drawn by the underground view
+  bool automata = true;                                 // scene sprites (vehicles, pedestrians)
 };
 
 // The nine terrain palette slots (spec 04 section 7.1), stored as top-down tables.

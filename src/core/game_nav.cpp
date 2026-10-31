@@ -134,7 +134,7 @@ void Game::drawNavigator(int barH) {
   cellBtn("nav.btn.1", 133, 112, 26, 29, tip(0xB, "Zoom out"), [&] { zoomBy(-1); });
   cellBtn("nav.btn.2", 47, 133, 26, 29, tip(0xC, "Rotate counter-clockwise"), [&] { rot(-1); });
   cellBtn("nav.btn.3", 112, 133, 26, 29, tip(0xD, "Rotate clockwise"), [&] { rot(1); });
-  cellBtn("nav.layers", 131, 24, 36, 35, tip(0xA7, "Layer views"), [&] { openWindow("map"); });
+  cellBtn("nav.layers", 131, 24, 36, 35, tip(0xA7, "Layer views"), [&] { if (showLayers_) showLayers_ = false; else openWindow("layers"); });
 }
 
 }  // namespace m3k

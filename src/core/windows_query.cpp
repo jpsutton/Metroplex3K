@@ -178,10 +178,11 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
   r.w = w; r.h = h;
   if (r.x + r.w > ui.W) r.x = ui.W - r.w;
   if (r.y + r.h > ui.H) r.y = ui.H - r.h;
-  ui.windowRects.push_back(r);
   if (r.x < 0) r.x = 0;
   if (r.y < 0) r.y = 0;
-  rect = r; placed = true;   // callers hit-test the drawn rect, not the requested anchor
+  rect = r; placed = true;   // home position; the drawn rect adds any title-bar drag
+  r = ui.movable(r, Ui::windowKey("query"));
+  ui.windowRects.push_back(r);
   if (frame(ui, E, r, E.query(1, "Query"))) { R.close = true; R.add(Act::Close); }
   int y = r.y + 30;
   for (auto& l : lines) {

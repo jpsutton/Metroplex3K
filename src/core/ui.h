@@ -2,7 +2,9 @@
 // mouse/keyboard state each frame. Used for all menus, dialogs and the in-city HUD.
 #pragma once
 #include <algorithm>
+#include <cstdint>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 #include "core/font.h"
@@ -51,11 +53,19 @@ class Ui {
   int focusId = 0;       // text box with keyboard focus
   int activeId = 0;      // widget being dragged
 
-  void begin(std::vector<uint32_t>* f, int w, int h, const Input& i) { fb = f; W = w; H = h; in = i; tooltip.clear(); idCounter_ = 0; windowRects.clear(); }
+  void begin(std::vector<uint32_t>* f, int w, int h, const Input& i);
   // Frames of the windows drawn this frame (windows register theirs through wui::centered), so the host can tell
   // whether the pointer is over a window instead of guessing sizes.
   mutable std::vector<Rect> windowRects;
   int nextId() { return ++idCounter_; }
+
+  // Movable dialogs: returns `home` shifted by the distance the user dragged the window by its title bar (the top
+  // `barH` pixels, 0 = the skin's title-bar height, minus the close box at the right end). Windows drawn later are on
+  // top: a press only starts a drag when no later window covers the point. The offset lasts while the window is drawn
+  // every frame, so a closed window reopens at its home position. `key` identifies the window (0 = its size).
+  Rect movable(Rect home, uint64_t key = 0, int barH = 0);
+  static uint64_t windowKey(const char* name);   // explicit key for windows whose size changes while open
+  bool draggingWindow() const { return dragKey_ != 0; }
 
   void fill(Rect r, uint32_t c);
   void fillAlpha(Rect r, uint32_t c, float a);
@@ -80,6 +90,10 @@ class Ui {
 
  private:
   int idCounter_ = 0;
+  struct WinOffset { int dx = 0, dy = 0; bool seen = false; };
+  std::map<uint64_t, WinOffset> winOffsets_;
+  uint64_t dragKey_ = 0, pressKey_ = 0;   // window being dragged; window whose title bar got this frame's press
+  int dragMx_ = 0, dragMy_ = 0, dragDx_ = 0, dragDy_ = 0;   // press position and the offset at the press
 };
 
 }  // namespace m3k

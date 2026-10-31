@@ -59,7 +59,7 @@ bool Game::anyBlockingWindow() const {
 }
 
 void Game::closeModelessWindows() {
-  showMap_ = showGraphs_ = showCharts_ = showGoals_ = showNeigh_ = showQuery_ = false;
+  showMap_ = showGraphs_ = showCharts_ = showGoals_ = showNeigh_ = showQuery_ = showLayers_ = false;
 }
 
 // ---------------------------------------------------------------- opening
@@ -116,6 +116,7 @@ void Game::openWindow(const std::string& name) {
   }
   else if (name == "goals") showGoals_ = true;
   else if (name == "map") showMap_ = true;
+  else if (name == "layers") { layersDlg_.edit = layers_; showLayers_ = true; }
   else if (name == "graphs") showGraphs_ = true;
   else if (name == "charts") showCharts_ = true;
   else if (name == "tip") showTip_ = true;
@@ -181,10 +182,10 @@ void Game::buildPickerEntries(PickerCategory c) {
   }
 }
 
-void Game::buildMapSource(MapSource& src) {
+void Game::buildMapSource(MapSource& src, int pollutionKind) {
   src.W = world_.W; src.H = world_.H;
   auto buf = std::make_shared<std::vector<uint8_t>>();
-  src.values = [this, buf](DataLayer l) -> const std::vector<uint8_t>* {
+  src.values = [this, buf, pollutionKind](DataLayer l) -> const std::vector<uint8_t>* {
     City& c = sim_.city();
     const int W = world_.W, H = world_.H;
     if (!W) return nullptr;
@@ -224,7 +225,7 @@ void Game::buildMapSource(MapSource& src) {
         }
         break;
       case DataLayer::Pollution: {
-        int kind = mapWin_.pollutionKind;
+        int kind = pollutionKind >= 0 ? pollutionKind : mapWin_.pollutionKind;
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
           int v = kind == 0 ? c.pollution.airAt(x, z) : kind == 1 ? c.pollution.waterAt(x, z) : c.pollution.standingGarbageAt(x, z);
           at(x, z) = clampB(v / 128);
@@ -252,6 +253,45 @@ void Game::buildMapSource(MapSource& src) {
     int g = std::min(255, 90 + (a - world_.seaLevel) * 2);
     return rgb(uint8_t(g / 2), uint8_t(g), uint8_t(g / 3));
   };
+}
+
+// ---------------------------------------------------------------- View City Layers (spec 09 7.2)
+
+void Game::applyLayers() {
+  const CityLayers& L = layers_;
+  const bool above = L.mode == CityLayers::AboveGround, view = L.mode == CityLayers::LayerView;
+  const size_t li = size_t(std::max(0, std::min(int(cityLayerViews().size()) - 1, L.layer)));
+  ropt_.underground = L.mode == CityLayers::Underground;
+  ropt_.subways = L.underground == 0;
+  ropt_.pipes = L.underground == 1;
+  // Data layers hide buildings, flora and automata; networks stay (spec 25 9.2). Traffic keeps the zone tint.
+  ropt_.flora = above && L.flora;
+  ropt_.automata = above && L.transport;
+  ropt_.zonePaint = above ? L.zones : view && cityLayerViews()[li].layer == DataLayer::Traffic;
+  if (above && (!L.transport || !L.powerLines)) {
+    const bool t = L.transport, p = L.powerLines;
+    ropt_.showNet = [this, t, p](const NetPiece& np) { return sim_.city().kindOf(np) == uint32_t(NetworkKind::Power) ? p : t; };
+  } else ropt_.showNet = nullptr;
+  if (above && (!L.zonedBuildings || !L.otherBuildings)) {
+    const bool zb = L.zonedBuildings, ob = L.otherBuildings;
+    ropt_.showOccupant = [zb, ob](const Occupant& o) { uint32_t k = o.agentType / 1000; return k >= 3 && k <= 9 ? zb : ob; };   // zoned = agent types 3000-9999
+  } else if (view) ropt_.showOccupant = [](const Occupant&) { return false; };
+  else ropt_.showOccupant = nullptr;
+  layerOverlay_ = DataOverlay();
+  if (view) refreshLayerOverlay();
+}
+
+void Game::refreshLayerOverlay() {
+  layerOverlayAge_ = 0;
+  if (layers_.mode != CityLayers::LayerView || !world_.W) { layerOverlay_ = DataOverlay(); return; }
+  const auto& views = cityLayerViews();
+  const DataLayer dl = views[size_t(std::max(0, std::min(int(views.size()) - 1, layers_.layer)))].layer;
+  MapSource src; buildMapSource(src, 0);   // pollution: the air layer
+  const std::vector<uint8_t>* v = src.values ? src.values(dl) : nullptr;
+  if (!v) { layerOverlay_ = DataOverlay(); return; }
+  layerOverlay_ = makeDataOverlay(dl, *v, world_.W, world_.H);
+  // Electric Power colours powered tiles only; unpowered land keeps its terrain colour (spec 25 9.2 [OBSERVED]).
+  if (dl == DataLayer::Power) for (auto& r : layerOverlay_.row) if (r != 0) r = 0xFF;
 }
 
 // ---------------------------------------------------------------- query popup
@@ -283,6 +323,7 @@ void Game::drawWindows(uint32_t dtMs) {
     MapSource src; buildMapSource(src);
     finish(mapWin_.draw(ui_, E, src), showMap_);
   }
+  if (showLayers_) finish(layersDlg_.draw(ui_, E, ropt_.grid), showLayers_);
   if (showGraphs_) {
     auto series = graphSeriesTemplate();
     Chart conv[4];
@@ -384,6 +425,7 @@ void Game::drawWindows(uint32_t dtMs) {
   else if (!modal && modalDepth_ > 0) { modalDepth_ = 1; modalClosed(); }
   if (modal) uiHit_ = true;
   for (const Rect& wr : ui_.windowRects) if (ui_.hover(wr)) uiHit_ = true;   // windows register their frames while drawing
+  if (ui_.draggingWindow()) uiHit_ = true;   // a window being dragged by its title bar owns the pointer
 }
 
 // ---------------------------------------------------------------- results
@@ -401,6 +443,8 @@ void Game::handleWindowResult(const WindowResult& r) {
       case Act::OpenNeighbours: openWindow("neighbours"); break;
       case Act::OpenBusinessDeals: openWindow("deals"); break;
       case Act::OpenMapWindow: openWindow("map"); break;
+      case Act::ApplyLayers: layers_ = layersDlg_.edit; applyLayers(); break;
+      case Act::ToggleGrid: ropt_.grid = !ropt_.grid; break;
       case Act::OpenAdvisor: openWindow("advisors"); advWin_.open(e.id); break;
       case Act::OpenPetitioner: {
         const PendingPetition* p = petitioners_.find(e.id);
