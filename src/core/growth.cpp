@@ -585,42 +585,101 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
         for (int x = x0 + 2; x < x1 - 1; x++) for (int z = z0 + 2; z < z1 - 1; z++) put(F, x, z);
       return placed;
     }
-    case 0xA2C1EDA3: {  // farm (approximation of the [INFERRED] field tiling)
-      int a = std::min(22, std::max(rule.a, 4));
-      if (r.w() < a || r.h() < a) return 0;
-      int maxAir = std::min(rule.c, 32767), maxWat = std::min(rule.d, 32767);
-      for (int x = r.x0 - 1; x <= r.x1 + 1; x++) for (int z = r.z0 - 1; z <= r.z1 + 1; z++) {
-        if (inside(x, z) || x < 0 || z < 0 || x >= c.mapW() || z >= c.mapH()) continue;
-        int zt = c.zoneAt(x, z);
-        if (!(zt == 0 || zt == 1 || zt == 5 || zt == 9 || zt == 22)) return 0;
-      }
-      std::vector<int> front;
-      for (int e = 0; e < 4; e++) {
-        bool hasAccess = false; int Ln = (e & 1) ? r.w() : r.h();
-        for (int i = 1; i + 1 < Ln; i++) {
-          int x = e == 0 ? r.x0 : e == 2 ? r.x1 : r.x0 + i, z = (e & 1) ? (e == 1 ? r.z1 : r.z0) : r.z0 + i;
-          if (c.airPollution(x, z) > maxAir || c.waterPollution(x, z) > maxWat) return 0;
-          if (c.hasAccess(x, z, maxDist)) hasAccess = true;
+    case 0xA2C1EDA3: {  // farm (spec 15 s5.5) [STATIC]
+      const int a = std::min(22, std::max(rule.a, 4)), bmax = std::min(22, std::max(rule.b, a));
+      const int maxAir = std::min(rule.c, 32767), maxWat = std::min(rule.d, 32767);
+      // member lists per family: fields = filler edge 1; farmhouse edge >= 3, outbuilding 2, yard <= 1 (non-filler)
+      struct FarmSet { std::vector<BuildingChoice> field, house, out, yard; };
+      std::map<int, FarmSet> fams;
+      for (const auto* v : {&L.filler, &L.small, &L.large})
+        for (const auto& m : *v) {
+          const int e = std::max(m.sizeX, m.sizeZ);
+          FarmSet& fs = fams[m.family];
+          if (m.isFiller()) { if (e == 1) fs.field.push_back(m); }
+          else if (e >= 3) fs.house.push_back(m);
+          else if (e == 2) fs.out.push_back(m);
+          else fs.yard.push_back(m);
         }
-        if (hasAccess) front.push_back(e);
+      std::vector<const FarmSet*> sets;
+      for (auto& kv : fams) if (!kv.second.field.empty() && !kv.second.house.empty() && !kv.second.out.empty() && !kv.second.yard.empty()) sets.push_back(&kv.second);
+      if (sets.empty()) return 0;
+      // 1. size
+      if (r.w() < a || r.h() < a) return 0;
+      // 2. surroundings: the ring without its four diagonal corners
+      auto zoneOk = [&](int x, int z) {
+        if (x < 0 || z < 0 || x >= c.mapW() || z >= c.mapH()) return true;
+        int zt = c.zoneAt(x, z);
+        return zt == 0 || zt == 1 || zt == 5 || zt == 9 || zt == 22;
+      };
+      for (int x = r.x0; x <= r.x1; x++) if (!zoneOk(x, r.z0 - 1) || !zoneOk(x, r.z1 + 1)) return 0;
+      for (int z = r.z0; z <= r.z1; z++) if (!zoneOk(r.x0 - 1, z) || !zoneOk(r.x1 + 1, z)) return 0;
+      // 3. edges 0 row z0, 1 column x1, 2 row z1, 3 column x0, without corner tiles
+      int n[4] = {0, 0, 0, 0};
+      for (int e = 0; e < 4; e++) {
+        const bool row = (e & 1) == 0;
+        const int Ln = row ? r.w() : r.h();
+        for (int t = 1; t + 1 < Ln; t++) {
+          int x = row ? r.x0 + t : (e == 1 ? r.x1 : r.x0), z = row ? (e == 0 ? r.z0 : r.z1) : r.z0 + t;
+          if (c.airPollution(x, z) > maxAir || c.waterPollution(x, z) > maxWat) return 0;
+          if (c.hasAccess(x, z, maxDist)) n[e]++;
+        }
       }
-      if (front.empty()) return 0;
-      used.assign(size_t(r.w()) * r.h(), 0);
-      int e = front[size_t(rng.rand(int(front.size())))];
-      int Ln = (e & 1) ? r.w() : r.h(), depthMax = (e & 1) ? r.h() : r.w();
-      int sl = std::min(Ln, 3 + rng.rand(6)), dp = std::min(depthMax, 3 + rng.rand(2));
-      int off = rng.rand(Ln - sl + 1);
-      int sx0 = (e & 1) ? r.x0 + off : (e == 0 ? r.x0 : r.x1 - dp + 1), sz0 = (e & 1) ? (e == 3 ? r.z0 : r.z1 - dp + 1) : r.z0 + off;
-      const BuildingChoice* fb = pickFrom(L.large);
-      if (fb && canAt(*fb, sx0, sz0)) placed += putAt(*fb, sx0, sz0);
-      for (int x = r.x0; x <= r.x1; x++) for (int z = r.z0; z <= r.z1; z++) {
-        if (used[idx(x, z)]) continue;
-        std::vector<BuildingChoice> fields;
-        for (const auto& f : L.filler) if ((f.flagWord & 0x500) == 0x500 && f.sizeX == 1 && f.sizeZ == 1) fields.push_back(f);
-        const BuildingChoice* f = fields.empty() ? nullptr : &fields[size_t(rng.rand(int(fields.size())))];
-        if (f && canAt(*f, x, z)) placed += putAt(*f, x, z);
+      int frontEdges = 0;
+      for (int e = 0; e < 4; e++) if (n[e] > 0) frontEdges++;
+      if (frontEdges < 1 || frontEdges > 2) return 0;
+      // 4. cut to b
+      if (r.w() > bmax) { if (n[1] > 0) r.x0 = r.x1 - bmax + 1; else r.x1 = r.x0 + bmax - 1; }
+      if (r.h() > bmax) { if (n[0] > 0) r.z1 = r.z0 + bmax - 1; else r.z0 = r.z1 - bmax + 1; }
+      const int W = r.w(), H = r.h();
+      used.assign(size_t(W) * H, 0);
+      const FarmSet& fs = *sets[sets.size() == 1 ? 0 : size_t(rng.rand(int(sets.size())))];   // [INFERRED] family choice
+      // 5. farmstead strip on the side with the most access tiles
+      int s = 0;
+      for (int e = 1; e < 4; e++) if (n[e] > n[s]) s = e;
+      int SX, SZ, xs, zs;
+      if (s == 0 || s == 2) {
+        SX = std::clamp(W / 2, 3, 8); SZ = std::clamp(H / 3, 3, 4);
+        xs = r.x0 + int(rng.rand(std::max(1, W - SX + 1))); zs = s == 0 ? r.z0 : r.z1 - SZ + 1;
+      } else {
+        SX = std::clamp(W / 3, 3, 4); SZ = std::clamp(H / 2, 3, 8);
+        xs = s == 1 ? r.x1 - SX + 1 : r.x0; zs = r.z0 + int(rng.rand(std::max(1, H - SZ + 1)));
       }
-      return placed;
+      const int xe = xs + SX - 1, ze = zs + SZ - 1;
+      auto anchorIn = [&](int e, int& ax, int& az) {
+        ax = xs + int(rng.rand(std::max(1, SX - e + 1))); az = zs + int(rng.rand(std::max(1, SZ - e + 1)));
+      };
+      // 6. farmhouse
+      {
+        BuildingChoice h = *pickFrom(fs.house); h.rot = 0;
+        int ax, az; anchorIn(std::max(h.sizeX, h.sizeZ), ax, az);
+        if (canAt(h, ax, az)) placed += putAt(h, ax, az);
+      }
+      // 7. up to 5 attempts, at most 2 outbuildings
+      for (int att = 0, ok = 0; att < 5 && ok < 2; att++) {
+        BuildingChoice o = *pickFrom(fs.out); o.rot = 0;
+        int ax, az; anchorIn(std::max(o.sizeX, o.sizeZ), ax, az);
+        if (canAt(o, ax, az)) { placed += putAt(o, ax, az); ok++; }
+      }
+      // 8. yard pieces on the free strip tiles
+      for (int x = xs; x <= xe; x++)
+        for (int z = zs; z <= ze; z++) {
+          if (!inside(x, z) || used[idx(x, z)]) continue;
+          BuildingChoice y = *pickFrom(fs.yard); y.rot = 0;
+          if (canAt(y, x, z)) placed += putAt(y, x, z);
+        }
+      // 9. fields: one rotation; walk order by rotation; mark every free tile; re-pick 30 % after each, and on used tiles
+      const int R = rng.rand(100) <= 50 ? 1 : 0;
+      BuildingChoice P = *pickFrom(fs.field);
+      auto visit = [&](int x, int z) {
+        if (used[idx(x, z)]) { P = *pickFrom(fs.field); return; }
+        BuildingChoice f = P; f.rot = R;
+        if (c.canPlace(f, x, z)) placed += putAt(f, x, z);
+        used[idx(x, z)] = 1;
+        if (rng.rand(100) < 30) P = *pickFrom(fs.field);
+      };
+      if (R == 0) { for (int x = r.x0; x <= r.x1; x++) for (int z = r.z0; z <= r.z1; z++) visit(x, z); }
+      else { for (int z = r.z0; z <= r.z1; z++) for (int x = r.x0; x <= r.x1; x++) visit(x, z); }
+      return std::max(placed, 1);   // the rule succeeds after the field walk
     }
     case 0xE2D3FD92: {  // seaport yard
       if (uncommitted <= 0) return 0;
