@@ -439,114 +439,159 @@ void WaterLayer::monthlyUpdate(const WaterEnv& env) {
   }
   stats.meanPollution = polN ? uint32_t(polSum / polN) : 0;
 
-  // ---- 3.4 distribution ----
-  // A building is charged when the wet front reaches its ANCHOR tile (spec 16 s3.4 "Spreading front" step 4) [STATIC].
-  std::vector<int> occAt(size_t(W) * H, -1);
+  // ---- 3.4 distribution (spec 16 s3.4) ----
+  // Needs-water marks [STATIC]: one per building on its lot CENTRE tile; water facilities get none. Copied once for the
+  // month, so a building is charged at most once across components.
+  std::vector<int> markAt(size_t(W) * H, -1);
+  std::vector<uint8_t> marked(nCons, 0);
+  int marks = 0;
   for (size_t i = 0; i < nCons; i++) {
     const auto& o = (*env.consumers)[i];
-    if (o.x >= 0 && o.z >= 0 && o.x < W && o.z < H && occAt[size_t(o.x) * H + o.z] < 0) occAt[size_t(o.x) * H + o.z] = int(i);
+    if (o.agentType == 12810 || o.agentType == 12840 || o.agentType == 12830) continue;
+    int cx = (o.x + o.x1()) / 2, cz = (o.z + o.z1()) / 2;
+    if (cx < 0 || cz < 0 || cx >= W || cz >= H) continue;
+    if (markAt[size_t(cx) * H + cz] < 0) markAt[size_t(cx) * H + cz] = int(i);
+    marked[i] = 1; marks++;
   }
+  auto inMask = [&](int x, int z) { return x >= 0 && z >= 0 && x < W && z < H && env.pipes && (*env.pipes)[size_t(x) * H + z]; };
   std::vector<uint8_t> reachedFac(fac_.size(), 0);
   const int r = params_.waterFromPipe;
-  int64_t pool = 0;
-  for (const auto& f : fac_) pool += std::max(0, f.output);
-  pool = k > 0 ? int64_t(double(pool) / k) : INT64_MAX / 4;
-  for (size_t fi = 0; fi < fac_.size(); fi++) {
-    if (fac_[fi].output <= 0 || reachedFac[fi]) continue;
-    // Component over pipes.
-    std::vector<uint8_t> comp(size_t(W) * H, 0);
-    std::deque<int> q;
-    int s = fac_[fi].x * H + fac_[fi].z;
-    comp[s] = 1; q.push_back(s);
-    std::vector<int> tiles;
-    while (!q.empty()) {
-      int c = q.front(); q.pop_front();
-      tiles.push_back(c);
-      int x = c / H, z = c % H;
-      static const int dx[4] = {1, -1, 0, 0}, dz[4] = {0, 0, 1, -1};
-      for (int d = 0; d < 4; d++) {
-        int nx = x + dx[d], nz = z + dz[d];
-        if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue;
-        int n = nx * H + nz;
-        if (comp[n] || !env.pipes || !(*env.pipes)[n]) continue;
-        comp[n] = 1; q.push_back(n);
+  for (;;) {
+    // 3. Component: first facility in list order with output != 0 not yet reached this month.
+    size_t seedIdx = fac_.size();
+    for (size_t fi = 0; fi < fac_.size(); fi++) if (fac_[fi].output > 0 && !reachedFac[fi]) { seedIdx = fi; break; }
+    if (seedIdx == fac_.size()) break;
+    // Flood of the pipe mask from the seed tile: each pass grows one tile left/right, then one tile up/down; at most 500
+    // passes [STATIC]. Every tile expands horizontally and vertically exactly once.
+    std::vector<uint8_t> filled(size_t(W) * H, 0);
+    const int sx = fac_[seedIdx].x, sz = fac_[seedIdx].z;
+    std::vector<int> needH{sx * H + sz}, needV{sx * H + sz};
+    filled[size_t(sx) * H + sz] = 1;
+    for (int pass = 0; pass < 500; pass++) {
+      bool added = false;
+      std::vector<int> nh, nv;
+      for (int t : needH) {
+        int x = t / H, z = t % H;
+        for (int nx : {x - 1, x + 1}) {
+          if (!inMask(nx, z) || filled[size_t(nx) * H + z]) continue;
+          filled[size_t(nx) * H + z] = 1; added = true; nh.push_back(nx * H + z); needV.push_back(nx * H + z);
+        }
       }
+      for (int t : needV) {
+        int x = t / H, z = t % H;
+        for (int nz : {z - 1, z + 1}) {
+          if (!inMask(x, nz) || filled[size_t(x) * H + nz]) continue;
+          filled[size_t(x) * H + nz] = 1; added = true; nv.push_back(x * H + nz); nh.push_back(x * H + nz);
+        }
+      }
+      needH.swap(nh);
+      needV.swap(nv);
+      if (!added) break;
     }
+    // S starts at 0 and sums EVERY producing facility inside the flood, including ones counted earlier [STATIC].
     int64_t S = 0;
-    std::vector<int> seeds;
+    std::vector<int> wetSeeds;
     for (size_t gi = 0; gi < fac_.size(); gi++) {
-      if (fac_[gi].output > 0 && comp[fac_[gi].x * H + fac_[gi].z]) {
-        reachedFac[gi] = 1; S += fac_[gi].output; seeds.push_back(fac_[gi].x * H + fac_[gi].z);
-      }
+      const auto& g = fac_[gi];
+      if (g.output > 0 && filled[size_t(g.x) * H + g.z]) { reachedFac[gi] = 1; S += g.output; wetSeeds.push_back(g.x * H + g.z); }
     }
-    stats.supply += S;
     bool unlimited = false;
     int64_t sold = 0;
     for (const auto& d : env.deals) {
-      if (d.tx < 0 || d.tz < 0 || d.tx >= W || d.tz >= H || !comp[d.tx * H + d.tz]) continue;
+      if (d.tx < 0 || d.tz < 0 || d.tx >= W || d.tz >= H || !filled[size_t(d.tx) * H + d.tz]) continue;
       if (d.purchase) unlimited = true; else sold += d.amount;
     }
-    // Budget [INFERRED, clean-side fit; spec 16 s3.4 step 6 says trunc(S / k) per component]: the components share one
-    // city-wide pool, trunc(sum of all facility outputs / k), less what earlier components drew from it. With a budget
-    // per component, Berlin's month-start distribution dries 926 lots that the original's saved bitmap has watered
-    // (one component holds 14.6k of supply for 34k of demand while the city has 184k for 144k); with the shared pool
-    // 14 stay dry, and no other played city changes. A component with a purchase deal is unlimited and draws its own
-    // supply from the pool first.
-    int64_t budget = unlimited ? INT64_MAX / 4 : std::max<int64_t>(0, pool);
-    if (!unlimited) { budget = std::max<int64_t>(0, budget - sold); pool -= sold; }
-    stats.sale[0] += sold;
-
-    // Dilate pipe component by r tiles (square).
+    // 5. Serviceable = the filled set dilated by WaterFromPipe (Chebyshev square).
     std::vector<uint8_t> serv(size_t(W) * H, 0);
-    for (int t : tiles) {
-      int x = t / H, z = t % H;
-      for (int xx = std::max(0, x - r); xx <= std::min(W - 1, x + r); xx++)
-        for (int zz = std::max(0, z - r); zz <= std::min(H - 1, z + r); zz++) serv[size_t(xx) * H + zz] = 1;
-    }
-    // Expanding front: one tile per sweep in every direction, alternating sweep direction.
-    std::vector<uint8_t> reach(size_t(W) * H, 0);
-    std::vector<int> frontier;
-    for (int t : seeds) if (!reach[t]) { reach[t] = 1; frontier.push_back(t); }
+    for (int x = 0; x < W; x++)
+      for (int z = 0; z < H; z++) {
+        if (!filled[size_t(x) * H + z]) continue;
+        for (int xx = std::max(0, x - r); xx <= std::min(W - 1, x + r); xx++)
+          for (int zz = std::max(0, z - r); zz <= std::min(H - 1, z + r); zz++) serv[size_t(xx) * H + zz] = 1;
+      }
+    // 6. Budget for this component alone.
+    int64_t budget = unlimited ? INT64_MAX / 4 : (k > 0 ? int64_t(double(S) / k) : INT64_MAX / 4);
+    if (!unlimited) budget = std::max<int64_t>(0, budget - sold);
+    stats.sale[0] += sold;
+    int64_t consumed = 0;
     bool stop = false;
-    int64_t drawn = 0;
-    auto reachTile = [&](int t) {
-      service_[t] = 1;
-      int oi = occAt[t];
-      if (oi < 0 || watered_[oi]) return;
-      int cons = params_.consumptionPerTile((*env.consumers)[oi].agentType) * (*env.consumers)[oi].sizeX * (*env.consumers)[oi].sizeZ;
-      if (cons <= 0) { watered_[oi] = 1; return; }
-      // Remaining budget <= c: the budget becomes 0 and spreading stops; the building stays dry (step 4) [STATIC].
-      if (budget <= cons) { budget = 0; stop = true; return; }
-      watered_[oi] = 1;
-      budget -= cons;
-      stats.used += cons; drawn += cons;
+    auto charge = [&](int t) {
+      int oi = markAt[t];
+      if (oi < 0 || !marked[size_t(oi)]) return;
+      const auto& o = (*env.consumers)[size_t(oi)];
+      int64_t c = int64_t(params_.consumptionPerTile(o.agentType)) * o.sizeX * o.sizeZ;
+      if (c <= 0) { marked[size_t(oi)] = 0; watered_[size_t(oi)] = 1; return; }
+      if (budget <= c) { budget = 0; stop = true; return; }
+      budget -= c; consumed += c;
+      marked[size_t(oi)] = 0; watered_[size_t(oi)] = 1;
       if (budget < 1) stop = true;
     };
-    for (size_t i = 0; i < frontier.size() && !stop; i++) reachTile(frontier[i]);
-    for (int layer = 0; !stop && !frontier.empty(); layer++) {
-      std::vector<int> next;
-      for (int c : frontier) {
-        int x = c / H, z = c % H;
-        for (int dx = -1; dx <= 1; dx++)
-          for (int dz = -1; dz <= 1; dz++) {
-            int nx = x + dx, nz = z + dz;
-            if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue;
-            int n = nx * H + nz;
-            if (reach[n] || !serv[n]) continue;
-            reach[n] = 1; next.push_back(n);
-          }
+    // Spreading front: the wet mask starts at the counted facilities' tiles, active rows = their rows; each iteration a
+    // down sweep then an up sweep, each growing the wet mask one tile horizontally and vertically inside the serviceable
+    // mask and the active rows, which then widen by one row each way [STATIC; growth inside a sweep INFERRED].
+    std::vector<uint8_t> wet(size_t(W) * H, 0);
+    int zlo = H, zhi = -1;
+    std::vector<int> front;
+    for (int t : wetSeeds) if (!wet[size_t(t)]) { wet[size_t(t)] = 1; front.push_back(t); zlo = std::min(zlo, t % H); zhi = std::max(zhi, t % H); }
+    for (int t : front) { service_[size_t(t)] = 1; if (!stop) charge(t); }
+    int idleSweeps = 0;
+    for (int sweep = 0; !stop && !front.empty() && idleSweeps < 2; sweep++) {
+      const bool down = (sweep % 2) == 0;
+      std::vector<int> next, keep;
+      for (int t : front) {
+        int x = t / H, z = t % H;
+        bool held = false;   // a neighbour waits for the active row range to widen
+        const int nb[4][2] = {{x - 1, z}, {x + 1, z}, {x, z - 1}, {x, z + 1}};
+        for (const auto& n : nb) {
+          if (n[0] < 0 || n[1] < 0 || n[0] >= W || n[1] >= H) continue;
+          size_t ni = size_t(n[0]) * H + n[1];
+          if (wet[ni] || !serv[ni]) continue;
+          if (n[1] < zlo || n[1] > zhi) { held = true; continue; }
+          wet[ni] = 1; next.push_back(int(ni));
+        }
+        if (held) keep.push_back(t);
       }
-      // Alternate downward (z ascending) and upward (z descending) sweeps [tie-break OPEN].
-      std::sort(next.begin(), next.end(), [&](int a, int b) {
-        int az = a % H, bz = b % H;
-        if (az != bz) return layer % 2 == 0 ? az < bz : az > bz;
-        return a < b;
+      idleSweeps = next.empty() ? idleSweeps + 1 : 0;
+      // Row order of the sweep; within a row x ascending. New tiles go wet a 32-tile row word at a time: when the budget
+      // runs out the rest of that word stays wet but uncharged.
+      std::sort(next.begin(), next.end(), [&](int a2, int b2) {
+        int az = a2 % H, bz = b2 % H;
+        if (az != bz) return down ? az < bz : az > bz;
+        return a2 < b2;
       });
-      for (int n : next) { if (stop) break; reachTile(n); }
-      frontier.swap(next);
+      int stopWordZ = -1, stopWordX = -1;
+      for (int t : next) {
+        int x = t / H, z = t % H;
+        if (stop) {
+          if (z == stopWordZ && x / 32 == stopWordX) service_[size_t(t)] = 1;
+          continue;
+        }
+        service_[size_t(t)] = 1;
+        charge(t);
+        if (stop) { stopWordZ = z; stopWordX = x / 32; }
+      }
+      front.swap(next);
+      front.insert(front.end(), keep.begin(), keep.end());
+      zlo = std::max(0, zlo - 1); zhi = std::min(H - 1, zhi + 1);
     }
-    if (unlimited && drawn > S) { stats.purchase[0] += drawn - S; }
-    pool -= unlimited ? std::min<int64_t>(drawn, int64_t(double(S) / std::max(0.01, k))) : drawn;
+    // 7. Leftover and statistics; a purchase component draws its excess from the neighbour (step 4).
+    int64_t L;
+    if (unlimited) {
+      if (consumed > S) { stats.purchase[0] += consumed - S; S = consumed; L = 0; }
+      else L = S - consumed;
+    } else {
+      L = k > 0 ? int64_t(double(budget) * k) : 0;
+    }
+    stats.supply += S;
+    stats.used += S - L;
+  }
+  // Counts (spec 16 s3.4 "Counts") [STATIC]: marks left = buildings without water; needWater = all marks, or 100 when
+  // none is left and at least one building needs water.
+  {
+    int left = 0;
+    for (size_t i = 0; i < nCons; i++) left += marked[i];
+    stats.statA = uint32_t(left);
+    if (marks > 0) stats.statB = left == 0 ? 100u : uint32_t(marks);
   }
 
   uint32_t pct = stats.supply > 0 ? uint32_t(std::min<int64_t>(100, 100 * stats.used / stats.supply)) : 0;

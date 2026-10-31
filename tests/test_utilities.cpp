@@ -371,13 +371,13 @@ static void testWaterDistribution() {
     WaterLayer t(32, 32, p2);
     t.addFacility(WaterKind::Tower, 2, 10, 0);
     t.monthlyUpdate(env);
-    CHECK(t.occupantWatered()[0] == 0 && t.stats.used == 0);
+    CHECK(t.occupantWatered()[0] == 0 && t.stats.used == 2 && t.stats.statA == 4);   // leftover 0: used = supply; all 4 marks left
   }
   // Ordinances: k = 1 - 0.2 - 0.1.
   env.ordinances.set(ord::WaterConservation, true);
   env.ordinances.set(ord::WaterMeters, true);
   f.L.monthlyUpdate(env);
-  CHECK(f.L.stats.used == 30);
+  CHECK(f.L.stats.used == 1000 - int64_t((int64_t(1000 / 0.7) - 30) * 0.7));   // used = S - trunc(B_left * k) (spec 16 s3.4 step 7)
   // Purchase deal => unlimited supply.
   WaterLayer u(32, 32, p);
   u.addFacility(WaterKind::Tower, 2, 10, 0);

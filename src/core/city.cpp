@@ -1345,11 +1345,12 @@ void City::monthlyPower() {
 }
 
 void City::monthlyWater() {
+  // Pipe mask (spec 16 s3.4 step 3): pipe pieces plus every tile of every water facility's lot, whatever its state or
+  // output [STATIC]. Berlin: non-producing pumps at (114,167), (117,146) and (119,142) link two pipe networks.
   std::vector<uint8_t> pipes(pipe_);
-  for (const auto& f : water.facilities()) {
-    int oi = occupantAt(f.x, f.z);
-    if (oi < 0) { pipes[idx(f.x, f.z)] = 1; continue; }
-    const Occupant& o = world_->occupants[size_t(oi)];
+  for (const auto& f : water.facilities()) if (occupantAt(f.x, f.z) < 0) pipes[idx(f.x, f.z)] = 1;
+  for (const auto& o : world_->occupants) {
+    if (o.agentType != kAgentPump && o.agentType != kAgentTower && o.agentType != kAgentDesal) continue;
     for (int dx = 0; dx < o.sizeX; dx++)
       for (int dz = 0; dz < o.sizeZ; dz++)
         if (inMap(o.x + dx, o.z + dz)) pipes[idx(o.x + dx, o.z + dz)] = 1;
@@ -1366,7 +1367,10 @@ void City::monthlyWater() {
           if (world_->waterAt(x + dx, z + dz) >= world_->altAt(x + dx, z + dz)) { wet = true; break; }
       if (wet) kind[idx(x, z)] = (!saltOff && pollution.seaFlagAt(x, z)) ? 2 : 1;
     }
-  auto consumers = simOccupants(true);
+  // Buildings with a needs-water mark: in practice lot states 1 and 4 (spec 16 s3.4 "Needs-water marks").
+  auto consumers = simOccupants(false);
+  consumers.erase(std::remove_if(consumers.begin(), consumers.end(), [](const us::SimOccupant& o) {
+                    const uint32_t b = o.state & ~0x200u; return b != 1 && b != 4; }), consumers.end());
   us::WaterEnv env;
   env.nowAbsMonth = absMonthOf(clock);
   env.pipes = &pipes;

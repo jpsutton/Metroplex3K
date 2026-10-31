@@ -91,6 +91,69 @@ int main(int argc, char** argv) {
       std::printf("\n");
       continue;
     }
+    if (const char* bb = std::getenv("M3K_FACBOX")) {   // water facilities in a box "x0,z0,x1,z1" after one month
+      int x0, z0, x1, z1;
+      if (std::sscanf(bb, "%d,%d,%d,%d", &x0, &z0, &x1, &z1) == 4) {
+        for (int d = 0; d < 35; d++) s.game.sim().tickDay();
+        int n = 0; long long sum = 0;
+        for (const auto& f : c.water.facilities()) {
+          if (f.x < x0 || f.x > x1 || f.z < z0 || f.z > z1) continue;
+          n++; sum += f.output;
+          std::printf("     fac kind %d (%d,%d) out %d status %d pipeAtTile %d powered %d\n", int(f.kind), f.x, f.z, f.output, int(f.status),
+                      c.isPipe(f.x, f.z) ? 1 : 0, c.power.powered(f.x, f.z) ? 1 : 0);
+        }
+        std::printf("   facilities in box: %d, output sum %lld\n", n, sum);
+        if (const char* sd = std::getenv("M3K_FLOODSEED")) {   // spec 16 s3.4 flood from a seed tile over pipes + facility lots
+          int fx, fz; std::sscanf(sd, "%d,%d", &fx, &fz);
+          const int W = s.game.world().W, H = s.game.world().H;
+          std::vector<uint8_t> mask(size_t(W) * H, 0), filled(size_t(W) * H, 0);
+          for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) mask[size_t(x) * H + z] = c.isPipe(x, z);
+          for (const auto& f : c.water.facilities()) {
+            int oi = c.occupantAt(f.x, f.z);
+            if (oi < 0) { mask[size_t(f.x) * H + f.z] = 1; continue; }
+            const auto& o = s.game.world().occupants[size_t(oi)];
+            for (int dx = 0; dx < o.sizeX; dx++) for (int dz = 0; dz < o.sizeZ; dz++) mask[size_t(o.x + dx) * H + o.z + dz] = 1;
+          }
+          std::vector<int> needH{fx * H + fz}, needV{fx * H + fz}; filled[size_t(fx) * H + fz] = 1;
+          int passes = 0;
+          for (; passes < 500; passes++) {
+            bool added = false; std::vector<int> nh, nv;
+            for (int t : needH) { int x = t / H, z = t % H; for (int nx : {x - 1, x + 1}) if (nx >= 0 && nx < W && mask[size_t(nx) * H + z] && !filled[size_t(nx) * H + z]) { filled[size_t(nx) * H + z] = 1; added = true; nh.push_back(nx * H + z); needV.push_back(nx * H + z); } }
+            for (int t : needV) { int x = t / H, z = t % H; for (int nz : {z - 1, z + 1}) if (nz >= 0 && nz < H && mask[size_t(x) * H + nz] && !filled[size_t(x) * H + nz]) { filled[size_t(x) * H + nz] = 1; added = true; nv.push_back(x * H + nz); nh.push_back(x * H + nz); } }
+            needH.swap(nh); needV.swap(nv);
+            if (!added) break;
+          }
+          int cnt = 0, bx0 = W, bx1 = -1, bz0 = H, bz1 = -1, nf = 0; long long S = 0;
+          for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) if (filled[size_t(x) * H + z]) { cnt++; bx0 = std::min(bx0, x); bx1 = std::max(bx1, x); bz0 = std::min(bz0, z); bz1 = std::max(bz1, z); }
+          for (const auto& f : c.water.facilities()) if (f.output > 0 && filled[size_t(f.x) * H + f.z]) { nf++; S += f.output; }
+          std::printf("   flood from (%d,%d): %d tiles in %d passes, bbox x %d-%d z %d-%d, %d producing facilities, S %lld\n", fx, fz, cnt, passes, bx0, bx1, bz0, bz1, nf, S);
+          {  // uncapped 4-connected component of the seed over the same mask, and the closest mask gap to the next component
+            std::vector<int> comp(size_t(W) * H, 0); std::vector<int> q{fx * H + fz}; comp[size_t(fx) * H + fz] = 1;
+            for (size_t h = 0; h < q.size(); h++) { int t = q[h], x = t / H, z = t % H; const int d4[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
+              for (auto& d : d4) { int nx = x + d[0], nz = z + d[1]; if (nx < 0 || nz < 0 || nx >= W || nz >= H || comp[size_t(nx) * H + nz] || !mask[size_t(nx) * H + nz]) continue; comp[size_t(nx) * H + nz] = 1; q.push_back(nx * H + nz); } }
+            std::printf("   uncapped component of the seed: %zu tiles\n", q.size());
+            // single-tile gaps: a non-mask tile with component tiles and other-mask tiles on opposite/adjacent sides
+            int shown = 0;
+            for (int x = 1; x < W - 1 && shown < 12; x++) for (int z = 1; z < H - 1 && shown < 12; z++) {
+              size_t i = size_t(x) * H + z; if (mask[i]) continue;
+              bool inC = false, other = false; const int d4[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
+              for (auto& d : d4) { size_t j = size_t(x + d[0]) * H + z + d[1]; if (comp[j]) inC = true; else if (mask[j]) other = true; }
+              if (inC && other) { std::printf("     gap tile (%d,%d) road %d occ %d\n", x, z, c.isRoadTile(x, z) ? 1 : 0, c.occupantAt(x, z) >= 0 ? int(s.game.world().occupants[size_t(c.occupantAt(x, z))].agentType) : -1); shown++; }
+            }
+          }
+          for (const auto& f : c.water.facilities()) {
+            if (f.output <= 0 || filled[size_t(f.x) * H + f.z] || f.x < bx0 - 10 || f.x > bx1 + 10 || f.z < bz0 || f.z > bz1) continue;
+            int near = 99;
+            for (int x = std::max(0, f.x - 6); x <= std::min(W - 1, f.x + 6); x++) for (int z = std::max(0, f.z - 6); z <= std::min(H - 1, f.z + 6); z++)
+              if (filled[size_t(x) * H + z]) near = std::min(near, std::max(std::abs(x - f.x), std::abs(z - f.z)));
+            std::string nb;
+            for (int dz = -2; dz <= 2; dz++) { for (int dx = -2; dx <= 2; dx++) { int x = f.x + dx, z = f.z + dz; nb += (x < 0 || z < 0 || x >= W || z >= H) ? '#' : filled[size_t(x) * H + z] ? 'F' : mask[size_t(x) * H + z] ? 'm' : c.isRoadTile(x, z) ? 'r' : '.'; } nb += '|'; }
+            std::printf("     outside: fac (%d,%d) out %d, nearest filled %d, 5x5 %s\n", f.x, f.z, f.output, near, nb.c_str());
+          }
+        }
+      }
+      continue;
+    }
     if (std::getenv("M3K_WATER")) {   // watered occupied R/C/I lots: saved bitmap at load vs after our month-start distribution
       auto dry = [&]() {
         int n = 0, tot = 0;
