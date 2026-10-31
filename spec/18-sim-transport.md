@@ -372,7 +372,12 @@ candidates. The rule is [STATIC]:
    * any other candidate replaces the current choice unless a below-annoyance candidate has
      already been chosen and d is lower than the best d chosen so far. After a station is
      chosen, the best d is treated as 255, so non-station tiles no longer replace it.
-3. If more than one candidate was seen, the new node is flagged "alternatives exist" (§5.7).
+3. If more than one candidate was seen (above or below the annoyance level), the new node is
+   flagged "alternatives exist" (§5.7). **Original defect** [STATIC]: every new node starts with
+   this flag already set, and a successful step never clears it, so in practice every node on the
+   path has it. The flag is cleared only on the node passed to a step that finds no candidate.
+   Reproduce this: on backtracking, **every** popped node is retried (§5.7 step 4), not only
+   nodes that had a second candidate. The origin node is also created with the flag set.
 
 The traffic therefore **follows the busiest uncongested route**: it prefers existing traffic
 until the annoyance level is reached, and then spills onto quieter tiles.
@@ -483,8 +488,11 @@ last-move code is a **different encoding** from the span direction above (there 
 
 ### 5.6 Budget
 
-Budget B = `TripCellCostBaseRoad` × max(W, H) (cost units; the raw INI value) [STATIC]. A node
-whose accumulated cost exceeds B is not expanded. On a 256-tile map with the shipped value 4,
+Budget B = `TripCellCostBaseRoad` × max(W, H) (cost units; the raw INI value) [STATIC]. The test is
+made when a node is about to be **expanded**: if B < the node's accumulated cost, the step fails
+(strict comparison; cost = B is still expanded). A new node is created and pushed whatever its
+cost, and its arrival test (§5.8) runs before the budget test, so a node that ends over budget can
+still arrive [STATIC]. On a 256-tile map with the shipped value 4,
 B = 1024: roughly 256 road steps, or more on cheaper transit.
 
 ### 5.7 Search loop and arrival
@@ -497,7 +505,10 @@ The search is a depth-first walk [STATIC]:
    and make it current, then go to 2.
 4. If there is none, backtrack: pop nodes until one is found whose "alternatives exist" flag is
    set *and* that now yields a new step (the visit mask prevents repeats). If the stack empties,
-   the trip **fails**.
+   the trip **fails**. A retried node runs the normal step again (§5.2–§5.5): the ring is
+   rescanned from the start, tiles whose visit-mask entry already holds all bits of the node's mode
+   are skipped, and the choice rule of §5.3 starts afresh over the remaining candidates. Nothing
+   resumes from the old scan position [STATIC].
 
 The visit mask is updated as each node is chosen: the new node's tiles are marked with the
 **parent's** mode bit, and rejected candidate tiles are marked with the scanning mode.
