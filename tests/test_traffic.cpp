@@ -247,6 +247,12 @@ static void testQueries() {
   s.rec().snapSubway[size_t(3) * 6 + 1] = 40;
   CHECK(s.tileValue(1, 1, 0x01) == 100 && s.tileValue(1, 1, 0x02) == 0);
   CHECK(s.tileValue(2, 1, 0x02) == 60 && s.tileValue(3, 1, 0x08) == 40 && s.tileValue(3, 1, 0x01) == 0);
+  {  // surface test is per bit (spec 18 7.1): a rail tile's surface value needs mask bit 0x04, not 0x01
+    s.flags(4, 1) |= TF_RAIL;
+    s.rec().snapSurface[size_t(4) * 6 + 1] = 70;
+    CHECK(s.tileValue(4, 1, 0x03) == 0 && s.tileValue(4, 1, 0x04) == 70 && s.tileValue(1, 1, 0x03) == 100);
+    s.flags(4, 1) = 0; s.rec().snapSurface[size_t(4) * 6 + 1] = 0;
+  }
   int sum, cnt;
   s.areaSumCount(TripRect{0, 0, 5, 5}, 0x0B, sum, cnt);
   CHECK(sum == 200 && cnt == 3);

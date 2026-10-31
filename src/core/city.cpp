@@ -1226,24 +1226,19 @@ void City::dailyZoneDev() { zones.tick(*growthView_, zoneRng_, zoneCrt_); }
 void City::dailyPollution() {
   us::PollutionEnv env;
   env.zone = &world_->zone;
-  // Traffic air term (spec 17 7.2.4 step 3). INFERRED from DATA, pending the spec: T_t = max(surface snapshot if the tile
-  // has the road flag 0x01, highway snapshot if it has the highway flag 0x02). On Berlin's saves (days 40, 145, 318) this
-  // input leaves the original's saved air nearly fixed over two sweeps (mean |d| 12-21). With no traffic the air falls by
-  // ~95 on average; counting the surface layer on rail and station tiles too (spec 18 7.1 tile value) raises it by +8..+15.
+  // Traffic air term (spec 17 7.2.4 step 3, 18 7.1) [STATIC]: T_t is the snapshot tile value with mask 0x03, i.e. the
+  // surface layer on road-flag tiles (not rail or station tiles), max with the highway layer on highway tiles.
+  // DATA agrees: on Berlin's saves this input leaves the original's saved air nearly fixed over two sweeps.
   std::vector<uint8_t> airTraffic;
   if (traffic) {
     const int W = world_->W, H = world_->H;
     airTraffic.assign(size_t(W) * H, 0);
     for (int x = 0; x < W; x++)
-      for (int z = 0; z < H; z++) {
-        uint16_t f = traffic->flags(x, z);
-        int v = (f & 0x0001) ? int(traffic->snapSurface(x, z)) : 0;
-        if (f & 0x0002) v = std::max(v, int(traffic->snapHighway(x, z)));
-        airTraffic[size_t(x) * H + z] = uint8_t(v);
-      }
+      for (int z = 0; z < H; z++) airTraffic[size_t(x) * H + z] = uint8_t(traffic->tileValue(x, z, 0x03));
     env.traffic = &airTraffic;
   }
   env.ordinances = usOrdinances();
+  if (!pollution.treatmentCapsSet()) updateTreatmentCaps();   // first run after load or new city
   env.exportDeal = neighbours.dealOfType(4);   // garbage export deal: the whole remainder leaves the city
   for (const auto& d : neighbours.active)      // garbage import deal (the player is paid): enters the pipeline first
     if (!d.terminated() && d.dealType == 5) env.importMonthly += d.quantity;
@@ -1564,6 +1559,21 @@ void City::monthlyPollution() {
     centres.push_back(pollution.recyclingCentreValues(working, std::max(0, now - std::min(built, now))));
   }
   pollution.monthEnd(d.month, d.year, residents_, &centres);
+  updateTreatmentCaps();
+}
+// Water-treatment plants' capacities (spec 16 s3.1) [STATIC]: set monthly; working = lot occupied (state 1) and the plant
+// tile powered and watered; age from the build date as for recycling centres.
+void City::updateTreatmentCaps() {
+  std::vector<int64_t> caps;
+  const int now = absMonthOf(clock);
+  for (const auto& o : world_->occupants) {
+    if (o.agentType != 12820) continue;   // water treatment plant (spec 17 s7.2.3 facility list)
+    int built = now;
+    if (o.hasDate && o.dateYear > 0) built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
+    bool working = (o.state & ~0x200u) == 1 && power.powered(o.x, o.z) && water.tileServiced(o.x, o.z);
+    caps.push_back(pollution.treatmentCapacity(working, std::max(0, now - std::min(built, now))));
+  }
+  pollution.setTreatmentCaps(std::move(caps));
 }
 void City::monthlyCrime() {
   cal::Date d = clock.date();

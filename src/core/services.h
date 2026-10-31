@@ -230,6 +230,7 @@ struct PollutionParams {
   // SC3Tune [RecyclingCenter] OptimalPctReduction / OptimalPopServed: inputs of the recycling ratio (spec 16 s4.3).
   int recyclingPct = 0, recyclingPopServed = 0;
   int recyclingMaxLifespan = 0, recyclingDeclineAge = 0;   // months
+  int treatmentMaxLifespan = 0, treatmentDeclineAge = 0;   // months, SC3Tune [WaterTreatment]
   std::map<uint32_t, PollutionEntry> table;
   // pollution = SC3Pollution.ini; tune = SC3Tune.ini; power = SC3PowerLayer.ini (any may be null)
   static PollutionParams fromIni(const IniFile& pollution, const IniFile* tune = nullptr, const IniFile* power = nullptr);
@@ -241,7 +242,7 @@ struct PollutionEnv {
   OrdinanceSet ordinances;
   bool exportDeal = false;
   int64_t importMonthly = 0;                       // neighbour garbage import (paid), per month
-  int treatmentFunding = 100, incineratorFunding = 100, wteFunding = 100;  // percent
+  int incineratorFunding = 100, wteFunding = 100;  // percent
 };
 
 class PollutionLayer {
@@ -282,6 +283,11 @@ class PollutionLayer {
   // A centre's monthly values (spec 16 s4.3) [STATIC]: 0 when not working (expired, age >= MaxLifespan, unpowered, lot
   // state not 1, failed trips), else the INI values reduced linearly after DeclineAge. No funding scaling.
   RecyclingCentre recyclingCentreValues(bool working, int ageMonths) const;
+  // A treatment plant's monthly capacity (spec 16 s3.1) [STATIC]: 0 unless working (lot occupied, tile powered and
+  // watered) and younger than MaxLifespan; OptimalPollutionCap reduced linearly after DeclineAge. No funding factor.
+  int64_t treatmentCapacity(bool working, int ageMonths) const;
+  void setTreatmentCaps(std::vector<int64_t> caps) { treatmentCaps_ = std::move(caps); treatmentCapsSet_ = true; }
+  bool treatmentCapsSet() const { return treatmentCapsSet_; }
   // Month end: chart, garbage counters and history (spec 16 s4.5), landfill store update (s4.4) and the recycling
   // ratio for `population` (s4.3) from `centres` (null: every listed centre new and working).
   void monthEnd(int month, int year, int64_t population = 0, const std::vector<RecyclingCentre>* centres = nullptr);
@@ -334,6 +340,8 @@ class PollutionLayer {
   const AgentHierarchy* hier_ = nullptr;
   MsRand rnd_;
   RunBudget wteRb_, incRb_, recRb_;
+  std::vector<int64_t> treatmentCaps_;
+  bool treatmentCapsSet_ = false;
   int64_t recBudget_ = 0;
 };
 

@@ -224,6 +224,7 @@ class City {
   void monthlyNeighbours(); void monthlyValves(); void monthlyOrdinances(); void monthlyPopulation();
   void monthlyTraffic(); void monthlyBudget(); void monthlyPower(); void monthlyWater();
   void monthlyPollution(); void monthlyCrime();
+  void updateTreatmentCaps();
 
   World* world_ = nullptr;
   GameData* game_ = nullptr;

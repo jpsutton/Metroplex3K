@@ -582,6 +582,8 @@ PollutionParams PollutionParams::fromIni(const IniFile& f, const IniFile* tune, 
   if (tune) {
     IniReader t{tune};
     p.treatmentCap = int(t.num("WaterTreatment", "OptimalPollutionCap", 0));
+    p.treatmentMaxLifespan = int(t.num("WaterTreatment", "MaxLifespan", 0));
+    p.treatmentDeclineAge = int(t.num("WaterTreatment", "DeclineAge", 0));
     p.incineratorCap = int(t.num("Incinerator", "OptimalGarbageCap", 0));
     p.recyclingPct = int(t.num("RecyclingCenter", "OptimalPctReduction", 0));
     p.recyclingPopServed = int(t.num("RecyclingCenter", "OptimalPopServed", 0));
@@ -806,11 +808,12 @@ void PollutionLayer::run(const PollutionEnv& env) {
   // 3 WTE burn its whole 104k/month remainder; Liverpool 3 incinerators burn 135,000 = 3 x 45,000 every month).
   int64_t wteBud = wteRb_.next(30 * wteN * P.wteCap * env.wteFunding / 100);
   int64_t incBud = incRb_.next(30 * incN * P.incineratorCap * env.incineratorFunding / 100);
-  // Treatment capacity C_T is the per-run sum of the plants' OptimalPollutionCap (spec 17 7.2.4 "at the start of every
-  // tick"), not a monthly figure spread over 30 runs. [DATA] Berlin (4 plants x 60,000): the original's saved per-sweep
-  // treated total is 1.24M, more than the 240k a monthly reading allows; with the per-run cap their saved water is a fixed
-  // point of our update (mean -1.6 over two sweeps, against +17.6 with the monthly reading).
-  int64_t trBud = trN * P.treatmentCap * env.treatmentFunding / 100;
+  // Treatment capacity C_T (spec 16 s3.1, 17 s7.2.4) [STATIC]: the sum of the plants' current capacities, taken at the
+  // start of every run (per run, not per month; no funding factor). The capacities are set monthly by the city
+  // (setTreatmentCaps); until the first such update every listed plant counts at OptimalPollutionCap.
+  int64_t trBud = 0;
+  if (treatmentCapsSet_) for (int64_t v : treatmentCaps_) trBud += v;
+  else trBud = trN * P.treatmentCap;
   burnCapA = uint32_t(incBud); burnCapB = uint32_t(wteBud);
   disp.abductionCap = P.garbageAbduction;
   disp.beginRun(wteBud, incBud, env.exportDeal);
@@ -860,6 +863,15 @@ float PollutionLayer::recyclingRatio(std::vector<RecyclingCentre> cs, int64_t P)
   }
   if (served <= 0) return 0;
   return float(served < double(P) ? w / double(P) : w / served);
+}
+
+int64_t PollutionLayer::treatmentCapacity(bool working, int age) const {
+  const PollutionParams& P = params_;
+  if (!working || (P.treatmentMaxLifespan > 0 && age >= P.treatmentMaxLifespan)) return 0;
+  int64_t cap = P.treatmentCap;
+  if (age > P.treatmentDeclineAge && P.treatmentMaxLifespan > P.treatmentDeclineAge)
+    cap -= int64_t(age - P.treatmentDeclineAge) * cap / (P.treatmentMaxLifespan - P.treatmentDeclineAge);
+  return cap;
 }
 
 PollutionLayer::RecyclingCentre PollutionLayer::recyclingCentreValues(bool working, int age) const {

@@ -769,7 +769,7 @@ static int tileVal(const TrafficSim& s, int x, int z, unsigned mask, int init, b
   uint16_t f = s.flags(x, z);
   int v = 0;
   has = false;
-  bool surf = (f & (TF_ROAD | TF_RAIL | TF_STATION | TF_XFER)) && (mask & (0x01 | 0x04 | 0x10 | 0x20));
+  bool surf = (f & mask & (TF_ROAD | TF_RAIL | TF_STATION | TF_XFER)) != 0;   // per bit: the requested surface kinds the tile has (spec 18 7.1)
   bool hwy = (f & TF_HIGHWAY) && (mask & 0x02);
   bool sub = (f & TF_SUBWAY) && (mask & 0x08);
   if (surf) { v = s.snapSurface(x, z); has = true; }

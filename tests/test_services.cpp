@@ -457,6 +457,17 @@ static void testPollutionRun() {
     CHECK(L.treatedLast == 2000 && L.rawWaterLast == 2000);   // no history: t = C_T, limited to S_W
     CHECK(L.waterAt(4, 4) == 0);      // target (2000-2000)/4 = 0
   }
+  {   // Treatment capacity (spec 16 s3.1): 0 unless working and younger than MaxLifespan; linear decline after DeclineAge
+    PollutionParams q = p; q.treatmentCap = 60000; q.treatmentDeclineAge = 100; q.treatmentMaxLifespan = 200;
+    PollutionLayer L; L.init(16, 16, q, &h);
+    CHECK(L.treatmentCapacity(true, 50) == 60000 && L.treatmentCapacity(false, 50) == 0);
+    CHECK(L.treatmentCapacity(true, 150) == 30000 && L.treatmentCapacity(true, 200) == 0);
+    SimOccupant w; w.agentType = 7000; w.x = 4; w.z = 4;
+    L.addOccupant(w);
+    L.setTreatmentCaps({0});          // one listed plant, not working: nothing treated
+    runSweep(L, env, 4);
+    CHECK(L.treatedLast == 0 && L.rawWaterLast == 2000);
+  }
   {   // Traffic and car smogging
     PollutionLayer L; L.init(16, 16, p, &h);
     std::vector<uint8_t> traffic(256, 0);
