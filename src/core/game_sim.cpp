@@ -589,6 +589,14 @@ void Game::applyCheat(const CheatResult& r) {
     cy.ordinances.makeAllAvailable(&announced);
   } else if (phrase == "nerdz rool") cy.setCleanIndustryOnly(true);
   else if (phrase == "pay tribute to your king") cheatAllRewards_ = true;
+  else if (phrase == "force petitioners to say") {   // spec 27 s5.3 / 22 s5.3: re-requested every petitioner cycle
+    long id = forcedMessageId(r.match);
+    if (id > 0 && std::find(petitioners_.forced.begin(), petitioners_.forced.end(), uint32_t(id)) == petitioners_.forced.end())
+      petitioners_.forced.push_back(uint32_t(id));
+  } else if (phrase == "stop forcing advice") {
+    petitioners_.forced.clear();
+    for (uint32_t a : allAdvisorIds()) advisors_.list(a).forced.clear();
+  }
   else if (phrase == "call cousin vinnie") { if (!vinnieDone_) { petitioners_.request(0xD7, 0, 6); presentPetitions(); } }
   else if (phrase == "zyxwvu") { if (vinnieRefused_) advisors_.rewards.markAvailable(19999); }
   else if (phrase == "salt off") cy.saltOff = true;
