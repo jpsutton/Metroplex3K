@@ -20,7 +20,7 @@ struct Stat {
     if (ours > theirs) oursHigh++;
   }
   void print() const {
-    std::printf("   %-14s cells %lld: mean ours %.1f theirs %.1f, mean |diff| %.2f, differ %lld (ours higher %lld)\n", name, n,
+    std::printf("   %-14s cells %lld: mean ours %.3f theirs %.3f, mean |diff| %.2f, differ %lld (ours higher %lld)\n", name, n,
                 n ? sumOurs / n : 0.0, n ? sumTheirs / n : 0.0, n ? sumAbs / n : 0.0, diff, oursHigh);
   }
 };
@@ -41,6 +41,21 @@ int main(int argc, char** argv) {
   City& t = theirs.game.city();
   const auto target = t.clock.date();
 
+  if (const char* nd = std::getenv("M3K_RUNTHEIRS")) {   // run their save forward N days with our rules; print water/power each day
+    int n = std::atoi(nd);
+    for (int d = 0; d < n; d++) {
+      theirs.game.sim().tickDay();
+      const auto& st = t.water.stats;
+      long long wt = 0, pw = 0; int W0 = theirs.game.world().W, H0 = theirs.game.world().H;
+      for (int x = 0; x < W0; x++) for (int z = 0; z < H0; z++) { wt += t.water.tileServiced(x, z); pw += t.power.powered(x, z); }
+      int unp = 0, retired = 0;
+      for (const auto& f : t.water.facilities()) { if (f.expired) retired++; else if (!t.power.powered(f.x, f.z)) unp++; }
+      std::printf("   theirs+%d %d-%02d-%02d: water supply %lld used %lld watered %.3f powered %.3f; facilities unpowered %d retired %d ageing %u; power produced %lld consumed %lld\n", d + 1,
+                  t.clock.date().year, t.clock.date().month, t.clock.date().day, (long long)st.supply, (long long)st.used,
+                  double(wt) / (W0 * H0), double(pw) / (W0 * H0), unp, retired, st.ageingCount, (long long)t.power.stats().produced, (long long)t.power.stats().consumed);
+    }
+    return 0;
+  }
   Session ours;
   if (!ours.open(root) || !ours.load(cities[0])) return 2;
   City& c = ours.game.city();
@@ -50,7 +65,18 @@ int main(int argc, char** argv) {
     for (int x = 0; x < w0.W; x += 2) for (int z = 0; z < w0.H; z += 2) {
       air0.push_back(c.pollution.airAt(x, z)); water0.push_back(c.pollution.waterAt(x, z)); lv0.push_back(c.landValue.landValueAtTile(x, z)); } }
   int days = 0;
-  while (absDay(c.clock.date()) < absDay(target) && days < 2000) { ours.game.sim().tickDay(); days++; }
+  while (absDay(c.clock.date()) < absDay(target) && days < 2000) {
+    ours.game.sim().tickDay(); days++;
+    if (std::getenv("M3K_OURSDAILY") && c.clock.date().day <= 2) {
+      const auto& st = c.water.stats; const World& w0 = ours.game.world();
+      long long wt = 0, pw = 0;
+      for (int x = 0; x < w0.W; x++) for (int z = 0; z < w0.H; z++) { wt += c.water.tileServiced(x, z); pw += c.power.powered(x, z); }
+      int unp = 0; for (const auto& f : c.water.facilities()) if (!f.expired && !c.power.powered(f.x, f.z)) unp++;
+      std::printf("   ours %d-%02d-%02d: water supply %lld watered %.3f powered %.3f; facilities unpowered %d; power produced %lld consumed %lld\n",
+                  c.clock.date().year, c.clock.date().month, c.clock.date().day, (long long)st.supply, double(wt) / (w0.W * w0.H),
+                  double(pw) / (w0.W * w0.H), unp, (long long)c.power.stats().produced, (long long)c.power.stats().consumed);
+    }
+  }
   std::printf("== %s after %d days (date %d-%02d-%02d) vs %s\n", cities[0].filename().string().c_str(), days, c.clock.date().year,
               c.clock.date().month, c.clock.date().day, observed.filename().string().c_str());
   std::printf("   population ours %d theirs %d\n", c.population(), t.population());
@@ -71,6 +97,29 @@ int main(int argc, char** argv) {
       wt.add(c.water.tileServiced(x, z) ? 1 : 0, t.water.tileServiced(x, z) ? 1 : 0);
     }
   for (const Stat* s : {&lv, &air, &water, &crime, &pw, &wt}) s->print();
+  if (std::getenv("M3K_WATERSTAT")) {
+    auto ws = [](const City& cc, const char* who) {
+      const auto& st = cc.water.stats;
+      int n = 0, good = 0, far = 0, nowat = 0, off = 0; int64_t out = 0;
+      for (const auto& f : cc.water.facilities()) { n++; out += f.output; if (f.status == us::WaterFacility::Good) good++; else if (f.status == us::WaterFacility::Far) far++; else if (f.status == us::WaterFacility::NoWater) nowat++; else off++; }
+      std::printf("   water %s: supply %lld used %lld fac %d (good %d far %d nowater %d off %d) output %lld meanPol %u ageing %u purchase %lld sale %lld\n", who,
+                  (long long)st.supply, (long long)st.used, n, good, far, nowat, off, (long long)out, st.meanPollution, st.ageingCount,
+                  (long long)st.purchase[0], (long long)st.sale[0]);
+    };
+    ws(c, "ours"); ws(t, "theirs");
+    auto props = [&](const World& wd, const char* who) {
+      std::map<std::string, int> m;
+      for (const auto& o : wd.occupants) {
+        if (o.agentType != 12810 && o.agentType != 12840 && o.agentType != 12830) continue;
+        char k[64]; std::string sv = "-";
+        for (const auto& kv : o.intProps) if (kv.first == 0x8351FDF5) sv = std::to_string(kv.second);
+        std::snprintf(k, sizeof k, "%u/st%u/%s", o.agentType, o.state, sv.c_str());
+        m[k]++;
+      }
+      std::printf("   water facilities %s (type/state/status):", who); for (auto& kv : m) std::printf(" %s:%d", kv.first.c_str(), kv.second); std::printf("\n");
+    };
+    props(w, "ours"); props(theirs.game.world(), "theirs");
+  }
   {
     int oa = 0, ta = 0, ol = 0, tl = 0; size_t i = 0;
     for (int x = 0; x < W; x += 2) for (int z = 0; z < H; z += 2, i++) {
