@@ -226,21 +226,40 @@ Test vectors (Max 2000, Min −2000, step 280): `V` = 1540, `target` = −2000 �
   and industrial buildings) in every played city, by a factor of 1.33–2.09 (5001) and 1.47–2.01
   (8001):
 
-  | City | 5001 `Dlast` saved | building sum | 8001 `Dlast` saved | building sum |
-  |---|---|---|---|---|
-  | Madison, WI | 33 668 | 22 148 | 120 493 | 60 527 |
-  | Craterville | 71 566 | 38 806 | 171 484 | 87 268 |
-  | Berlin | 614 402 | 322 895 | 180 069 | 113 068 |
-  | Mount Herrang | 3 104 | 2 378 | 25 301 | 12 755 |
+  | City | 5001 `Dlast` saved | building sum | ratio | 8001 `Dlast` saved | building sum | ratio |
+  |---|---|---|---|---|---|---|
+  | Madison, WI | 33 668 | 22 148 | 1.52 | 120 493 | 60 527 | 1.99 |
+  | Craterville | 71 566 | 38 806 | 1.84 | 171 484 | 87 268 | 1.97 |
+  | Berlin | 614 402 | 322 895 | 1.90 | 180 069 | 113 068 | 1.59 |
+  | London | 171 100 | 102 681 | 1.67 | 146 844 | 96 700 | 1.52 |
+  | Mount Herrang | 3 104 | 2 378 | 1.31 | 25 301 | 12 755 | 1.98 |
+  | Madrid | 1 017 497 | 487 241 | 2.09 | 247 842 | 120 619 | 2.05 |
 
-  The excess is not explained by `[ConnectionValveEffects]` (supply only), `[OrdinanceEffects]`
-  (valves 5000/8000 only), abandoned or under-construction lots, or by applying ancestor entries
-  as well (that would also inflate 5000/8000 supply, which matches the saves). No other rule that
-  adds demand to 5001/8001 was found. Recommended until settled: keep the building rule and, when
-  loading a city, carry the saved `Dlast` ratio (saved ÷ building sum) as a per-valve multiplier
-  on the building demand of 5001 and 8001 until the next save; this keeps the cap rule's input at
-  the original's level. Settling observation: in a new city with only zoned commercial
-  buildings, record 5001 `Dlast` and the building sum across three consecutive month-end saves.
+  `Dbase` of 5001/8001 is 0 in every played city; `Sbase` is the layer's `InitialConnectionSupply`
+  (25 000 / 70 000) [DATA]. Ratios persist across W5 months (Madison 5001 drifts ~1.47–1.59;
+  Craterville is flat at 1.84 / 1.97; Berlin ~1.90 / 1.58) [DATA].
+
+  **Rejected sources** (still do not explain the excess) [STATIC unless marked DATA]:
+  * `[ConnectionValveEffects]` — demand column is 0 for every shipped item (supply only).
+  * `[OrdinanceEffects]` — only valves 5000/8000.
+  * Abandoned / under-construction lots; summing all ancestor `AgentValveEffects` entries (inflates
+    5000/8000 supply, which already match).
+  * Forwarding `5000`/`8000` supply into `5001`/`8001` demand (Mount Herrang 8001 equals
+    building `8001` demand + building `8000` supply exactly [DATA], but Berlin/London/Farmsville
+    overshoot badly; 5001 + `5000` supply overshoots every city).
+  * The jobs valve's demand side-effect (`JobToResFactor`, shipped 2) — that forwards only onto
+    valve **3000**, not 5001/8001 [STATIC].
+  * Airport / seaport / spaceport `AgentValveEffects` rows (`12310`, `12330`, `12350`) — those
+    items put **supply** on 5001/8001 (and jobs demand on 7000); their 5001/8001 demand column is 0.
+  * A universal ×2 (8001 is ~2.0 in Madison / Craterville / Mount Herrang / Madrid, but ~1.5 in
+    Berlin / London / Farmsville / Sacramento).
+
+  No other rule that adds demand to 5001/8001 was found. Recommended until settled: keep the
+  building rule and, when loading a city, carry the saved `Dlast` ratio (saved ÷ building sum) as
+  a per-valve multiplier on the building demand of 5001 and 8001 until the next save; this keeps
+  the cap rule's input at the original's level. Settling observation: in a new city with only
+  zoned commercial buildings, record 5001 `Dlast` and the building sum across three consecutive
+  month-end saves (starter towns ship with both sides 0 [DATA], so they do not settle the question).
 
 ### 3.4 The jobs valve (7000) and the R/C/I coupling
 
