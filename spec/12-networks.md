@@ -540,7 +540,7 @@ before building, and also refuses if the price exceeds funds `[STATIC]`.
    drag direction are not both valid slopes and neither holds a network piece, the terrain between
    them is levelled so the network can end there `[INFERRED]` from the call pattern.
 4. Bridge attempt (road, rail, power, highway only; path length ≥ 4 tiles): §6.4.
-5. Tunnel attempt (road and rail): §6.4.
+5. Tunnel attempt (road, rail, and highway): §6.4.
 6a. Neighbour-connection offer for path ends on the map edge: §8.
 6. Place pieces: the tile list goes to the tiler (§4.6). For the highway, a second tiler pass is
    run for road (net 1) over the tiles where the new highway meets existing roads, to create the
@@ -711,14 +711,29 @@ Tunnels (agent type 16006, cost key 16006) `[STATIC]`:
    The exit uses the column for (d + 2) mod 4. DATA: every span pair in the shipped files matches.
    For example, Mount Herrang has road piece 64 at x 56 (dir 2, len 23) and at x 79 (dir 0,
    len 23). Trips jump between the portals using the span (`18-sim-transport.md` §5.5).
-7. **Highway tunnels** [STATIC; details partly OPEN]. Same straight-drag and hill rules, checked
-   across the two-tile width, with a minimum count of 3. Price = 2 × count × cost of 16006, using
-   the walk count as its own builder counts it. Each end gets **four** pieces: two without a span
-   (IDs 18088–18091 by direction) and two carrying a span (IDs 18025–18028 by direction). Both span
-   pieces of one end carry the same direction, the travel direction at the entrance end and its
-   opposite at the exit end, with length = walk count + 1 [INFERRED: the portal distance, as for
-   road and rail]. The exact corner checks and piece positions are [OPEN]. No shipped file
-   contains a highway tunnel.
+7. **Highway tunnels** [STATIC]. Same straight-drag rule as road/rail, for network type highway
+   only, checked across the two-tile carriageway width. Minimum walk count 3. The walk threshold
+   is **h + 8** (road/rail use h + 4). Price = 2 × walk_count × cost of agent type **16006** — the
+   same cost key as road/rail tunnels (shipped `[BuildingPlacementCosts] 16006=1000`); there is no
+   separate highway-tunnel cost key. Confirm prompt is the same instance `0x253`. Terrain-shape
+   failure after confirm still shows `0x284` and places nothing.
+   Each end gets **four** pieces: two without a span record and two carrying a span. Both span
+   pieces of one end share the travel direction (entrance) or its opposite (exit), with
+   length = walk_count + 1 [STATIC; was INFERRED]. Correction: earlier text listed span IDs
+   18025–18028; the tables are **18027–18030**. Non-span IDs **18088–18091** were already right.
+   Packed as `(occupant_id << 8) | rotation`. By travel direction d (0 = −x, 1 = −z, 2 = +x, 3 = +z):
+
+   | d | span A | span B | plain A | plain B |
+   |---|---|---|---|---|
+   | 0 | 18030, rot 0 | 18028, rot 0 | 18091, rot 0 | 18089, rot 0 |
+   | 1 | 18029, rot 0 | 18027, rot 0 | 18090, rot 0 | 18088, rot 0 |
+   | 2 | 18030, rot 2 | 18028, rot 2 | 18091, rot 2 | 18089, rot 2 |
+   | 3 | 18029, rot 2 | 18027, rot 2 | 18090, rot 2 | 18088, rot 2 |
+
+   Exit end uses the row for (d + 2) mod 4. Placement order at each end: plain A, plain B, span A,
+   span B. The two plain pieces are placed with no span; the two span pieces get direction and
+   length as above. Exact tile offsets of the four pieces within the portal (which carriageway /
+   which adjacent tile) remain [OPEN]. No shipped file contains a highway tunnel.
 8. Bridges never carry span records. Their decks are ordinary pieces on every tile (above).
 
 ### 6.5 Demolition
@@ -1000,3 +1015,6 @@ recomputed after load `[INFERRED]`.
    tie-breaking of the allocation front.
 6. Closed: the per-occupant power consumption byte is attribute 0xC9 (§9.1 step 2).
 7. Collapse groups: exact trigger (demolition vs. disaster damage) and neighbourhood searched.
+8. Highway tunnel portal tile offsets within each end (which of the four pieces sits on which
+   carriageway / adjacent tile) — IDs, cost key 16006, hill h+8, and length = walk+1 are closed
+   (§6.4 item 7).
