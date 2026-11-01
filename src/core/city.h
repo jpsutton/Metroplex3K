@@ -237,8 +237,10 @@ class City {
   void updateTreatmentCaps();
  public:
   // Spacing grid 01FD7A8C (spec 10 s6.3): one byte per 4 x 4 block; bits 2-5 = overlap counter. add(): if any block of
-  // the 5 x 5-block neighbourhood has 15, refuse; else +1 on all of them.
+  // the 5 x 5-block neighbourhood has 15, refuse; else +1 on all of them. rem(): c ← c−1 on the same 25 blocks (no
+  // underflow check — the nibble wraps).
   bool spacingAdd(int x, int z);
+  void spacingRem(int x, int z);
  private:
 
   World* world_ = nullptr;

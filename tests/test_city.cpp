@@ -128,6 +128,13 @@ int main() {
   s.tickDay();
   CHECK(c.budget.tax[0].rate == 12 && c.budget.tax[2].rate == 12);
 
+  // --- spacing grid overlap counter (spec 10 §6.3): add fills to 15, rem frees a slot ---
+  for (int i = 0; i < 15; i++) CHECK(c.spacingAdd(48, 48));
+  CHECK(!c.spacingAdd(48, 48));
+  c.spacingRem(48, 48);
+  CHECK(c.spacingAdd(48, 48));
+  c.spacingRem(48, 48);  // leave the neighbourhood empty for the rest of the test
+
   // --- bulldoze ---
   // Spec 18 §11: removing a road zeroes that tile's surface live + snapshot density; neighbours keep theirs.
   CHECK(c.traffic);

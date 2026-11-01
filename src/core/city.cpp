@@ -724,21 +724,35 @@ void City::applyRoadCondition(int percent) {
   if (changed) netDirty_ = true;   // rebuild the traffic flags (0x80) and network classification
 }
 
-bool City::spacingAdd(int x, int z) {
-  if (!world_) return false;
-  const int bw = world_->W / 4, bh = world_->H / 4;
-  if (spacing_.size() != size_t(bw) * bh) spacing_.assign(size_t(bw) * bh, 0);
+namespace {
+std::vector<size_t> spacingNeighCells(World& w, std::vector<uint8_t>& spacing, int x, int z) {
+  const int bw = w.W / 4, bh = w.H / 4;
+  if (spacing.size() != size_t(bw) * bh) spacing.assign(size_t(bw) * bh, 0);
   std::vector<size_t> cells;
   for (int i = -2; i <= 2; i++)
     for (int j = -2; j <= 2; j++) {
       int tx = x + 4 * i, tz = z + 4 * j;
-      if (!inMap(tx, tz)) continue;
+      if (!w.inTiles(tx, tz)) continue;
       size_t k = size_t(tx / 4) * bh + size_t(tz / 4);
-      if (k < spacing_.size()) cells.push_back(k);
+      if (k < spacing.size()) cells.push_back(k);
     }
+  return cells;
+}
+}  // namespace
+
+bool City::spacingAdd(int x, int z) {
+  if (!world_) return false;
+  std::vector<size_t> cells = spacingNeighCells(*world_, spacing_, x, z);
   for (size_t k : cells) if (((spacing_[k] >> 2) & 15) == 15) return false;
   for (size_t k : cells) spacing_[k] = uint8_t((spacing_[k] & ~0x3C) | ((((spacing_[k] >> 2) & 15) + 1) << 2));
   return true;
+}
+
+void City::spacingRem(int x, int z) {
+  if (!world_) return;
+  // Spec 10 §6.3 [STATIC]: remove decrements the overlap counter on the 5×5-block neighbourhood with no underflow check.
+  for (size_t k : spacingNeighCells(*world_, spacing_, x, z))
+    spacing_[k] = uint8_t((spacing_[k] & ~0x3C) | ((((spacing_[k] >> 2) - 1) & 15) << 2));
 }
 
 double City::roadCondition() const {
@@ -798,7 +812,51 @@ void City::damageOccupant(int i, uint32_t st) {
   occDirty_ = true;
 }
 
-void City::removeOccupantIdx(const std::set<int>& kill) {
+void City::removeOccupantIdx(const std::set<int>& killIn) {
+  std::set<int> kill = killIn;
+  // Spec 10 §6.3 [STATIC]: spacing-grid removal handler. Pier parts (attr 0x1F4 ∈ {7,8,9}) expand to the
+  // connected pier, then *remove* one overlap count at the pier head (line 8; else the seed tile).
+  std::vector<std::pair<int, int>> pierRem;
+  if (game_ && world_) {
+    auto partOf = [&](const Occupant& o) -> int {
+      const OccAttr* a = game_->occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT);
+      return a ? a->partIndex : 0;
+    };
+    auto isPier = [&](int oi) {
+      if (oi < 0 || oi >= int(world_->occupants.size())) return false;
+      int p = partOf(world_->occupants[size_t(oi)]);
+      return p >= 7 && p <= 9;
+    };
+    std::set<int> seenPier;
+    const int d4[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    for (int seed : killIn) {
+      if (!isPier(seed) || seenPier.count(seed)) continue;
+      std::vector<int> comp;
+      std::vector<int> q{seed};
+      seenPier.insert(seed);
+      for (size_t qi = 0; qi < q.size(); qi++) {
+        const Occupant& o = world_->occupants[size_t(q[qi])];
+        comp.push_back(q[qi]);
+        for (auto& dd : d4) {
+          int nx = o.x + dd[0], nz = o.z + dd[1];
+          int nj = occupantAt(nx, nz);
+          if (!isPier(nj) || !seenPier.insert(nj).second) continue;
+          q.push_back(nj);
+        }
+      }
+      int hx = world_->occupants[size_t(seed)].x, hz = world_->occupants[size_t(seed)].z;
+      for (int oi : comp) {
+        kill.insert(oi);
+        if (partOf(world_->occupants[size_t(oi)]) == 8) {
+          hx = world_->occupants[size_t(oi)].x;
+          hz = world_->occupants[size_t(oi)].z;
+        }
+      }
+      pierRem.push_back({hx, hz});
+    }
+  }
+  for (auto [hx, hz] : pierRem) spacingRem(hx, hz);
+
   for (auto it = kill.rbegin(); it != kill.rend(); ++it) {
     const Occupant o = world_->occupants[size_t(*it)];
     // Spec 18 §11 [STATIC]: a station clears its flags and zeroes surface density on the footprint;
