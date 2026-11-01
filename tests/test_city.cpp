@@ -56,6 +56,7 @@ int main() {
   CHECK(s.buildRoad(line(10, 40, 70, 40)));
   CHECK(w.surface.size() == 61 && s.roadCount() == 61);
   CHECK(s.isRoadTile(30, 40) && !s.isRoadTile(30, 41));
+  CHECK(c.hasRoadPiece(30, 40) && !c.hasRoadPiece(30, 41));
   CHECK(!sounds.empty() && sounds.back() == 14);
   CHECK(s.paintZoneType(12, 41, 40, 43, 1));
   CHECK(s.paintZoneType(12, 37, 40, 39, 5));

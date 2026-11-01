@@ -28,7 +28,8 @@ bool Game::StreetHost::pieceAt(int x, int y, AutoNet k, PieceRef& out) const {
 bool Game::StreetHost::isWater(int x, int y) const { return w && w->inTiles(x, y) && w->altAt(x, y) < w->waterAt(x, y); }
 
 bool Game::StreetHost::pedEligible(int x, int y) const {
-  return w && w->inTiles(x, y) && c && (c->occupantAt(x, y) >= 0 || (w->zone[w->tIdx(x, y)] != 0));
+  // Spec 26 §5.8 / 13 §3.1a [STATIC]: pedestrian spawn needs occupant flag 0x8000 = road piece.
+  return w && c && c->hasRoadPiece(x, y);
 }
 
 int Game::StreetHost::trafficDensity(int x, int y) const {

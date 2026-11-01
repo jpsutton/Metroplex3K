@@ -124,7 +124,10 @@ class City {
   bool lastFailNoMoney = false;
 
   // ---- queries ----
+  // Any surface transport (road / rail / highway). Name is historical; prefer hasRoadPiece for road-only.
   bool isRoadTile(int x, int z) const { return inMap(x, z) && transport_[idx(x, z)]; }
+  // Spec 13 §3.1a bit 0x8000: a road (or road-crossing) network piece is present.
+  bool hasRoadPiece(int x, int z) const;
   bool isPowerLine(int x, int z) const { return inMap(x, z) && powerLine_[idx(x, z)]; }
   bool isPipe(int x, int z) const { return inMap(x, z) && pipe_[idx(x, z)]; }
   int occupantAt(int x, int z) const { return inMap(x, z) ? occ_[idx(x, z)] : -1; }

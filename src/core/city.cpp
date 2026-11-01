@@ -853,6 +853,12 @@ bool City::spacingPointNear(int x, int z) const {
   return false;
 }
 
+bool City::hasRoadPiece(int x, int z) const {
+  if (!inMap(x, z)) return false;
+  if (traffic && (traffic->flags(x, z) & TF_ROAD)) return true;
+  return transport_[idx(x, z)] == uint8_t(NetworkKind::Road);
+}
+
 double City::roadCondition() const {
   if (!world_) return 0.0;
   int64_t roads = 0, damaged = 0;
