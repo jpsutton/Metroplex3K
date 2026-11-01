@@ -321,6 +321,42 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
     }
   }
   in.util.desalinationAvailable = advisors_.buildingUnlocked(12830);
+  {  // Planner metrics (spec 22 s3.11)
+    auto& P = in.plan;
+    for (auto z : world_.zone) { if (z == 15) P.zSea++; else if (z == 14) P.zAir++; else if (z == 17) P.zFill++; }
+    // x(f, c): tiles of family f with last result c = the zone developer's tallies of the last completed pass, summed over
+    // the family's zone types [INFERRED: per-pass tallies stand in for per-tile last codes]
+    int seaBad = 0, fillNoAccess = 0;
+    for (const auto& kv : c.zones.resultPrev) {
+      const int code = kv.first.first, zt = kv.first.second;
+      const int f = (zt >= 1 && zt <= 3) ? 0 : (zt >= 5 && zt <= 7) ? 1 : (zt >= 9 && zt <= 11) ? 2 : -1;
+      if (f >= 0 && code < 20) P.x[f][code] += int(kv.second);
+      if (zt == 15 && (code == 9 || code == 12 || (code >= 14 && code <= 17))) seaBad += int(kv.second);
+      if (zt == 17 && code == 16) fillNoAccess += int(kv.second);
+    }
+    P.seaportBadTiles = seaBad; P.landfillNoAccessTiles = fillNoAccess;
+    for (const auto& o : world_.occupants) {
+      if ((o.state & ~0x200u) != 1) continue;
+      switch (o.agentType) {
+        case 12310: P.airportCount++; break;
+        case 12330: P.seaportCount++; break;
+        case 9300: P.farms++; break;
+        case 8700: case 8900: case 9100: P.cleanIndustry++; break;
+        case 5700: case 6100: P.medComm++; break;
+        case 6300: case 6700: P.highComm++; break;
+        case 14310: P.n14310++; break; case 14311: P.n14311++; break; case 14312: P.n14312++; break;
+        case 14313: P.n14313++; break; case 14314: P.n14314++; break; case 14315: P.n14315++; break; case 14316: P.n14316++; break;
+        default: break;
+      }
+      if (o.agentType >= 8000 && o.agentType < 10000) P.industrialBuildings++;
+    }
+    P.farmersMarketAvailable = c.ordinances.available(0x62F6E82B) && !c.ordinances.enacted(0x62F6E82B);
+    P.proReadingEnacted = c.ordinances.enacted(0xE0D07233);
+    P.tourismEnacted = c.ordinances.enacted(0x62F6E7CF);
+    // landfill "full" and "no free capacity" [INFERRED from the store]: pending garbage exceeds spare room / no spare room
+    P.landfillFull = c.pollution.disp.store.V < 0;
+    P.landfillNoFreeCapacity = c.pollution.disp.store.Dlast <= 0;
+  }
   {  // Ageing counts (spec 16 s2.6, 22 s3.13) [STATIC]: plants from the power layer's monthly pass, water facilities that reached
      // the ageing step, incinerators (global [Incinerator] DeclineAge) and WTE plants (their own Ld) in lot state 1.
     in.util.nOldPlants = c.power.stats().oldPlants;
