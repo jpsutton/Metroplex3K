@@ -357,16 +357,38 @@ bool applyBridge(INetworkMap& m, BridgePlan& pl) {
 
 // ======================= tunnels =======================
 TunnelPlan planTunnel(const INetworkMap& m, int kind, const std::vector<PathTile>& path, const PlacementCosts& costs) {
-  // Spec 12 s6.4 tunnels (road and rail) [STATIC]. Highway tunnels are partly OPEN and not built.
+  // Spec 12 s6.4 tunnels [STATIC]: road, rail, and highway (Q-AN).
   TunnelPlan tp;
-  if (!(kind == NK_ROAD || kind == NK_RAIL) || path.size() < 2) return tp;
-  int dx = path[1].x - path[0].x, dz = path[1].z - path[0].z;
+  if (!(kind == NK_ROAD || kind == NK_RAIL || kind == NK_HIGHWAY) || path.size() < 2) return tp;
+  // Primary path: carriage 0 for highway (both carriageways are checked via the pair offset).
+  std::vector<PathTile> primary;
+  for (const auto& t : path) if (kind != NK_HIGHWAY || t.carriage == 0) primary.push_back(t);
+  if (primary.size() < 2) return tp;
+  int dx = primary[1].x - primary[0].x, dz = primary[1].z - primary[0].z;
   if (std::abs(dx) + std::abs(dz) != 1) return tp;
-  for (size_t i = 1; i < path.size(); i++)
-    if (path[i].x - path[i - 1].x != dx || path[i].z - path[i - 1].z != dz) return tp;
+  for (size_t i = 1; i < primary.size(); i++)
+    if (primary[i].x - primary[i - 1].x != dx || primary[i].z - primary[i - 1].z != dz) return tp;
   tp.dx = dx; tp.dz = dz;
   tp.dir = dx < 0 ? 0 : dz < 0 ? 1 : dx > 0 ? 2 : 3;
+  tp.highway = kind == NK_HIGHWAY;
+  if (tp.highway) {
+    for (const auto& a : path)
+      if (a.carriage == 0)
+        for (const auto& b : path)
+          if (b.carriage == 1 && (b.x - a.x) * dx + (b.z - a.z) * dz == 0) {
+            tp.pairDx = b.x - a.x;
+            tp.pairDz = b.z - a.z;
+            break;
+          }
+    if (tp.pairDx == 0 && tp.pairDz == 0) return tp;  // need a second carriageway
+  }
+  const int hillAdd = tp.highway ? 8 : 4;
   auto lowest = [&](int x, int z) { int c[4]; m.tileCorners(x, z, c); return *std::min_element(c, c + 4); };
+  auto lowestPair = [&](int x, int z) {
+    int h = lowest(x, z);
+    if (tp.highway) h = std::min(h, lowest(x + tp.pairDx, z + tp.pairDz));
+    return h;
+  };
   auto nearFar = [&](int x, int z, int& n0, int& n1, int& f0, int& f1) {
     int c[4];
     m.tileCorners(x, z, c);
@@ -375,30 +397,41 @@ TunnelPlan planTunnel(const INetworkMap& m, int kind, const std::vector<PathTile
     else if (dz == 1) { n0 = c[0]; n1 = c[1]; f0 = c[3]; f1 = c[2]; }
     else { n0 = c[3]; n1 = c[2]; f0 = c[0]; f1 = c[1]; }
   };
-  for (size_t i = 0; i < path.size(); i++) {
-    if (!m.onMap(path[i].x, path[i].z)) return tp;
+  auto rising = [&](int x, int z) {
     int n0, n1, f0, f1;
-    nearFar(path[i].x, path[i].z, n0, n1, f0, f1);
-    if (!(f0 > n0 && f1 > n1)) continue;   // entrance E at the foot of rising ground
-    const int ex = path[i].x, ez = path[i].z, h = lowest(ex, ez);
-    // Walk: L = 1, P = E + d; step on while the lowest corner of P is >= h + 4. Off map: no tunnel.
+    nearFar(x, z, n0, n1, f0, f1);
+    if (!(f0 > n0 && f1 > n1)) return false;
+    if (!tp.highway) return true;
+    nearFar(x + tp.pairDx, z + tp.pairDz, n0, n1, f0, f1);
+    return f0 > n0 && f1 > n1;
+  };
+  for (size_t i = 0; i < primary.size(); i++) {
+    if (!m.onMap(primary[i].x, primary[i].z)) return tp;
+    if (tp.highway && !m.onMap(primary[i].x + tp.pairDx, primary[i].z + tp.pairDz)) return tp;
+    if (!rising(primary[i].x, primary[i].z)) continue;
+    const int ex = primary[i].x, ez = primary[i].z, h = lowestPair(ex, ez);
     int L = 1, px = ex + dx, pz = ez + dz;
-    if (!m.onMap(px, pz)) return tp;
+    if (!m.onMap(px, pz) || (tp.highway && !m.onMap(px + tp.pairDx, pz + tp.pairDz))) return tp;
     bool off = false;
     for (;;) {
       int nx = px + dx, nz = pz + dz;
-      if (!m.onMap(nx, nz)) { off = true; break; }
+      if (!m.onMap(nx, nz) || (tp.highway && !m.onMap(nx + tp.pairDx, nz + tp.pairDz))) { off = true; break; }
       px = nx; pz = nz; L++;
-      if (lowest(px, pz) < h + 4) break;
+      if (lowestPair(px, pz) < h + hillAdd) break;
     }
     if (off || L < 3) return tp;
     tp.ok = true;
     tp.entrance = {ex, ez};
     tp.exit = {ex + L * dx, ez + L * dz};
     tp.length = L;
+    tp.spanLength = tp.highway ? L + 1 : L;
     tp.hillTiles = L - 1;
-    for (int q = 1; q < L; q++) tp.hidden.push_back({ex + q * dx, ez + q * dz});
-    tp.price = (L - 1) * costs.cost(kTunnelCostKey);   // per tunnel tile
+    for (int q = 1; q < L; q++) {
+      tp.hidden.push_back({ex + q * dx, ez + q * dz});
+      if (tp.highway) tp.hidden.push_back({ex + q * dx + tp.pairDx, ez + q * dz + tp.pairDz});
+    }
+    const int unit = costs.cost(kTunnelCostKey);
+    tp.price = tp.highway ? 2 * L * unit : (L - 1) * unit;
     return tp;
   }
   return tp;
@@ -600,27 +633,58 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
       extraSpent += total;
     }
   }
-  // tunnel attempt
-  if (res.bridges == 0 && (P.kind == NK_ROAD || P.kind == NK_RAIL)) {
+  // tunnel attempt (road, rail, highway — spec 12 s6.4 / Q-AN)
+  if (res.bridges == 0 && (P.kind == NK_ROAD || P.kind == NK_RAIL || P.kind == NK_HIGHWAY)) {
     TunnelPlan tp = planTunnel(m, P.kind, path, costs);
     if (tp.ok && tp.price <= host.funds() && host.confirmTunnel(tp.price)) {
-      // Two portal pieces only (spec 12 s6.4 step 6): the entrance points along d, the exit back, both with length L.
-      static const uint32_t roadId[4] = {64, 63, 64, 63}, railId[4] = {18024, 18019, 18024, 18019};
-      static const int rotOf[4] = {0, 0, 2, 2};
       const int dIn = tp.dir, dOut = (tp.dir + 2) & 3;
-      auto portal = [&](std::pair<int, int> t, int d) {
-        int c[4]; m.tileCorners(t.first, t.second, c);
-        m.placePiece(t.first, t.second, LAYER_SURFACE, P.kind == NK_RAIL ? railId[d] : roadId[d], rotOf[d], *std::min_element(c, c + 4));
-        m.setPieceSpan(t.first, t.second, LAYER_SURFACE, d, tp.length);
+      auto altAt = [&](int x, int z) {
+        int c[4]; m.tileCorners(x, z, c); return *std::min_element(c, c + 4);
       };
-      portal(tp.entrance, dIn);
-      portal(tp.exit, dOut);
-      host.buildTunnel(P.kind, tp);   // optional host notification (sound, bookkeeping)
+      if (tp.highway) {
+        // Four pieces per end (spec 12 s6.4 item 7 / Q-AN). Tile offsets of the four pieces within the
+        // portal remain [OPEN]; interim: plains one tile before the portal face, spans on the face.
+        static const uint32_t spanA[4] = {18030, 18029, 18030, 18029}, spanB[4] = {18028, 18027, 18028, 18027};
+        static const uint32_t plainA[4] = {18091, 18090, 18091, 18090}, plainB[4] = {18089, 18088, 18089, 18088};
+        static const int rotOf[4] = {0, 0, 2, 2};
+        auto end = [&](std::pair<int, int> face, int d) {
+          // Outside the portal face = opposite the travel vector of d; exact offsets remain [OPEN].
+          static const int tdx[4] = {-1, 0, 1, 0}, tdz[4] = {0, -1, 0, 1};
+          const int fx = face.first, fz = face.second;
+          const int bx = fx - tdx[d], bz = fz - tdz[d];
+          const int px = tp.pairDx, pz = tp.pairDz;
+          struct P { int x, z; uint32_t id; bool span; };
+          const P order[4] = {{bx, bz, plainA[d], false},
+                              {bx + px, bz + pz, plainB[d], false},
+                              {fx, fz, spanA[d], true},
+                              {fx + px, fz + pz, spanB[d], true}};
+          for (auto& o : order) {
+            if (!m.onMap(o.x, o.z)) continue;
+            m.placePiece(o.x, o.z, LAYER_SURFACE, o.id, rotOf[d], altAt(o.x, o.z));
+            if (o.span) m.setPieceSpan(o.x, o.z, LAYER_SURFACE, d, tp.spanLength);
+            skip.insert({o.x, o.z});
+          }
+        };
+        end(tp.entrance, dIn);
+        end(tp.exit, dOut);
+      } else {
+        // Two portal pieces only: entrance along d, exit back, both with length L.
+        static const uint32_t roadId[4] = {64, 63, 64, 63}, railId[4] = {18024, 18019, 18024, 18019};
+        static const int rotOf[4] = {0, 0, 2, 2};
+        auto portal = [&](std::pair<int, int> t, int d) {
+          m.placePiece(t.first, t.second, LAYER_SURFACE, P.kind == NK_RAIL ? railId[d] : roadId[d], rotOf[d],
+                       altAt(t.first, t.second));
+          m.setPieceSpan(t.first, t.second, LAYER_SURFACE, d, tp.spanLength ? tp.spanLength : tp.length);
+        };
+        portal(tp.entrance, dIn);
+        portal(tp.exit, dOut);
+        skip.insert(tp.entrance);
+        skip.insert(tp.exit);
+      }
+      host.buildTunnel(P.kind, tp);
       host.charge(tp.price);
       extraSpent += tp.price;
       res.tunnels++;
-      skip.insert(tp.entrance);
-      skip.insert(tp.exit);
       for (auto& t : tp.hidden) skip.insert(t);
       for (auto& t : skip) context.push_back(t);
     }

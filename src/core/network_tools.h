@@ -125,11 +125,14 @@ bool isBridgePierId(uint32_t id);
 
 struct TunnelPlan {
   bool ok = false;
+  bool highway = false;
   int dx = 0, dz = 0;
+  int pairDx = 0, pairDz = 0;               // second carriageway offset (highway); (0,0) for road/rail
   std::pair<int, int> entrance, exit;
   int hillTiles = 0;
-  int dir = 0, length = 0;                  // span direction (0 -x, 1 -z, 2 +x, 3 +z) and portal distance L
-  std::vector<std::pair<int, int>> hidden;  // tiles strictly between portals
+  int dir = 0, length = 0;                  // portal distance L (entrance → exit)
+  int spanLength = 0;                       // length written on span pieces (L road/rail; L+1 highway)
+  std::vector<std::pair<int, int>> hidden;  // tiles strictly between portals (both carriageways for highway)
   int price = 0;
 };
 TunnelPlan planTunnel(const INetworkMap& m, int kind, const std::vector<PathTile>& path, const PlacementCosts& costs);

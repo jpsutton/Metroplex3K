@@ -358,6 +358,24 @@ static void testTunnel() {
     CHECK(!planTunnel(low, NK_ROAD, path, c).ok);
   }
   CHECK(!planTunnel(m, NK_POWER, path, c).ok);
+  // Highway tunnel (spec 12 s6.4 / Q-AN): h+8 threshold, dual carriageway, price 2*L*cost, spanLen L+1.
+  {
+    SimpleNetworkMap hw(20, 8, 30);
+    for (int vx = 3; vx <= 10; vx++) for (int vz = 0; vz <= 8; vz++) hw.setCornerHeight(vx, vz, 40);  // h+10
+    std::vector<PathTile> hp;
+    for (int x = 2; x <= 12; x++) {
+      PathTile a; a.x = x; a.z = 2; a.carriage = 0; hp.push_back(a);
+      PathTile b; b.x = x; b.z = 3; b.carriage = 1; hp.push_back(b);
+    }
+    auto ht = planTunnel(hw, NK_HIGHWAY, hp, c);
+    CHECK(ht.ok && ht.highway && ht.dir == 2 && ht.pairDz == 1);
+    CHECK(ht.entrance.first == 2 && ht.length >= 3 && ht.spanLength == ht.length + 1);
+    CHECK(ht.price == 2 * ht.length * 500);
+    // h+7 is not enough for a highway tunnel
+    SimpleNetworkMap shortHill(20, 8, 30);
+    for (int vx = 3; vx <= 10; vx++) for (int vz = 0; vz <= 8; vz++) shortHill.setCornerHeight(vx, vz, 37);
+    CHECK(!planTunnel(shortHill, NK_HIGHWAY, hp, c).ok);
+  }
 }
 
 static void testConnections() {
