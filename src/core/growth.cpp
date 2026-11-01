@@ -780,6 +780,11 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
       };
       const int along = (side & 1) ? r.w() : r.h(), D = (side & 1) ? r.h() : r.w();
       const int Ln = std::min(10, along);
+      // Spec 15 s5.5 / 10 s6.3 [STATIC]: reserve the strip segment before laying; fail the rule if another runway is near.
+      int sx0, sz0, sx1, sz1;
+      toXZ(0, 0, sx0, sz0);
+      toXZ(Ln - 1, 0, sx1, sz1);
+      if (!c.spacingReserveSegment(sx0, sz0, sx1, sz1)) return 0;
       used.assign(size_t(r.w()) * r.h(), 0);
       auto lay = [&](const BuildingChoice* m, int rot, int a, int d) {
         if (!m) return;
@@ -802,9 +807,10 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
         }
         if (D >= 2) lay(l2.first, l2.second, a, row);
       }
+      if (placed == 0) c.spacingReleaseSegment(sx0, sz0, sx1, sz1);
       return placed;
     }
-    case 0x2207D9EE: {  // airport buildings (arrangement step [OPEN] omitted)
+    case 0x2207D9EE: {  // airport buildings (arrangement step 2 [OPEN] omitted)
       if (uncommitted <= 0) return 0;
       if (L.small.empty() && L.large.empty() && L.filler.empty()) return 0;
       if (r.w() > 10) r.x1 = r.x0 + 9;
@@ -820,15 +826,30 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
       for (int x = r.x0; x <= r.x1; x++) edge.push_back({x, r.z0});
       int bestS = -1; std::pair<int, int> bt = edge[0];
       for (auto& t : edge) {
-        int s = (c.isTransport(t.first - 1, t.second) ? 1 : 0) + (c.isTransport(t.first + 1, t.second) ? 1 : 0) + (c.isTransport(t.first, t.second - 1) ? 1 : 0) + (c.isTransport(t.first, t.second + 1) ? 1 : 0);
+        // Frontage score [INFERRED]: transport adjacency; segment flag of the block also counts (spec 10 s6.3).
+        int s = (c.isTransport(t.first - 1, t.second) ? 1 : 0) + (c.isTransport(t.first + 1, t.second) ? 1 : 0) +
+                (c.isTransport(t.first, t.second - 1) ? 1 : 0) + (c.isTransport(t.first, t.second + 1) ? 1 : 0) +
+                (c.spacingSegmentBlock(t.first, t.second) ? 1 : 0);
         if (s >= 2) { bt = t; bestS = s; break; }
         if (s > bestS) { bestS = s; bt = t; }
       }
       const BuildingChoice* b1 = pickFrom(pool);
-      if (b1 && canAt(*b1, bt.first, bt.second)) return putAt(*b1, bt.first, bt.second);
+      // Spec 10 s6.3 [STATIC]: reserve a point before placing; release if placement fails.
+      if (b1 && canAt(*b1, bt.first, bt.second) && c.spacingReservePoint(bt.first, bt.second)) {
+        int n = putAt(*b1, bt.first, bt.second);
+        if (n) return n;
+        c.spacingReleasePoint(bt.first, bt.second);
+      }
+      // (3) random tile on a runway-reserved (segment-flagged) block
       const BuildingChoice* b3 = pickFrom(pool);
-      int rx = r.x0 + rng.rand(r.w()), rz = r.z0 + rng.rand(r.h());
-      if (b3 && canAt(*b3, rx, rz)) return putAt(*b3, rx, rz);
+      for (int attempt = 0; attempt < 16; attempt++) {
+        int rx = r.x0 + rng.rand(r.w()), rz = r.z0 + rng.rand(r.h());
+        if (!c.spacingSegmentBlock(rx, rz) || !b3 || !canAt(*b3, rx, rz)) continue;
+        if (!c.spacingReservePoint(rx, rz)) continue;
+        int n = putAt(*b3, rx, rz);
+        if (n) return n;
+        c.spacingReleasePoint(rx, rz);
+      }
       return 0;
     }
     case 0xE22F4A83: {  // estates (spec 15 s5.5) [STATIC]

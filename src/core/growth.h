@@ -166,6 +166,13 @@ class GrowthCity {
   virtual bool tileOccupied(int, int) const { return false; }
   virtual bool placePier(const BuildingChoice&, int, int) { return false; }
   virtual bool spacingAdd(int, int) { return true; }
+  // Airport spacing-grid clients (spec 10 s6.3 / 15 s5.5): runway segment reserve/release, buildings point reserve,
+  // and the per-block segment test used by random airport placement.
+  virtual bool spacingReserveSegment(int, int, int, int) { return true; }
+  virtual void spacingReleaseSegment(int, int, int, int) {}
+  virtual bool spacingSegmentBlock(int, int) const { return true; }
+  virtual bool spacingReservePoint(int, int) { return true; }
+  virtual void spacingReleasePoint(int, int) {}
   virtual bool landfillRegistered(int, int) const { return false; }
   virtual void registerLandfill(int, int) {}
   virtual void creditLandfillRoom(int) {}

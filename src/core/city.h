@@ -238,9 +238,15 @@ class City {
  public:
   // Spacing grid 01FD7A8C (spec 10 s6.3): one byte per 4 x 4 block; bits 2-5 = overlap counter. add(): if any block of
   // the 5 x 5-block neighbourhood has 15, refuse; else +1 on all of them. rem(): c ← c−1 on the same 25 blocks (no
-  // underflow check — the nibble wraps).
+  // underflow check — the nibble wraps). Segment bit 0 and point bit 1: airport runway / building clients.
   bool spacingAdd(int x, int z);
   void spacingRem(int x, int z);
+  bool spacingReserveSegment(int x0, int z0, int x1, int z1);
+  void spacingReleaseSegment(int x0, int z0, int x1, int z1);
+  bool spacingSegmentBlock(int x, int z) const;   // test-block: segment flag of the tile's 4×4 block
+  bool spacingReservePoint(int x, int z);
+  void spacingReleasePoint(int x, int z);
+  bool spacingPointNear(int x, int z) const;      // test-point: any block in the 3×3 neighbourhood
  private:
 
   World* world_ = nullptr;

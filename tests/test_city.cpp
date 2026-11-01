@@ -134,6 +134,19 @@ int main() {
   c.spacingRem(48, 48);
   CHECK(c.spacingAdd(48, 48));
   c.spacingRem(48, 48);  // leave the neighbourhood empty for the rest of the test
+  // Segment / point flags (airport clients): reserve blocks a second overlapping reserve; release clears.
+  CHECK(c.spacingReserveSegment(8, 8, 16, 8));
+  CHECK(c.spacingSegmentBlock(12, 8));
+  CHECK(!c.spacingReserveSegment(12, 8, 20, 8));
+  c.spacingReleaseSegment(8, 8, 16, 8);
+  CHECK(c.spacingReserveSegment(12, 8, 20, 8));
+  c.spacingReleaseSegment(12, 8, 20, 8);
+  CHECK(c.spacingReservePoint(60, 60));
+  CHECK(c.spacingPointNear(60, 60));
+  CHECK(!c.spacingReservePoint(60, 60));
+  c.spacingReleasePoint(60, 60);
+  CHECK(c.spacingReservePoint(60, 60));
+  c.spacingReleasePoint(60, 60);
 
   // --- bulldoze ---
   // Spec 18 §11: removing a road zeroes that tile's surface live + snapshot density; neighbours keep theirs.

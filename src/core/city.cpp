@@ -2,7 +2,10 @@
 #include "core/occ_defaults.h"
 
 #include <algorithm>
+#include <array>
+#include <climits>
 #include <cstdlib>
+#include <set>
 #include <sstream>
 
 #include "core/flora.h"
@@ -367,6 +370,11 @@ class GrowthAdapter : public growth::GrowthCity {
     return true;
   }
   bool spacingAdd(int x, int z) override { return c_.spacingAdd(x, z); }
+  bool spacingReserveSegment(int x0, int z0, int x1, int z1) override { return c_.spacingReserveSegment(x0, z0, x1, z1); }
+  void spacingReleaseSegment(int x0, int z0, int x1, int z1) override { c_.spacingReleaseSegment(x0, z0, x1, z1); }
+  bool spacingSegmentBlock(int x, int z) const override { return c_.spacingSegmentBlock(x, z); }
+  bool spacingReservePoint(int x, int z) override { return c_.spacingReservePoint(x, z); }
+  void spacingReleasePoint(int x, int z) override { c_.spacingReleasePoint(x, z); }
   void removeBuilding(const growth::LotInfo& lot) override {
     int oi = c_.occupantAt(lot.ax, lot.az);
     if (oi < 0) return;
@@ -755,6 +763,96 @@ void City::spacingRem(int x, int z) {
     spacing_[k] = uint8_t((spacing_[k] & ~0x3C) | ((((spacing_[k] >> 2) - 1) & 15) << 2));
 }
 
+namespace {
+// Blocks within ±4 tiles (one block / 3×3 neighbourhood) of every tile on an axis-aligned segment (spec 10 §6.3).
+std::vector<size_t> spacingSegmentCells(World& w, std::vector<uint8_t>& spacing, int x0, int z0, int x1, int z1) {
+  const int bw = w.W / 4, bh = w.H / 4;
+  if (spacing.size() != size_t(bw) * bh) spacing.assign(size_t(bw) * bh, 0);
+  if (x0 > x1) std::swap(x0, x1);
+  if (z0 > z1) std::swap(z0, z1);
+  std::set<size_t> uniq;
+  auto addAround = [&](int x, int z) {
+    for (int i = -1; i <= 1; i++)
+      for (int j = -1; j <= 1; j++) {
+        int tx = x + 4 * i, tz = z + 4 * j;
+        if (!w.inTiles(tx, tz)) continue;
+        size_t k = size_t(tx / 4) * bh + size_t(tz / 4);
+        if (k < spacing.size()) uniq.insert(k);
+      }
+  };
+  if (z0 == z1) {
+    for (int x = x0; x <= x1; x++) addAround(x, z0);
+  } else if (x0 == x1) {
+    for (int z = z0; z <= z1; z++) addAround(x0, z);
+  } else {
+    addAround(x0, z0);
+    addAround(x1, z1);
+  }
+  return {uniq.begin(), uniq.end()};
+}
+
+std::vector<size_t> spacingPointCells(World& w, std::vector<uint8_t>& spacing, int x, int z) {
+  const int bw = w.W / 4, bh = w.H / 4;
+  if (spacing.size() != size_t(bw) * bh) spacing.assign(size_t(bw) * bh, 0);
+  std::vector<size_t> cells;
+  for (int i = -1; i <= 1; i++)
+    for (int j = -1; j <= 1; j++) {
+      int tx = x + 4 * i, tz = z + 4 * j;
+      if (!w.inTiles(tx, tz)) continue;
+      size_t k = size_t(tx / 4) * bh + size_t(tz / 4);
+      if (k < spacing.size()) cells.push_back(k);
+    }
+  return cells;
+}
+}  // namespace
+
+bool City::spacingReserveSegment(int x0, int z0, int x1, int z1) {
+  if (!world_) return false;
+  auto cells = spacingSegmentCells(*world_, spacing_, x0, z0, x1, z1);
+  for (size_t k : cells) if (spacing_[k] & 0x01) return false;
+  for (size_t k : cells) spacing_[k] = uint8_t(spacing_[k] | 0x01);
+  return true;
+}
+
+void City::spacingReleaseSegment(int x0, int z0, int x1, int z1) {
+  if (!world_) return;
+  for (size_t k : spacingSegmentCells(*world_, spacing_, x0, z0, x1, z1)) spacing_[k] = uint8_t(spacing_[k] & ~0x01);
+}
+
+bool City::spacingSegmentBlock(int x, int z) const {
+  if (!world_ || !world_->inTiles(x, z) || spacing_.empty()) return false;
+  const int bh = world_->H / 4;
+  size_t k = size_t(x / 4) * bh + size_t(z / 4);
+  return k < spacing_.size() && (spacing_[k] & 0x01) != 0;
+}
+
+bool City::spacingReservePoint(int x, int z) {
+  if (!world_) return false;
+  auto cells = spacingPointCells(*world_, spacing_, x, z);
+  for (size_t k : cells) if (spacing_[k] & 0x02) return false;
+  for (size_t k : cells) spacing_[k] = uint8_t(spacing_[k] | 0x02);
+  return true;
+}
+
+void City::spacingReleasePoint(int x, int z) {
+  if (!world_) return;
+  for (size_t k : spacingPointCells(*world_, spacing_, x, z)) spacing_[k] = uint8_t(spacing_[k] & ~0x02);
+}
+
+bool City::spacingPointNear(int x, int z) const {
+  if (!world_ || spacing_.empty()) return false;
+  // Const path: same neighbourhood as reserve, read-only.
+  const int bh = world_->H / 4;
+  for (int i = -1; i <= 1; i++)
+    for (int j = -1; j <= 1; j++) {
+      int tx = x + 4 * i, tz = z + 4 * j;
+      if (!world_->inTiles(tx, tz)) continue;
+      size_t k = size_t(tx / 4) * bh + size_t(tz / 4);
+      if (k < spacing_.size() && (spacing_[k] & 0x02)) return true;
+    }
+  return false;
+}
+
 double City::roadCondition() const {
   if (!world_) return 0.0;
   int64_t roads = 0, damaged = 0;
@@ -814,48 +912,80 @@ void City::damageOccupant(int i, uint32_t st) {
 
 void City::removeOccupantIdx(const std::set<int>& killIn) {
   std::set<int> kill = killIn;
-  // Spec 10 §6.3 [STATIC]: spacing-grid removal handler. Pier parts (attr 0x1F4 ∈ {7,8,9}) expand to the
-  // connected pier, then *remove* one overlap count at the pier head (line 8; else the seed tile).
+  // Spec 10 §6.3 [STATIC]: spacing-grid removal handler for airport/seaport parts (attr 0x1F4).
   std::vector<std::pair<int, int>> pierRem;
+  std::vector<std::array<int, 4>> runwaySeg;   // x0,z0,x1,z1
+  std::vector<std::pair<int, int>> pointRem;
   if (game_ && world_) {
     auto partOf = [&](const Occupant& o) -> int {
       const OccAttr* a = game_->occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT);
       return a ? a->partIndex : 0;
     };
-    auto isPier = [&](int oi) {
+    auto partOk = [&](int oi, auto pred) {
       if (oi < 0 || oi >= int(world_->occupants.size())) return false;
-      int p = partOf(world_->occupants[size_t(oi)]);
-      return p >= 7 && p <= 9;
+      return pred(partOf(world_->occupants[size_t(oi)]));
     };
-    std::set<int> seenPier;
     const int d4[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
-    for (int seed : killIn) {
-      if (!isPier(seed) || seenPier.count(seed)) continue;
+    auto flood = [&](int seed, auto pred, std::set<int>& seen) {
       std::vector<int> comp;
+      if (!partOk(seed, pred) || !seen.insert(seed).second) return comp;
       std::vector<int> q{seed};
-      seenPier.insert(seed);
       for (size_t qi = 0; qi < q.size(); qi++) {
         const Occupant& o = world_->occupants[size_t(q[qi])];
         comp.push_back(q[qi]);
         for (auto& dd : d4) {
-          int nx = o.x + dd[0], nz = o.z + dd[1];
-          int nj = occupantAt(nx, nz);
-          if (!isPier(nj) || !seenPier.insert(nj).second) continue;
+          int nj = occupantAt(o.x + dd[0], o.z + dd[1]);
+          if (!partOk(nj, pred) || !seen.insert(nj).second) continue;
           q.push_back(nj);
         }
       }
-      int hx = world_->occupants[size_t(seed)].x, hz = world_->occupants[size_t(seed)].z;
-      for (int oi : comp) {
-        kill.insert(oi);
-        if (partOf(world_->occupants[size_t(oi)]) == 8) {
-          hx = world_->occupants[size_t(oi)].x;
-          hz = world_->occupants[size_t(oi)].z;
+      return comp;
+    };
+    std::set<int> seenPier, seenRunway;
+    for (int seed : killIn) {
+      // Pier parts 7–9: remove the connected pier and *remove* one overlap count at the head (line 8).
+      if (partOk(seed, [](int p) { return p >= 7 && p <= 9; }) && !seenPier.count(seed)) {
+        auto comp = flood(seed, [](int p) { return p >= 7 && p <= 9; }, seenPier);
+        int hx = world_->occupants[size_t(seed)].x, hz = world_->occupants[size_t(seed)].z;
+        for (int oi : comp) {
+          kill.insert(oi);
+          if (partOf(world_->occupants[size_t(oi)]) == 8) {
+            hx = world_->occupants[size_t(oi)].x;
+            hz = world_->occupants[size_t(oi)].z;
+          }
+        }
+        pierRem.push_back({hx, hz});
+      }
+      // Runway part index 1: remove the rest of its runway line (parts 1–3) and release the strip segment.
+      if (partOk(seed, [](int p) { return p == 1; }) && !seenRunway.count(seed)) {
+        auto comp = flood(seed, [](int p) { return p >= 1 && p <= 3; }, seenRunway);
+        int x0 = INT32_MAX, z0 = INT32_MAX, x1 = INT32_MIN, z1 = INT32_MIN;
+        bool any1 = false;
+        for (int oi : comp) {
+          kill.insert(oi);
+          const Occupant& o = world_->occupants[size_t(oi)];
+          if (partOf(o) != 1) continue;
+          any1 = true;
+          x0 = std::min(x0, o.x); z0 = std::min(z0, o.z);
+          x1 = std::max(x1, o.x); z1 = std::max(z1, o.z);
+        }
+        if (any1) {
+          // Strip endpoints: the row-A extent is axis-aligned; collapse the thin axis to a line.
+          if (x1 - x0 >= z1 - z0) z1 = z0 = (z0 + z1) / 2;
+          else x1 = x0 = (x0 + x1) / 2;
+          runwaySeg.push_back({x0, z0, x1, z1});
         }
       }
-      pierRem.push_back({hx, hz});
+      // Airport building part index 4: release the point at its anchor.
+      if (partOk(seed, [](int p) { return p == 4; })) {
+        const Occupant& o = world_->occupants[size_t(seed)];
+        pointRem.push_back({o.x, o.z});
+      }
     }
   }
   for (auto [hx, hz] : pierRem) spacingRem(hx, hz);
+  for (auto& s : runwaySeg) spacingReleaseSegment(s[0], s[1], s[2], s[3]);
+  for (auto [x, z] : pointRem) spacingReleasePoint(x, z);
 
   for (auto it = kill.rbegin(); it != kill.rend(); ++it) {
     const Occupant o = world_->occupants[size_t(*it)];
