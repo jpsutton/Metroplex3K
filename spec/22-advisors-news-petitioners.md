@@ -409,8 +409,25 @@ Each transportation-advisor cycle draws r = uniform 0–99 (shared LCG).
 * Otherwise (r ≥ 10): an announcement topic still listed is deleted once the city has built the
   corresponding facility (subway, bus stations, airport, highway respectively).
 
-The "announced" flags are not saved [INFERRED: no record found; OPEN whether they are
-re-derived on load]; if not, an announcement can repeat after loading.
+**Technology flags** [STATIC]. The four flags are 1 subway, 2 bus stops, 3 airport, 4 highway.
+They are not saved. They are re-derived when the city is set up, and again when the "city
+opened" notification arrives (message `0x632ABA43`, posted after a city is loaded or started
+[INFERRED name]). At that point each flag ← (its year ≤ the current year), with no announcement.
+During play a flag becomes set only through the announcement above. A technology whose year
+passes during play therefore stays unavailable until the 10 % draw announces it.
+Every time a flag is (re)evaluated, the advisor posts a "tool enabled/disabled" message
+(`0x025F0A92`, tool ID, flag) for each gated tool:
+
+| Flag | Tool command IDs (`08-ui-framework.md`) |
+|---|---|
+| subway | `0x10004201` subway, `0x10004202` subway station, `0x10004009` subway–rail station |
+| bus | `0x10004004` bus stop |
+| airport | `0x10003006` airport zone |
+| highway | `0x10004301` highway, `0x10004302` highway on-ramp |
+
+An announcement posts "enabled" for its tools. The tools are greyed while their flag is clear. The
+hot keys that say "only if available" follow the same flags. The city-planning advisor reads
+flags 3 and 4 (3.11).
 
 #### 3.10.1 Transportation advisor rules [STATIC; metric identities INFERRED from topic meaning]
 
@@ -487,13 +504,21 @@ Metrics gathered each cycle:
   samples of that zone family (the advisor keeps its own 12-entry ring of samples [OPEN: whether a sample is taken per advisor cycle (weekly) or per month]).
 * zR, zC, zI = number of zoned tiles of zone types 1–3, 5–7, 9–11; zSea, zAir, zFill = tiles of
   zone 15, 14, 17 (`15-sim-growth.md` §1).
-* x(z, c) = number of tiles of zone family z whose last developer result code is c
-  (`15-sim-growth.md` §4.3).
+* x(z, c) = the zone developers' **previous-pass tallies**: the resultPrev counts of the zone
+  record (`10-save-format.md` §6.4) for result code c, summed over the zone types of family z
+  [STATIC]. This is not a per-tile grid.
 * Building counts by agent type: airport (12310), seaport (12330), farms (9300), clean industry
   (8700 + 8900 + 9100), medium-density commercial (5700 + 6100), high-density commercial
   (6300 + 6700).
-* LV = city-average land value; AP, WP = air / water pollution index; capC, capI = commercial /
-  industrial demand-cap measures [INFERRED]; landfill-full flags (garbage subsystem).
+* LV = city-average land value; AP, WP = air / water pollution index.
+* capC, capI = `capPct` (0–100) of valves **5000** and **8000**: the family valves, whose cap the
+  cap rule of `15-sim-growth.md` §3.2 sets from 5001 / 8001 [STATIC]. Correction: the previous
+  text said 0–255 [INFERRED].
+* Flags A and B (arguments 3 and 4) are answered by the **transportation advisor**. They are its
+  technology flags of 3.10: index 1 subway, 2 bus stops, 3 airport, 4 highway. So A = "airport
+  available" and B = "highway available" [STATIC].
+* Garbage: Lf = number of registered landfill tiles × 32767; Lr = the landfill store's `Dlast`
+  (room left, `16-sim-utilities.md` §4.4) [STATIC].
 
 Rules (each line raises its topic when the condition holds):
 
@@ -522,7 +547,7 @@ Rules (each line raises its topic when the condition holds):
 | `0xDB` | plain | LV < LLV |
 | `0xE2` | plain | zSea > 5 and seaport tiles with result codes 9, 12, 14, 15, 16 or 17 > 5 |
 | `0xE0` | plain | zFill ≠ 0 and landfill tiles with result code 16 (no access) ≠ 0 |
-| `0xE1` | plain | otherwise (previous row false), landfill reported full and no free landfill capacity |
+| `0xE1` | plain | otherwise (previous row false): Lf > 0 and Lr = 0 (landfill exists and has no room left) [STATIC] |
 
 All size-dependent rows (`0xBF`…`0xD8`) are skipped when N ≥ MS. All comparisons are strict.
 "Event" = raise(topic, 0, L, P=1, E=1); "persistent" = raise(topic, 0, L, P=1) (section 3.4).
@@ -533,8 +558,8 @@ Notes on the cap rows: K = number of neighbour sides that have a neighbour city 
 connected by road/highway, Kt = sides connected by rail [INFERRED from topic meaning]. Exact
 conditions: `0x83` when no airport building and cap-cause flag A is set; with ≥ 1 airport building:
 `0x2B` if Kr = K and cap-cause flag B is set, else `0x84` if flag B is set, else nothing. Flags A
-and B are two boolean queries (arguments 3 and 4) answered by the demand-cap model [OPEN: exact
-meaning]. Industrial: if 1 ≤ K ≤ 3, Kt = 0 and no seaport → `0x82`; else if Kt < K → `0xE5`; else if
+and B are the transportation advisor's airport-available and highway-available flags (above)
+[STATIC]. Industrial: if 1 ≤ K ≤ 3, Kt = 0 and no seaport → `0x82`; else if Kt < K → `0xE5`; else if
 K ≠ 4 and ≥ 1 seaport → `0x86`.
 
 #### 3.11.1 City-planning growth petitions (post-update) [STATIC]
@@ -555,8 +580,10 @@ Requested as plain petitions with cool-down L (cycles) via the petitioner manage
 
 Pk = park measure = n(14311) + 9·n(14312) + 16·n(14313) + 4·n(14314) + 4·n(14315) + n(14316), where
 n(t) is the number of buildings of agent type t (the multipliers are hard-coded; the agent types
-are the park/plaza family, `13-buildings-occupants.md`). F = farm-building count. B = total
-building count plus four further counts from the flora/automata layer [OPEN: identities]. Map
+are the park/plaza family, `13-buildings-occupants.md`). F = farm-building count. B = the occupant manager's total occupant count plus the network
+subsystem's running piece counts for road, highway, rail and power line (`12-networks.md` §10:
+flags 0x8000, 0x10000, 0x20000, 0x400000) [STATIC]. Correction: these are network counts, not
+flora/automata counts. Map
 tiles = map width × height. Draws happen only when the earlier conditions hold (short-circuit), so
 the shared-LCG sequence depends on evaluation order: rows are evaluated top to bottom.
 
@@ -1072,7 +1099,7 @@ Section `[PetitionerExtraInfo]`, lines `0x%08X=<a>,<b>` keyed by petitioner ID [
 * `a` — portrait image: resource (Type `0x62B9DA24`, Group `0x52DB60A0`, Instance `a`) in
   `Res/UI/Shared/52DB60A0_Advisors.ixf`. It also selects the petitioner's *character type*, which
   chooses the voice sound played on accept/decline (sound IDs `0x9B`–`0xA6`, see
-  `06-audio.md`) [STATIC; table of type→sound OPEN].
+  `06-audio.md`; table in 5.5) [STATIC].
 * `b` — optional second image (same Type/Group, Instance `b`); 0 = none.
 
 Files are searched in `[PetitionerExtraInfo Filenames]` order; the first file containing the key
@@ -1183,17 +1210,41 @@ petition ID:
 |---|---|
 | `0x01`, `0x04`, `0x07`, `0x0A`, `0x84`, `0x88`, `0x8A`–`0x90`, `0x94`, `0x96`, `0x97`, `0xCD`, `0x12C`, `0x12F` | City planner: reward/landmark gift — accept makes the reward building available to place (section 6) |
 | `0x10`, `0x11`, `0x12`, `0x95`, `0xCE`, `0xD2` | Budget: business deals (`19-sim-economy.md` §11) |
-| `0x9B`–`0x9E` | Health & education: worker strikes (accept = raise funding) [INFERRED] |
-| `0x9F`, `0xA0`, `0xA2`, `0xCC` | Public safety: police/fire strikes [INFERRED] |
-| `0xA3`, `0xA4` | Transportation: transit strike [INFERRED] |
+| `0x9B`–`0x9E` | Strikes, accept only: department funding ← 110 % if it is below 110 %. `0x9B`/`0x9C` → health, `0x9D`/`0x9E` → education [STATIC] |
+| `0x9F`, `0xA0`, `0xA2`, `0xCC` | Accept only: funding ← 110 % if below. `0x9F`/`0xA0` → police, `0xA2`/`0xCC` → fire [STATIC] |
+| `0xA3`, `0xA4` | Accept only: transit funding ← 110 % if below. Then, if the transit strike state is not "normal", it is set to **striking** with counter 0 and the "strike started" notification is posted (`18-sim-transport.md` §8.5). So accepting while a strike is only threatened starts it (original behaviour) [STATIC] |
 | `0xA5`–`0xCA` (deal IDs), `0xE9`–`0xEE`, `0xF7`, `0xF8` | Utilities: neighbour deals (`19-sim-economy.md` §10) |
 | ordinance petitions | table 5.4 |
 | `0xD7` | accept: treasury +100000, nothing else; decline: sets the "refused Vinnie" flag, whose only reader is the `zyxwvu` cheat (`27-platform.md`) [STATIC]. Petition 0xD7 is raised only by the `call cousin Vinnie` cheat. Retyping the cheat while it is pending only re-marks it. Once it has been answered, or has gone unanswered for its 6-cycle limit, it stays hidden for the rest of the session [STATIC; not tested in play] |
 | `0x12D` | accept: starts the holiday parade (automata, `26-automata.md`) |
 | all others | informational only |
 
-For neighbour-deal term petitions `0xE9`–`0xEE` the voice is fixed: sound `0x9B` on accept,
-`0xA4` on decline.
+Declining any of the strike petitions has no effect [STATIC]. The ticker line and voice still
+play.
+
+**Voice reaction** [STATIC]. Not played when the petition goes unanswered (answer 0). For
+neighbour-deal term petitions `0xE9`–`0xEE` the sound is fixed: `0x9B` on accept, `0xA4` on any
+other answer. Otherwise, with t = the petitioner's character type (the `a` value of its
+PetitionerExtraInfo line, 5.2):
+
+| t | Accept | Decline |
+|---|---|---|
+| 2, 3 | `0xA4` | `0x9C` |
+| 4 | `0xA2` | `0x9E` |
+| 5 | `0xA0` | `0x9E` |
+| 6 | `0xA3` | `0x9D` |
+| 7 | `0xA4` | `0x9E` |
+| 8 | `0x9F` | `0x9D` |
+| 9, 10 | `0xA6` | `0x9D` |
+| 11 | `0xA5` | `0x9C` |
+| 12 | `0xA2` | `0x9E` |
+| 13 | `0xA6` | `0x9D` |
+| 14 | `0xA4` | `0x9C` |
+| 15 | `0xA1` | `0x9D` |
+| 16 | `0xA6` | `0x9D` |
+| 17 | `0xA4` | `0x9C` |
+| 18 | `0xA4` | `0x9B` |
+| other (incl. no line) | none | none |
 
 ## 6. Reward and business-deal buildings
 
