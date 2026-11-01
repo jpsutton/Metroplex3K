@@ -310,6 +310,26 @@ int main(int argc, char** argv) {
       }
       continue;
     }
+    if (std::getenv("M3K_CONNTEST")) {   // road drag to the map edge creates and keeps a neighbour connection (spec 12 s8)
+      const World& wd = s.game.world();
+      for (int x = 2; x < wd.W - 2; x++) {
+        bool ok = true;
+        for (int z = 0; z < 4 && ok; z++) ok = c.occupantAt(x, z) < 0 && !c.isRoadTile(x, z) && !c.isPowerLine(x, z) && wd.waterAt(x, z) < wd.altAt(x, z) && wd.zone[size_t(x) * wd.H + z] == 0 && wd.altAt(x, z) == wd.altAt(x + 1, z) && wd.altAt(x, z) == wd.altAt(x, z + 1) && wd.altAt(x, z) == wd.altAt(x + 1, z + 1);
+        if (!ok) continue;
+        size_t before = c.neighbours.conn[1].size(); uint32_t nb = c.neighbours.neighbours[1].nRoad;
+        bool built = c.buildNetwork(NetworkKind::Road, {{x, 3}, {x, 0}});
+        std::printf("   conn test x=%d built %d: road conn tiles %zu -> %zu, neighbour 1 nRoad %u -> %u (exists %d)\n", x, built ? 1 : 0, before,
+                    c.neighbours.conn[1].size(), nb, c.neighbours.neighbours[1].nRoad, c.neighbours.neighbours[1].exists ? 1 : 0);
+        bool again = c.buildNetwork(NetworkKind::Road, {{x, 3}, {x, 0}});
+        std::printf("   second drag built %d: conn tiles %zu nRoad %u\n", again ? 1 : 0, c.neighbours.conn[1].size(), c.neighbours.neighbours[1].nRoad);
+        s.game.sim().tickDay();
+        for (const auto& pc : s.game.world().surface) if (pc.x == x && pc.z <= 4) std::printf("   piece (%d,%d) id %u\n", pc.x, pc.z, pc.pieceId);
+        std::printf("   road at (x,0) %d,(x,1) %d; conn has 0x%x %d\n", c.isRoadTile(x, 0) ? 1 : 0, c.isRoadTile(x, 1) ? 1 : 0, (unsigned(x) << 16), int(c.neighbours.conn[1].count(uint32_t(x) << 16)));
+        c.bulldoze(x, 0, x, 0);
+        std::printf("   after bulldoze: conn tiles %zu\n", c.neighbours.conn[1].size());
+        break;
+      }
+    }
     if (std::getenv("M3K_LANDMARKS")) {   // landmark picker membership: agent types under 18000 in the hierarchy
       int n = 0, lo = 1 << 30, hi = 0;
       for (const auto& kv : c.config().parent) if (c.agentHierarchy().isAncestorOrSelf(kv.first, 18000)) { n++; lo = std::min<int>(lo, int(kv.first)); hi = std::max<int>(hi, int(kv.first)); }
