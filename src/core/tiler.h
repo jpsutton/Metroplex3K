@@ -12,10 +12,11 @@
 
 namespace m3k {
 
-// Occupant flag bits (section 5.2).
+// Occupant flag bits (12 §5.2; run-time word of 13 §3.1a).
 enum OccFlags : uint32_t {
   OF_IGNORABLE = 0x400,
   OF_NETPIECE = 0x800,
+  OF_TRANSPORT = 0x4000,  // transport/network-occupant bit (not pipes / plain power); 18 §6.1 fare gate
   OF_ROAD = 0x8000,
   OF_HIGHWAY = 0x10000,
   OF_RAIL = 0x20000,

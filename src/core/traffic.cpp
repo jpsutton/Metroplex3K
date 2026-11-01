@@ -673,6 +673,19 @@ void TrafficSim::applyCountedTrip(const TripRect& origin, const TripResult& tr) 
     g[k] = uint8_t(v);
   };
   for (auto& n : tr.path) {
+    // Transport-occupant gate (spec 18 §6.1, Q-AL / f3c0515) [STATIC]: before density or fare, the
+    // node's occupant must be non-null with run-time flag bit 0x4000 (13 §3.1a). That bit is on
+    // network pieces other than pipes/plain power, and on transit stations (0x4104). Those are
+    // exactly the tiles that carry TF_ROAD/HIGHWAY/RAIL/SUBWAY/STATION in our flag grid. Fail →
+    // skip the whole node. Origin (mode 0x80) and bare building tiles fail.
+    bool gate = false;
+    for (int x = n.r.x0; x <= n.r.x1 && !gate; x++)
+      for (int z = n.r.z0; z <= n.r.z1 && !gate; z++) {
+        if (x < 0 || z < 0 || x >= W_ || z >= H_) continue;
+        uint16_t f = flags_[size_t(x) * H_ + z];
+        if (f & (TF_ROAD | TF_HIGHWAY | TF_RAIL | TF_SUBWAY | TF_STATION)) gate = true;
+      }
+    if (!gate) continue;
     bool s = false, hwy = false, sub = false;
     float fare = 0;
     switch (n.mode) {
@@ -690,6 +703,7 @@ void TrafficSim::applyCountedTrip(const TripRect& origin, const TripResult& tr) 
     if (n.mode == TM_ROAD) { /* surface only */ }
     for (int x = n.r.x0; x <= n.r.x1; x++)
       for (int z = n.r.z0; z <= n.r.z1; z++) {
+        if (x < 0 || z < 0 || x >= W_ || z >= H_) continue;
         size_t k = size_t(x) * H_ + z;
         if (s) add(rec_.liveSurface, k);
         if (hwy) add(rec_.liveHighway, k);

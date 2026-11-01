@@ -164,6 +164,17 @@ static void testTrips() {
   s3.applyCountedTrip(TripRect{0, 0, 6, 6}, fake);
   s3.applyCountedTrip(TripRect{0, 0, 6, 6}, fake);
   CHECK(s3.liveSurface(5, 10) == 0);  // clamped at 0
+
+  // Transport-occupant gate (spec 18 §6.1): a node whose tiles have no network/station flag
+  // credits neither density nor fare (no run-time 0x4000 occupant).
+  TrafficSim s4(6, 6, p, 1);
+  TripNode bare; bare.mode = TM_RAIL; bare.r = TripRect{2, 2, 2, 2};
+  TripResult barePath; barePath.path = {bare};
+  s4.applyCountedTrip(TripRect{0, 0, 0, 0}, barePath);
+  CHECK(s4.liveSurface(2, 2) == 0 && s4.rec().faresThisMonth == 0.0f);
+  s4.flags(2, 2) |= TF_RAIL;
+  s4.applyCountedTrip(TripRect{0, 0, 0, 0}, barePath);
+  CHECK(s4.liveSurface(2, 2) >= 1 && s4.rec().faresThisMonth > 0.0f);
 }
 
 static void testTransit() {

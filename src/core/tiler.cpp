@@ -24,12 +24,14 @@ bool flagsMatchKind(int kind, uint32_t f) {
 }
 
 uint32_t defaultFlagsForKind(int kind) {
+  // Spec 13 §3.1a [STATIC]: every network piece has 0x800; all except pipes and plain power also
+  // have 0x4000 (OF_TRANSPORT). Membership bits follow.
   switch (kind) {
-    case NK_ROAD: return OF_ROAD | OF_NETPIECE;
-    case NK_HIGHWAY: return OF_HIGHWAY | OF_NETPIECE;
-    case NK_RAIL: return OF_RAIL | OF_NETPIECE;
-    case NK_SUBWAY: return OF_SUBWAY;
-    case NK_PIPE: return OF_PIPE;
+    case NK_ROAD: return OF_ROAD | OF_NETPIECE | OF_TRANSPORT;
+    case NK_HIGHWAY: return OF_HIGHWAY | OF_NETPIECE | OF_TRANSPORT;
+    case NK_RAIL: return OF_RAIL | OF_NETPIECE | OF_TRANSPORT;
+    case NK_SUBWAY: return OF_SUBWAY | OF_NETPIECE | OF_TRANSPORT;
+    case NK_PIPE: return OF_PIPE | OF_NETPIECE;
     case NK_POWER: return OF_POWER | OF_NETPIECE;
   }
   return 0;
