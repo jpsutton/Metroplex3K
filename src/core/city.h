@@ -195,6 +195,9 @@ class City {
   std::function<void(const std::string&)> onMessage;
   // Sound event ids (AUDIO.INI ids) raised by tools; Game maps them to AudioSystem::request.
   std::function<void(int soundId)> onSound;
+  // A building occupant was added to the city (player plop, growth, pier): agent type, count of that type afterwards,
+  // anchor tile (spec 22 s4.7.1 building news).
+  std::function<void(uint32_t agentType, int countAfter, int x, int z)> onBuildingAdded;
 
   // Multi-line human-readable diagnostics: valves, buildings per class/state, power, zone-manager results.
   std::string debugStats() const;

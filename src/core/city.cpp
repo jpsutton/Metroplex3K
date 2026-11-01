@@ -781,6 +781,11 @@ int City::addOccupant(const Occupant& o) {
     for (int dz = 0; dz < o.sizeZ; dz++)
       if (inMap(o.x + dx, o.z + dz)) occ_[idx(o.x + dx, o.z + dz)] = i;
   occDirty_ = true;
+  if (onBuildingAdded) {
+    int n = 0;
+    for (const auto& oc : world_->occupants) n += oc.agentType == o.agentType;
+    onBuildingAdded(o.agentType, n, o.x, o.z);
+  }
   return i;
 }
 

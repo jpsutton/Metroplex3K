@@ -379,6 +379,7 @@ class Game {
   TickerDb tickerDb_;
   std::unique_ptr<NewsTickerSink> sink_;
   GameRng rng_{12345};
+  GameRng newsRng_{4242};   // the building subsystem's own generator for building-news variants (spec 22 s4.7.1)
   DisasterManager disasters_;
   CheatRegistry cheats_;
   std::string cheatBuf_;

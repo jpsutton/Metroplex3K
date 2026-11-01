@@ -124,6 +124,18 @@ void Game::enterCity() {
   sim_.init(&world_, haveData_ ? &data_ : nullptr, &cityCfg_, 12345u + uint32_t(world_.W));
   sim_.city().onSound = [this](int id) { sound(id); };
   sim_.city().onMessage = [this](const std::string& m) { message(m); };
+  // Building news (spec 22 s4.7.1): a ticker item for the listed agent types and the landmark family.
+  sim_.city().onBuildingAdded = [this](uint32_t type, int countAfter, int x, int z) {
+    if (!managersReady_) return;
+    const bool landmark = sim_.city().agentHierarchy().isAncestorOrSelf(type, 18000);
+    NewsKey k = buildingNews(type, countAfter, landmark, newsRng_);
+    if (!k.valid()) return;
+    WinEnv E = env();
+    std::string text = E.text(k.table, k.id, "");
+    if (text.empty()) return;
+    cal::Date d = sim_.city().clock.date();
+    news_.post(k.table, k.id, tickerStamp(d.month, d.day, d.year), true, x, z, &text);
+  };
   simReady_ = true; paused_ = true; dirty_ = false; simAccum_ = 0;
   speed_ = std::max(1, std::min(4, world_.info.gameSpeed));
   showPicker_ = false;
