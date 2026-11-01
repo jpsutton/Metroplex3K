@@ -69,7 +69,19 @@ class CityDisasterWorld : public DisasterWorld {
   OccInfo occupantAt(int x, int z) const override {
     OccInfo o;
     int i = c_.occupantAt(x, z);
-    if (i < 0 || i >= int(w_.occupants.size())) return o;
+    if (i < 0 || i >= int(w_.occupants.size())) {
+      // Network pieces are occupants with a class flag word (spec 13 s3.1a) [STATIC]: 0x4 | 0x800 (network piece), 0x4000
+      // for all but pipes and plain power lines, plus 0x8000 road. Road pieces are riot sites and pedestrian spawns.
+      if (!w_.inTiles(x, z)) return o;
+      const uint16_t tf = c_.traffic ? c_.traffic->flags(x, z) : 0;
+      const bool road = (tf & TF_ROAD) != 0, hwy = (tf & TF_HIGHWAY) != 0, rail = (tf & TF_RAIL) != 0;
+      const bool power = c_.isPowerLine(x, z);
+      if (!road && !hwy && !rail && !power) return o;
+      o.valid = true; o.ax = x; o.az = z; o.w = o.h = 1;
+      o.flags = 0x4u | kOccIndestructible | ((road || hwy || rail) ? 0x4000u : 0u) | (road ? kOccCrowdSite : 0u) |
+                (hwy ? 0x10000u : 0u) | (rail ? 0x20000u : 0u) | (power ? 0x400000u : 0u);
+      return o;
+    }
     const Occupant& oc = w_.occupants[i];
     o.valid = true; o.id = oc.uid; o.ax = oc.x; o.az = oc.z; o.w = oc.sizeX; o.h = oc.sizeZ;
     o.agentType = oc.agentType;
