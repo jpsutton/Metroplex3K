@@ -1049,7 +1049,17 @@ bool City::buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& p
     void charge(int a) override { c.budget.funds -= a; }
     void sound(int id) override { if (c.onSound) c.onSound(id); }
     void message(const std::string& m) override { if (c.onMessage) c.onMessage(m); }
+    bool neighbourExists(int edge) const override {
+      return edge >= 0 && edge < 4 && c.neighbours.neighbours[edge].exists;
+    }
   } host(*this);
+  // Neighbour connections (spec 12 s8): the map starts from the saved connection sets, and connections made by this drag are
+  // written back (set + the neighbour's count for that network, one per accepted offer). The offer is accepted at once
+  // (no modal dialog in this path yet).
+  static const int setOfKind[7] = {-1, 1, 0, 3, 4, 2, 5};   // NK kind -> saved set index (rail, road, pipe, power, highway, subway)
+  for (int nk = 1; nk <= 6; nk++)
+    for (uint32_t p : neighbours.conn[setOfKind[nk]]) map.setConnection(nk, int(p >> 16), int(p & 0xFFFF), true);
+  const auto before = map.connections();
   // Split into straight runs.
   std::vector<std::pair<std::pair<int, int>, std::pair<int, int>>> segs;
   size_t s = 0;
@@ -1064,6 +1074,25 @@ bool City::buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& p
     RoutedPath rp = routePath(map, tool, sg.first, sg.second);
     CommitResult r = commitPath(map, cfg_.tiling, costs, host, tool, rp);
     if (r.status == COMMIT_OK) any = true;
+  }
+  {  // write back new connections
+    std::set<int> kindsAdded[4];
+    for (const auto& t : map.connections()) {
+      if (before.count(t)) continue;
+      const int nk = std::get<0>(t), x = std::get<1>(t), z = std::get<2>(t);
+      if (nk < 1 || nk > 6) continue;
+      neighbours.conn[setOfKind[nk]].insert((uint32_t(x) << 16) | uint32_t(z));
+      int edge = edgeNeighbour(x, z, world_->W, world_->H);
+      if (edge >= 0 && edge < 4) kindsAdded[edge].insert(nk);
+    }
+    for (int e = 0; e < 4; e++)
+      for (int nk : kindsAdded[e]) {
+        Neighbour& nb = neighbours.neighbours[e];
+        switch (nk) {
+          case 1: nb.nRoad++; break; case 2: nb.nRail++; break; case 3: nb.nPower++; break;
+          case 4: nb.nHighway++; break; case 5: nb.nPipe++; break; case 6: nb.nSubway++; break;
+        }
+      }
   }
   if (any) rebuildIndex();
   return any;
@@ -1087,6 +1116,10 @@ bool City::bulldoze(int x0, int z0, int x1, int z1) {
     }
   for (auto& kv : netTiles) count += int(kv.second.size());
   if (kill.empty() && netTiles.empty()) return any;
+  // Bulldozing a network piece removes every connection of every kind at that tile (spec 12 s8 "Removal") [STATIC].
+  for (auto& kv : netTiles)
+    for (auto& t : kv.second)
+      for (auto& set : neighbours.conn) set.erase((uint32_t(t.first) << 16) | uint32_t(t.second));
   budget.funds -= int64_t(kill.size()) + count;
   for (int oi : kill) {
     const Occupant& o = world_->occupants[size_t(oi)];
