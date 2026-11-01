@@ -287,6 +287,13 @@ static void testQueries() {
   s.rec().snapSubway[size_t(4) * 6 + 1] = 40;
   CHECK(s.areaAverage(TripRect{4, 1, 4, 1}, 0x09, 0) == 40);   // 40 > initial 0 replaces 90
   CHECK(s.areaAverage(TripRect{4, 1, 4, 1}, 0x09, 50) == 90);  // 40 !> 50
+  // Business-deal trip (spec 18 §10): increments attempt counters, never credits density.
+  TrafficSim d(8, 4, p, 3);
+  for (int x = 0; x <= 7; x++) d.flags(x, 1) |= TF_ROAD;
+  d.flags(7, 1) |= TF_ROAD_EXIT;
+  d.rebuildDestinations({{2, 1, 1, 1, CAT_COM, 0, true}});
+  CHECK(d.routeDealTrip(TripRect{0, 1, 0, 1}));
+  CHECK(d.rec().tripsAttempted == 1 && d.liveSurface(3, 1) == 0);
 }
 
 static void testMonthly() {

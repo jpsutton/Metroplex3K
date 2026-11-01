@@ -199,6 +199,9 @@ class TrafficSim {
 
   // ---- trips ----
   TripResult routeTrip(const TripRequest& req);
+  // Business-deal "can this building reach anything" trip (spec 18 §10) [STATIC]: dest any, budget 255,
+  // all modes, uncounted. Fired when the building's query window is built.
+  bool routeDealTrip(const TripRect& lot);
   // Applies a successful counted trip (6.1). Returns fare credited.
   void applyCountedTrip(const TripRect& origin, const TripResult& tr);
   void writeResult(const TripRect& origin, bool ok);

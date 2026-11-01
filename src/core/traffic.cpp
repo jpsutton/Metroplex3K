@@ -812,6 +812,21 @@ bool TrafficSim::routeFacilityTrip(const TripRect& lot) {
   return tr.success;
 }
 
+bool TrafficSim::routeDealTrip(const TripRect& lot) {
+  if (lot.x0 < 0 || lot.z0 < 0 || lot.x0 >= W_ || lot.z0 >= H_) return false;
+  TripRequest req;
+  req.origin = lot;
+  req.originCategory = CAT_OTHER;
+  req.dest = CAT_ANY;
+  req.rail = req.bus = req.subway = true;
+  req.budgetFactor = 255;
+  TripResult tr = routeTrip(req);
+  rec_.tripsAttempted++;
+  if (!tr.success) rec_.tripsFailed++;
+  // Uncounted: no density/fare and no trip-result bits on the lot (spec 18 §10).
+  return tr.success;
+}
+
 int TrafficSim::runWeekly(int day, const std::vector<TripBuilding>& bs) {
   int n = 0;
   for (auto& b : bs)

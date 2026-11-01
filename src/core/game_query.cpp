@@ -161,6 +161,11 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   if (q.status & QsDestroyed) q.cleanupCost = c.budget.specialCost(12);
   q.growable = q.cls == QueryClass::Zoned && o->state == 1;
   q.showPower = true;
+  // Business-deal reachability (spec 18 §10) [STATIC]: MegaMall/Casino/Toxic/Prison fire an uncounted
+  // "reach anything" trip when their query window is built (powered/watered/state-1 is the rest of the
+  // functional test, owned by the deal manager).
+  if (c.traffic && o->agentType >= 19001 && o->agentType <= 19004)
+    c.traffic->routeDealTrip(TripRect{o->x, o->z, o->x + o->sizeX - 1, o->z + o->sizeZ - 1});
 
   switch (q.cls) {
     case QueryClass::PowerPlant:
