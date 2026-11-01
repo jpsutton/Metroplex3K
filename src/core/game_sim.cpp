@@ -658,6 +658,35 @@ void Game::applyPetitionEffect(const PetitionEffect& e) {
         if (d.messageId == e.petition) { if (b.acceptByMessage(e.petition)) advisors_.rewards.markAvailable(int(d.buildingType)); break; }
       break;
     }
+    case PetitionEffect::WorkerStrike: case PetitionEffect::PublicSafetyStrike: case PetitionEffect::TransitStrike: {
+      // Strike petitions (spec 22 s5.5) [INFERRED: accept = raise funding]: the department goes to 100 % funding when below;
+      // the services' strike machines end a strike once funding reaches 100 % (spec 17 s3.4, 20 s5.4, 18 s8.5).
+      uint32_t d = 0;
+      switch (e.petition) {
+        case 0x9B: case 0x9C: d = dept::Health; break;
+        case 0x9D: case 0x9E: d = dept::Education; break;
+        case 0x9F: case 0xA0: d = dept::Police; break;
+        case 0xA2: case 0xCC: d = dept::Fire; break;
+        case 0xA3: case 0xA4: d = dept::Transit; break;
+        default: break;
+      }
+      if (const Department* dp = d ? c.budget.dept(d) : nullptr)
+        if (dp->funding < 100) {
+          c.budget.setFunding(d, 100);
+          if (d == dept::Police) c.police.setFunding(100);
+          else if (d == dept::Fire) c.fire.setFunding(100);
+          else if (d == dept::Transit && c.traffic) c.traffic->setTransitFunding(100);
+          dirty_ = true;
+        }
+      break;
+    }
+    case PetitionEffect::StartParade: {   // 0x12D accepted: the holiday parade (spec 22 s5.5, 26) runs regardless of the disaster setting
+      if (!managersReady_) initManagers();
+      CityDisasterWorld dw(world_, c);
+      DisasterOutput out;
+      if (disasters_.startRandom(DisasterType::Parade, dw, inputsFor(c, true, cheats_), out)) applyDisasterOutput(out);
+      break;
+    }
     default: break;
   }
   if (e.voiceSound) sound(e.voiceSound);
