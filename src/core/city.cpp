@@ -796,6 +796,9 @@ void City::damageOccupant(int i, uint32_t st) {
 void City::removeOccupantIdx(const std::set<int>& kill) {
   for (auto it = kill.rbegin(); it != kill.rend(); ++it) {
     const Occupant o = world_->occupants[size_t(*it)];
+    // Removing a non-transport building clears the trip-tried and trip-ok bits of its lot (spec 18 s11) [STATIC], so a
+    // building later placed there is "untried" and routes on every firing until it has a result (s4.4 step 2).
+    if (traffic && !stationFlagsForType(o.agentType)) traffic->clearLot(TripRect{o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1});
     for (int dx = 0; dx < o.sizeX; dx++)
       for (int dz = 0; dz < o.sizeZ; dz++)
         if (inMap(o.x + dx, o.z + dz) && world_->zone[idx(o.x + dx, o.z + dz)] == 22) world_->zone[idx(o.x + dx, o.z + dz)] = 0;

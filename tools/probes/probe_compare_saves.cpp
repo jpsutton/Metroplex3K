@@ -114,6 +114,18 @@ int main(int argc, char** argv) {
       }
       std::printf("\n");
     }
+    {  // untried R/C/I lots (first tile) by state
+      auto untried = [&](const World& wd, const TrafficRecord& rr, int& n, int& uc) {
+        n = uc = 0;
+        for (const auto& o : wd.occupants) {
+          if (o.agentType < 3000 || o.agentType >= 10000) continue;
+          size_t i = size_t(o.x) * H + o.z;
+          if (i < rr.tripTried.size() && !rr.tripTried[i]) { n++; if ((o.state & ~0x200u) == 4) uc++; }
+        }
+      };
+      int on, ou, tn, tu; untried(w, A, on, ou); untried(theirs.game.world(), B, tn, tu);
+      std::printf("   untried R/C/I lots ours %d (construction %d) theirs %d (construction %d)\n", on, ou, tn, tu);
+    }
     std::printf("   trips attempted/failed ours %u/%u theirs %u/%u; failure ratio ours %.3f theirs %.3f\n", A.tripsAttempted, A.tripsFailed,
                 B.tripsAttempted, B.tripsFailed, A.failureRatio, B.failureRatio);
     {  // trip generator census of their city: spec 18 4.1 categories by parent chain vs our type/1000 rule
