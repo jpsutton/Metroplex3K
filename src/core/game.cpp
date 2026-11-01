@@ -138,7 +138,13 @@ void Game::loadHotkeys() {
 void Game::hotkeyCommand(int cmd, int, int arg2) {
   (void)arg2;
   uint32_t param = 0;
-  if (uint32_t cls = hotkeyToolClass(cmd, &param)) { runTarget(cls, param); return; }
+  if (uint32_t cls = hotkeyToolClass(cmd, &param)) {
+    // hotkeys follow the menu's transport tech flags (spec 22 s3.10, Q-AK)
+    for (const auto& kv : menu_.items)
+      if (kv.second.target == cls && kv.second.arg1 == param && !transportToolEnabled(kv.first)) return;
+    runTarget(cls, param);
+    return;
+  }
   auto scroll = [&](float dx, float dy) {
     float Wt = 8.f * float(1 << cam_.zoom), Ht = Wt / 2;
     float du = (dy / (Ht / 2) - dx / (Wt / 2)) / 2, dv = (dy / (Ht / 2) + dx / (Wt / 2)) / 2;
@@ -336,9 +342,21 @@ void Game::runTarget(uint32_t target, uint32_t arg1, const std::string& name) {
   dispatch(mi);
 }
 
+bool Game::transportToolEnabled(uint32_t id) const {
+  int flag = -1;
+  switch (id) {
+    case 0x10004201: case 0x10004202: case 0x10004009: flag = 0; break;   // subway, subway station, subway-rail station
+    case 0x10004004: flag = 1; break;                                     // bus stop
+    case 0x10003006: flag = 2; break;                                     // airport zone
+    case 0x10004301: case 0x10004302: flag = 3; break;                    // highway, on-ramp
+    default: return true;
+  }
+  return !managersReady_ || advisors_.transportTech(flag);
+}
+
 void Game::execute(uint32_t menuItemId) {
   auto it = menu_.items.find(menuItemId);
-  if (it != menu_.items.end() && it->second.enabled) dispatch(it->second);
+  if (it != menu_.items.end() && it->second.enabled && transportToolEnabled(menuItemId)) dispatch(it->second);
 }
 
 void Game::dispatch(const MenuItemInfo& mi) {
@@ -577,6 +595,7 @@ bool Game::drawSkinnedToolMenu() {
         std::string label = ii != menu_.items.end() ? str(ii->second.nameTable, ii->second.nameId) : "(item)";
         bool enabled = ii == menu_.items.end() || ii->second.enabled;
         if (flyOpen == 0xD100A100 && !disastersOn_) enabled = false;
+        if (!transportToolEnabled(b.item)) enabled = false;
         if (ui_.button({fr.x + 10, fy, 176, 26}, label, enabled)) { execute(b.item); if (tool_ != ToolKind::Unavailable) { openFly_ = 0; openRoot_ = 0; } }
         fy += 28;
       }
@@ -644,6 +663,7 @@ void Game::drawToolMenu() {
         bool enabled = ii == menu_.items.end() || ii->second.enabled;
         // Start-disaster items are disabled when disasters are off for the city.
         if (flyOpen == 0xD100A100 && !disastersOn_) enabled = false;
+        if (!transportToolEnabled(b.item)) enabled = false;
         if (ui_.button({fr.x + 10, fy, 176, 26}, label, enabled)) { execute(b.item); if (tool_ != ToolKind::Unavailable) { openFly_ = 0; openRoot_ = 0; } }
         fy += 28;
       }

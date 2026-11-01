@@ -321,6 +321,10 @@ class AdvisorManager {
   // The environment advisor's own availability query (spec 22 "Garbage metrics" C): a type absent from
   // [GARBAGE_BUILDINGS] counts as not available.
   bool garbageBuildingAvailable(int agentType) const;
+  // Transportation tech flags (spec 22 s3.10, Q-AK) [STATIC]: 0 subway, 1 bus, 2 airport, 3 highway. At city setup and on
+  // "city opened" flag = (year <= current year), no announcement; in play a flag is set only by the 10 % announcement.
+  void initTransportFlags(int year);
+  bool transportTech(int i) const { return i >= 0 && i < 4 && tAnnounced_[i]; }
 
  private:
   std::vector<TopicList> lists_;

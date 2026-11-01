@@ -907,6 +907,11 @@ void AdvisorManager::utilRules(TopicList& L, const AdvisorInputs& in) {
   unlockTopics_.clear();
 }
 
+void AdvisorManager::initTransportFlags(int year) {
+  static const char* names[4] = {"SUBWAY_AVAILABLE", "BUS_STATION_AVAILABLE", "AIRPORT_AVAILABLE", "HIGHWAY_AVAILABLE"};
+  for (int i = 0; i < 4; i++) tAnnounced_[i] = thr.get(names[i]) <= year;
+}
+
 void AdvisorManager::initBuildingUnlocks(int year) {
   unlocked_.clear(); unlockTopics_.clear(); unlockTopicsEnv_.clear();
   for (auto* lst : {&thr.power, &thr.water, &thr.garbage})

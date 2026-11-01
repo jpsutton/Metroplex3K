@@ -187,7 +187,8 @@ void Game::initManagers() {
   petitioners_.clear();
   petShown_.clear();
   petView_.reset();
-  advisors_.initBuildingUnlocks(city().clock.date().year);   // spec 22 "Building availability": unlocked at load
+  advisors_.initBuildingUnlocks(city().clock.date().year);
+  advisors_.initTransportFlags(city().clock.date().year);   // spec 22 "Building availability": unlocked at load
 }
 
 void Game::fillAdvisorInputs(AdvisorInputs& in) {
@@ -354,8 +355,21 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
     P.proReadingEnacted = c.ordinances.enacted(0xE0D07233);
     P.tourismEnacted = c.ordinances.enacted(0x62F6E7CF);
     // landfill "full" and "no free capacity" [INFERRED from the store]: pending garbage exceeds spare room / no spare room
-    P.landfillFull = c.pollution.disp.store.V < 0;
-    P.landfillNoFreeCapacity = c.pollution.disp.store.Dlast <= 0;
+    // spec 22 s3.11 [STATIC]: 0xE1 = registered landfill tiles x 32767 > 0 and the store's Dlast == 0
+    P.landfillFull = int64_t(c.pollution.landfillTiles) * 32767 > 0;
+    P.landfillNoFreeCapacity = c.pollution.disp.store.Dlast == 0;
+    // capC/capI = capPct of valves 5000/8000; flags A/B = the transportation advisor's airport / highway tech flags
+    P.capC = c.valves.v5000.capPct; P.capI = c.valves.v8000.capPct;
+    P.capFlagA = advisors_.transportTech(2); P.capFlagB = advisors_.transportTech(3);
+    // B (petitions 0x49/0x4A) = all occupants + road, highway, rail and power-line piece counts (spec 12 s10 counters)
+    {
+      int64_t net = 0;
+      for (const auto& p : world_.surface) {
+        if (!world_.inTiles(p.x, p.z)) continue;
+        if (c.isRoadTile(p.x, p.z) || c.isPowerLine(p.x, p.z)) net++;
+      }
+      P.totalBuildings = int64_t(world_.occupants.size()) + net;
+    }
   }
   {  // Ageing counts (spec 16 s2.6, 22 s3.13) [STATIC]: plants from the power layer's monthly pass, water facilities that reached
      // the ageing step, incinerators (global [Incinerator] DeclineAge) and WTE plants (their own Ld) in lot state 1.
@@ -593,6 +607,15 @@ void Game::applyCheat(const CheatResult& r) {
     long id = forcedMessageId(r.match);
     if (id > 0 && std::find(petitioners_.forced.begin(), petitioners_.forced.end(), uint32_t(id)) == petitioners_.forced.end())
       petitioners_.forced.push_back(uint32_t(id));
+  } else if (phrase.rfind("force ", 0) == 0 && phrase.size() > 6) {   // force <advisor> to say <n> (spec 27 s5.3, 22)
+    static const std::pair<const char*, uint32_t> names[] = {{"force mortimer to say", kAdvBudget}, {"force moe to say", kAdvTransport},
+        {"force constance to say", kAdvPlanner}, {"force maria to say", kAdvSafety}, {"force randall to say", kAdvDemographics},
+        {"force gus to say", kAdvUtilities}, {"force karen to say", kAdvEnvironment}};
+    for (const auto& nm : names)
+      if (phrase == nm.first) {
+        long id = forcedMessageId(r.match);
+        if (id > 0) advisors_.list(nm.second).forced.push_back(uint32_t(id));   // duplicates allowed, not saved
+      }
   } else if (phrase == "stop forcing advice") {
     petitioners_.forced.clear();
     for (uint32_t a : allAdvisorIds()) advisors_.list(a).forced.clear();
@@ -667,8 +690,8 @@ void Game::applyPetitionEffect(const PetitionEffect& e) {
       break;
     }
     case PetitionEffect::WorkerStrike: case PetitionEffect::PublicSafetyStrike: case PetitionEffect::TransitStrike: {
-      // Strike petitions (spec 22 s5.5) [INFERRED: accept = raise funding]: the department goes to 100 % funding when below;
-      // the services' strike machines end a strike once funding reaches 100 % (spec 17 s3.4, 20 s5.4, 18 s8.5).
+      // Strike petitions (spec 22 s5.5) [STATIC]: accept sets the department to 110 % when below; decline does nothing.
+      // Transit accept also forces the strike state to striking (counter 0) when it is not normal (original quirk).
       uint32_t d = 0;
       switch (e.petition) {
         case 0x9B: case 0x9C: d = dept::Health; break;
@@ -679,13 +702,16 @@ void Game::applyPetitionEffect(const PetitionEffect& e) {
         default: break;
       }
       if (const Department* dp = d ? c.budget.dept(d) : nullptr)
-        if (dp->funding < 100) {
-          c.budget.setFunding(d, 100);
-          if (d == dept::Police) c.police.setFunding(100);
-          else if (d == dept::Fire) c.fire.setFunding(100);
-          else if (d == dept::Transit && c.traffic) c.traffic->setTransitFunding(100);
+        if (dp->funding < 110) {
+          c.budget.setFunding(d, 110);
+          if (d == dept::Police) c.police.setFunding(110);
+          else if (d == dept::Fire) c.fire.setFunding(110);
+          else if (d == dept::Transit && c.traffic) c.traffic->setTransitFunding(110);
           dirty_ = true;
         }
+      if (d == dept::Transit && c.traffic && c.traffic->rec().strikeState != STRIKE_NORMAL) {
+        c.traffic->rec().strikeState = STRIKE_STRIKING; c.traffic->rec().strikeMonths = 0;
+      }
       break;
     }
     case PetitionEffect::StartParade: {   // 0x12D accepted: the holiday parade (spec 22 s5.5, 26) runs regardless of the disaster setting
