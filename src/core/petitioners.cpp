@@ -219,6 +219,13 @@ void PetitionerManager::weeklyCycle(const PetitionerInputs& in, GameRng& rng) {
 PetitionEffect PetitionerManager::answer(uint32_t id, bool accepted, int32_t) {
   PetitionEffect e;
   e.petition = id; e.accepted = accepted;
+  {  // voice reaction by character type t = the PetitionerExtraInfo `a` value (spec 22 s5.5) [STATIC]
+    static const int acc[19] = {0, 0, 0xA4, 0xA4, 0xA2, 0xA0, 0xA3, 0xA4, 0x9F, 0xA6, 0xA6, 0xA5, 0xA2, 0xA6, 0xA4, 0xA1, 0xA6, 0xA4, 0xA4};
+    static const int dec[19] = {0, 0, 0x9C, 0x9C, 0x9E, 0x9E, 0x9D, 0x9E, 0x9D, 0x9D, 0x9D, 0x9C, 0x9E, 0x9D, 0x9C, 0x9D, 0x9D, 0x9C, 0x9B};
+    PetitionerConfig::ExtraInfo xi = config.extraInfo(id);
+    const uint32_t t = xi.found ? xi.portrait : 0;
+    if (t >= 2 && t <= 18) e.voiceSound = accepted ? acc[t] : dec[t];
+  }
   if (PendingPetition* p = findMut(id)) { p->flags |= kFlagHidden; dropTicker(*p); }
   if (sink_) {
     PetitionText cat = accepted ? PetitionText::TickerX : PetitionText::TickerY;
