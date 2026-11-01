@@ -732,8 +732,25 @@ Tunnels (agent type 16006, cost key 16006) `[STATIC]`:
 
    Exit end uses the row for (d + 2) mod 4. Placement order at each end: plain A, plain B, span A,
    span B. The two plain pieces are placed with no span; the two span pieces get direction and
-   length as above. Exact tile offsets of the four pieces within the portal (which carriageway /
-   which adjacent tile) remain [OPEN]. No shipped file contains a highway tunnel.
+   length as above.
+
+   **Tile offsets within each portal** `[STATIC]`. Each end occupies a **2×2** block: two tiles
+   along the travel axis (approach + hillward) by the two carriageway tiles. Let P = (xₚ, zₚ) be
+   the max-x, max-z corner of that 2×2. Let δ be the piece direction written into the span
+   records at that end (entrance δ = d; exit δ = (d + 2) mod 4). Offsets from P:
+
+   | δ | plain A | plain B | span A | span B |
+   |---|---|---|---|---|
+   | 0 (−x) | (0, 0) | (0, −1) | (−1, 0) | (−1, −1) |
+   | 1 (−z) | (−1, 0) | (0, 0) | (−1, −1) | (0, −1) |
+   | 2 (+x) | (−1, −1) | (−1, 0) | (0, −1) | (0, 0) |
+   | 3 (+z) | (0, −1) | (−1, −1) | (0, 0) | (−1, 0) |
+
+   Equivalently: span pieces sit on the forward edge of the 2×2 (the edge faced by δ); plain
+   pieces sit on the opposite (approach) edge. On each edge, A is the right-hand tile and B the
+   left-hand tile when facing δ in the x/z plane (+x / +z). Matched entrance/exit span tiles lie
+   `walk_count + 1` steps apart along the travel axis (the span length). No shipped file contains
+   a highway tunnel.
 8. Bridges never carry span records. Their decks are ordinary pieces on every tile (above).
 
 ### 6.5 Demolition
@@ -1015,6 +1032,5 @@ recomputed after load `[INFERRED]`.
    tie-breaking of the allocation front.
 6. Closed: the per-occupant power consumption byte is attribute 0xC9 (§9.1 step 2).
 7. Collapse groups: exact trigger (demolition vs. disaster damage) and neighbourhood searched.
-8. Highway tunnel portal tile offsets within each end (which of the four pieces sits on which
-   carriageway / adjacent tile) — IDs, cost key 16006, hill h+8, and length = walk+1 are closed
-   (§6.4 item 7).
+8. Closed: highway tunnel portal tile offsets within each end (§6.4 item 7) — 2×2 footprint,
+   offsets from the max-x/max-z corner by piece-direction δ, A = right / B = left when facing δ.
