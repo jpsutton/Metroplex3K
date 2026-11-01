@@ -249,16 +249,20 @@ void Game::onMessageResult(MsgButton b) {
   int purpose = msgBoxPurpose_, action = msgBoxAction_;
   msgBoxPurpose_ = 0; msgBoxAction_ = 0;
   if (purpose == 1) { if (b == MsgButton::OK) askSaveBeforeLeave(action); return; }
-  if (purpose == 3) {
-    // Neighbour-connection offer (spec 12 §8): Yes adds the connection with the drag; No builds the drag alone.
+  if (purpose == 3 || purpose == 4 || purpose == 5) {
+    // Spec 12 §6.4 / §8: bridge/tunnel decline cancels the whole drag; connection decline still builds the drag.
     City& city = sim_.city();
-    city.connectionConfirmOverride = (b == MsgButton::Yes);
-    pendingConnAsk_ = false;
-    if (!pendingConnPath_.empty()) {
-      sim_.buildNetwork(pendingConnKind_, pendingConnPath_);
-      dirty_ = true;
+    pendingNetAsk_ = false;
+    auto path = std::move(pendingNetPath_);
+    NetworkKind nk = pendingNetKind_;
+    pendingNetPath_.clear();
+    pendingNetAskKind_ = City::NetworkConfirmKind::None;
+    if (purpose == 4 || purpose == 5) {
+      if (b == MsgButton::Yes && !path.empty()) { sim_.buildNetwork(nk, path); dirty_ = true; }
+      return;
     }
-    pendingConnPath_.clear();
+    city.connectionConfirmOverride = (b == MsgButton::Yes);
+    if (!path.empty()) { sim_.buildNetwork(nk, path); dirty_ = true; }
     city.connectionConfirmOverride.reset();
     return;
   }

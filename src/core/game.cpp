@@ -891,17 +891,31 @@ void Game::executeTool(int x0, int z0, int x1, int z1) {
       if (q.cost != 0 && q.cost > sim_.funds) { sound(32); break; }
       NetworkKind nk = NetworkKind(toolArg_ ? toolArg_ : 1);
       auto path = routePath(x0, z0, x1, z1);
-      // Spec 12 §8: yes/no dialog (029541F4:0x252 / 0x251) before accepting a neighbour connection.
-      if (!pendingConnAsk_) {
-        if (auto offer = sim_.city().peekConnectionOffer(nk, path)) {
-          pendingConnAsk_ = true;
-          pendingConnKind_ = nk;
-          pendingConnPath_ = path;
+      // Spec 12 §6.4 / §8: bridge, tunnel, then neighbour-connection yes/no dialogs before commit.
+      if (!pendingNetAsk_) {
+        City::NetworkConfirm conf = sim_.city().peekNetworkConfirm(nk, path);
+        if (conf.kind != City::NetworkConfirmKind::None) {
+          pendingNetAsk_ = true;
+          pendingNetAskKind_ = conf.kind;
+          pendingNetKind_ = nk;
+          pendingNetPath_ = path;
           WinEnv E = env();
-          std::string title = E.win(0x252, "Neighbor Connection");
-          std::string body = subst(E.win(0x251, "Connect to the neighboring city for %s?"), {E.money(offer->price)});
+          std::string title = E.win(0x252, "Confirm");
+          std::string body;
+          if (conf.kind == City::NetworkConfirmKind::Bridge) {
+            body = subst(E.win(conf.powerBridge ? 0x2D2u : 0x28Bu,
+                               conf.powerBridge ? "Build a power line bridge for %s?" : "Build a bridge for %s?"),
+                         {E.money(conf.price)});
+            msgBoxPurpose_ = 4;
+          } else if (conf.kind == City::NetworkConfirmKind::Tunnel) {
+            body = subst(E.win(0x253, "Build a tunnel for %s?"), {E.money(conf.price)});
+            msgBoxPurpose_ = 5;
+          } else {
+            title = E.win(0x252, "Neighbor Connection");
+            body = subst(E.win(0x251, "Connect to the neighboring city for %s?"), {E.money(conf.price)});
+            msgBoxPurpose_ = 3;
+          }
           msgBox_.open(title, body, 3, MessageBox::IconQuestion);
-          msgBoxPurpose_ = 3;
           break;
         }
       }

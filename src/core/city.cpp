@@ -1227,9 +1227,9 @@ bool City::buildNetworkFallback(NetworkKind k, const std::vector<std::pair<int, 
   return true;
 }
 
-std::optional<City::ConnectionOffer> City::peekConnectionOffer(NetworkKind k,
-                                                               const std::vector<std::pair<int, int>>& path) const {
-  if (!world_ || !cfg_.haveTiling || path.empty()) return std::nullopt;
+City::NetworkConfirm City::peekNetworkConfirm(NetworkKind k, const std::vector<std::pair<int, int>>& path) const {
+  NetworkConfirm out;
+  if (!world_ || !cfg_.haveTiling || path.empty()) return out;
   Tool tool = k == NetworkKind::Road ? TOOL_ROAD : k == NetworkKind::Rail ? TOOL_RAIL : k == NetworkKind::Power ? TOOL_POWER
             : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
   WorldNetworkMap map(*const_cast<World*>(world_), flagsFromRuleSets(cfg_.tiling));
@@ -1246,7 +1246,7 @@ std::optional<City::ConnectionOffer> City::peekConnectionOffer(NetworkKind k,
   static const int setOfKind[7] = {-1, 1, 0, 3, 4, 2, 5};
   for (int nk = 1; nk <= 6; nk++)
     for (uint32_t p : neighbours.conn[setOfKind[nk]]) map.setConnection(nk, int(p >> 16), int(p & 0xFFFF), true);
-  // Same straight-run split as buildNetwork: the first segment that would offer wins the preview.
+  // Same straight-run split as buildNetwork; commit order is bridge → tunnel → connection (spec 12 §6.2.6).
   std::vector<std::pair<std::pair<int, int>, std::pair<int, int>>> segs;
   size_t s = 0;
   for (size_t i = 2; i < path.size(); i++) {
@@ -1255,21 +1255,48 @@ std::optional<City::ConnectionOffer> City::peekConnectionOffer(NetworkKind k,
     if (dx0 != dx1 || dz0 != dz1) { segs.push_back({path[s], path[i - 1]}); s = i - 1; }
   }
   segs.push_back({path[s], path.back()});
+  const int nk = int(k);
+  const NetworkRules& nr = cfg_.tiling.nets[netKindToTable(nk)];
   const int tileCost = costs.cost(toolParams(tool).costKey);
   for (auto& sg : segs) {
     RoutedPath rp = routePath(map, tool, sg.first, sg.second);
     std::vector<PathTile> tiles = toPathTiles(rp, true);
     int dragPrice = int(tiles.size()) * tileCost;
-    ConnectionOfferPlan pl = planConnectionOffer(map, host, costs, int(k), tiles, dragPrice);
+    if (tiles.size() >= 4 && !nr.bridges.empty() &&
+        (nk == NK_ROAD || nk == NK_RAIL || nk == NK_POWER || nk == NK_HIGHWAY)) {
+      int passes = nk == NK_HIGHWAY ? 2 : 1, total = 0;
+      bool any = false;
+      for (int pass = 0; pass < passes; pass++) {
+        std::vector<PathTile> sub;
+        for (auto& t : tiles) if (nk != NK_HIGHWAY || t.carriage == pass) sub.push_back(t);
+        BridgePlan bp = planBridge(map, nr, nk, sub, costs, pass);
+        if (!bp.ok) continue;
+        total += bp.price;
+        any = true;
+      }
+      if (any && total <= host.funds()) {
+        out.kind = NetworkConfirmKind::Bridge;
+        out.price = total;
+        out.powerBridge = (nk == NK_POWER);
+        return out;
+      }
+    }
+    if (nk == NK_ROAD || nk == NK_RAIL || nk == NK_HIGHWAY) {
+      TunnelPlan tp = planTunnel(map, nk, tiles, costs);
+      if (tp.ok && tp.price <= host.funds()) {
+        out.kind = NetworkConfirmKind::Tunnel;
+        out.price = tp.price;
+        return out;
+      }
+    }
+    ConnectionOfferPlan pl = planConnectionOffer(map, host, costs, nk, tiles, dragPrice);
     if (pl.ok) {
-      ConnectionOffer o;
-      o.kind = pl.kind;
-      o.price = pl.price;
-      o.edge = pl.edge;
-      return o;
+      out.kind = NetworkConfirmKind::Connection;
+      out.price = pl.price;
+      return out;
     }
   }
-  return std::nullopt;
+  return out;
 }
 
 bool City::buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path) {

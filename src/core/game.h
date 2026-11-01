@@ -342,12 +342,13 @@ class Game {
   TipWindow tipWin_;
   CreditsWindow creditsWin_;
   MessageBox msgBox_;
-  int msgBoxPurpose_ = 0;   // 0 info, 1 "Now leaving" (OK/Cancel), 2 save before leaving (Yes/No), 3 neighbour connection (Yes/No)
+  int msgBoxPurpose_ = 0;   // 0 info, 1 "Now leaving", 2 save before leave, 3 connection, 4 bridge, 5 tunnel
   int msgBoxAction_ = 0;    // leave action the open prompt belongs to
-  // Pending network drag waiting on the neighbour-connection dialog (spec 12 §8).
-  bool pendingConnAsk_ = false;
-  NetworkKind pendingConnKind_ = NetworkKind::Road;
-  std::vector<std::pair<int, int>> pendingConnPath_;
+  // Pending network drag waiting on a bridge / tunnel / neighbour-connection dialog (spec 12 §6.4 / §8).
+  bool pendingNetAsk_ = false;
+  City::NetworkConfirmKind pendingNetAskKind_ = City::NetworkConfirmKind::None;
+  NetworkKind pendingNetKind_ = NetworkKind::Road;
+  std::vector<std::pair<int, int>> pendingNetPath_;
   PetitionerDialog petDlg_;
   std::unique_ptr<PetitionerView> petView_;
   uint32_t petViewId_ = 0;

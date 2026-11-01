@@ -98,14 +98,14 @@ class City {
   bool plop(uint32_t occId, int x, int z, int cost);
   bool plopAgent(uint32_t occId, uint32_t agentType, int sizeX, int sizeZ, int x, int z, int cost);
   bool buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path);
-  // Spec 12 §8: dry-run whether a drag would raise the neighbour-connection yes/no dialog.
-  // Price is the connection agent-type cost only (not the drag). Empty when no offer / funds short.
-  struct ConnectionOffer {
-    int kind = 0;
+  // Spec 12 §6.4 / §8: first yes/no confirm a drag would raise (bridge, then tunnel, then connection).
+  enum class NetworkConfirmKind { None, Bridge, Tunnel, Connection };
+  struct NetworkConfirm {
+    NetworkConfirmKind kind = NetworkConfirmKind::None;
     int price = 0;
-    int edge = -1;
+    bool powerBridge = false;   // bridge text 0x2D2 vs 0x28B
   };
-  std::optional<ConnectionOffer> peekConnectionOffer(NetworkKind k, const std::vector<std::pair<int, int>>& path) const;
+  NetworkConfirm peekNetworkConfirm(NetworkKind k, const std::vector<std::pair<int, int>>& path) const;
   // When set, ToolHost::confirmConnection returns this value (Game uses it after the yes/no dialog).
   // Nullopt = accept (tests, scripts, and non-interactive hosts).
   std::optional<bool> connectionConfirmOverride;
