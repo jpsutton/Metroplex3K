@@ -258,13 +258,14 @@ struct TestHost : ToolHost {
   long money = 100000;
   int charged = 0;
   bool bridgeOk = true;
+  bool connOk = true;
   std::vector<int> sounds;
   std::vector<std::string> msgs;
   int connPrice = -1, connKind = -1;
   long funds() const override { return money; }
   void charge(int a) override { charged += a; money -= a; }
   bool confirmBridge(int, bool) override { return bridgeOk; }
-  bool confirmConnection(int k, int p) override { connKind = k; connPrice = p; return true; }
+  bool confirmConnection(int k, int p) override { connKind = k; connPrice = p; return connOk; }
   void sound(int e) override { sounds.push_back(e); }
   void message(const std::string& s) override { msgs.push_back(s); }
 };
@@ -388,10 +389,24 @@ static void testConnections() {
   TestHost h;
   std::vector<PathTile> path;
   for (int x = 0; x <= 3; x++) { PathTile p; p.x = x; p.z = 2; path.push_back(p); }
+  // planConnectionOffer is a dry run (spec 12 §8): same eligibility, no side effects.
+  {
+    ConnectionOfferPlan pl = planConnectionOffer(m, h, c, NK_ROAD, path, 40);
+    CHECK(pl.ok && pl.price == 50 && pl.tiles.size() == 1 && pl.tiles[0] == std::make_pair(0, 2));
+    CHECK(!m.hasConnection(NK_ROAD, 0, 2) && h.charged == 0);
+  }
   int n = offerConnections(m, h, c, NK_ROAD, path, 40);
   CHECK(n == 1 && m.hasConnection(NK_ROAD, 0, 2) && h.charged == 50 && h.connPrice == 50);
   CHECK(h.sounds.size() == 1 && h.sounds[0] == 36);
   CHECK(offerConnections(m, h, c, NK_ROAD, path, 40) == 0);  // already exists
+  // Declined confirm: drag still builds elsewhere; no connection is written.
+  {
+    SimpleNetworkMap md(8, 8);
+    TestHost no;
+    no.connOk = false;
+    CHECK(offerConnections(md, no, c, NK_ROAD, path, 40) == 0);
+    CHECK(!md.hasConnection(NK_ROAD, 0, 2) && no.charged == 0 && no.connPrice == 50);
+  }
   // insufficient funds
   SimpleNetworkMap m2(8, 8);
   TestHost poor;

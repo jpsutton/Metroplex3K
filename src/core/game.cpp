@@ -889,7 +889,24 @@ void Game::executeTool(int x0, int z0, int x1, int z1) {
       City::Quote q = quoteTool(x0, z0, x1, z1);
       if (!q.valid) { sound(30); break; }
       if (q.cost != 0 && q.cost > sim_.funds) { sound(32); break; }
-      sim_.buildNetwork(NetworkKind(toolArg_ ? toolArg_ : 1), routePath(x0, z0, x1, z1)); dirty_ = true;
+      NetworkKind nk = NetworkKind(toolArg_ ? toolArg_ : 1);
+      auto path = routePath(x0, z0, x1, z1);
+      // Spec 12 §8: yes/no dialog (029541F4:0x252 / 0x251) before accepting a neighbour connection.
+      if (!pendingConnAsk_) {
+        if (auto offer = sim_.city().peekConnectionOffer(nk, path)) {
+          pendingConnAsk_ = true;
+          pendingConnKind_ = nk;
+          pendingConnPath_ = path;
+          WinEnv E = env();
+          std::string title = E.win(0x252, "Neighbor Connection");
+          std::string body = subst(E.win(0x251, "Connect to the neighboring city for %s?"), {E.money(offer->price)});
+          msgBox_.open(title, body, 3, MessageBox::IconQuestion);
+          msgBoxPurpose_ = 3;
+          break;
+        }
+      }
+      sim_.buildNetwork(nk, path);
+      dirty_ = true;
       break;
     }
     case ToolKind::Demolish: sim_.bulldoze(x0, z0, x1, z1); dirty_ = true; break;

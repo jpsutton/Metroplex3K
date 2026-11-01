@@ -1227,6 +1227,51 @@ bool City::buildNetworkFallback(NetworkKind k, const std::vector<std::pair<int, 
   return true;
 }
 
+std::optional<City::ConnectionOffer> City::peekConnectionOffer(NetworkKind k,
+                                                               const std::vector<std::pair<int, int>>& path) const {
+  if (!world_ || !cfg_.haveTiling || path.empty()) return std::nullopt;
+  Tool tool = k == NetworkKind::Road ? TOOL_ROAD : k == NetworkKind::Rail ? TOOL_RAIL : k == NetworkKind::Power ? TOOL_POWER
+            : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
+  WorldNetworkMap map(*const_cast<World*>(world_), flagsFromRuleSets(cfg_.tiling));
+  PlacementCosts costs = makeCosts(budget, cfg_);
+  struct Host : ToolHost {
+    const City& c;
+    explicit Host(const City& cc) : c(cc) {}
+    long funds() const override { return long(c.budget.funds); }
+    void charge(int) override {}
+    bool neighbourExists(int edge) const override {
+      return edge >= 0 && edge < 4 && c.neighbours.neighbours[edge].exists;
+    }
+  } host(*this);
+  static const int setOfKind[7] = {-1, 1, 0, 3, 4, 2, 5};
+  for (int nk = 1; nk <= 6; nk++)
+    for (uint32_t p : neighbours.conn[setOfKind[nk]]) map.setConnection(nk, int(p >> 16), int(p & 0xFFFF), true);
+  // Same straight-run split as buildNetwork: the first segment that would offer wins the preview.
+  std::vector<std::pair<std::pair<int, int>, std::pair<int, int>>> segs;
+  size_t s = 0;
+  for (size_t i = 2; i < path.size(); i++) {
+    int dx0 = path[i - 1].first - path[i - 2].first, dz0 = path[i - 1].second - path[i - 2].second;
+    int dx1 = path[i].first - path[i - 1].first, dz1 = path[i].second - path[i - 1].second;
+    if (dx0 != dx1 || dz0 != dz1) { segs.push_back({path[s], path[i - 1]}); s = i - 1; }
+  }
+  segs.push_back({path[s], path.back()});
+  const int tileCost = costs.cost(toolParams(tool).costKey);
+  for (auto& sg : segs) {
+    RoutedPath rp = routePath(map, tool, sg.first, sg.second);
+    std::vector<PathTile> tiles = toPathTiles(rp, true);
+    int dragPrice = int(tiles.size()) * tileCost;
+    ConnectionOfferPlan pl = planConnectionOffer(map, host, costs, int(k), tiles, dragPrice);
+    if (pl.ok) {
+      ConnectionOffer o;
+      o.kind = pl.kind;
+      o.price = pl.price;
+      o.edge = pl.edge;
+      return o;
+    }
+  }
+  return std::nullopt;
+}
+
 bool City::buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path) {
   lastFailNoMoney = false;
   if (path.empty()) return false;
@@ -1245,10 +1290,13 @@ bool City::buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& p
     bool neighbourExists(int edge) const override {
       return edge >= 0 && edge < 4 && c.neighbours.neighbours[edge].exists;
     }
+    bool confirmConnection(int, int) override {
+      return c.connectionConfirmOverride.value_or(true);
+    }
   } host(*this);
   // Neighbour connections (spec 12 s8): the map starts from the saved connection sets, and connections made by this drag are
-  // written back (set + the neighbour's count for that network, one per accepted offer). The offer is accepted at once
-  // (no modal dialog in this path yet).
+  // written back (set + the neighbour's count for that network, one per accepted offer). Game sets
+  // connectionConfirmOverride after the yes/no dialog (029541F4:0x252 / 0x251); nullopt auto-accepts.
   static const int setOfKind[7] = {-1, 1, 0, 3, 4, 2, 5};   // NK kind -> saved set index (rail, road, pipe, power, highway, subway)
   for (int nk = 1; nk <= 6; nk++)
     for (uint32_t p : neighbours.conn[setOfKind[nk]]) map.setConnection(nk, int(p >> 16), int(p & 0xFFFF), true);

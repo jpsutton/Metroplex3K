@@ -152,6 +152,17 @@ OnRampPlan planOnRamp(const INetworkMap& m, int ax, int az);
 int edgeNeighbour(int x, int z, int W, int H);
 // Sound event for a created connection (36 road/highway, 37 rail/subway, 46 power, 45 pipe).
 int connectionSoundEvent(int kind);
+// Dry-run of §8 offer eligibility (no confirm, charge, or map write).
+struct ConnectionOfferPlan {
+  bool ok = false;
+  bool insufficientFunds = false;
+  int kind = 0;
+  int price = 0;
+  int edge = -1;
+  std::vector<std::pair<int, int>> tiles;
+};
+ConnectionOfferPlan planConnectionOffer(const INetworkMap& m, const ToolHost& host, const PlacementCosts& costs,
+                                        int kind, const std::vector<PathTile>& path, int dragPrice);
 // Offers/creates connections at drag ends (section 8). Returns number of connections added.
 int offerConnections(INetworkMap& m, ToolHost& host, const PlacementCosts& costs, int kind,
                      const std::vector<PathTile>& path, int dragPrice);

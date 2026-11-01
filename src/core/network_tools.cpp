@@ -510,30 +510,30 @@ int connectionSoundEvent(int kind) {
   return 0;
 }
 
-int offerConnections(INetworkMap& m, ToolHost& host, const PlacementCosts& costs, int kind,
-                     const std::vector<PathTile>& path, int dragPrice) {
-  if (path.empty()) return 0;
+ConnectionOfferPlan planConnectionOffer(const INetworkMap& m, const ToolHost& host, const PlacementCosts& costs,
+                                        int kind, const std::vector<PathTile>& path, int dragPrice) {
+  ConnectionOfferPlan pl;
+  pl.kind = kind;
+  if (path.empty()) return pl;
   const int W = m.width(), H = m.height();
   auto isEdge = [&](int x, int z) { return x == 0 || z == 0 || x == W - 1 || z == H - 1; };
-  std::vector<std::pair<int, int>> tiles;
-  int edge = -1;
   if (kind == NK_HIGHWAY) {
     auto scan = [&](size_t from, bool fwd) {
       for (int i = 0; i < 4; i++) {
         long idx = fwd ? long(from) + i : long(path.size()) - 1 - i;
         if (idx < 0 || idx >= long(path.size())) break;
         auto& t = path[size_t(idx)];
-        if (isEdge(t.x, t.z) && tiles.size() < 2 &&
-            std::find(tiles.begin(), tiles.end(), std::make_pair(t.x, t.z)) == tiles.end())
-          tiles.push_back({t.x, t.z});
+        if (isEdge(t.x, t.z) && pl.tiles.size() < 2 &&
+            std::find(pl.tiles.begin(), pl.tiles.end(), std::make_pair(t.x, t.z)) == pl.tiles.end())
+          pl.tiles.push_back({t.x, t.z});
       }
     };
     scan(0, true);
     scan(0, false);
-    if (tiles.empty()) return 0;
-    for (auto& t : tiles) if (m.hasConnection(kind, t.first, t.second)) return 0;
-    edge = edgeNeighbour(tiles[0].first, tiles[0].second, W, H);
-    if (edge < 0 || !host.neighbourExists(edge)) return 0;
+    if (pl.tiles.empty()) return pl;
+    for (auto& t : pl.tiles) if (m.hasConnection(kind, t.first, t.second)) { pl.tiles.clear(); return pl; }
+    pl.edge = edgeNeighbour(pl.tiles[0].first, pl.tiles[0].second, W, H);
+    if (pl.edge < 0 || !host.neighbourExists(pl.edge)) { pl.tiles.clear(); return pl; }
   } else {
     // ends of the drag; only one connection per drag
     std::vector<std::pair<int, int>> ends = {{path.front().x, path.front().z}};
@@ -543,23 +543,35 @@ int offerConnections(INetworkMap& m, ToolHost& host, const PlacementCosts& costs
       int ed = edgeNeighbour(e.first, e.second, W, H);
       if (ed < 0 || !host.neighbourExists(ed)) continue;
       if (m.hasConnection(kind, e.first, e.second)) continue;
-      tiles.push_back(e);
-      edge = ed;
-      break;  // no connection made yet by this drag
+      pl.tiles.push_back(e);
+      pl.edge = ed;
+      break;
     }
-    if (tiles.empty()) return 0;
+    if (pl.tiles.empty()) return pl;
   }
-  int price = costs.cost(connectionCostKey(kind));
-  if (price != 0 && host.funds() < long(dragPrice) + price) {
+  pl.price = costs.cost(connectionCostKey(kind));
+  if (pl.price != 0 && host.funds() < long(dragPrice) + pl.price) {
+    pl.insufficientFunds = true;
+    pl.tiles.clear();
+    return pl;
+  }
+  pl.ok = true;
+  return pl;
+}
+
+int offerConnections(INetworkMap& m, ToolHost& host, const PlacementCosts& costs, int kind,
+                     const std::vector<PathTile>& path, int dragPrice) {
+  ConnectionOfferPlan pl = planConnectionOffer(m, host, costs, kind, path, dragPrice);
+  if (pl.insufficientFunds) {
     host.message("insufficient funds: neighbour connection");
     return 0;
   }
-  if (!host.confirmConnection(kind, price)) return 0;
-  for (auto& t : tiles) m.setConnection(kind, t.first, t.second, true);
-  if (price) host.charge(price);
+  if (!pl.ok) return 0;
+  if (!host.confirmConnection(kind, pl.price)) return 0;
+  for (auto& t : pl.tiles) m.setConnection(kind, t.first, t.second, true);
+  if (pl.price) host.charge(pl.price);
   host.sound(connectionSoundEvent(kind));
-  (void)edge;
-  return int(tiles.size());
+  return int(pl.tiles.size());
 }
 
 int removeConnectionsAt(INetworkMap& m, int x, int z) {

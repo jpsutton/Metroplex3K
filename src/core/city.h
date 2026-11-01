@@ -9,6 +9,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -97,6 +98,17 @@ class City {
   bool plop(uint32_t occId, int x, int z, int cost);
   bool plopAgent(uint32_t occId, uint32_t agentType, int sizeX, int sizeZ, int x, int z, int cost);
   bool buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path);
+  // Spec 12 §8: dry-run whether a drag would raise the neighbour-connection yes/no dialog.
+  // Price is the connection agent-type cost only (not the drag). Empty when no offer / funds short.
+  struct ConnectionOffer {
+    int kind = 0;
+    int price = 0;
+    int edge = -1;
+  };
+  std::optional<ConnectionOffer> peekConnectionOffer(NetworkKind k, const std::vector<std::pair<int, int>>& path) const;
+  // When set, ToolHost::confirmConnection returns this value (Game uses it after the yes/no dialog).
+  // Nullopt = accept (tests, scripts, and non-interactive hosts).
+  std::optional<bool> connectionConfirmOverride;
   bool bulldoze(int x0, int z0, int x1, int z1);
 
   // ---- quotes (spec 09 5.1): dry-run of the player actions. valid=false: nothing in the area is legal.

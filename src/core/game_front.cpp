@@ -249,6 +249,19 @@ void Game::onMessageResult(MsgButton b) {
   int purpose = msgBoxPurpose_, action = msgBoxAction_;
   msgBoxPurpose_ = 0; msgBoxAction_ = 0;
   if (purpose == 1) { if (b == MsgButton::OK) askSaveBeforeLeave(action); return; }
+  if (purpose == 3) {
+    // Neighbour-connection offer (spec 12 §8): Yes adds the connection with the drag; No builds the drag alone.
+    City& city = sim_.city();
+    city.connectionConfirmOverride = (b == MsgButton::Yes);
+    pendingConnAsk_ = false;
+    if (!pendingConnPath_.empty()) {
+      sim_.buildNetwork(pendingConnKind_, pendingConnPath_);
+      dirty_ = true;
+    }
+    pendingConnPath_.clear();
+    city.connectionConfirmOverride.reset();
+    return;
+  }
   if (purpose != 2) return;
   if (b != MsgButton::Yes) { doLeave(action); return; }
   if (!currentFile_.empty()) { saveCurrent(currentFile_.stem().string(), currentFile_.parent_path()); if (!dirty_) doLeave(action); return; }   // failed save: stay
