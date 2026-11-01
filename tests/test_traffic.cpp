@@ -206,6 +206,19 @@ static void testTransit() {
   s.rec().liveSurface[size_t(3) * 10 + 2] = 5;
   s.removeStation(kRailStationType, TripRect{3, 2, 3, 2});
   CHECK(!(s.flags(3, 2) & TF_STATION) && s.liveSurface(3, 2) == 0);
+  // Spec 18 §11 piece removal: clearNetwork zeroes the piece's own layer and the listed flag bits;
+  // span is never cleared.
+  TrafficSim n(4, 4, p, 9);
+  n.flags(1, 1) = uint16_t(TF_ROAD | TF_DAMAGED | TF_PROP_A | TF_ROAD_EXIT | TF_SPAN);
+  n.rec().liveSurface[size_t(1) * 4 + 1] = 40;
+  n.rec().snapSurface[size_t(1) * 4 + 1] = 30;
+  n.clearNetwork(TripRect{1, 1, 1, 1}, uint16_t(TF_ROAD | TF_DAMAGED | TF_PROP_A | TF_ROAD_EXIT), true, false, false);
+  CHECK(n.flags(1, 1) == TF_SPAN && n.liveSurface(1, 1) == 0 && n.snapSurface(1, 1) == 0);
+  n.flags(2, 2) = uint16_t(TF_HIGHWAY | TF_ACCESS | TF_HWY_EXIT);
+  n.rec().liveHighway[size_t(2) * 4 + 2] = 55;
+  n.clearNetwork(TripRect{2, 2, 2, 2}, uint16_t(TF_HIGHWAY | TF_ACCESS | TF_DAMAGED | TF_PROP_A | TF_HWY_EXIT), false, true,
+                 false);
+  CHECK(!(n.flags(2, 2) & (TF_HIGHWAY | TF_ACCESS | TF_HWY_EXIT)) && n.liveHighway(2, 2) == 0);
 }
 
 static void testSpansAndHighway() {

@@ -801,9 +801,14 @@ void City::damageOccupant(int i, uint32_t st) {
 void City::removeOccupantIdx(const std::set<int>& kill) {
   for (auto it = kill.rbegin(); it != kill.rend(); ++it) {
     const Occupant o = world_->occupants[size_t(*it)];
-    // Removing a non-transport building clears the trip-tried and trip-ok bits of its lot (spec 18 s11) [STATIC], so a
-    // building later placed there is "untried" and routes on every firing until it has a result (s4.4 step 2).
-    if (traffic && !stationFlagsForType(o.agentType)) traffic->clearLot(TripRect{o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1});
+    // Spec 18 §11 [STATIC]: a station clears its flags and zeroes surface density on the footprint;
+    // any other non-transport building clears the lot's trip-tried / trip-ok bits.
+    if (traffic) {
+      if (stationFlagsForType(o.agentType))
+        traffic->removeStation(o.agentType, TripRect{o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1});
+      else
+        traffic->clearLot(TripRect{o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1});
+    }
     for (int dx = 0; dx < o.sizeX; dx++)
       for (int dz = 0; dz < o.sizeZ; dz++)
         if (inMap(o.x + dx, o.z + dz) && world_->zone[idx(o.x + dx, o.z + dz)] == 22) world_->zone[idx(o.x + dx, o.z + dz)] = 0;
@@ -1120,6 +1125,31 @@ bool City::bulldoze(int x0, int z0, int x1, int z1) {
   for (auto& kv : netTiles)
     for (auto& t : kv.second)
       for (auto& set : neighbours.conn) set.erase((uint32_t(t.first) << 16) | uint32_t(t.second));
+  // Spec 18 §11 [STATIC]: each removed piece clears its flag bits and zeroes its own network layer's
+  // live + snapshot density on the footprint (span 0x4000 is never cleared here).
+  if (traffic) {
+    for (auto& kv : netTiles) {
+      for (auto& t : kv.second) {
+        TripRect r{t.first, t.second, t.first, t.second};
+        switch (kv.first) {
+          case 1:  // road
+            traffic->clearNetwork(r, uint16_t(TF_ROAD | TF_DAMAGED | TF_PROP_A | TF_ROAD_EXIT), true, false, false);
+            break;
+          case 2:  // rail
+            traffic->clearNetwork(r, uint16_t(TF_RAIL | TF_PROP_A | TF_RAIL_EXIT), true, false, false);
+            break;
+          case 4:  // highway (on-ramp access bit cleared with the highway piece)
+            traffic->clearNetwork(r, uint16_t(TF_HIGHWAY | TF_ACCESS | TF_DAMAGED | TF_PROP_A | TF_HWY_EXIT), false, true,
+                                  false);
+            break;
+          case 5:  // subway (when tracked as a transport kind)
+            traffic->clearNetwork(r, uint16_t(TF_SUBWAY | TF_SUBWAY_PROP_A | TF_SUBWAY_EXIT), false, false, true);
+            break;
+          default: break;
+        }
+      }
+    }
+  }
   budget.funds -= int64_t(kill.size()) + count;
   for (int oi : kill) {
     const Occupant& o = world_->occupants[size_t(oi)];
@@ -1410,6 +1440,18 @@ void City::rebuildTraffic() {
     if (b.makesTrips()) tripBuildings_.push_back(b);
   }
   traffic->rebuildDestinations(tripBuildings_);
+  // Spec 18 §11 [STATIC]: removing a network piece zeroes that layer's live and snapshot density on its
+  // footprint. rebuildTraffic is the common path after bulldoze/retile; clear any layer that no longer
+  // has a piece (road/rail/station share surface; highway and subway are their own). TF_SPAN is left alone.
+  auto& tr = traffic->rec();
+  for (int x = 0; x < W; x++)
+    for (int z = 0; z < H; z++) {
+      size_t k = size_t(x) * H + z;
+      uint16_t f = traffic->flags(x, z);
+      if (!(f & (TF_ROAD | TF_RAIL | TF_STATION | TF_XFER))) tr.snapSurface[k] = tr.liveSurface[k] = 0;
+      if (!(f & TF_HIGHWAY)) tr.snapHighway[k] = tr.liveHighway[k] = 0;
+      if (!(f & TF_SUBWAY)) tr.snapSubway[k] = tr.liveSubway[k] = 0;
+    }
 }
 
 void City::refresh(bool force) {

@@ -129,8 +129,15 @@ int main() {
   CHECK(c.budget.tax[0].rate == 12 && c.budget.tax[2].rate == 12);
 
   // --- bulldoze ---
+  // Spec 18 §11: removing a road zeroes that tile's surface live + snapshot density; neighbours keep theirs.
+  CHECK(c.traffic);
+  c.traffic->rec().liveSurface[size_t(15) * 96 + 40] = 80;
+  c.traffic->rec().snapSurface[size_t(15) * 96 + 40] = 70;
+  c.traffic->rec().liveSurface[size_t(25) * 96 + 40] = 90;
   CHECK(s.bulldoze(10, 40, 20, 40));
   CHECK(!s.isRoadTile(15, 40) && s.isRoadTile(25, 40));
+  CHECK(c.traffic->liveSurface(15, 40) == 0 && c.traffic->rec().snapSurface[size_t(15) * 96 + 40] == 0);
+  CHECK(c.traffic->liveSurface(25, 40) == 90);
   CHECK(c.bulldoze(42, 30, 45, 33));   // plant
   CHECK(s.occupantAt(43, 31) < 0);
   for (int d = 0; d < 40; d++) s.tickDay();
