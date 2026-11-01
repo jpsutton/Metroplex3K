@@ -158,6 +158,14 @@ class GrowthCity {
   // placing garbage moves it from the pending amount S onto the tile (and out of the room D).
   // Spec 15 s7 interim [OPEN]: in a loaded city an airport rule call on a lot inside an existing airport places nothing.
   virtual bool insideLoadedAirport(int, int) const { return false; }
+  // Seaport pier support (spec 15 s5.5, 10 s6.3): water test (any corner water >= ground), deep-water table, any occupant
+  // or network piece on the tile, the zone layer's place routine without the flatness test (lot state 1), and the spacing
+  // grid's overlap-counter add.
+  virtual bool waterTile(int, int) const { return false; }
+  virtual bool deepWater(int, int) const { return false; }
+  virtual bool tileOccupied(int, int) const { return false; }
+  virtual bool placePier(const BuildingChoice&, int, int) { return false; }
+  virtual bool spacingAdd(int, int) { return true; }
   virtual bool landfillRegistered(int, int) const { return false; }
   virtual void registerLandfill(int, int) {}
   virtual void creditLandfillRoom(int) {}

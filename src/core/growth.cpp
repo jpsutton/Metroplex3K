@@ -907,8 +907,79 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
         }
       return placed;
     }
-    case 0xC2D3FD7E:
-      return 0;  // seaport pier: piece order [OPEN] (spec 15 s5.5)
+    case 0xC2D3FD7E: {  // seaport pier (spec 15 s5.5) [STATIC]; never reports success
+      struct PierSet { std::vector<BuildingChoice> Q0, Q1, H0, H1, B0, B1; };
+      std::map<int, PierSet> fams;
+      for (const auto* v : {&L.filler, &L.small, &L.large})
+        for (const auto& m : *v) {
+          if (std::max(m.sizeX, m.sizeZ) != 1 || !(m.flagWord & 0x200)) continue;
+          const bool f4 = (m.flagWord & 0x400) != 0, f8 = (m.flagWord & 0x800) != 0;
+          if (!f4 && !f8) continue;
+          PierSet& ps = fams[m.family];
+          if (m.line == 7) (f4 ? ps.Q0 : ps.Q1).push_back(m);
+          else if (m.line == 8) (f4 ? ps.H0 : ps.H1).push_back(m);
+          else if (m.line == 9) (f4 ? ps.B1 : ps.B0).push_back(m);
+        }
+      std::vector<const PierSet*> sets;
+      for (auto& kv : fams)
+        if (!kv.second.B0.empty() && !kv.second.B1.empty() && !kv.second.H0.empty() && !kv.second.H1.empty() &&
+            (!kv.second.Q0.empty() || !kv.second.Q1.empty()))
+          sets.push_back(&kv.second);
+      if (sets.empty()) return 0;
+      // 1. shore run: sides low-z (0,-1), high-z (0,+1), high-x (+1,0), low-x (-1,0); longest run, strictly longer wins
+      static const int SD[4][2] = {{0, -1}, {0, 1}, {1, 0}, {-1, 0}};
+      int bestSide = -1, bestStart = 0, bestLen = 0;
+      for (int sd = 0; sd < 4; sd++) {
+        const int dx = SD[sd][0], dz = SD[sd][1];
+        const bool alongX = dz != 0;
+        const int Ln = alongX ? r.w() : r.h();
+        auto edgeTile = [&](int t, int& x, int& z) {
+          if (alongX) { x = r.x0 + t; z = dz < 0 ? r.z0 : r.z1; } else { z = r.z0 + t; x = dx < 0 ? r.x0 : r.x1; }
+        };
+        int run = 0, runStart = 0;
+        for (int t = 0; t < Ln; t++) {
+          int x, z; edgeTile(t, x, z);
+          bool ok = true;
+          for (int k = 1; k <= 5 && ok; k++) {
+            int tx = x + k * dx, tz = z + k * dz;
+            if (tx < 0 || tz < 0 || tx >= c.mapW() || tz >= c.mapH() || !c.waterTile(tx, tz) || c.tileOccupied(tx, tz)) ok = false;
+          }
+          if (ok && !c.deepWater(x + 5 * dx, z + 5 * dz)) ok = false;
+          if (ok) { if (run == 0) runStart = t; run++; if (run > bestLen) { bestLen = run; bestSide = sd; bestStart = runStart; } }
+          else run = 0;
+        }
+      }
+      if (bestSide < 0 || bestLen < 5) return 0;
+      const int L = std::min(bestLen, 12);
+      // 2. pieces, once per call
+      const PierSet& ps = *sets[size_t(rng.rand(int(sets.size())))];
+      BuildingChoice shore, head, body;
+      auto pick = [&](const std::vector<BuildingChoice>& v, int rot) { BuildingChoice b = v[size_t(rng.rand(int(v.size())))]; b.rot = rot; return b; };
+      switch (bestSide) {
+        case 0: shore = !ps.Q0.empty() ? pick(ps.Q0, 2) : pick(ps.Q1, 3); head = pick(ps.H0, 2); body = pick(ps.B0, 2); break;
+        case 1: shore = !ps.Q0.empty() ? pick(ps.Q0, 0) : pick(ps.Q1, 1); head = pick(ps.H0, 0); body = pick(ps.B0, 0); break;
+        case 2: shore = !ps.Q1.empty() ? pick(ps.Q1, 0) : pick(ps.Q0, 1); head = pick(ps.H1, 0); body = pick(ps.B1, 0); break;
+        default: shore = !ps.Q1.empty() ? pick(ps.Q1, 2) : pick(ps.Q0, 3); head = pick(ps.H1, 2); body = pick(ps.B1, 2); break;
+      }
+      // 3. laying
+      const int dx = SD[bestSide][0], dz = SD[bestSide][1];
+      const bool alongX = dz != 0;
+      int g = 5, nPlaced = 0, p = 0;
+      bool lastPier = false;
+      for (int t = bestStart; t < bestStart + L; t++) {
+        int x = alongX ? r.x0 + t : (dx < 0 ? r.x0 : r.x1), z = alongX ? (dz < 0 ? r.z0 : r.z1) : r.z0 + t;
+        const int tx = x + dx, tz = z + dz;
+        bool pier = false;
+        if (g >= 5) pier = int(rng.rand(L)) >= L - nPlaced - 1 + p;
+        if (c.tileOccupied(tx, tz) || !c.placePier(pier ? head : shore, tx, tz)) continue;
+        nPlaced++;
+        if (pier && !lastPier && c.spacingAdd(tx, tz)) {
+          for (int k = 2; k <= 5; k++) { int bx = x + k * dx, bz = z + k * dz; if (!c.tileOccupied(bx, bz)) c.placePier(body, bx, bz); }
+          g = 0; p++; lastPier = true;
+        } else { g++; lastPier = false; }
+      }
+      return 0;   // the pier rule never reports success: the next rule is still tried
+    }
     default: break;
   }
   // Scatter rules (section 5.4)

@@ -337,6 +337,36 @@ class GrowthAdapter : public growth::GrowthCity {
     o.agentType = b.agentType; o.state = 4;
     c_.addOccupant(o);
   }
+  bool waterTile(int x, int z) const override {
+    if (!c_.inMap(x, z)) return false;
+    const World& w = *c_.world_;
+    for (int dx = 0; dx < 2; dx++) for (int dz = 0; dz < 2; dz++) if (w.waterAt(x + dx, z + dz) >= w.altAt(x + dx, z + dz) && w.waterAt(x + dx, z + dz) > 0) return true;
+    return false;
+  }
+  // Deep-water table (spec 15 s5.5) [STATIC per vertex: water >= 8, ground <= water - 8, water == sea level]; keyed by any
+  // corner of the tile [INFERRED, keying OPEN].
+  bool deepWater(int x, int z) const override {
+    if (!c_.inMap(x, z)) return false;
+    const World& w = *c_.world_;
+    for (int dx = 0; dx < 2; dx++) for (int dz = 0; dz < 2; dz++) {
+      int wa = w.waterAt(x + dx, z + dz), g = w.altAt(x + dx, z + dz);
+      if (wa >= 8 && g <= wa - 8 && wa == w.seaLevel) return true;
+    }
+    return false;
+  }
+  bool tileOccupied(int x, int z) const override {
+    return c_.inMap(x, z) && (c_.occupantAt(x, z) >= 0 || c_.isRoadTile(x, z) || c_.isPowerLine(x, z));
+  }
+  bool placePier(const growth::BuildingChoice& b, int x, int z) override {
+    for (int dx = 0; dx < b.sizeX; dx++) for (int dz = 0; dz < b.sizeZ; dz++) if (!c_.inMap(x + dx, z + dz)) return false;
+    Occupant o;
+    o.x = x; o.z = z; o.y = c_.world_->altAt(x, z); o.rot = b.rot & 3;
+    o.sizeX = b.sizeX; o.sizeZ = b.sizeZ; o.occId = b.occId; o.keyType = b.port ? T_OCC_ATTR_PORT : T_OCC_ATTR;
+    o.agentType = b.agentType; o.state = 1;
+    c_.addOccupant(o);
+    return true;
+  }
+  bool spacingAdd(int x, int z) override { return c_.spacingAdd(x, z); }
   void removeBuilding(const growth::LotInfo& lot) override {
     int oi = c_.occupantAt(lot.ax, lot.az);
     if (oi < 0) return;
@@ -692,6 +722,23 @@ void City::applyRoadCondition(int percent) {
     }
   }
   if (changed) netDirty_ = true;   // rebuild the traffic flags (0x80) and network classification
+}
+
+bool City::spacingAdd(int x, int z) {
+  if (!world_) return false;
+  const int bw = world_->W / 4, bh = world_->H / 4;
+  if (spacing_.size() != size_t(bw) * bh) spacing_.assign(size_t(bw) * bh, 0);
+  std::vector<size_t> cells;
+  for (int i = -2; i <= 2; i++)
+    for (int j = -2; j <= 2; j++) {
+      int tx = x + 4 * i, tz = z + 4 * j;
+      if (!inMap(tx, tz)) continue;
+      size_t k = size_t(tx / 4) * bh + size_t(tz / 4);
+      if (k < spacing_.size()) cells.push_back(k);
+    }
+  for (size_t k : cells) if (((spacing_[k] >> 2) & 15) == 15) return false;
+  for (size_t k : cells) spacing_[k] = uint8_t((spacing_[k] & ~0x3C) | ((((spacing_[k] >> 2) & 15) + 1) << 2));
+  return true;
 }
 
 double City::roadCondition() const {
@@ -1789,6 +1836,17 @@ void City::loadRecords() {
   if (const Department* p = budget.dept(dept::Police)) police.setFunding(p->funding);
   if (const Department* f = budget.dept(dept::Fire)) fire.setFunding(f->funding);
   tryLoad(keys::Flammability, [&](const uint8_t* p, size_t n) { flammability.parse(p, n); return true; });
+  {  // spacing grid (spec 10 s6.3): 8-byte header, then (W/4)(H/4) cells, rows last-first
+    spacing_.clear();
+    if (const InnerRecord* r = raw.findInner(keys::Spacing)) {
+      const int bw = W / 4, bh = H / 4;
+      if (r->data.size() >= 8 + size_t(bw) * bh) {
+        spacing_.assign(size_t(bw) * bh, 0);
+        for (int bx = 0; bx < bw; bx++)
+          for (int bz = 0; bz < bh; bz++) spacing_[size_t(bx) * bh + bz] = r->data[8 + size_t(bw - 1 - bx) * bh + bz];
+      }
+    }
+  }
 }
 
 void City::flush(World& w) {
@@ -1817,6 +1875,15 @@ void City::flush(World& w) {
   put(kPoliceKey, police.serialize());
   put(kFireKey, fire.serialize());
   put(keys::Flammability, flammability.serialize());
+  if (!spacing_.empty())
+    if (const InnerRecord* r = st.findInner(keys::Spacing)) {
+      Bytes d = r->data;
+      const int bw = w.W / 4, bh = w.H / 4;
+      if (d.size() >= 8 + size_t(bw) * bh)
+        for (int bx = 0; bx < bw; bx++)
+          for (int bz = 0; bz < bh; bz++) d[8 + size_t(bw - 1 - bx) * bh + bz] = spacing_[size_t(bx) * bh + bz];
+      st.setInner(keys::Spacing, std::move(d));
+    }
 }
 
 }  // namespace m3k

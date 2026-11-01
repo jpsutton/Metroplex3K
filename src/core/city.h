@@ -232,6 +232,11 @@ class City {
   void monthlyTraffic(); void monthlyBudget(); void monthlyPower(); void monthlyWater();
   void monthlyPollution(); void monthlyCrime();
   void updateTreatmentCaps();
+ public:
+  // Spacing grid 01FD7A8C (spec 10 s6.3): one byte per 4 x 4 block; bits 2-5 = overlap counter. add(): if any block of
+  // the 5 x 5-block neighbourhood has 15, refuse; else +1 on all of them.
+  bool spacingAdd(int x, int z);
+ private:
 
   World* world_ = nullptr;
   GameData* game_ = nullptr;
@@ -250,6 +255,7 @@ class City {
   std::vector<uint32_t> hwyMatrix_;               // per tile: surface piece's 0x136 connection matrix (spec 18 s5.4)
   std::vector<uint8_t> hwyRot_, hwyPiece_;         // per tile: piece rotation, piece-with-matrix marker
   std::vector<uint16_t> span_;                     // per tile: span record (dir | len << 2) of a surface piece, 0 = none
+  std::vector<uint8_t> spacing_;                   // spacing grid cells, index bx * (H/4) + bz (empty: no record)
 
   std::vector<int32_t> occ_;
   std::vector<uint8_t> transport_, powerLine_, pipe_;
