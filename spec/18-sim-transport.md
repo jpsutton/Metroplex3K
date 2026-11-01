@@ -593,17 +593,25 @@ A is added to the live density of every tile of every node on the path. The laye
 
 Each update is new = clamp(old + A, 0, `TrafficMaxDensity`), computed in 16-bit signed arithmetic [STATIC].
 Fares are credited per **node**, not per tile. A fare is the effective per-trip fare of §8.1,
-added to a monthly fare accumulator. Only nodes whose occupant is a transport occupant credit
-anything.
+added to a monthly fare accumulator.
+
+**Transport-occupant gate** [STATIC]. For each path node of a successful counted trip, before any
+density or fare is applied, the node's occupant pointer is tested: it must be non-null and its
+run-time occupant flag word (`13-buildings-occupants.md` §3.1a) must have bit **0x4000** set.
+That bit is the transport/network-occupant flag (present on network pieces other than pipes and
+plain power lines, and on transit stations `0x4104`). It is **not** the network-grid span flag
+0x4000 of §3.1. If the test fails, the node is skipped entirely (no density, no fare). Ordinary
+road/rail/highway/subway pieces and stations pass; the origin lot (a building, mode 0x80) fails
+and also has no fare/density row in the table above. Correction: an earlier sentence said "network
+piece" for this gate; stations are buildings with bit 0x4000 and must pass too.
 
 Buses therefore put no density on roads; bus riders load only the stops. Mode-3/0x43 road tiles
 (the junction tiles) also receive no density from passing trips.
 Further details [STATIC]: density and fares are added only on a **successful** counted trip; a
-failed trip adds nothing. They are added per tile of each node rectangle, but only for nodes
-whose occupant is a network piece. Every node after the origin is a single tile, so in practice
-"per node" = "per tile". The origin node (the lot rectangle, mode 0x80) and a destination
-building tile receive nothing. A span step moves the 1-tile rectangle by *L* tiles; it does not
-widen it.
+failed trip adds nothing. They are added per tile of each node rectangle, after the gate above.
+Every node after the origin is a single tile, so in practice "per node" = "per tile". The origin
+node (the lot rectangle, mode 0x80) and a destination building tile receive nothing. A span step
+moves the 1-tile rectangle by *L* tiles; it does not widen it.
 
 ### 6.2 Monthly decay
 
@@ -684,6 +692,32 @@ exists, and is used by the map views.
 ### 7.3 Fare income
 
 At each month-end the fare accumulator is reported to the budget (§8.3) and reset.
+
+### 7.3a London fare trajectory after load [DATA]
+
+On the W5 London run (shipped city, N = 256), traffic-record `faresLast` / `faresCur` /
+`avgTransit` / funding / strike / enacted ordinances:
+
+| save | day | faresLast | faresCur | avgT | avgR | failRatio | strike | roads% | transit% |
+|---|---|---|---|---|---|---|---|---|---|
+| s01 | 1 | 908.03 | 199.03 | 122 | 34 | 0.027 | idle (2) | 103 | 102 |
+| s02 | 36 | 771.26 | 914.94 | 120 | 34 | 0.023 | idle | 103 | 102 |
+| s03 | 68 | 936.18 | 995.98 | 125 | 35 | 0.021 | idle | 103 | 102 |
+| s05 | 139 | 1018.13 | 0.00 | 127 | 36 | 0.019 | idle | 103 | 102 |
+| s10 | 311 | 930.67 | 913.51 | 124 | 36 | 0.019 | idle | 103 | 102 |
+
+Enacted ordinances are unchanged across these saves (Parking Fines `0x015B4D1E` and five others;
+**not** Subsidized Mass Transit `0xC2D1B025`, **not** Shuttle Service) [DATA]. So the s01→s02
+drop of `faresLast` (908 → 771) is **not** a fare-rate, ordinance, strike or funding change:
+`faresLast` at s01 is the shipped city's previous month; 771 is the first completed month of the
+run; by s03 it has already recovered to 936 and stays near 930–1018. Parking Fines only changes
+the road density retention (§6.2) at month-end, after that month's fares are sealed. No
+London-specific boarding or path-shortening rule was found [STATIC]. The month-1 fare total is
+therefore the mode mix / path composition under the loaded live densities (and the wall-clock
+RNG of §4.7). An implementation that posts ~928 in that same first month while the original posts
+771 is over-crediting transit nodes or over-using transit modes relative to the original; the
+transport-occupant gate of §6.1 alone does not explain a gap of that size on ordinary network
+nodes (they all pass the gate) [INFERRED medium].
 
 ## 8. Mass transit: ridership, funding and strikes
 
@@ -884,6 +918,11 @@ There is no explicit "commute time" statistic [STATIC].
    4. the road-condition message (§8.4);
    5. fares: last-month fares ← this month's accumulator; accumulator ← 0. The last-month value
       is what the budget reads as transit income [INFERRED: the budget reads the "last month" value].
+      There is **no** extra first-month or second-month traffic pass beyond this order [STATIC].
+      Civic "can this building reach anything" trips (§10) run only when those four deal buildings'
+      query windows are built, not on a monthly schedule. Neighbour-connection absorption (§5.8)
+      is always on. Funding and strike state are applied on load and re-checked in steps 2–3; they
+      are not a one-shot month-2 initialisation.
 3. **Event driven**:
    * occupant added/removed (and the bulk "occupants loaded" notifications after a load): update
      the network flags (§3.1), the destination bits (§4.3), the station list and upkeep (§8.3), and
@@ -1033,3 +1072,5 @@ occupants (any other argument disables it). It has no simulation effect [STATIC]
 8. `TrafficSimLobotomyDensity`: loaded, but has no known effect.
 9. Strike side effects outside the trip model (news, advisor, automata).
 10. The direction of the history arrays in the save record (index 0 = most recent is inferred).
+11. (Q-AL, narrowed): London road-density overshoot / long car paths remain parked; first-month
+    fare dip is explained as mode-mix under load, not a missing fare multiplier (§7.3a).
