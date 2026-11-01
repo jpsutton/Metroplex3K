@@ -488,10 +488,12 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
           return c.isTransport(x, z);
         };
         // Building whose frame square starts at (a, d): its world anchor is the low corner of the mapped square.
-        auto building = [&](int s, int a, int d) {
+        // Orientations are from the layout tables (spec 15 s5.5) [STATIC]: B uses 0 / 1 / 0; C uses 0 / 0.
+        auto building = [&](int s, int a, int d, int rot) {
+          BuildingChoice bc = *b; bc.rot = rot;
           int xa, za, xb, zb; toXZ(s, a, d, xa, za); toXZ(s, a + e - 1, d + e - 1, xb, zb);
           int x = std::min(xa, xb), z = std::min(za, zb);
-          if (canAt(*b, x, z)) placed += putAt(*b, x, z);
+          if (canAt(bc, x, z)) placed += putAt(bc, x, z);
         };
         auto filler = [&](int s, int a, int d) { int x, z; toXZ(s, a, d, x, z); putFiller(x, z); };
         int start = rng.rand(4);
@@ -504,15 +506,15 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
           if (!ok) continue;
           if (layoutB) {   // staggered triple: the middle building on the road, the outer two set back behind filler
             for (int a = 0; a < e; a++) filler(s, a, 0);
-            building(s, 0, 1);
-            building(s, e, 0);
+            building(s, 0, 1, 0);
+            building(s, e, 0, 1);
             for (int a = e; a < 2 * e; a++) filler(s, a, e);
             for (int a = 2 * e; a < 3 * e; a++) filler(s, a, 0);
-            building(s, 2 * e, 1);
+            building(s, 2 * e, 1, 0);
           } else {         // pair with a one-tile filler path between them
-            building(s, 0, 0);
+            building(s, 0, 0, 0);
             for (int d = 0; d < e; d++) filler(s, e, d);
-            building(s, e + 1, 0);
+            building(s, e + 1, 0, 0);
           }
           break;
         }
