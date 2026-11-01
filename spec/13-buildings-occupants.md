@@ -114,6 +114,38 @@ buildings `0x0200BEE2`/`0x0203A6E2`; civic buildings `0x00C70624`; power plants 
 landfill pieces `0x00030026`; airport parts `0x001F4226`; network pieces `0x00070020`; flora
 `0x0005B6E0`; vehicles/people `0x0005BEE0`. Implementations must preserve the value.
 
+### 3.1a Run-time occupant flag word [STATIC unless marked]
+
+The "occupant flag word" tested by networks (`12-networks.md` §5.2), disasters (`21-disasters.md`)
+and automata (`26-automata.md`) is **not** attribute 0x72 and is not saved. It is a run-time
+value that depends on the occupant's **class**:
+
+* **Network pieces** (all classes of the network subsystem) have a fixed word per piece class.
+  Every one has 0x4 and 0x800 (network piece). All except pipes and plain power lines also have
+  0x4000. Then the network bits of the piece: 0x8000 road, 0x10000 highway, 0x20000 rail,
+  0x40000 subway, 0x400000 power line, 0x800000 pipe; crossing pieces combine them (e.g. road + rail
+  = 0x2C804). 0x200000 marks highway on-ramps, and 0x80000 / 0x100000 mark two further piece
+  variants [OPEN: meaning]. Values in use: road 0xC804, highway 0x14804, rail 0x24804, subway
+  0x44804, power line 0x400804, pipe 0x800804, road+highway 0x1C804, road+rail 0x2C804,
+  rail+highway 0x34804, rail+subway 0x64804, road+power 0x40C804, highway+power 0x414804,
+  rail+power 0x424804, on-ramps 0x214804 / 0x21C804, and the variants 0x8C804, 0x94804, 0xA4804,
+  0x480804, 0x10C804, 0x114804, 0x124804.
+* **Flora** (trees, `11-world-terrain.md` §6): 0x404. Flora is the only occupant with bit 0x400.
+* **Utility buildings**: power plants 0x400104 (they conduct power), water facilities 0x800104
+  (they connect to pipes), other utility classes 0x104. **Transit stations**: 0x4104.
+* **Other building classes** owned by simulation subsystems (services, garbage, deal buildings,
+  disasters' objects, etc.): 0x104; a few landmark/deal classes 0x40000104.
+* **Generic (zoned and ordinary) buildings**: looked up by agent type (attribute 0x65) in a
+  run-time agent-type table when the occupant is created [STATIC for the lookup; the table's
+  values are not traced, INFERRED: 0x104 like the other building classes].
+* Automata (vehicles, pedestrians): 0x100A204.
+
+Consequences: bit **0x8000 = road piece** (including every crossing that contains road). So riot
+sites and pedestrian spawn tiles are tiles whose occupant is a road piece. Bit **0x400** = flora,
+bit **0x800** = network piece, so the "non-flammable / indestructible" exclusions of
+`21-disasters.md` skip trees and network pieces. Correction: earlier revisions treated these
+as unidentified building flags.
+
 ### 3.2 What is NOT in the occupant attributes
 
 [DATA] There are no per-building fields for residents, jobs, cost, upkeep, water use, pollution,

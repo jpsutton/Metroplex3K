@@ -502,9 +502,9 @@ gridlock style event, e.g. a disaster or riot) is [OPEN].
 * **Area.** The spawn area is the square centre ± Radius tiles (mode Radius, shipped 8), clamped to
   the map. Eligible tiles are those whose occupant has bit 0x8000 set in its occupant flag word.
   This is the **same** flag that marks a valid riot site (`21-disasters.md` §8.4): both tests read
-  the same flag word and bit [STATIC]. Which occupants carry it is [OPEN] (it is not yet mapped to
-  an attribute in `13-buildings-occupants.md`); presumably lots and pieces where people gather
-  (sidewalks, plazas, public buildings) [INFERRED, low confidence].
+  the same flag word and bit [STATIC]. The bit is the road-piece flag (`13-buildings-occupants.md`
+  §3.1a): pedestrians spawn on road tiles. Correction: previously OPEN, with a guess that it was a lot flag
+  for sidewalks, plazas or public buildings.
 * **Fill.** When an area (or a newly covered strip of it after the centre moves) is filled, and the
   source's live count is below its cap: let C be the number of eligible tiles in the strip and
   n = min(cap − count, 4 × C). If C < n, every eligible tile in scan order (rows, then x) gets

@@ -547,7 +547,7 @@ is classified by walking its agent-type hierarchy (`13-buildings-occupants.md`, 
 | 3 high-tech | 13870 *University*, 1001 *Arcology*, 9100 *IndCleanHighDensity*, 12310 *Airport*, 12330 *Seaport*, 19001 (toxic waste plant) | `MaxHighTechBuildingsDestroyedPerAttack` |
 | 2 spaceport | 12350 *Spaceport* | `MaxSpaceportBuildingsDestroyedPerAttack` |
 | 1 landmark | 14160 *HistoricBuilding*, 18000 *Landmarks* | `MaxLandmarkBuildingsDestroyedPerAttack` |
-| 0 low-tech | anything else, only if not flagged non-flammable/indestructible (occupant flag bits 0x400 or 0x800) | `MaxLowTechBuildingsDestroyedPerAttack` |
+| 0 low-tech | anything else, only if its occupant flag word has neither 0x400 (flora) nor 0x800 (network piece) (`13-buildings-occupants.md` §3.1a) | `MaxLowTechBuildingsDestroyedPerAttack` |
 
 Targets are then emitted, up to `MaxTotalBuildingsToDestroy` in total, in this order: low-tech,
 landmark, spaceport, high-tech, power, each list truncated to its cap. A target point is the
@@ -857,7 +857,7 @@ fault line: [STATIC]
    * with probability Pdestroy(class)/10000 the occupant anchored at that tile is destroyed
      (§9; with a 1-in-50 chance a visual explosion/splash effect is also spawned);
    * otherwise with probability Pignite(class)/10000 it is set on fire (§5.3, intensity 0) unless
-     it is a non-flammable occupant (occupant flag bit 0x400);
+     it is a flora occupant (occupant flag bit 0x400, `13-buildings-occupants.md` §3.1a);
    * otherwise nothing.
    Only the occupant whose anchor tile is exactly (x, z') is affected.
 3. The earthquake also updates the history entry used by §7.2.
@@ -928,8 +928,8 @@ out on the next tick. [STATIC]
   sites (SiteCoverageMax). [STATIC]
 
 **Riot sites and the site search** [STATIC]. A valid riot site is a tile whose police-coverage byte
-< SiteCoverageMax and whose occupant has occupant flag bit `0x8000` set (`13-buildings-occupants.md`;
-`[INFERRED: the "can host a crowd" lot flag]`). It is the same flag bit that makes a tile eligible
+< SiteCoverageMax and whose occupant has occupant flag bit `0x8000` set, i.e. a **road piece** (any crossing that
+includes road counts) (`13-buildings-occupants.md` §3.1a) [STATIC]. It is the same flag bit that makes a tile eligible
 for pedestrian spawning (`26-automata.md` §5.8) [STATIC]. The search around a start point (cx, cz) covers
 the rectangle [cx − SearchRadius, cx + SearchRadius] × [cz − SearchRadius, cz + SearchRadius]
 clipped to the map, scanning row by row starting **at** (cx, cz): x increases (wrapping from the
