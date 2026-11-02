@@ -366,8 +366,11 @@ Background image `02F78C6D:42FB77F6` (41×88 px). Three vertical bars labelled R
 (`225872FE:41`/`42`/`43`), drawn in RGB (0,192,0), (0,0,192) and (192,192,0) respectively. Bar
 horizontal extents inside the image: R x=5…10, C x=14…19, I x=23…28. The zero line is at y=51;
 positive demand grows upward and negative demand downward, scaled by 16 pixels per demand unit,
-clipped to the image (constants 16.0, 51, 62 in the indicator) [STATIC constants; INFERRED mapping].
-Demand values: `15-sim-growth.md`. A button under the indicator ("visit SimCity Exchange",
+clipped to the image (constants 16.0, 51, 62 in the indicator) [STATIC constants]. Demand unit =
+`N / 1000` from the valve normalised reading of `15-sim-growth.md` §3.2 step 6 (equivalently
+`V / Max` for the ±2000 R/C/I valves) [INFERRED, high: Berlin shipped load V 1140 / 880 / −1680
+→ 0.57 / 0.44 / −0.84 matches the original's ~50% / ~40% / ~−80% bar fill; a ×3 scale fills the
+slot at |V| ≥ 667 and does not]. Demand values: `15-sim-growth.md`. A button under the indicator ("visit SimCity Exchange",
 `041F2625:190`) opens the user's web browser after a confirmation; failure messages are
 `041F2625:1F9`–`1FC`.
 
