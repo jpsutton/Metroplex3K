@@ -776,10 +776,12 @@ For a cell with anchor (*cx, cz*): [STATIC]
 
 1. *S* = the modifier accumulator of the cell (§8.2); *n* = 0.
 2. For each of the cell's 16 tiles (*cx* + (i mod 4), *cz* + ⌊i/4⌋), i = 0…15:
-   a. The tile counts only if the occupant query for the tile succeeds and the occupant there is
-      either absent or of building kind 1. Skipped tiles contribute nothing. [INFERRED: this means
-      "a building/lot tile"; empty or non-building tiles such as bare terrain or networks are
-      skipped]
+   a. The tile counts only if the occupant query for the tile succeeds, and either the query
+      returns no occupant or the occupant reports **occupant kind** 1 (`13-buildings-occupants.md`
+      Occupant kind). Any other kind is skipped and contributes nothing. Empty tiles therefore
+      **do** count; the gate is not the lot-state word (1 = occupied, etc.) and is not attribute
+      0x72. Occupant kind is a fixed per-class value, so a kind-1 building still counts when
+      abandoned or under construction. [STATIC]
    b. Police: let *p* be the police coverage at the tile (0–255, the displayed byte of §2). If
       *p* > *P₀*, *v* = (*p* − *P₀*)·*s_hi* + *E₀*; otherwise *v* = *E₀* − (*P₀* − *p*)·*s_lo*. Add
       round-to-nearest(*v*), ties to even.
@@ -893,8 +895,8 @@ each jail (`10-save-format.md` §6.2.5).
 
 ## Open questions
 
-* Aura: the meaning of occupant "kind 1" in the tile-count test (§8.4; question for testing: are
-  tiles under networks and parks counted?), and the order of the chart series.
+* Aura: which non-building occupant classes use kinds other than 1 (so they are skipped by
+  §8.4), and the order of the chart series.
 * Which list holds libraries/museums in the education funding pass (§6.2).
 * Fire strike machine assumed identical to police.
 * The (now decoded) `garbageStore` block of the pollution record (§7.4). (Police record fields
