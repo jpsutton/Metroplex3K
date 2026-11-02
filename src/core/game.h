@@ -68,10 +68,11 @@ class Game {
   void requestFile(const std::string& path);  // open a city file directly (skips the intro)
   std::string windowTitle() const;
   // Audio hook: null until game data with Res/Sound/AUDIO.INI is open (silent). The host's audio callback
-  // calls audio()->mixAudio() under its own lock (the same lock must be held around frame()).
+  // calls audio()->mixAudio() under its own lock; AudioMixer synchronises the voices itself, so frame() runs
+  // without that lock.
   AudioSystem* audio() { return audio_.get(); }
-  // Optional host hooks: frame() takes the audio lock itself and releases it around the software render, which
-  // can take longer than an audio buffer on complex cities (holding the lock then starves the callback: static).
+  // Optional host hooks: the host's audio-callback lock. Game takes it only while it replaces audio_ (data
+  // (re)load), so the callback never sees a dangling pointer.
   std::function<void()> audioLock, audioUnlock;
   Sim& sim() { return sim_; }
   City& city() { return sim_.city(); }

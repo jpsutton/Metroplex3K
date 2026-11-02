@@ -147,6 +147,12 @@ class Renderer {
   void render(const Camera& cam, const RenderOptions& opt, const RenderScene* scene = nullptr);
 
   const std::vector<uint32_t>& pixels() const { return fb_; }
+  // Hand the rendered frame to `out` without copying; the renderer takes `out`'s old storage (render()
+  // clears it). Afterwards pixels() holds stale data until the next render().
+  void swapPixels(std::vector<uint32_t>& out) {
+    if (out.size() != fb_.size()) out.assign(fb_.size(), 0);
+    fb_.swap(out);
+  }
   int width() const { return fbW_; }
   int height() const { return fbH_; }
 
@@ -169,6 +175,8 @@ class Renderer {
   void centreOnWorld(Camera& cam, float x, float z) const;
 
   void invalidateShade() { shadeValid_ = false; }
+  // Number of horizontal bands render() rasterises in parallel; 0 = automatic (by height and pool size).
+  void setBandCount(int n) { bands_ = n; }
 
   // ---- configuration / injection ----
   void setPalettes(const TerrainPalettes& p) { pal_ = p; palOverride_ = true; }
@@ -218,14 +226,18 @@ class Renderer {
   void makeFallbackPalettes();
   void ensureShade();
   void computeOrigin(const Camera& cam);
-  void drawBackground(int zoom);
-  void drawTerrain(const Camera& cam, const RenderOptions& opt);
-  void drawEdgeFaces(const Camera& cam, const RenderOptions& opt);
+  // Band functions draw only rows [y0, y1); render() runs them concurrently, one band per task, so they
+  // must not write shared state (prepareTerrain / loadBackground / buildItems do that beforehand).
+  void loadBackground(int zoom);
+  void drawBackground(int zoom, int y0, int y1);
+  void prepareTerrain(const RenderOptions& opt);
+  void drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, int y1);
+  void drawEdgeFaces(const Camera& cam, int y0, int y1);
   void drawPreviews(const Camera& cam, const RenderScene& scene);
   void drawFallbackBoxes(const Camera& cam);   // data-less demo: coloured boxes instead of sprites
   void buildItems(const Camera& cam, const RenderOptions& opt, const RenderScene* scene);
-  void drawItems(const RenderOptions& opt);
-  void drawSprite(const Item& it, const RenderOptions& opt);
+  void drawItems(const RenderOptions& opt, int y0, int y1);
+  void drawSprite(const Item& it, const RenderOptions& opt, int y0, int y1);
   void tileQuad(const Camera& cam, int u, int v, float sx[4], float sy[4], int wx[4], int wz[4]) const;
   const SpriteImage* getSprite(uint32_t c, uint32_t i);
   const Plane* getPlane(uint32_t c, uint32_t i);
@@ -262,6 +274,7 @@ class Renderer {
   CostLabel label_;
   int labelX_ = 0, labelY_ = 0;
 
+  int bands_ = 0;
   std::vector<Item> items_;
   std::vector<int> occ_;  // view tile -> index into items_ (last drawn), -1 none
   bool itemsValid_ = false;

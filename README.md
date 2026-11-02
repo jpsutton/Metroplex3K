@@ -145,6 +145,9 @@ All build to `build/` next to the tests and need no SDL. The probes in `tools/pr
 | `hud_shot` | `hud_shot --game DIR [--city FILE] --size WxH [--do STEP]... out.png` — scripted headless UI screenshot (steps listed in the file header) |
 | `skin_demo` | `skin_demo [outdir [GAMEDIR]]` — render the skinned UI chrome (synthetic art, or real art with `GAMEDIR`) |
 | `diag` | `diag GAME_DIR [OUT_DIR]` — report what the engine can read from an install; paste the output into bug reports |
+| `frame_bench` | `frame_bench --game DIR --city FILE [--size WxH] [--frames N]` — time `Renderer::render` per zoom, `Game::frame` and a music decode; prints a hash per frame so render changes can be checked for pixel identity |
+
+The renderer rasterises in horizontal bands on a worker pool (`src/core/workpool.h`). Set `M3K_THREADS=N` to choose the thread count (`1` = single-threaded); the default is the hardware thread count, capped at 16.
 
 ## Status and limitations
 

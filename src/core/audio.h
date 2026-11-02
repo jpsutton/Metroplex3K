@@ -1,12 +1,15 @@
 // Platform-independent audio engine core: AUDIO.INI, FSC ambient schedules, mixer, music playlist,
 // event sound selection. spec/06-audio.md. No SDL / OS audio: the platform layer calls
-// AudioSystem::mixAudio(out, frames) from its audio callback (caller provides any locking).
+// AudioSystem::mixAudio(out, frames) from its audio callback. AudioMixer locks its own voice list, so
+// the callback may run concurrently with the rest of AudioSystem; everything else is game-thread only.
 #pragma once
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <future>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -175,12 +178,14 @@ struct VoiceParams {
   int64_t startDelayFrames = 0;  // output frames before the voice starts
 };
 
+// Thread-safe: every public method takes mu_, so mixAudio (audio thread) and control calls (game
+// thread) may interleave.
 class AudioMixer {
  public:
   using Handle = int;  // 0 = invalid
-  void setOutputRate(int hz) { outRate_ = hz > 0 ? hz : 44100; }
-  int outputRate() const { return outRate_; }
-  void setMaxVoices(int n) { maxVoices_ = n; }  // 0 = unlimited
+  void setOutputRate(int hz) { std::lock_guard<std::mutex> l(mu_); outRate_ = hz > 0 ? hz : 44100; }
+  int outputRate() const { std::lock_guard<std::mutex> l(mu_); return outRate_; }
+  void setMaxVoices(int n) { std::lock_guard<std::mutex> l(mu_); maxVoices_ = n; }  // 0 = unlimited
 
   Handle play(std::shared_ptr<const PcmBuffer> pcm, const VoiceParams& p);
   void stop(Handle h);                      // immediate
@@ -188,14 +193,14 @@ class AudioMixer {
   void setVolume(Handle h, int volume, int rampMs = 0);  // 0..1024 item volume
   void setPan(Handle h, float pan);
   bool isPlaying(Handle h) const;
-  int voiceCount() const { return int(voices_.size()); }
+  int voiceCount() const { std::lock_guard<std::mutex> l(mu_); return int(voices_.size()); }
   void stopAll();
 
   // Category volume 0..1024 and on/off (off forces 0).
   void setCategoryVolume(AudioCategory c, int v);
   void setCategoryEnabled(AudioCategory c, bool on);
-  int categoryVolume(AudioCategory c) const { return catVol_[int(c)]; }
-  void setMasterMute(bool m) { mute_ = m; }
+  int categoryVolume(AudioCategory c) const { std::lock_guard<std::mutex> l(mu_); return catVol_[int(c)]; }
+  void setMasterMute(bool m) { std::lock_guard<std::mutex> l(mu_); mute_ = m; }
 
   // Produce `frames` interleaved s16 stereo frames at outputRate (overwrites out).
   void mixAudio(int16_t* out, size_t frames);
@@ -210,6 +215,8 @@ class AudioMixer {
   };
   Voice* find(Handle h);
   const Voice* find(Handle h) const;
+  void stopLocked(Handle h);
+  mutable std::mutex mu_;
   std::vector<Voice> voices_;
   int outRate_ = 44100, maxVoices_ = 0;
   int catVol_[3] = {1024, 1024, 1024};
@@ -300,6 +307,9 @@ class AudioSystem {
   void stopMusic();
   // While held (e.g. intro movie plays its own audio) the playlist neither plays nor advances.
   void setMusicHeld(bool held);
+  // Decode songs on a worker thread; the song starts from update() once decoded. Off by default so
+  // playSong starts synchronously (tests); the game turns it on so a song change never stalls a frame.
+  void setAsyncMusic(bool on) { asyncMusic_ = on; }
   int currentSong() const { return curSong_; }
   MusicPlaylist& playlist() { return playlist_; }
 
@@ -316,6 +326,9 @@ class AudioSystem {
   std::shared_ptr<const PcmBuffer> load(const std::string& path, bool absolute);
   AudioMixer::Handle playBuf(const std::string& path, bool absolute, const VoiceParams& p, double* lenOutFrames = nullptr);
   void stopId(int id);
+  std::string cacheKey(const std::string& path, bool absolute) const;
+  void startMusicVoice(std::shared_ptr<const PcmBuffer> pcm);
+  void collectMusicLoads();
   struct Fade { AudioMixer::Handle head = 0, loop = 0; int level = 1024; bool audible = true; int vol = 1024; };
   AudioIni ini_;
   SoundFileLoader loader_;
@@ -337,6 +350,9 @@ class AudioSystem {
   int curSong_ = 0;
   int64_t musicElapsed_ = 0, musicDelay_ = 0;
   bool musicDelayRunning_ = true;
+  bool asyncMusic_ = false;
+  std::string musicWant_;  // cache key of the song waiting for its decode ("" = none)
+  std::map<std::string, std::future<std::shared_ptr<const PcmBuffer>>> musicLoads_;  // in-flight decodes
   // ambient
   int ambArea_ = -1;
   FscSchedule sched_;

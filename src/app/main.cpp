@@ -35,8 +35,8 @@ static int vkFromSdl(SDL_Keycode k) {
   }
 }
 
-// Audio callback: stereo S16 from AudioSystem::mixAudio. The device lock (SDL_LockAudioDevice) is held
-// by Game::frame (via audioLock/audioUnlock) except while it renders, so the callback never races with game logic.
+// Audio callback: stereo S16 from AudioSystem::mixAudio. AudioMixer locks its own voice list; the device lock
+// (SDL_LockAudioDevice, via Game::audioLock/audioUnlock) is taken only while Game replaces its AudioSystem.
 static void audioCallback(void* user, Uint8* stream, int len) {
   Game* g = static_cast<Game*>(user);
   AudioSystem* a = g->audio();
@@ -66,6 +66,8 @@ int main(int argc, char** argv) {
   SDL_Renderer* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
   if (!ren) ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
   if (!ren) { std::cerr << "renderer: " << SDL_GetError() << "\n"; return 1; }
+  SDL_RendererInfo rinfo;
+  const bool vsync = SDL_GetRendererInfo(ren, &rinfo) == 0 && (rinfo.flags & SDL_RENDERER_PRESENTVSYNC);
 
   std::srand(uint32_t(SDL_GetTicks()));
   Game game;
@@ -100,7 +102,7 @@ int main(int argc, char** argv) {
   Input in;
   uint32_t last = SDL_GetTicks();
   bool panDrag = false;
-  std::string curName;
+  std::string curName, curTitle;
   SDL_Cursor* cursor = nullptr;
   while (!game.wantQuit()) {
     in.pressed = in.released = in.rightPressed = false; in.wheel = 0; in.text.clear();
@@ -155,14 +157,14 @@ int main(int argc, char** argv) {
     int w, h; SDL_GetWindowSize(win, &w, &h);
     uint32_t now = SDL_GetTicks();
     openAudio();
-    game.frame(in, w, h, now - last); last = now;   // takes the audio lock itself (see Game::audioLock)
+    game.frame(in, w, h, now - last); last = now;
     if (!tex || tw != w || th != h) {
       if (tex) SDL_DestroyTexture(tex);
       tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, w, h); tw = w; th = h;
     }
     SDL_UpdateTexture(tex, nullptr, game.screen().data(), w * 4);
     SDL_RenderClear(ren); SDL_RenderCopy(ren, tex, nullptr, nullptr); SDL_RenderPresent(ren);
-    SDL_SetWindowTitle(win, game.windowTitle().c_str());
+    if (game.windowTitle() != curTitle) { curTitle = game.windowTitle(); SDL_SetWindowTitle(win, curTitle.c_str()); }
     if (game.cursorName() != curName) {
       curName = game.cursorName();
       if (cursor) { SDL_FreeCursor(cursor); cursor = nullptr; }
@@ -177,7 +179,7 @@ int main(int argc, char** argv) {
       }
       SDL_SetCursor(cursor ? cursor : SDL_GetDefaultCursor());
     }
-    SDL_Delay(8);
+    if (!vsync) SDL_Delay(8);   // with vsync, SDL_RenderPresent already paces the loop
   }
 done:
   if (adev) SDL_CloseAudioDevice(adev);

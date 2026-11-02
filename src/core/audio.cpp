@@ -1,4 +1,6 @@
 #include "core/audio.h"
+
+#include <chrono>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -364,6 +366,7 @@ const AudioMixer::Voice* AudioMixer::find(Handle h) const {
 }
 
 AudioMixer::Handle AudioMixer::play(std::shared_ptr<const PcmBuffer> pcm, const VoiceParams& p) {
+  std::lock_guard<std::mutex> l(mu_);
   if (!pcm || pcm->frames() == 0) return 0;
   if (maxVoices_ > 0 && int(voices_.size()) >= maxVoices_) {
     size_t vi = 0;
@@ -385,35 +388,39 @@ AudioMixer::Handle AudioMixer::play(std::shared_ptr<const PcmBuffer> pcm, const 
   return voices_.back().h;
 }
 
-void AudioMixer::stop(Handle h) {
+void AudioMixer::stopLocked(Handle h) {
   voices_.erase(std::remove_if(voices_.begin(), voices_.end(), [&](const Voice& v) { return v.h == h; }), voices_.end());
 }
-void AudioMixer::stopAll() { voices_.clear(); }
+void AudioMixer::stop(Handle h) { std::lock_guard<std::mutex> l(mu_); stopLocked(h); }
+void AudioMixer::stopAll() { std::lock_guard<std::mutex> l(mu_); voices_.clear(); }
 
 void AudioMixer::fadeOut(Handle h, int ms) {
+  std::lock_guard<std::mutex> l(mu_);
   Voice* v = find(h);
   if (!v) return;
   float frames = float(ms) * float(outRate_) / 1000.f;
-  if (frames < 1.f) { stop(h); return; }
+  if (frames < 1.f) { stopLocked(h); return; }
   v->fadingOut = true;
   v->envStep = -v->env / frames;
-  if (v->envStep == 0) stop(h);
+  if (v->envStep == 0) stopLocked(h);
 }
 
 void AudioMixer::setVolume(Handle h, int volume, int rampMs) {
+  std::lock_guard<std::mutex> l(mu_);
   Voice* v = find(h);
   if (!v) return;
   v->volTarget = std::clamp(volume, 0, 1024) / 1024.f;
   if (rampMs <= 0) { v->vol = v->volTarget; v->volStep = 0; }
   else v->volStep = (v->volTarget - v->vol) / (float(rampMs) * float(outRate_) / 1000.f);
 }
-void AudioMixer::setPan(Handle h, float pan) { if (Voice* v = find(h)) v->p.pan = std::clamp(pan, -1.f, 1.f); }
-bool AudioMixer::isPlaying(Handle h) const { return h != 0 && find(h) != nullptr; }
+void AudioMixer::setPan(Handle h, float pan) { std::lock_guard<std::mutex> l(mu_); if (Voice* v = find(h)) v->p.pan = std::clamp(pan, -1.f, 1.f); }
+bool AudioMixer::isPlaying(Handle h) const { std::lock_guard<std::mutex> l(mu_); return h != 0 && find(h) != nullptr; }
 
-void AudioMixer::setCategoryVolume(AudioCategory c, int v) { catVol_[int(c)] = std::clamp(v, 0, 1024); }
-void AudioMixer::setCategoryEnabled(AudioCategory c, bool on) { catOn_[int(c)] = on; }
+void AudioMixer::setCategoryVolume(AudioCategory c, int v) { std::lock_guard<std::mutex> l(mu_); catVol_[int(c)] = std::clamp(v, 0, 1024); }
+void AudioMixer::setCategoryEnabled(AudioCategory c, bool on) { std::lock_guard<std::mutex> l(mu_); catOn_[int(c)] = on; }
 
 void AudioMixer::mixAudio(int16_t* out, size_t frames) {
+  std::lock_guard<std::mutex> l(mu_);
   acc_.assign(frames * 2, 0.f);
   for (auto& v : voices_) {
     float cat = catOn_[int(v.p.category)] && !mute_ ? float(catVol_[int(v.p.category)]) / 1024.f : 0.f;
@@ -589,15 +596,19 @@ void AudioSystem::init(AudioIni ini, SoundFileLoader loader, int rate, uint32_t 
   mixer_.stopAll();
   mixer_.setOutputRate(rate);
   rng_ = AudioRng(seed);
-  cache_.clear(); active_.clear(); fades_.clear();
+  cache_.clear(); active_.clear(); fades_.clear(); musicLoads_.clear(); musicWant_.clear();
   playlist_.setSongs(ini_.music);
   musicDelay_ = -1; musicDelayRunning_ = true; musicElapsed_ = 0; musicH_ = 0; curSong_ = 0;
   ambArea_ = -1; cellH_.clear(); now_ = 0;
 }
 
+std::string AudioSystem::cacheKey(const std::string& path, bool absolute) const {
+  return lower(normalizeSoundPath(path)) + (absolute ? "|a" : "");
+}
+
 std::shared_ptr<const PcmBuffer> AudioSystem::load(const std::string& path, bool absolute) {
   if (path.empty() || !loader_) return nullptr;
-  std::string key = lower(normalizeSoundPath(path)) + (absolute ? "|a" : "");
+  std::string key = cacheKey(path, absolute);
   auto it = cache_.find(key);
   if (it != cache_.end()) return it->second;
   std::shared_ptr<const PcmBuffer> res;
@@ -756,6 +767,21 @@ bool AudioSystem::playSong(int id) {
   for (auto& m : ini_.music) {
     if (m.id != id) continue;
     if (musicH_) mixer_.stop(musicH_);
+    musicH_ = 0; musicWant_.clear();
+    const std::string key = cacheKey(m.file, m.absolute);
+    if (asyncMusic_ && loader_ && !m.file.empty() && !cache_.count(key)) {
+      // Decode off the game thread; collectMusicLoads() starts the voice when it is ready.
+      if (!musicLoads_.count(key))
+        musicLoads_[key] = std::async(std::launch::async, [loader = loader_, file = m.file, abs = m.absolute]() -> std::shared_ptr<const PcmBuffer> {
+          std::vector<uint8_t> data;
+          if (!loader(file, abs, data)) return nullptr;
+          auto b = std::make_shared<PcmBuffer>();
+          return loadSoundFile(file, data, *b) ? b : nullptr;
+        });
+      musicWant_ = key;
+      curSong_ = id; musicElapsed_ = 0; musicDelayRunning_ = false;
+      return true;
+    }
     VoiceParams p; p.category = AudioCategory::Music;
     musicH_ = playBuf(m.file, m.absolute, p);
     if (!musicH_) { curSong_ = 0; musicDelay_ = ini_.options.get("MusicPlayerSongDelayMsec", 0); musicDelayRunning_ = true; musicElapsed_ = 0; return false; }
@@ -765,9 +791,27 @@ bool AudioSystem::playSong(int id) {
   return false;
 }
 
+void AudioSystem::startMusicVoice(std::shared_ptr<const PcmBuffer> pcm) {
+  VoiceParams p; p.category = AudioCategory::Music;
+  musicH_ = mixer_.play(std::move(pcm), p);
+  if (!musicH_) { curSong_ = 0; musicDelay_ = ini_.options.get("MusicPlayerSongDelayMsec", 0); musicDelayRunning_ = true; }
+  musicElapsed_ = 0;
+}
+
+// Moves finished background decodes into the cache and starts the song that is waiting for one.
+void AudioSystem::collectMusicLoads() {
+  for (auto it = musicLoads_.begin(); it != musicLoads_.end();) {
+    if (it->second.wait_for(std::chrono::seconds(0)) != std::future_status::ready) { ++it; continue; }
+    auto pcm = it->second.get();
+    cache_[it->first] = pcm;
+    if (it->first == musicWant_) { musicWant_.clear(); startMusicVoice(pcm); }
+    it = musicLoads_.erase(it);
+  }
+}
+
 void AudioSystem::stopMusic() {
   if (musicH_) mixer_.stop(musicH_);
-  musicH_ = 0; curSong_ = 0; musicElapsed_ = 0;
+  musicH_ = 0; curSong_ = 0; musicElapsed_ = 0; musicWant_.clear();
   musicDelayRunning_ = true;
   musicDelay_ = ini_.options.get("MusicStartDelayAfterStop", 0);
 }
@@ -791,6 +835,7 @@ bool AudioSystem::setAmbientArea(int index) {
 
 void AudioSystem::update(int64_t dt) {
   now_ += dt;
+  if (!musicLoads_.empty()) collectMusicLoads();
   // music
   if (musicOn_ && !musicHeld_) {
     if (musicH_ && !mixer_.isPlaying(musicH_)) {

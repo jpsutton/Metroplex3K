@@ -1,5 +1,6 @@
 #include <cmath>
 #include "core/render.h"
+#include "core/terrain_gen.h"
 #include "testutil.h"
 using namespace m3k;
 
@@ -205,6 +206,36 @@ int main() {
     CHECK(o.slot == 2 && o.row[0] == 31 && o.row[1] == 31 && o.row[2] == 30 && o.row[3] == 0 && o.row[4] == 19);
     DataOverlay z = makeDataOverlay(DataLayer::Zones, {0, 1, 255}, 3, 1);
     CHECK(z.slot == 1 && z.row[1] == 4 && z.row[2] == 0xFF);
+  }
+  {  // banded (parallel) rendering is pixel-identical to a single band
+    World w;
+    TerrainGenOptions go; go.seed = 7;
+    generateTerrain(w, 64, 64, go);
+    SpriteImage red; red.img = solid(8, 24, rgba(255, 0, 0)); red.L = 4; red.T = 24; red.R = 4; red.B = 0; red.ok = true;
+    Plane half; half.w = 8; half.h = 24; half.v.assign(8 * 24, 16);
+    RenderScene sc;
+    for (int i = 0; i < 40; i++) {
+      SceneSprite s; s.category = 1; s.x = (5 + (i * 7) % 54) * 256; s.z = (5 + (i * 13) % 54) * 256;
+      s.height = w.altAt(s.x / 256, s.z / 256) * 256; s.moving = (i % 3) == 0; s.magnify2x = (i % 5) == 0;
+      if (i % 2) { s.hasAlpha = true; s.alphaCategory = 1; s.alphaId = 99; }
+      sc.sprites.push_back(s);
+    }
+    TilePreview tp; tp.x0 = 20; tp.z0 = 20; tp.x1 = 30; tp.z1 = 25; sc.previews.push_back(tp);
+    auto renderWith = [&](int bands, int zoom, int rot) {
+      Renderer r; r.setWorld(&w, nullptr); r.resize(640, 480); r.setBandCount(bands);
+      r.setSpriteLookup([&](uint32_t c, uint32_t) -> const SpriteImage* { return c == 1 ? &red : nullptr; },
+                        [&](uint32_t c, uint32_t id) -> const Plane* { return (c == 1 && id == 99) ? &half : nullptr; });
+      Camera cam; cam.zoom = zoom; cam.rot = rot; r.centreOnWorld(cam, 32, 32);
+      RenderOptions opt; opt.grid = true;
+      r.render(cam, opt, &sc);
+      return r.pixels();
+    };
+    for (int zoom = 0; zoom < 5; zoom++)
+      for (int rot = 0; rot < 4; rot += 3) {
+        auto one = renderWith(1, zoom, rot);
+        CHECK(renderWith(7, zoom, rot) == one);
+        CHECK(renderWith(37, zoom, rot) == one);
+      }
   }
   {  // noise tables: land -8/0/8 only
     World w = flatWorld(8, 40);

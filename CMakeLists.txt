@@ -12,6 +12,8 @@ endif()
 file(GLOB CORE_SRC CONFIGURE_DEPENDS src/core/*.cpp)
 add_library(m3k_core STATIC ${CORE_SRC})
 target_include_directories(m3k_core PUBLIC src)
+find_package(Threads REQUIRED)  # audio decode and render worker threads
+target_link_libraries(m3k_core PUBLIC Threads::Threads)
 if(MSVC)
   target_compile_options(m3k_core PRIVATE /W4)
 else()

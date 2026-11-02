@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include "core/workpool.h"
 
 namespace m3k {
 
@@ -340,16 +341,16 @@ void Renderer::landVertexColour(int x, int z, int zoom, bool underground, int& r
 
 namespace {
 
-// Scan-line triangle walker. Rows are sampled at integer y, spans are [xa, xe).
+// Scan-line triangle walker. Rows are sampled at integer y in [yLo, yHi), spans are [xa, xe).
 // Edges are always interpolated from the upper (then left) endpoint, so triangles that share an
 // edge produce identical crossings.
 template <class F>
-void rasterTri(const void* /*unused*/, int fbH, float x0, float y0, const float* a0, float x1, float y1, const float* a1,
+void rasterTri(int yLo, int yHi, float x0, float y0, const float* a0, float x1, float y1, const float* a1,
                float x2, float y2, const float* a2, F&& span) {
   struct P { float x, y; const float* a; };
   P v[3] = {{x0, y0, a0}, {x1, y1, a1}, {x2, y2, a2}};
   std::sort(v, v + 3, [](const P& p, const P& q) { return p.y < q.y || (p.y == q.y && p.x < q.x); });
-  int ys = std::max(0, int(std::ceil(v[0].y))), ye = std::min(fbH, int(std::ceil(v[2].y)));
+  int ys = std::max(yLo, int(std::ceil(v[0].y))), ye = std::min(yHi, int(std::ceil(v[2].y)));
   auto cross = [](const P& p, const P& q, float y, float* out) {
     float t = (q.y == p.y) ? 0.f : (y - p.y) / (q.y - p.y);
     out[0] = p.x + (q.x - p.x) * t;
@@ -366,9 +367,11 @@ void rasterTri(const void* /*unused*/, int fbH, float x0, float y0, const float*
   }
 }
 
+// Drawing target. Primitives only touch rows [Y0, H): a render band (see Renderer::render).
 struct Ctx {
   uint32_t* fb; int W, H, zoom;
   const int8_t* noiseL; const int8_t* noiseE;
+  int Y0 = 0;
 };
 
 enum class NoiseMode { None, Mono, Rgb };
@@ -380,7 +383,7 @@ inline int clamp255(int v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
 // Gouraud triangle with spec 6.3 noise.
 void gouraudTri(const Ctx& c, const float* p0, const float* p1, const float* p2, int seed, int ytop, NoiseMode nm) {
   // p = {x, y, r, g, b}
-  rasterTri(nullptr, c.H, p0[0], p0[1], p0 + 2, p1[0], p1[1], p1 + 2, p2[0], p2[1], p2 + 2,
+  rasterTri(c.Y0, c.H, p0[0], p0[1], p0 + 2, p1[0], p1[1], p1 + 2, p2[0], p2[1], p2 + 2,
             [&](int y, int xa, int xe, const float* L, const float* R) {
     int n = xe - xa;
     float inv = 1.f / float(n + 1);
@@ -400,7 +403,7 @@ void gouraudTri(const Ctx& c, const float* p0, const float* p1, const float* p2,
 
 // Shoreline colour-key fill (spec 6.4): key colour pixels become water colour R.
 void shoreTri(const Ctx& c, const float* p0, const float* p1, const float* p2, int seed, int ytop, const int key[3], const int rep[3]) {
-  rasterTri(nullptr, c.H, p0[0], p0[1], p0 + 2, p1[0], p1[1], p1 + 2, p2[0], p2[1], p2 + 2,
+  rasterTri(c.Y0, c.H, p0[0], p0[1], p0 + 2, p1[0], p1[1], p1 + 2, p2[0], p2[1], p2 + 2,
             [&](int y, int xa, int xe, const float* L, const float* R) {
     int n = xe - xa;
     float inv = 1.f / float(n + 1);
@@ -430,7 +433,7 @@ void shoreTri(const Ctx& c, const float* p0, const float* p1, const float* p2, i
 // Palette-index Gouraud (map-edge faces).
 void indexTri(const Ctx& c, const Image& tbl, const float* p0, const float* p1, const float* p2, int seed, int ytop, bool mono) {
   // p = {x, y, idx, 0, 0}
-  rasterTri(nullptr, c.H, p0[0], p0[1], p0 + 2, p1[0], p1[1], p1 + 2, p2[0], p2[1], p2 + 2,
+  rasterTri(c.Y0, c.H, p0[0], p0[1], p0 + 2, p1[0], p1[1], p1 + 2, p2[0], p2[1], p2 + 2,
             [&](int y, int xa, int xe, const float* L, const float* R) {
     int n = xe - xa;
     float step = (R[0] - L[0]) / float(n + 1);
@@ -451,7 +454,7 @@ void indexTri(const Ctx& c, const Image& tbl, const float* p0, const float* p1, 
 // Constant-colour alpha blend triangle (previews).
 void blendTri(const Ctx& c, const float* p0, const float* p1, const float* p2, int r, int g, int b, int alpha) {
   float z3[3] = {0, 0, 0};
-  rasterTri(nullptr, c.H, p0[0], p0[1], z3, p1[0], p1[1], z3, p2[0], p2[1], z3,
+  rasterTri(c.Y0, c.H, p0[0], p0[1], z3, p1[0], p1[1], z3, p2[0], p2[1], z3,
             [&](int y, int xa, int xe, const float*, const float*) {
     int x0 = std::max(xa, 0), x1 = std::min(xe, c.W);
     for (int x = x0; x < x1; x++) {
@@ -463,7 +466,7 @@ void blendTri(const Ctx& c, const float* p0, const float* p1, const float* p2, i
 }
 
 void darken(const Ctx& c, int x, int y, int delta) {
-  if (x < 0 || y < 0 || x >= c.W || y >= c.H) return;
+  if (x < 0 || y < c.Y0 || x >= c.W || y >= c.H) return;
   uint32_t& p = c.fb[size_t(y) * c.W + x];
   p = pack(clamp255(int(p & 255) + delta), clamp255(int((p >> 8) & 255) + delta), clamp255(int((p >> 16) & 255) + delta));
 }
@@ -473,7 +476,7 @@ void gridEdge(const Ctx& c, float ax, float ay, float bx, float by, bool leftEdg
   if (by < ay) { std::swap(ax, bx); std::swap(ay, by); }
   if (by == ay) return;
   int n = int(std::fabs((bx - ax) / (by - ay))) + 1;
-  for (int y = std::max(0, int(std::ceil(ay))); y < std::min(c.H, int(std::ceil(by))); y++) {
+  for (int y = std::max(c.Y0, int(std::ceil(ay))); y < std::min(c.H, int(std::ceil(by))); y++) {
     float t = (float(y) - ay) / (by - ay);
     int x = int(std::ceil(ax + (bx - ax) * t));
     if (leftEdge) for (int k = 0; k < n; k++) darken(c, x + k, y, delta);
@@ -540,7 +543,7 @@ void Renderer::tileQuad(const Camera& cam, int u, int v, float sx[4], float sy[4
 // Background + terrain
 // ======================================================================================
 
-void Renderer::drawBackground(int zoom) {
+void Renderer::loadBackground(int zoom) {
   if (!backTried_[zoom]) {
     backTried_[zoom] = true;
     if (data_) {
@@ -549,9 +552,12 @@ void Renderer::drawBackground(int zoom) {
       if (!p.empty() && readFile(p, b)) { try { back_[zoom] = decodeBmp(b.data(), b.size(), false); } catch (const FormatError&) {} }
     }
   }
+}
+
+void Renderer::drawBackground(int zoom, int y0, int y1) {
   const Image& im = back_[zoom];
   if (im.empty()) return;
-  for (int y = 0; y < fbH_; y++) {
+  for (int y = y0; y < y1; y++) {
     int ty = ((y - originY_) % im.h + im.h) % im.h;
     const uint32_t* row = &im.px[size_t(ty) * im.w];
     uint32_t* dst = &fb_[size_t(y) * fbW_];
@@ -563,7 +569,8 @@ void Renderer::drawBackground(int zoom) {
   }
 }
 
-void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt) {
+// Shared terrain state; runs before the (parallel) drawTerrain bands.
+void Renderer::prepareTerrain(const RenderOptions& opt) {
   const World& w = *world_;
   ensureShade();
   roadMask_.assign(size_t(w.W) * w.H, 0);
@@ -572,9 +579,13 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt) {
   const bool netSprites = opt.objects && (data_ || spriteFn_);
   if (opt.zonePaint && !opt.underground && !netSprites)
     for (const auto& np : w.surface) if (w.inTiles(np.x, np.z)) roadMask_[w.tIdx(np.x, np.z)] = 1;
+}
+
+void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, int y1) {
+  const World& w = *world_;
   const int z = cam.zoom;
   const float A = float(1 << z);
-  Ctx ctx{fb_.data(), fbW_, fbH_, z, noiseLand_, noiseEdge_};
+  Ctx ctx{fb_.data(), fbW_, y1, z, noiseLand_, noiseEdge_, y0};
 
   float u0, v0, u1, v1, u2, v2, u3, v3;
   screenToView(cam, 0, 0, u0, v0); screenToView(cam, fbW_, 0, u1, v1);
@@ -609,7 +620,7 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt) {
         minY = std::min(minY, top); maxY = std::max(maxY, gy[i]);
         minX = std::min(minX, qx[i]); maxX = std::max(maxX, qx[i]);
       }
-      if (maxY < 0 || minY > fbH_ || maxX < 0 || minX > fbW_) continue;
+      if (maxY < float(y0) || minY > float(y1) || maxX < 0 || minX > fbW_) continue;
       int tx0 = std::min(std::min(wx[0], wx[1]), std::min(wx[2], wx[3])), tz0 = std::min(std::min(wz[0], wz[1]), std::min(wz[2], wz[3]));
       if (!w.inTiles(tx0, tz0)) continue;
       const int tIdx = w.tIdx(tx0, tz0);
@@ -724,11 +735,11 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt) {
 // Map-edge faces (spec 6.5)
 // ======================================================================================
 
-void Renderer::drawEdgeFaces(const Camera& cam, const RenderOptions&) {
+void Renderer::drawEdgeFaces(const Camera& cam, int y0, int y1) {
   const World& w = *world_;
   const int z = cam.zoom;
   const float Wt = 8.f * float(1 << z), Ht = Wt / 2, A = float(1 << z);
-  Ctx ctx{fb_.data(), fbW_, fbH_, z, noiseLand_, noiseEdge_};
+  Ctx ctx{fb_.data(), fbW_, y1, z, noiseLand_, noiseEdge_, y0};
   const bool even = (cam.rot & 1) == 0;
   auto seg = [&](int ua, int va, int ub, int vb, const Image& tbl) {
     int wx[2], wz[2];
@@ -745,7 +756,7 @@ void Renderer::drawEdgeFaces(const Camera& cam, const RenderOptions&) {
     }
     if (maxX < 0 || minX > fbW_) return;
     float topY = std::min(s0[0], s0[1]) - 255 * A;
-    if (topY > fbH_) return;
+    if (topY > y1) return;
     int seed = seedFor(std::min(wx[0], w.W - 1), std::min(wz[0], w.H - 1));
     bool waterPart = wat[0] > alt[0] || wat[1] > alt[1];
     if (waterPart) {
@@ -1074,15 +1085,15 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
   }
 }
 
-void Renderer::drawSprite(const Item& it, const RenderOptions& opt) {
+void Renderer::drawSprite(const Item& it, const RenderOptions& opt, int bandY0, int bandY1) {
   const SpriteImage& s = *it.spr;
   const int sc = it.dbl ? 2 : 1;
   const int x0 = it.ax - s.L * sc, y0 = it.ay - s.T * sc;
   const Plane* pl = (it.plane && it.plane->w == s.img.w && it.plane->h == s.img.h) ? it.plane : nullptr;
   const bool blendAll = pl || it.m2 < 32;
-  for (int y = 0; y < s.img.h * sc; y++) {
+  const int yb = std::max(0, bandY0 - y0), ye = std::min(s.img.h * sc, bandY1 - y0);
+  for (int y = yb; y < ye; y++) {
     int dy = y0 + y;
-    if (dy < 0 || dy >= fbH_) continue;
     int sy = y / sc;
     const uint32_t* row = &s.img.px[size_t(sy) * s.img.w];
     for (int x = 0; x < s.img.w * sc; x++) {
@@ -1108,8 +1119,8 @@ void Renderer::drawSprite(const Item& it, const RenderOptions& opt) {
   }
 }
 
-void Renderer::drawItems(const RenderOptions& opt) {
-  for (const auto& it : items_) drawSprite(it, opt);
+void Renderer::drawItems(const RenderOptions& opt, int y0, int y1) {
+  for (const auto& it : items_) drawSprite(it, opt, y0, y1);
 }
 
 // ======================================================================================
@@ -1215,17 +1226,27 @@ void Renderer::drawFallbackBoxes(const Camera& cam) {
 
 void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderScene* scene) {
   if (fbW_ <= 0 || fbH_ <= 0) return;
-  std::fill(fb_.begin(), fb_.end(), 0xFF302820u);
-  if (!world_) return;
+  if (!world_) { std::fill(fb_.begin(), fb_.end(), 0xFF302820u); return; }
   const int zoom = std::max(0, std::min(4, cam.zoom));
   computeOrigin(cam);
-  if (opt.background) drawBackground(zoom);
-  if (opt.terrain) {
-    drawTerrain(cam, opt);
-    if (opt.edgeFaces) drawEdgeFaces(cam, opt);
-  }
+  // Serial setup: caches, shared terrain state and the sorted draw list.
+  if (opt.background) loadBackground(zoom);
+  if (opt.terrain) prepareTerrain(opt);
   buildItems(cam, opt, scene);
-  drawItems(opt);
+  // Rasterise in horizontal bands on the worker pool. Each band replays the same primitives in the same
+  // order, clipped to its rows, so the image is identical to a single-threaded render.
+  WorkerPool& pool = WorkerPool::shared();
+  const int bands = bands_ > 0 ? std::min(bands_, fbH_) : fbH_ < 128 ? 1 : std::min(fbH_ / 32, pool.threads() * 2);
+  pool.run(bands, [&](int b) {
+    const int y0 = fbH_ * b / bands, y1 = fbH_ * (b + 1) / bands;
+    std::fill(fb_.begin() + ptrdiff_t(y0) * fbW_, fb_.begin() + ptrdiff_t(y1) * fbW_, 0xFF302820u);
+    if (opt.background) drawBackground(zoom, y0, y1);
+    if (opt.terrain) {
+      drawTerrain(cam, opt, y0, y1);
+      if (opt.edgeFaces) drawEdgeFaces(cam, y0, y1);
+    }
+    drawItems(opt, y0, y1);
+  });
   if (opt.objects && !(data_ || spriteFn_)) drawFallbackBoxes(cam);
   label_ = CostLabel();
   if (scene) {

@@ -330,7 +330,13 @@ bool Game::windowOpen(const std::string& n) const {
 }
 
 void Game::initAudio() {
-  audio_.reset(); ambCfg_ = false; ambSel_.reset(-1);
+  // The host callback reads audio_; swap it only under the host lock (the mixer guards everything else).
+  auto swapAudio = [this](std::unique_ptr<AudioSystem> a) {
+    if (audioLock) audioLock();
+    audio_.swap(a);
+    if (audioUnlock) audioUnlock();
+  };   // the old system (now in `a`) is destroyed here, after the unlock
+  swapAudio(nullptr); ambCfg_ = false; ambSel_.reset(-1);
   if (!haveData_) return;
   fs::path dir = resolveCI(data_.appsDir(), "Res/Sound");
   if (dir.empty()) return;
@@ -339,7 +345,8 @@ void Game::initAudio() {
   if (ini.empty() || !readFile(ini, b)) return;
   auto a = std::make_unique<AudioSystem>();
   a->init(AudioIni::parse(std::string(b.begin(), b.end())), makeDirLoader(dir));
-  audio_ = std::move(a);
+  a->setAsyncMusic(true);
+  swapAudio(std::move(a));
   applySettingsToAudio();
 }
 
@@ -449,13 +456,6 @@ void Game::dispatch(const MenuItemInfo& mi) {
 static const char* kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
 void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
-  struct Held {   // audio lock held for the frame body, dropped around rendering
-    Game& g; bool on = false;
-    void lock() { if (g.audioLock && !on) { g.audioLock(); on = true; } }
-    void unlock() { if (g.audioUnlock && on) { g.audioUnlock(); on = false; } }
-    ~Held() { unlock(); }
-  } held{*this};
-  held.lock();
   W_ = w; H_ = h; frameDt_ = dtMs;
   syncScreenPending();
   if (audio_) { audio_->setAudioZoom(cam_.zoom + 1); audio_->update(dtMs); }
@@ -478,10 +478,8 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
     costShow_ = false;
     renderer_.setCostTextHook([this](int sx, int sy, const std::string& text, bool ok) { costText_ = text; costX_ = sx; costY_ = sy; costOk_ = ok; costShow_ = true; });
     ropt_.animTick = int(sim_.day);
-    held.unlock();   // rendering touches no audio state
     renderer_.render(cam_, ropt_, &scene_);
-    held.lock();
-    screen_ = renderer_.pixels();
+    renderer_.swapPixels(screen_);
   } else if (scr_ != Screen::Intro) {
     stopAmbience();
     std::fill(screen_.begin(), screen_.end(), 0xFF3A2C20u);

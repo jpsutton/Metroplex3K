@@ -1,5 +1,9 @@
+#include <atomic>
+#include <chrono>
 #include <cstring>
+#include <future>
 #include <memory>
+#include <thread>
 #include "core/audio.h"
 #include "core/bytes.h"
 #include "core/video.h"
@@ -383,6 +387,65 @@ static void testVideo() {
   Bytes junk = {1, 2, 3}; TgqMovie m2; CHECK(!m2.parse(junk));
 }
 
+// Async music: playSong returns at once, the voice starts from update() after the worker decodes it.
+static void testAsyncMusic() {
+  std::promise<void> release;
+  std::shared_future<void> gate = release.get_future().share();
+  Bytes song = wavBytes(std::vector<int16_t>(500, 100), 1, 22050);
+  auto loader = [gate, song](const std::string& p, bool, Bytes& out) {
+    if (toLower(normalizeSoundPath(p)) != "music/a.wav") return false;
+    gate.wait();
+    out = song; return true;
+  };
+  AudioSystem as;
+  as.init(AudioIni::parse("[Music]\r\n1=\"A\",0,\"Music\\a.wav\",\"\",0,1,0,1\r\n"), loader, 22050);
+  as.setAsyncMusic(true);
+  CHECK(as.playSong(1));
+  CHECK(as.currentSong() == 1);
+  as.update(10);
+  CHECK(as.mixer().voiceCount() == 0);  // still decoding
+  release.set_value();
+  for (int i = 0; i < 500 && as.mixer().voiceCount() == 0; i++) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    as.update(10);
+  }
+  CHECK(as.mixer().voiceCount() == 1 && as.currentSong() == 1);
+  // A cached song starts synchronously.
+  as.stopMusic();
+  CHECK(as.playSong(1) && as.mixer().voiceCount() == 1);
+  // stopMusic while a decode is pending: the decode lands in the cache but no voice starts.
+  AudioSystem bs;
+  std::promise<void> r2;
+  std::shared_future<void> g2 = r2.get_future().share();
+  bs.init(AudioIni::parse("[Music]\r\n1=\"A\",0,\"Music\\a.wav\",\"\",0,1,0,1\r\n"),
+          [g2, song](const std::string&, bool, Bytes& out) { g2.wait(); out = song; return true; }, 22050);
+  bs.setAsyncMusic(true);
+  bs.setMusicEnabled(false);
+  CHECK(bs.playSong(1));
+  bs.stopMusic();
+  r2.set_value();
+  for (int i = 0; i < 50; i++) { std::this_thread::sleep_for(std::chrono::milliseconds(2)); bs.update(10); }
+  CHECK(bs.mixer().voiceCount() == 0 && bs.currentSong() == 0);
+}
+
+// The mixer is driven from the audio thread while the game thread changes voices.
+static void testMixerThreads() {
+  AudioMixer m;
+  auto pcm = std::make_shared<PcmBuffer>();
+  pcm->channels = 1; pcm->sampleRate = 44100; pcm->samples.assign(4410, 1000);
+  std::atomic<bool> stop{false};
+  std::thread audio([&] { int16_t buf[2 * 256]; while (!stop) m.mixAudio(buf, 256); });
+  for (int i = 0; i < 2000; i++) {
+    VoiceParams p; p.loop = (i % 3) == 0;
+    auto h = m.play(pcm, p);
+    m.setVolume(h, 512, 10); m.setPan(h, 0.5f);
+    if (i % 2) m.fadeOut(h, 5); else m.stop(h);
+  }
+  stop = true; audio.join();
+  m.stopAll();
+  CHECK(m.voiceCount() == 0);
+}
+
 int main() {
   testXa();
   testIni();
@@ -392,6 +455,8 @@ int main() {
   testArea();
   testFsc();
   testSystem();
+  testAsyncMusic();
+  testMixerThreads();
   testVideo();
   TEST_MAIN_END();
 }

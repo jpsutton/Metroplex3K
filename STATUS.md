@@ -21,7 +21,7 @@ synthetic fixtures (tests/fake_install.h builds a tiny install on disk). First r
 - Sim: clock, economy, population, growth/valves/landvalue (m3k::growth), utilities/services (m3k::us), tiling_rules/tiler/
   network_tools, traffic, disasters, advisors/news/petitioners, scenario/script, bat, settings/cheats; city.* owns all
 - Media: audio/xa_codec, video/tqi/intro, automata (+ game_street.cpp host adapter)
-- Host: src/app/main.cpp (SDL2). Tools: conformance, render_demo, game_demo, game_play_demo, city_sim_demo, windows_demo, skin_demo
+- Host: src/app/main.cpp (SDL2). Tools: conformance, render_demo, game_demo, game_play_demo, city_sim_demo, windows_demo, skin_demo, frame_bench
 - 37 test executables; `ctest` must stay green
 
 ## Open issues: GitHub is the single source of truth
