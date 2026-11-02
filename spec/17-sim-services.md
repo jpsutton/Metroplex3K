@@ -199,8 +199,12 @@ funding ≥ `MinAcceptableFunding`, or city-average crime ≤ `MaxAcceptableCrim
   stations remain. [STATIC] Funding is an integer percentage (one byte), so "≥ 100 %" here and
   "> 99 %" in §5.3 and §6.4 are the same test. [STATIC]
 
-The fire department uses the same machine with the `SC3FireLayer.ini` keys, testing average
-flammability against `MaxAcceptableFlam`. [INFERRED from the identical key set; verify]
+The fire department uses the **same strike machine** with the `SC3FireLayer.ini` keys, testing the
+flammability layer's running average against `MaxAcceptableFlam` in place of average crime vs
+`MaxAcceptableCrime` [STATIC]. Chance / start / end / `StrikeEfficiency` coverage multiply are
+identical in form to the police rules above (no stations → never start; end when counter >
+`MaxStrikeDuration`, funding ≥ 100 %, or no stations remain). Advisors/news get the fire-strike
+messages instead of the police ones.
 
 ## 4. Fire protection and flammability
 
@@ -908,9 +912,9 @@ each jail (`10-save-format.md` §6.2.5).
 * Aura: which non-building occupant classes use kinds other than 1 (so they are skipped by
   §8.4). (Chart series order closed: index 0 = newest, §8.6.)
 * Which list holds libraries/museums in the education funding pass (§6.2).
-* Fire strike machine assumed identical to police.
 * The (now decoded) `garbageStore` block of the pollution record (§7.4). (Police record fields
   closed, see Persisted state.)
+* Fire strike closed: identical machine to police, avg flammability vs `MaxAcceptableFlam` (§3.4).
 * Whether the agent-type distance of §7.1.2 is the parent-step count.
 * Flammability record trailer fields beyond the visit-order cursor (closed: visit order is
   row-major x-fastest with a continuing cursor, §4).
