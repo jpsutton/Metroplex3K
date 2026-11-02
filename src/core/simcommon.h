@@ -19,6 +19,7 @@ constexpr uint32_t YouthCurfew = 0xC2BF1DC5, Gambling = 0xA0D07129, JrSports = 0
                    NeighborhoodWatch = 0x62BF1DB9, ConservationCorps = 0xA2F6E7DA,
                    ParkingFine = 0x015B4D1E, AltDriving = 0xE2BF1E2A, NukeFree = 0xE0D0722E,
                    PowerConservation = 0x82B9999B, StairwellLighting = 0x82E42E30,
+                   // Spec 16 §3.4 / 19 §9.5 / Q-BX [STATIC]: water demand ordinances.
                    WaterConservation = 0x02BF1DFA, WaterMeters = 0xC2F90EB1,
                    CleanAir = 0xA2BF1E43, TrashPresort = 0x42BF1E18, IndPolluteFee = 0x02F6E7E2,
                    LawnChemBan = 0x62F6E808, TireRecycling = 0xC2F6E81F,

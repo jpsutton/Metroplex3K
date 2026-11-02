@@ -383,7 +383,8 @@ static void testWaterDistribution() {
     t.monthlyUpdate(env);
     CHECK(t.occupantWatered()[0] == 0 && t.stats.used == 2 && t.stats.statA == 4);   // leftover 0: used = supply; all 4 marks left
   }
-  // Ordinances: k = 1 - 0.2 - 0.1.
+  // Ordinances: k = 1 - 0.2 - 0.1. Spec 16 §3.4 / Q-BX [STATIC]: IDs match 19 §9.5.
+  CHECK(ord::WaterConservation == 0x02BF1DFAu && ord::WaterMeters == 0xC2F90EB1u);
   env.ordinances.set(ord::WaterConservation, true);
   env.ordinances.set(ord::WaterMeters, true);
   f.L.monthlyUpdate(env);

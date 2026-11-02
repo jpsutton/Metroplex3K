@@ -402,6 +402,7 @@ static bool ringAny(int W, int H, int x0, int z0, int x1, int z1, const std::vec
 void WaterLayer::monthlyUpdate(const WaterEnv& env) {
   const int W = W_, H = H_;
   double k = 1.0;
+  // Spec 16 §3.4 / Q-BX [STATIC]: k = 1 − Conserv/100 − Meters/100; IDs 0x02BF1DFA / 0xC2F90EB1.
   if (env.ordinances.active(ord::WaterConservation)) k -= params_.conservationFactor / 100.0;
   if (env.ordinances.active(ord::WaterMeters)) k -= params_.meterFactor / 100.0;
 

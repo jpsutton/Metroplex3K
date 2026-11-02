@@ -217,6 +217,7 @@ class Budget {
 namespace ord {
 constexpr uint32_t YouthCurfew = 0xC2BF1DC5, LegalGambling = 0xA0D07129, ReadingProgram = 0xE0D07233,
                    YouthSports = 0x815B4CEF, ParkingFines = 0x015B4D1E, HomelessShelter = 0x20D07175,
+                   // Spec 16 §3.4 / 19 §9.5 / Q-BX [STATIC]
                    CrossingGuards = 0xC2BF1DEF, Shuttle = 0xA2BF1DE5, WaterConservation = 0x02BF1DFA,
                    EarthquakeRetrofit = 0xC2BF1DD1, StairwellLighting = 0x82E42E30, CleanAir = 0xA2BF1E43,
                    AltDriving = 0xE2BF1E2A, FreeClinics = 0x40D07236, LeafBurningBan = 0x22BF1E35,
