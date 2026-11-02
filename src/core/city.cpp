@@ -377,7 +377,7 @@ class GrowthAdapter : public growth::GrowthCity {
     int oi = c_.occupantAt(lot.ax, lot.az);
     if (oi < 0) return;
     std::set<int> kill{oi};
-    c_.removeOccupantIdx(kill);
+    c_.removeOccupantIdx(kill, false);   // growth demolishes a lot only; the network is unchanged
   }
   void setLotState(const growth::LotInfo& lot, uint32_t st) override {
     int oi = c_.occupantAt(lot.ax, lot.az);
@@ -696,7 +696,7 @@ void City::classifyNetwork() {
   for (const auto& p : world_->subway) if (world_->inTiles(p.x, p.z)) subway_[idx(p.x, p.z)] = 1;
 }
 
-void City::rebuildIndex() {
+void City::rebuildIndex(bool network) {
   size_t N = size_t(world_->W) * world_->H;
   for (auto& o : world_->occupants) if (!o.uid) o.uid = nextUid_++;
   occ_.assign(N, -1);
@@ -706,8 +706,8 @@ void City::rebuildIndex() {
       for (int dz = 0; dz < o.sizeZ; dz++)
         if (world_->inTiles(o.x + dx, o.z + dz)) occ_[idx(o.x + dx, o.z + dz)] = int32_t(i);
   }
-  classifyNetwork();
-  occDirty_ = netDirty_ = true;
+  if (network) { classifyNetwork(); netDirty_ = true; }
+  occDirty_ = true;
   // #28 Placement query + 13 §3.1a class flags: refresh attrs and rebuild occupancy scanners.
   for (auto& o : world_->occupants) {
     o.classFlags = runtimeOccupantFlags(o.agentType);
@@ -965,7 +965,7 @@ void City::damageOccupant(int i, uint32_t st) {
   occDirty_ = true;
 }
 
-void City::removeOccupantIdx(const std::set<int>& killIn) {
+void City::removeOccupantIdx(const std::set<int>& killIn, bool network) {
   std::set<int> kill = killIn;
   // Spec 10 §6.3 [STATIC]: spacing-grid removal handler for airport/seaport parts (attr 0x1F4).
   std::vector<std::pair<int, int>> pierRem;
@@ -1057,7 +1057,7 @@ void City::removeOccupantIdx(const std::set<int>& killIn) {
         if (inMap(o.x + dx, o.z + dz) && world_->zone[idx(o.x + dx, o.z + dz)] == 22) world_->zone[idx(o.x + dx, o.z + dz)] = 0;
     world_->occupants.erase(world_->occupants.begin() + *it);
   }
-  rebuildIndex();
+  rebuildIndex(network);
 }
 
 // ============================================================================ player actions

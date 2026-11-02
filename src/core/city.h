@@ -88,7 +88,9 @@ class City {
 
   // `g` may be null (no game data). `cfg` is copied. Loads every layer from w->raw when present.
   void init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed = 1);
-  void rebuildIndex();   // after loading a city / external edits to World
+  // After loading a city / external edits to World. network=false skips network reclassification and
+  // netDirty_ for edits that only touch occupants (so the throttled refresh() is not forced every day).
+  void rebuildIndex(bool network = true);
 
   // ---- time ----
   // Advance one calendar day through the clock; runs daily/weekly/monthly steps as dates demand.
@@ -260,7 +262,7 @@ class City {
   bool tileBuildable(int x, int z) const;
   bool flatTile(int x, int z) const;
   int addOccupant(const Occupant& o);
-  void removeOccupantIdx(const std::set<int>& kill);
+  void removeOccupantIdx(const std::set<int>& kill, bool network = true);
   void classifyNetwork();
   void rebuildTraffic();
   void setFallbackRoadPiece(int x, int z);
