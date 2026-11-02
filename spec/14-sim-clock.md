@@ -424,8 +424,23 @@ participate:
 
 On the 1-tile scanner, a hit fails the cell unless the occupant both exposes capability flag
 `0x400` and passes the caller-supplied occupancy filter; a passing hit may add to the optional
-cost. On the 2-tile and 4-tile scanners, any hit fails the cell (no filter). The exact filter
-predicates each caller passes are still [OPEN].
+cost. On the 2-tile and 4-tile scanners, any hit fails the cell (no filter).
+
+**Occupancy filter** [STATIC]. Callers do not supply an arbitrary predicate. They pass an integer
+mode `f`:
+
+| `f` | Occupant must answer true to |
+|---|---|
+| `1` | the **removable** query (the same one network retile / crossable checks use; `12-networks.md`) |
+| any other value (callers use `0`) | the **alternate clearable** query (a second per-occupant boolean; ordinary buildings answer false to both) |
+
+If that base query is true, the filter still **fails** when the occupant carries filler-lot flag
+bit `0x100` (`13-buildings-occupants.md` attribute `0xCA`) **and** its lot reports protected flag
+`0x200` (`13` § persisted lot flags). Otherwise the filter passes.
+
+The same `f` is used by clearance, footprint collect, and nearest-match. Observed network
+placement paths pass `f = 1`. A full per-tool table of who passes `0` vs `1` is still [OPEN];
+implementing the two modes plus the filler/protected override is enough for hold/clearance.
 
 **Per-building work (weekly).** Besides the layer-wide steps above, every building that has a
 lot is itself enrolled in the schedule when it is added to the city, and withdrawn when it is
@@ -619,6 +634,6 @@ are converted as follows [STATIC]:
 * Graph histories owned by subsystems other than the budget and demographics (crime, pollution,
   traffic graphs and so on): when they are sampled.
 * The relative order of daily items 6–11 and monthly items 1–3 (§6.1), recorded as subsystem order.
-* Which occupant-filter predicates each placement-query (#28) caller passes (the mode → scanner
-  table is closed).
+* Full per-tool table of which placement-query (#28) callers pass occupancy-filter mode `0` vs `1`
+  (§6.1); the two-mode rule and filler/protected override are closed.
 * Full per-dialog inventory of pending/modal raisers (§2.3); the pause-vs-pending rule is closed.
