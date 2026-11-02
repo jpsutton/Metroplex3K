@@ -189,8 +189,7 @@ void Game::loadFile(const fs::path& p) {
     }
     scen_ = std::move(sc);
     // City-info flags: flagA = Disasters, flagB = Auto Budget (world.h).
-    disastersOn_ = world_.info.flagA != 0; autoBudget_ = world_.info.flagB != 0;
-    disasters_.setDisastersEnabled(disastersOn_);
+    setDisastersOn(world_.info.flagA != 0); autoBudget_ = world_.info.flagB != 0;
     enterCity();
     currentFile_ = p;
     if (scen_) startScenarioHooks();
@@ -331,10 +330,9 @@ void Game::acceptTerrain() {
   int64_t start = Budget::startingFunds(nc_diff_);
   if (nc_diff_ == 3) { b.newCity(0); b.issueBond(10000, 1, nc_year_); }
   else b.newCity(start);
-  disastersOn_ = nc_disasters_; autoBudget_ = nc_autoBudget_;
+  setDisastersOn(nc_disasters_); autoBudget_ = nc_autoBudget_;
   world_.info.flagA = nc_disasters_ ? 1 : 0; world_.info.flagB = nc_autoBudget_ ? 1 : 0;
   world_.info.gameSpeed = 1;
-  disasters_.setDisastersEnabled(disastersOn_);
   b.showBudgetOnlyInDebt = true;  // spec 19 7 [OBSERVED]: no year-end budget window while funds are positive
   currentFile_.clear();
   saveSettings();

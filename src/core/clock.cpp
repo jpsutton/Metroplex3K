@@ -306,11 +306,24 @@ std::vector<Step> dailySteps() {
           Step::DailyAura, Step::DailyPollution, Step::DailyCrime, Step::DailyFlammability};
 }
 std::vector<Step> weeklySteps() { return {Step::WeeklyStreetSim}; }
+std::vector<Step> monthlyDedicatedSteps() {
+  // Spec 14 §6.1 items 1–2 [STATIC Q-BE]: dedicated monthly-tier entries, subsystem creation order.
+  return {Step::MonthlyDisasterManager, Step::MonthlyNeighbours};
+}
+std::vector<Step> monthlySharedSteps() {
+  // Spec 14 §6.1 items 4–16 [STATIC]: shared monthly pass (AreaAgent cascade).
+  return {Step::MonthlyRci, Step::MonthlyOrdinances, Step::MonthlyResidential, Step::MonthlyCommercial,
+          Step::MonthlyIndustrial, Step::MonthlyTraffic, Step::MonthlyBudget, Step::MonthlyPower,
+          Step::MonthlyWater, Step::MonthlyWeather, Step::MonthlyPollution, Step::MonthlyCrime,
+          Step::MonthlyAura};
+}
 std::vector<Step> monthlySteps() {
-  return {Step::MonthlyDisasterManager, Step::MonthlyNeighbours, Step::MonthlyWorldLayer, Step::MonthlyRci,
-          Step::MonthlyOrdinances, Step::MonthlyResidential, Step::MonthlyCommercial, Step::MonthlyIndustrial,
-          Step::MonthlyTraffic, Step::MonthlyBudget, Step::MonthlyPower, Step::MonthlyWater,
-          Step::MonthlyWeather, Step::MonthlyPollution, Step::MonthlyCrime, Step::MonthlyAura};
+  // Item 3 (world layer) before 4–16 [INFERRED]; order vs 1–2 remains [INFERRED] (kept after 1–2).
+  std::vector<Step> v = monthlyDedicatedSteps();
+  v.push_back(Step::MonthlyWorldLayer);
+  auto shared = monthlySharedSteps();
+  v.insert(v.end(), shared.begin(), shared.end());
+  return v;
 }
 std::vector<Step> minuteSteps() { return {Step::MinuteDisasterInstances, Step::MinuteScenario}; }
 
@@ -410,10 +423,15 @@ void CitySchedule::runWeek() {
 
 void CitySchedule::runMonth() {
   if (clock_) clock_->pause();
-  for (Step s : monthlySteps()) {
+  // Spec 14 §6.1 / Q-BE [STATIC]: dedicated monthly-tier entries (items 1–2: disaster manager,
+  // then neighbours) are processed before the shared monthly pass that drives items 4–16.
+  for (Step s : monthlyDedicatedSteps()) {
     if (s == Step::MonthlyDisasterManager && !disastersEnabled) continue;
     run(s);
   }
+  // Item 3 world layer [INFERRED]: before 4–16; relative to 1–2 inferred (after dedicated).
+  run(Step::MonthlyWorldLayer);
+  for (Step s : monthlySharedSteps()) run(s);
   if (onMonth) onMonth();
   if (clock_) clock_->resume();
 }

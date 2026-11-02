@@ -153,11 +153,27 @@ DisasterInputs inputsFor(City& c, bool enabled, const CheatRegistry& cheats) {
 
 }  // namespace
 
+void Game::setDisastersOn(bool on) {
+  disastersOn_ = on;
+  disasters_.setDisastersEnabled(on);
+  if (simReady_) city().sched.disastersEnabled = on;   // monthly item 1 gate (Q-BD / Q-BE)
+}
+
 void Game::initManagers() {
   disasters_.seed(uint32_t(world_.W) * 2654435761u + 7u);
   managersReady_ = true;
   lastMonth_ = city().clock.date().month;
   lastWeekDay_ = -1;
+  // Spec 14 §6.1 / Q-BE [STATIC]: monthly DM is a dedicated schedule entry before the shared pass.
+  // City::wire leaves it unwired (Game owns DisasterManager); plug it in here so runMonth order is
+  // DM → neighbours → … rather than neighbours/4–16 then a post-hoc monthlyTick.
+  city().sched.disastersEnabled = disastersOn_;
+  city().sched.setHandler(Step::MonthlyDisasterManager, [this] {
+    CityDisasterWorld dw(world_, city());
+    DisasterOutput out;
+    disasters_.monthlyTick(dw, inputsFor(city(), disastersOn_, cheats_), out);
+    applyDisasterOutput(out);
+  });
   // Ticker text carries %CITYNAME%/%YOURCITY%/%MAYOR%... tags; expand when the item is created.
   auto textFn = [this](uint32_t t, uint32_t i) { return expandTokens(str(t, i), env().tc); };
   tickerDb_ = TickerDb();
@@ -666,7 +682,7 @@ void Game::startScenarioHooks() {
                                        DisasterType::SpaceJunk};
     if (kind >= 0 && kind < 9) startDisaster(map[kind]);
   };
-  h.setDisastersEnabled = [this](bool on) { disastersOn_ = on; };
+  h.setDisastersEnabled = [this](bool on) { setDisastersOn(on); };
   h.text = [this](uint32_t g, uint32_t i) { return str(g, i); };
   scen_->start(city(), world_.info.mayorName, world_.info.cityName, h);
 }
@@ -768,7 +784,8 @@ void Game::tickSim(uint32_t dtMs) {
     disasters_.dayTick(dw, in, out);
     int month = city().clock.date().month;
     if (month != lastMonth_) {
-      lastMonth_ = month; disasters_.monthlyTick(dw, in, out);
+      // Monthly DM already ran inside CitySchedule::runMonth (dedicated item 1, Q-BE) during tickDay.
+      lastMonth_ = month;
       advisors_.monthlyBuildingUnlock(city().clock.date().year, rng_);
       if (month == 1) {   // city anniversary ticker item (10, 25, 50, 100, ... years since founding)
         NewsKey k = anniversaryNews(city().clock.date().year - world_.info.foundingYear);

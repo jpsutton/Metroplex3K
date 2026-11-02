@@ -241,6 +241,14 @@ static void testSchedule() {
   CHECK(monthlySteps().size() == 16);
   CHECK(monthlySteps()[9] == Step::MonthlyBudget && monthlySteps()[5] == Step::MonthlyResidential);
   CHECK(monthlySteps().back() == Step::MonthlyAura);
+  // Spec 14 §6.1 / Q-BE [STATIC]: dedicated items 1–2 (DM then neighbours) before shared 4–16.
+  CHECK(monthlyDedicatedSteps().size() == 2);
+  CHECK(monthlyDedicatedSteps()[0] == Step::MonthlyDisasterManager);
+  CHECK(monthlyDedicatedSteps()[1] == Step::MonthlyNeighbours);
+  CHECK(monthlySharedSteps()[0] == Step::MonthlyRci);
+  CHECK(monthlySharedSteps().back() == Step::MonthlyAura);
+  CHECK(monthlySteps()[0] == Step::MonthlyDisasterManager && monthlySteps()[1] == Step::MonthlyNeighbours);
+  CHECK(monthlySteps()[2] == Step::MonthlyWorldLayer && monthlySteps()[3] == Step::MonthlyRci);
   CHECK(anniversaryNewsItem(10) == 0x1F4 && anniversaryNewsItem(2000) == 0x1FB && anniversaryNewsItem(11) == 0);
 
   Clock clk;
@@ -269,14 +277,18 @@ static void testSchedule() {
   CHECK(sc.cascadeLog(0) == int(Step::DailyDisasters));
   size_t daily = dailySteps().size() - 1;   // disaster instances skipped
   CHECK(sc.cascadeLog(daily) == int(Step::MonthlyDisasterManager));
+  CHECK(sc.cascadeLog(daily + 1) == int(Step::MonthlyNeighbours));   // Q-BE: neighbours after DM
+  CHECK(sc.cascadeLog(daily + 3) == int(Step::MonthlyRci));          // shared pass after world
   CHECK(sc.cascadeLog(daily + 16 - 1) == int(Step::MonthlyAura));
   CHECK(sc.cascadeLog(daily + 16) == -1);
 
-  // disasters disabled skip the disaster manager monthly step
+  // disasters disabled skip the disaster manager monthly step; neighbours still before shared
   sc.clearLog();
   sc.disastersEnabled = false;
   sc.runMonth();
   CHECK(sc.cascadeLog(0) == int(Step::MonthlyNeighbours));
+  CHECK(sc.cascadeLog(1) == int(Step::MonthlyWorldLayer));
+  CHECK(sc.cascadeLog(2) == int(Step::MonthlyRci));
 
   // weekly: enrolled buildings first, in order, additions during the step wait
   std::vector<std::string> wk;

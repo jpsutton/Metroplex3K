@@ -588,9 +588,8 @@ void Game::handleWindowResult(const WindowResult& r) {
       case Act::ApplyCityProps: {
         const CityPropsState& s = propsState_;
         world_.info.cityName = s.name; world_.info.mayorName = s.mayor;
-        disastersOn_ = s.disasters; autoBudget_ = s.autoBudget;
+        setDisastersOn(s.disasters); autoBudget_ = s.autoBudget;
         world_.info.flagA = disastersOn_ ? 1 : 0; world_.info.flagB = autoBudget_ ? 1 : 0;
-        disasters_.setDisastersEnabled(disastersOn_);
         uint32_t L = size_t(s.landscape) < schemeIdsL_.size() ? schemeIdsL_[size_t(s.landscape)] : world_.scheme.landscape;
         uint32_t F = size_t(s.flora) < schemeIdsF_.size() ? schemeIdsF_[size_t(s.flora)] : world_.scheme.floraSet;
         uint32_t B = size_t(s.buildings) < schemeIdsB_.size() ? schemeIdsB_[size_t(s.buildings)] : world_.scheme.buildingSet;
