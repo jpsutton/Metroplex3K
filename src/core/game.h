@@ -140,6 +140,17 @@ class Game {
   bool windowOpen(const std::string& name) const;
   const EngineOptions& engineOptions() const { return engineOpts_; }
   EngineOptions& mutableEngineOptions() { return engineOpts_; }
+  // Timings of the most recent frame() call (microsecond resolution), for the host's frame log.
+  struct FramePhases {
+    double simMs = 0;      // tickSim: the sim cascade (days, refresh)
+    double streetMs = 0;   // streetSimFrame
+    double rasterMs = 0;   // city rasteriser, 0 on a cache hit
+    bool rastered = false; // true when the city was rasterised this frame (false = cached blit)
+    bool simDay = false;   // at least one sim day ran this frame
+    int zoom = 0, speed = 0;
+    bool paused = false;
+  };
+  const FramePhases& lastFramePhases() const { return phases_; }
   int framesPerSecond() const { return fps_; }   // half-second average, updated whether or not the counter shows
   // Test hook: every window control drawn registers (name, rect) here (cleared by the caller).
   void setSpotSink(std::vector<Spot>* s) { spotSink_ = s; }
@@ -317,6 +328,7 @@ class Game {
   EngineOptionsDialog engineDlg_;
   bool showEngine_ = false;
   // Frame counter overlay (engine option): built-in monospace font, scale follows the window height.
+  FramePhases phases_;
   uint32_t fpsAccMs_ = 0;
   int fpsFrames_ = 0, fps_ = 0, fpsScale_ = 0;
   Font fpsFont_;

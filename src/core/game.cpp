@@ -3,6 +3,7 @@
 #include "core/game.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -552,6 +553,12 @@ void Game::applyCostLabelFromScene() {
 }
 
 void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixels, int outPitchBytes) {
+  using PhaseClock = std::chrono::steady_clock;
+  auto phaseMs = [](PhaseClock::time_point a, PhaseClock::time_point b) {
+    return std::chrono::duration<double, std::milli>(b - a).count();
+  };
+  phases_ = FramePhases();
+  phases_.zoom = cam_.zoom; phases_.speed = speed_; phases_.paused = paused_;
   W_ = w; H_ = h; frameDt_ = dtMs;
   syncScreenPending();
   if (audio_) { audio_->setAudioZoom(cam_.zoom + 1); audio_->update(dtMs); }
@@ -570,9 +577,14 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
   if (world3d) {
     if (renderer_.width() != w || renderer_.height() != h) { renderer_.resize(w, h); cityFbValid_ = false; }
     if (scr_ == Screen::InCity) {
+      const auto pt0 = PhaseClock::now();
       tickSim(dtMs);
+      phases_.simDay = simDayThisFrame_;
       if (simDayThisFrame_) bumpCityVisual();
+      const auto pt1 = PhaseClock::now();
       streetSimFrame(dtMs);
+      phases_.simMs = phaseMs(pt0, pt1);
+      phases_.streetMs = phaseMs(pt1, PhaseClock::now());
       updateAmbience(dtMs);
       ropt_.overlay = (showMap_ && mapWin_.showInCityView) ? mapWin_.activeOverlay() : nullptr;
       if (!ropt_.overlay && layers_.mode == CityLayers::LayerView) {   // City Layer Views: kept current with the sim
@@ -594,7 +606,10 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
       renderer_.setCostTextHook([this](int sx, int sy, const std::string& text, bool ok) {
         costText_ = text; costX_ = sx; costY_ = sy; costOk_ = ok; costShow_ = true;
       });
+      const auto pr0 = PhaseClock::now();
       renderer_.render(cam_, ropt_, &scene_);
+      phases_.rasterMs = phaseMs(pr0, PhaseClock::now());
+      phases_.rastered = true;
       // Keep a city-only copy so UI-only frames can skip the rasteriser.
       if (cityFb_.size() != size_t(w) * h) cityFb_.assign(size_t(w) * h, 0);
       renderer_.swapPixels(cityFb_);

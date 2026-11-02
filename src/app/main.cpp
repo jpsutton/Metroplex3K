@@ -2,6 +2,7 @@
 // drives a FrameBackend so other hosts (Android, later GPU present) can reuse the core unchanged.
 #include <SDL.h>
 
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -10,6 +11,7 @@
 #include "core/city_rasterizer.h"
 #include "core/game.h"
 #include "core/gamedir.h"
+#include "frame_log.h"
 #include "gl_compute.h"
 #include "sdl_presenter.h"
 
@@ -48,19 +50,21 @@ static void audioCallback(void* user, Uint8* stream, int len) {
 }
 
 int main(int argc, char** argv) {
-  std::string gameArg, cityArg, langArg;
+  std::string gameArg, cityArg, langArg, frameLogArg;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
     if ((a == "--game-dir" || a == "--game") && i + 1 < argc) gameArg = argv[++i];
     else if (a == "--city" && i + 1 < argc) cityArg = argv[++i];
+    else if (a == "--frame-log" && i + 1 < argc) frameLogArg = argv[++i];
     else if ((a == "--language" || a == "-l") && i + 1 < argc) langArg = argv[++i];
     else if (a == "--help" || a == "-h") {
-      std::cout << "metroplex3k [--game-dir DIR] [--city FILE] [--language NAME]\n"
+      std::cout << "metroplex3k [--game-dir DIR] [--city FILE] [--language NAME] [--frame-log FILE]\n"
                    "Language: NAME (English, French, German, ...), $M3K_LANGUAGE, else the OS locale (an installed language).\n"
                    "Game data: DIR (game root, its Apps folder, or a parent), $M3K_GAME_DIR, the saved choice,\n"
                    "or auto-detected GOG install locations. You can also drop the folder or the GOG installer\n"
                    "onto the window, or type the path on the first screen.\n"
-                   "Render: $M3K_RENDER=cpu|gpu (default cpu). gpu uses OpenGL compute for terrain when available.\n";
+                   "Render: $M3K_RENDER=cpu|gpu (default cpu). gpu uses OpenGL compute for terrain when available.\n"
+                   "Frame log: --frame-log FILE or $M3K_FRAMELOG=FILE writes a per-frame timing CSV and prints a summary on exit.\n";
       return 0;
     }
   }
@@ -121,6 +125,19 @@ int main(int argc, char** argv) {
   };
   openAudio();
 
+  FrameLog frameLog;
+  if (frameLogArg.empty())
+    if (const char* e = std::getenv("M3K_FRAMELOG")) frameLogArg = e;
+  if (!frameLogArg.empty()) {
+    const bool gpuActive = wantGpu && glTerrain.available();
+    if (frameLog.open(frameLogArg, gpuActive ? "gpu" : "cpu")) std::cerr << "metroplex3k: logging frame times to " << frameLogArg << "\n";
+    else std::cerr << "metroplex3k: cannot open frame log " << frameLogArg << "\n";
+  }
+  FrameLog::Clock::time_point prevStart = FrameLog::Clock::now();
+  auto msBetween = [](FrameLog::Clock::time_point a, FrameLog::Clock::time_point b) {
+    return std::chrono::duration<double, std::milli>(b - a).count();
+  };
+
   SDL_StartTextInput();
   Input in;
   uint32_t last = SDL_GetTicks();
@@ -128,6 +145,7 @@ int main(int argc, char** argv) {
   std::string curName, curTitle;
   SDL_Cursor* cursor = nullptr;
   while (!game.wantQuit()) {
+    const auto tStart = FrameLog::Clock::now();
     in.pressed = in.released = in.rightPressed = false; in.wheel = 0; in.text.clear();
     std::memset(in.key, 0, sizeof in.key);
     in.keyDowns.clear();
@@ -187,6 +205,7 @@ int main(int argc, char** argv) {
       presenter.setVsync(wantVsync);
     }
 
+    const auto tGame0 = FrameLog::Clock::now();
     FrameBuffer fb;
     if (presenter.beginFrame(w, h, fb)) {
       game.frame(in, now - last, fb);
@@ -196,7 +215,9 @@ int main(int argc, char** argv) {
       presenter.upload(game.screen().data(), w, h);
     }
     last = now;
+    const auto tGame1 = FrameLog::Clock::now();
     presenter.present();
+    const auto tPresent1 = FrameLog::Clock::now();
 
     if (game.windowTitle() != curTitle) { curTitle = game.windowTitle(); SDL_SetWindowTitle(win, curTitle.c_str()); }
     if (game.cursorName() != curName) {
@@ -213,7 +234,19 @@ int main(int argc, char** argv) {
       }
       SDL_SetCursor(cursor ? cursor : SDL_GetDefaultCursor());
     }
+    const auto tDelay0 = FrameLog::Clock::now();
     if (!wantVsync) SDL_Delay(8);   // with vsync, present() already paces the loop
+    if (frameLog.active()) {
+      FrameLog::Sample smp;
+      smp.loopMs = msBetween(prevStart, tStart);
+      smp.eventsMs = msBetween(tStart, tGame0);
+      smp.gameMs = msBetween(tGame0, tGame1);
+      smp.presentMs = msBetween(tGame1, tPresent1);
+      smp.delayMs = msBetween(tDelay0, FrameLog::Clock::now());
+      smp.w = w; smp.h = h;
+      frameLog.add(smp, game.lastFramePhases());
+    }
+    prevStart = tStart;
   }
 done:
   if (adev) SDL_CloseAudioDevice(adev);
