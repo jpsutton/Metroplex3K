@@ -133,7 +133,6 @@ int main(int argc, char** argv) {
     if (frameLog.open(frameLogArg, gpuActive ? "gpu" : "cpu")) std::cerr << "metroplex3k: logging frame times to " << frameLogArg << "\n";
     else std::cerr << "metroplex3k: cannot open frame log " << frameLogArg << "\n";
   }
-  FrameLog::Clock::time_point prevStart = FrameLog::Clock::now();
   auto msBetween = [](FrameLog::Clock::time_point a, FrameLog::Clock::time_point b) {
     return std::chrono::duration<double, std::milli>(b - a).count();
   };
@@ -238,7 +237,7 @@ int main(int argc, char** argv) {
     if (!wantVsync) SDL_Delay(8);   // with vsync, present() already paces the loop
     if (frameLog.active()) {
       FrameLog::Sample smp;
-      smp.loopMs = msBetween(prevStart, tStart);
+      smp.loopMs = msBetween(tStart, FrameLog::Clock::now());   // this iteration's own duration, vsync wait and delay included
       smp.eventsMs = msBetween(tStart, tGame0);
       smp.gameMs = msBetween(tGame0, tGame1);
       smp.presentMs = msBetween(tGame1, tPresent1);
@@ -246,7 +245,6 @@ int main(int argc, char** argv) {
       smp.w = w; smp.h = h;
       frameLog.add(smp, game.lastFramePhases());
     }
-    prevStart = tStart;
   }
 done:
   if (adev) SDL_CloseAudioDevice(adev);

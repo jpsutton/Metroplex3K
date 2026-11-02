@@ -19,7 +19,7 @@ class FrameLog {
 
   // One loop iteration, timed by the host. All values in milliseconds.
   struct Sample {
-    double loopMs = 0;      // start of this iteration to start of the previous one (what FPS is built from)
+    double loopMs = 0;      // whole duration of this iteration, present/vsync wait and delay included (FPS = 1000 / this)
     double eventsMs = 0;    // SDL event pump + input state
     double gameMs = 0;      // Game::frame (incl. locking the target, excluding present)
     double presentMs = 0;   // presenter present / vsync wait
@@ -49,8 +49,8 @@ class FrameLog {
                  p.rasterMs, ui, s.presentMs, s.delayMs, p.rastered ? 1 : 0, p.simDay ? 1 : 0, p.paused ? 1 : 0,
                  p.speed, p.zoom, s.w, s.h);
     if (++frames_ % 120 == 0) std::fflush(f_);
-    // The first iteration has no previous start; skip it so it does not read as a long frame.
-    if (frames_ > 1) { loop_.push_back(s.loopMs); if (!p.paused && p.rastered) running_.push_back(s.loopMs); }
+    loop_.push_back(s.loopMs);
+    if (!p.paused && p.rastered) running_.push_back(s.loopMs);
   }
 
   void close() {
