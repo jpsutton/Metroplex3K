@@ -3,6 +3,7 @@
 #pragma once
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -77,6 +78,17 @@ struct SpriteImage {
   bool hasSpan = false;
 };
 
+// A mutex that can live in a movable class: moving yields a fresh unlocked mutex (the lock guards cache contents,
+// which are moved along with it only when no other thread can be using them).
+struct CacheMutex {
+  std::mutex m;
+  CacheMutex() = default;
+  CacheMutex(CacheMutex&&) noexcept {}
+  CacheMutex& operator=(CacheMutex&&) noexcept { return *this; }
+  void lock() { m.lock(); }
+  void unlock() { m.unlock(); }
+};
+
 class GameData {
  public:
   // `root` may be the game root (containing Apps/), the Apps directory itself, or any directory
@@ -116,6 +128,7 @@ class GameData {
   ResourceDb db_;
   std::unordered_map<uint64_t, std::unique_ptr<SpriteImage>> spriteCache_;
   std::unordered_map<uint64_t, std::unique_ptr<Plane>> planeCache_;
+  CacheMutex occMu_;   // guards the three occupant attribute caches: the sim worker and the renderer both fill them lazily
   std::unordered_map<uint32_t, OccAttr> occCache_;
   std::unordered_map<uint32_t, OccAttr> netCache_;
   std::unordered_map<uint32_t, OccAttr> portCache_;

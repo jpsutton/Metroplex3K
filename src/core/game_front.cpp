@@ -101,12 +101,13 @@ void Game::loadSchemes() {
 // ---------------------------------------------------------------- world adoption
 
 void Game::attachWorld() {
+  syncSim();   // the world is about to be replaced
   if (haveData_) {
     data_.unmountSets();
     if (world_.scheme.buildingSet) data_.mountBuildingSet(world_.scheme.buildingSet);
     if (world_.scheme.floraSet) data_.mountFloraSet(world_.scheme.floraSet);
   }
-  renderer_.setWorld(&world_, haveData_ ? &data_ : nullptr);
+  bindRenderWorld();
   terra_ = std::make_unique<Terraformer>(world_);
   IniFile bl;
   if (haveData_ && data_.ini().load("SC3BudgetLayer.ini", bl)) terra_->setCosts(TerraformCosts::fromIni(bl));
@@ -119,25 +120,30 @@ void Game::attachWorld() {
 }
 
 void Game::enterCity() {
+  syncSim();
   // Sim.init rebuilds the City; windows referencing it are closed first.
   closeModelessWindows();
   ticker_ = TickerWidget();   // every new, loaded or scenario city starts with an empty strip
   pauseNewsItem_ = 0;
   streetHost_.reset(); street_.reset();
   sim_.init(&world_, haveData_ ? &data_ : nullptr, &cityCfg_, 12345u + uint32_t(world_.W));
-  sim_.city().onSound = [this](int id) { sound(id); };
-  sim_.city().onMessage = [this](const std::string& m) { message(m); };
+  // These fire inside the sim tick, which may be on the worker thread: hand the UI work to the owner thread.
+  sim_.city().onSound = [this](int id) { simWorker_.postToOwner([this, id] { sound(id); }); };
+  sim_.city().onMessage = [this](const std::string& m) { simWorker_.postToOwner([this, m] { message(m); }); };
   // Building news (spec 22 s4.7.1): a ticker item for the listed agent types and the landmark family.
   sim_.city().onBuildingAdded = [this](uint32_t type, int countAfter, int x, int z) {
     if (!managersReady_) return;
+    // Sim state is read here (on the tick's thread); the news post itself is UI state and runs on the owner.
     const bool landmark = sim_.city().agentHierarchy().isAncestorOrSelf(type, 18000);
-    NewsKey k = buildingNews(type, countAfter, landmark, newsRng_);
-    if (!k.valid()) return;
-    WinEnv E = env();
-    std::string text = E.text(k.table, k.id, "");
-    if (text.empty()) return;
-    cal::Date d = sim_.city().clock.date();
-    news_.post(k.table, k.id, tickerStamp(d.month, d.day, d.year), true, x, z, &text);
+    const cal::Date d = sim_.city().clock.date();
+    simWorker_.postToOwner([this, type, countAfter, x, z, landmark, d] {
+      NewsKey k = buildingNews(type, countAfter, landmark, newsRng_);
+      if (!k.valid()) return;
+      WinEnv E = env();
+      std::string text = E.text(k.table, k.id, "");
+      if (text.empty()) return;
+      news_.post(k.table, k.id, tickerStamp(d.month, d.day, d.year), true, x, z, &text);
+    });
   };
   simReady_ = true; paused_ = true; dirty_ = false; simAccum_ = 0; clockCbAccMs_ = 0;
   screenPending_ = false;  // city re-inited; pending latch starts clear

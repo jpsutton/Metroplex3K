@@ -34,10 +34,10 @@ WinEnv Game::env() {
   E.image = [this](uint32_t g, uint32_t i) { return icon(g, i); };
   E.tc.mayor = world_.info.mayorName.empty() ? nc_mayor_ : world_.info.mayorName;
   E.tc.city = world_.info.cityName.empty() ? nc_name_ : world_.info.cityName;
-  E.tc.population = simReady_ || scr_ == Screen::InCity ? sim_.population() : 0;
-  E.tc.year = scr_ == Screen::InCity ? sim_.city().clock.date().year : nc_year_;
-  const auto& nb = sim_.city().neighbours.neighbours[0];
-  if (!nb.cityName.empty()) E.tc.neighbour = nb.cityName;
+  const HudSnap& hs = hudNow();   // not the live city: it may be mid-tick on the worker
+  E.tc.population = simReady_ || scr_ == Screen::InCity ? hs.pop : 0;
+  E.tc.year = scr_ == Screen::InCity ? hs.clockYear : nc_year_;
+  if (!hs.neighbourName.empty()) E.tc.neighbour = hs.neighbourName;
   E.currency = "$";
   E.spots = spotSink_;
   return E;

@@ -28,6 +28,7 @@
 #include "core/gamedata.h"
 #include "core/intro.h"
 #include "core/render.h"
+#include "core/sim_worker.h"
 #include "core/skin.h"
 #include "core/settings.h"
 #include "core/sim.h"
@@ -115,6 +116,12 @@ class Game {
   uint64_t cityRasterFrames() const { return cityRasterFrames_; }
   uint64_t cityCacheHits() const { return cityCacheHits_; }
   bool paused() const { return paused_; }
+  // Run the sim day tick on a worker thread (opt-in; see game_async.cpp). Off by default. Tests and tools
+  // leave it off and get the synchronous behaviour. Turning it off waits for a running tick.
+  void setAsyncSim(bool on);
+  bool asyncSim() const { return asyncSim_; }
+  // Wait for a running async tick and apply its results. No-op when async is off or idle.
+  void syncSim();
   const std::string& lastMessage() const { return lastMsg_; }
   NewsTicker& news() { return news_; }
   AdvisorManager& advisors() { return advisors_; }
@@ -145,6 +152,8 @@ class Game {
     double simMs = 0;      // tickSim: the sim cascade (days, refresh)
     double streetMs = 0;   // streetSimFrame
     double rasterMs = 0;   // city rasteriser, 0 on a cache hit
+    double simWaitMs = 0;  // async sim: time the frame spent waiting for the worker (join) and applying its result
+    double asyncEndMs = 0; // async sim: publishing snapshots and starting the next job
     bool rastered = false; // true when the city was rasterised this frame (false = cached blit)
     bool simDay = false;   // at least one sim day ran this frame
     int zoom = 0, speed = 0;
@@ -273,6 +282,27 @@ class Game {
   std::vector<std::pair<int, int>> routePath(int x0, int z0, int x1, int z1);
   void executeTool(int x0, int z0, int x1, int z1);
   void buildScene();
+  // async sim (game_async.cpp)
+  struct HudSnap {
+    int dayOfYear = 1, year = 0, pop = 0, month = 1, day = 1, clockYear = 0;
+    int64_t funds = 0;
+    Valve valveR, valveC, valveI;
+    std::string neighbourName;
+  };
+  HudSnap liveHud() const;
+  const HudSnap& hudNow();                 // live when the sim is idle, else the last published snapshot
+  const World& viewWorld() const { return asyncSim_ ? renderWorld_ : world_; }
+  bool simBusy() const { return asyncSim_ && simJobInFlight_; }
+  void asyncFrameBegin(const Input& in);
+  void asyncFrameEnd();
+  bool canRunFast(const Input& in) const;
+  bool anyWindowOpen() const;
+  void publishSnapshots(bool jobJustFinished);
+  void launchSimJob();
+  void finishSimJob();
+  void daySimStep(bool disasterActive);    // the sim half of one day (runs on the worker when async)
+  void dayPostStep();                      // month / week hooks (always on the owner thread, sim idle)
+  void bindRenderWorld();
   void bumpCityVisual() { ++cityVisualSerial_; }
   void invalidateCityView() { renderer_.invalidateShade(); bumpCityVisual(); }
   uint64_t cityViewSignature() const;
@@ -403,6 +433,16 @@ class Game {
   CityLayersDialog layersDlg_;
   CityLayers layers_;            // applied View City Layers settings
   DataOverlay layerOverlay_;     // City Layer Views overlay (mode LayerView)
+  // async sim state
+  bool asyncSim_ = false;
+  bool simJobInFlight_ = false;
+  bool fastFrame_ = false;       // this frame runs while the tick is still going; it must not touch sim state
+  bool streetCacheDirty_ = true;
+  uint64_t streetCacheSerial_ = 0;
+  SimWorker simWorker_;
+  World renderWorld_;            // copy of world_ taken while the sim was idle; what the renderer reads
+  HudSnap hud_;
+  uint64_t frameNo_ = 0, hudFrame_ = ~0ull;   // hudNow() recomputes live at most once per frame
   int layerOverlayAge_ = 0;      // frames since layerOverlay_ was rebuilt
   GraphsWindow graphsWin_;
   ChartsWindow chartsWin_;
@@ -478,6 +518,11 @@ class Game {
   struct StreetHost : public AutomataHost {
     World* w = nullptr; City* c = nullptr; int month = 1, day = 1;
     std::vector<int32_t> piece;   // tile -> index into w->surface or -1
+    // Async sim: per-tile copies of the City answers, refreshed while the sim is idle (empty = ask the City).
+    std::vector<uint8_t> roadPieceCache, densityCache;
+    void refreshCaches();
+    int liveDensity(int x, int y) const;
+    void clearCaches() { roadPieceCache.clear(); densityCache.clear(); }
     int mapWidth() const override { return w ? w->W : 0; }
     int mapHeight() const override { return w ? w->H : 0; }
     bool pieceAt(int x, int y, AutoNet k, PieceRef& out) const override;

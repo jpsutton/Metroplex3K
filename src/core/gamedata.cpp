@@ -243,6 +243,7 @@ const Plane* GameData::spritePlane(uint32_t cat, uint32_t id) {
 }
 
 const OccAttr* GameData::occupant(uint32_t id, bool network, bool port) {
+  std::lock_guard<CacheMutex> lk(occMu_);
   auto& cache = network ? netCache_ : port ? portCache_ : occCache_;
   auto it = cache.find(id);
   if (it == cache.end()) {

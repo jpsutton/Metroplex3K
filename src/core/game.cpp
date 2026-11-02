@@ -142,7 +142,9 @@ void Game::ensureFonts() {
 }
 
 Game::Game() { menu_.buildFallback(); menuLoaded_ = true; loadHotkeys(); }
-Game::~Game() = default;
+Game::~Game() {
+  if (asyncSim_ && simJobInFlight_) simWorker_.wait();   // the job uses members that die with us
+}
 
 void Game::loadHotkeys() {
   hotkeyTable_ = HotkeyTable();
@@ -512,8 +514,9 @@ uint64_t Game::cityViewSignature() const {
   mix(uint64_t(layers_.mode)); mix(layers_.transport); mix(layers_.powerLines); mix(layers_.flora);
   mix(layers_.zonedBuildings); mix(layers_.otherBuildings); mix(layers_.zones);
   mix(uint64_t(layers_.underground)); mix(uint64_t(layers_.layer));
-  mix(uint64_t(world_.occupants.size())); mix(uint64_t(world_.surface.size()));
-  mix(uint64_t(world_.pipes.size())); mix(uint64_t(world_.subway.size()));
+  const World& vw = viewWorld();   // async: the renderer's snapshot, not the world the worker is changing
+  mix(uint64_t(vw.occupants.size())); mix(uint64_t(vw.surface.size()));
+  mix(uint64_t(vw.pipes.size())); mix(uint64_t(vw.subway.size()));
   mix(uint64_t(scene_.sprites.size()));
   for (const auto& sp : scene_.sprites) {
     mix(sp.category); mix(sp.spriteId); mix(uint32_t(sp.x)); mix(uint32_t(sp.z));
@@ -558,7 +561,11 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
     return std::chrono::duration<double, std::milli>(b - a).count();
   };
   phases_ = FramePhases();
+  ++frameNo_;
   phases_.zoom = cam_.zoom; phases_.speed = speed_; phases_.paused = paused_;
+  const auto pa0 = PhaseClock::now();
+  asyncFrameBegin(in);
+  phases_.simWaitMs += phaseMs(pa0, PhaseClock::now());
   W_ = w; H_ = h; frameDt_ = dtMs;
   syncScreenPending();
   if (audio_) { audio_->setAudioZoom(cam_.zoom + 1); audio_->update(dtMs); }
@@ -588,7 +595,7 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
       updateAmbience(dtMs);
       ropt_.overlay = (showMap_ && mapWin_.showInCityView) ? mapWin_.activeOverlay() : nullptr;
       if (!ropt_.overlay && layers_.mode == CityLayers::LayerView) {   // City Layer Views: kept current with the sim
-        if (++layerOverlayAge_ >= 30) refreshLayerOverlay();
+        if (++layerOverlayAge_ >= 30 && !simBusy()) refreshLayerOverlay();
         ropt_.overlay = &layerOverlay_;
       }
     } else { ropt_.overlay = nullptr; stopAmbience(); }
@@ -673,6 +680,10 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
     ui_.text(r.x + 4, r.y + 2, ui_.tooltip);
   }
   drawFpsCounter(dtMs);
+  const auto pe0 = PhaseClock::now();
+  asyncFrameEnd();
+  phases_.simWaitMs += 0;
+  phases_.asyncEndMs = phaseMs(pe0, PhaseClock::now());
 }
 
 void Game::drawFpsCounter(uint32_t dtMs) {
@@ -889,10 +900,11 @@ void Game::drawHud() {
   Rect bar{0, H_ - bh, W_, bh};
   if (!skinBar) ui_.panel(bar);
   if (ui_.hover(bar)) uiHit_ = true;
-  int month = std::min(11, (world_.info.dayOfYear - 1) * 12 / 365);
-  std::string date = std::string(kMonths[month]) + " " + std::to_string(world_.info.year);
-  std::string funds = "$" + groupDigits(sim_.funds), popText = "Pop " + groupDigits(sim_.population());
-  uint32_t fundsCol = sim_.funds < 0 ? rgb(255, 0, 0) : 0;
+  const HudSnap& hud = hudNow();
+  int month = std::min(11, (hud.dayOfYear - 1) * 12 / 365);
+  std::string date = std::string(kMonths[month]) + " " + std::to_string(hud.year);
+  std::string funds = "$" + groupDigits(hud.funds), popText = "Pop " + groupDigits(hud.pop);
+  uint32_t fundsCol = hud.funds < 0 ? rgb(255, 0, 0) : 0;
   // Navigator panel (mini-map, zoom, rotate, layers) is in the bottom-right corner; the RCI indicator is just left of it
   // (spec 08 4.2 observed). Both are anchored to the window, not to the bar art.
   const int navX = navigatorRect(bh).x;
@@ -901,7 +913,7 @@ void Game::drawHud() {
   };
   if (skinBar) {
     centredField(place.fieldA, world_.info.cityName, 0);
-    centredField(place.fieldB, groupDigits(sim_.population()), 0);
+    centredField(place.fieldB, groupDigits(hud.pop), 0);
     centredField(place.fieldC, funds, fundsCol);
     centredField(place.fieldD, date, 0);
   } else {
@@ -963,7 +975,7 @@ void Game::drawHud() {
 
   // RCI bars: bottom-anchored, just left of the navigator.
   int rx = navX - RciGeometry::imgW, ry = H_ - RciGeometry::imgH;
-  const Valve* v[3] = {&sim_.valveR, &sim_.valveC, &sim_.valveI};
+  const Valve* v[3] = {&hud.valveR, &hud.valveC, &hud.valveI};
   uint32_t cols[3] = {rgb(0, 192, 0), rgb(0, 0, 192), rgb(192, 192, 0)};
   const char* nm[3] = {"R", "C", "I"};
   // Spec 09 §4.5 / 15 §3.2 [STATIC Q-BQ]: demand unit u = N/1000 (= V/Max for ±2000 R/C/I valves).

@@ -290,6 +290,7 @@ void Game::updateAmbience(uint32_t dtMs) {
   if (!audio_ || !world_.W) return;
   ambAcc_ += dtMs;
   if (ambAcc_ < 250) return;
+  if (simBusy()) return;   // samples live city state; ambAcc_ keeps counting, so it runs on the next idle frame
   const int64_t dt = ambAcc_;
   ambAcc_ = 0;
   const auto& opt = audio_->ini().options;
@@ -347,8 +348,8 @@ void Game::stopAmbience() {
 
 // ================================================================================== ticker (spec 09 4.4)
 void Game::drawTicker(Rect r) {
-  cal::Date d = sim_.city().clock.date();
-  int32_t today = tickerStamp(d.month, d.day, d.year);
+  const HudSnap& hs = hudNow();
+  int32_t today = tickerStamp(hs.month, hs.day, hs.clockYear);
   // Pause fillers use the same ticker-data colour as the real 0x2F9 news item.
   TickerStyle pauseStyle = tickerDb_.style(kTblNewsTriggered, 0x2F9);
   ticker_.update(frameDt_, r.w, ui_, &news_, today, &rng_, paused_, pauseStyle.r, pauseStyle.g, pauseStyle.b);

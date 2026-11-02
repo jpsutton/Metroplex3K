@@ -27,12 +27,31 @@ bool Game::StreetHost::pieceAt(int x, int y, AutoNet k, PieceRef& out) const {
 
 bool Game::StreetHost::isWater(int x, int y) const { return w && w->inTiles(x, y) && w->altAt(x, y) < w->waterAt(x, y); }
 
+void Game::StreetHost::refreshCaches() {
+  if (!w || !c) return;
+  const size_t n = size_t(w->W) * w->H;
+  roadPieceCache.assign(n, 0);
+  densityCache.assign(n, 0);
+  for (int x = 0; x < w->W; x++)
+    for (int y = 0; y < w->H; y++) {
+      const size_t i = size_t(w->tIdx(x, y));
+      roadPieceCache[i] = c->hasRoadPiece(x, y) ? 1 : 0;
+      densityCache[i] = uint8_t(liveDensity(x, y));
+    }
+}
+
 bool Game::StreetHost::pedEligible(int x, int y) const {
+  if (!roadPieceCache.empty()) return w && w->inTiles(x, y) && roadPieceCache[size_t(w->tIdx(x, y))];
   // Spec 26 §5.8 / 13 §3.1a [STATIC]: pedestrian spawn needs occupant flag 0x8000 = road piece.
   return w && c && c->hasRoadPiece(x, y);
 }
 
 int Game::StreetHost::trafficDensity(int x, int y) const {
+  if (!densityCache.empty()) return w && w->inTiles(x, y) ? densityCache[size_t(w->tIdx(x, y))] : 0;
+  return liveDensity(x, y);
+}
+
+int Game::StreetHost::liveDensity(int x, int y) const {
   if (!w || !c) return 0;
   if (int live = c->trafficDensityAt(x, y)) return live;
   // Cheap stand-in for the traffic layer where the simulator has no live data: density of road pieces around the tile.
@@ -71,8 +90,9 @@ void Game::setupStreetSim() {
     automataLoaded_ = true;
   }
   streetHost_ = std::make_unique<StreetHost>();
-  streetHost_->w = &world_; streetHost_->c = &city();
+  streetHost_->w = asyncSim_ ? &renderWorld_ : &world_; streetHost_->c = &city();
   streetHost_->rebuild();
+  streetCacheDirty_ = true;
   StreetSim::Config cfg;
   cfg.seed = 1u + uint32_t(world_.W);
   street_ = std::make_unique<StreetSim>(automata_, *streetHost_, cfg);
@@ -106,20 +126,22 @@ void Game::streetSimFrame(uint32_t dtMs) {
   // same frame as a sim day tick, and at most every kStreetSyncMinFrames when the city changed.
   constexpr int kStreetSyncMinFrames = 30;   // ~500 ms at 60 Hz
   constexpr int kStreetSyncPeriodic = 300;
-  const bool changed = world_.occupants.size() != streetOccCount_ || world_.surface.size() != streetNetCount_;
+  const World& vw = viewWorld();
+  const bool changed = vw.occupants.size() != streetOccCount_ || vw.surface.size() != streetNetCount_;
   if (changed) {
     streetSyncDue_ = true;
     if (streetSyncCooldown_ < 1) streetSyncCooldown_ = 1;   // at least the next frame (after any day tick)
   }
   if ((++streetAcc_ % kStreetSyncPeriodic) == 0) streetSyncDue_ = true;
   if (streetSyncCooldown_ > 0) streetSyncCooldown_--;
-  if (streetSyncDue_ && streetSyncCooldown_ == 0 && !simDayThisFrame_) {
+  if (streetSyncDue_ && streetSyncCooldown_ == 0 && !simDayThisFrame_ && !simBusy()) {
     syncStreetSources();
     streetSyncDue_ = false;
     streetSyncCooldown_ = kStreetSyncMinFrames;
   }
-  streetHost_->month = city().clock.date().month;
-  streetHost_->day = city().clock.date().day;
+  const HudSnap& hs = hudNow();
+  streetHost_->month = hs.month;
+  streetHost_->day = hs.day;
   // Visible tile rectangle from the screen corners.
   AutoView v;
   float us[4], vs[4];

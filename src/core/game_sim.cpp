@@ -168,27 +168,35 @@ void Game::initManagers() {
   // City::wire leaves it unwired (Game owns DisasterManager); plug it in here so runMonth order is
   // DM → neighbours → … rather than neighbours/4–16 then a post-hoc monthlyTick.
   city().sched.disastersEnabled = disastersOn_;
+  // The four Game-bound steps below touch Game-owned state (disasters, scenario, UI effects), so when the tick runs
+  // on the worker they run on the owner thread while the worker waits (callOnOwner is inline when synchronous).
   city().sched.setHandler(Step::MonthlyDisasterManager, [this] {
-    CityDisasterWorld dw(world_, city());
-    DisasterOutput out;
-    disasters_.monthlyTick(dw, inputsFor(city(), disastersOn_, cheats_), out);
-    applyDisasterOutput(out);
+    simWorker_.callOnOwner([this] {
+      CityDisasterWorld dw(world_, city());
+      DisasterOutput out;
+      disasters_.monthlyTick(dw, inputsFor(city(), disastersOn_, cheats_), out);
+      applyDisasterOutput(out);
+    });
   });
   // Spec 14 §6.1 / Q-BI [STATIC]: items 1–5 in creation order inside the shared daily pass.
   city().sched.setHandler(Step::DailyDisasters, [this] {
-    DisasterOutput out;
-    disasters_.emergencyDayTick(inputsFor(city(), disastersOn_, cheats_), out);
-    applyDisasterOutput(out);
+    simWorker_.callOnOwner([this] {
+      DisasterOutput out;
+      disasters_.emergencyDayTick(inputsFor(city(), disastersOn_, cheats_), out);
+      applyDisasterOutput(out);
+    });
   });
   city().sched.setHandler(Step::DailyScenario, [this] {
-    if (scen_) scen_->dayTick();
+    simWorker_.callOnOwner([this] { if (scen_) scen_->dayTick(); });
   });
   // Spec 14 §6.1 / Q-BJ [STATIC]: item 7 after daily 1–5, before self-scheduled (gated by disasterActive_).
   city().sched.setHandler(Step::DailyDisasterInstances, [this] {
-    CityDisasterWorld dw(world_, city());
-    DisasterOutput out;
-    disasters_.instanceDayTick(dw, inputsFor(city(), disastersOn_, cheats_), out);
-    applyDisasterOutput(out);
+    simWorker_.callOnOwner([this] {
+      CityDisasterWorld dw(world_, city());
+      DisasterOutput out;
+      disasters_.instanceDayTick(dw, inputsFor(city(), disastersOn_, cheats_), out);
+      applyDisasterOutput(out);
+    });
   });
   // Ticker text carries %CITYNAME%/%YOURCITY%/%MAYOR%... tags; expand when the item is created.
   auto textFn = [this](uint32_t t, uint32_t i) { return expandTokens(str(t, i), env().tc); };
@@ -592,6 +600,7 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
 }
 
 void Game::startDisaster(DisasterType t) {
+  syncSim();   // mutates sim state; also callable from outside a frame
   if (!simReady_ || !disastersOn_) return;
   if (!managersReady_) initManagers();
   CityDisasterWorld dw(world_, city());
@@ -787,30 +796,42 @@ void Game::presentPetitions() {
   }
 }
 
+void Game::dayPostStep() {
+  int month = city().clock.date().month;
+  if (month != lastMonth_) {
+    // Monthly DM already ran inside CitySchedule::runMonth (dedicated item 1, Q-BE) during tickDay.
+    lastMonth_ = month;
+    advisors_.monthlyBuildingUnlock(city().clock.date().year, rng_);
+    if (month == 1) {   // city anniversary ticker item (10, 25, 50, 100, ... years since founding)
+      NewsKey k = anniversaryNews(city().clock.date().year - world_.info.foundingYear);
+      if (k.valid()) postNews(k.table, k.id);
+    }
+  }
+  int wd = cal::weekday(city().clock.jdn());
+  if (wd == 1 && lastWeekDay_ != int(city().clock.jdn())) { lastWeekDay_ = int(city().clock.jdn()); weeklyHook(); }
+}
+
 void Game::tickSim(uint32_t dtMs) {
   if (!simReady_ || paused_ || !world_.W) return;
   if (!managersReady_) initManagers();
   const uint32_t factor = SpeedControl::kFactor[std::max(1, std::min(4, speed_))];
   // One simulated day: sim step, disaster day tick, month/anniversary hooks, scenario and weekly hooks.
-  simDayThisFrame_ = false;
   auto dayStep = [&] {
-    // Sync item-7 gate before the day cascade (Q-BJ); emergency + scenario run as items 1 and 5 (Q-BI).
     simDayThisFrame_ = true;
-    city().sched.setDisasterActive(disasters_.anyActiveNonParade());
-    sim_.tickDay();
-    int month = city().clock.date().month;
-    if (month != lastMonth_) {
-      // Monthly DM already ran inside CitySchedule::runMonth (dedicated item 1, Q-BE) during tickDay.
-      lastMonth_ = month;
-      advisors_.monthlyBuildingUnlock(city().clock.date().year, rng_);
-      if (month == 1) {   // city anniversary ticker item (10, 25, 50, 100, ... years since founding)
-        NewsKey k = anniversaryNews(city().clock.date().year - world_.info.foundingYear);
-        if (k.valid()) postNews(k.table, k.id);
-      }
-    }
-    int wd = cal::weekday(city().clock.jdn());
-    if (wd == 1 && lastWeekDay_ != int(city().clock.jdn())) { lastWeekDay_ = int(city().clock.jdn()); weeklyHook(); }
+    daySimStep(disasters_.anyActiveNonParade());
+    dayPostStep();
   };
+  // Async: credit time here; asyncFrameEnd starts the worker job. Disasters, whirlpools and minute mode need the
+  // owner thread, so those wait for a running job and use the synchronous path below.
+  const bool asyncOk = asyncSim_ && vortexMs_ <= 0 && !minuteModeOn_ && !disasters_.anyActiveNonParade();
+  if (asyncSim_ && !asyncOk) syncSim();
+  if (asyncOk) {
+    clockCbAccMs_ += dtMs;
+    simAccum_ = std::min(4.0, simAccum_ + double(dtMs) / 1000.0 * double(factor) / 86400.0);
+    if (shake_ > 0) shake_--;
+    return;
+  }
+  simDayThisFrame_ = false;
   // Whirlpool lifetime is real wall-clock (not batched with the sim timer).
   if (vortexMs_ > 0) {
     vortexMs_ -= int(dtMs);

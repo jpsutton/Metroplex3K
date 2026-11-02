@@ -29,12 +29,12 @@ class FrameLog {
 
   ~FrameLog() { close(); }
 
-  bool open(const std::string& path, const std::string& backend) {
+  bool open(const std::string& path, const std::string& backend, const std::string& simMode = "sync") {
     f_ = std::fopen(path.c_str(), "w");
     if (!f_) return false;
     start_ = Clock::now();
-    std::fprintf(f_, "# metroplex3k frame log, render=%s\n", backend.c_str());
-    std::fprintf(f_, "frame,t_ms,loop_ms,events_ms,game_ms,sim_ms,street_ms,raster_ms,ui_ms,present_ms,delay_ms,"
+    std::fprintf(f_, "# metroplex3k frame log, render=%s sim=%s\n", backend.c_str(), simMode.c_str());
+    std::fprintf(f_, "frame,t_ms,loop_ms,events_ms,game_ms,sim_ms,sim_wait_ms,async_end_ms,street_ms,raster_ms,ui_ms,present_ms,delay_ms,"
                      "rastered,sim_day,paused,speed,zoom,w,h\n");
     return true;
   }
@@ -43,10 +43,10 @@ class FrameLog {
   void add(const Sample& s, const Game::FramePhases& p) {
     if (!f_) return;
     const double t = std::chrono::duration<double, std::milli>(Clock::now() - start_).count();
-    const double ui = std::max(0.0, s.gameMs - p.simMs - p.streetMs - p.rasterMs);   // HUD, windows, blits, fps overlay
-    std::fprintf(f_, "%llu,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d\n",
-                 static_cast<unsigned long long>(frames_), t, s.loopMs, s.eventsMs, s.gameMs, p.simMs, p.streetMs,
-                 p.rasterMs, ui, s.presentMs, s.delayMs, p.rastered ? 1 : 0, p.simDay ? 1 : 0, p.paused ? 1 : 0,
+    const double ui = std::max(0.0, s.gameMs - p.simMs - p.simWaitMs - p.asyncEndMs - p.streetMs - p.rasterMs);   // HUD, windows, blits, fps overlay
+    std::fprintf(f_, "%llu,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d\n",
+                 static_cast<unsigned long long>(frames_), t, s.loopMs, s.eventsMs, s.gameMs, p.simMs, p.simWaitMs, p.asyncEndMs,
+                 p.streetMs, p.rasterMs, ui, s.presentMs, s.delayMs, p.rastered ? 1 : 0, p.simDay ? 1 : 0, p.paused ? 1 : 0,
                  p.speed, p.zoom, s.w, s.h);
     if (++frames_ % 120 == 0) std::fflush(f_);
     loop_.push_back(s.loopMs);

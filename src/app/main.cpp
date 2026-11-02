@@ -64,6 +64,7 @@ int main(int argc, char** argv) {
                    "or auto-detected GOG install locations. You can also drop the folder or the GOG installer\n"
                    "onto the window, or type the path on the first screen.\n"
                    "Render: $M3K_RENDER=cpu|gpu (default cpu). gpu uses OpenGL compute for terrain when available.\n"
+                   "Sim thread: $M3K_SIM_THREAD=1 runs the sim day tick on a worker thread (experimental, default off).\n"
                    "Frame log: --frame-log FILE or $M3K_FRAMELOG=FILE writes a per-frame timing CSV and prints a summary on exit.\n";
       return 0;
     }
@@ -85,6 +86,9 @@ int main(int argc, char** argv) {
   std::string err;
   if (!game.init(root, err) && !err.empty()) std::cerr << err << "\n";
   if (!cityArg.empty()) game.requestFile(cityArg);
+  const char* simThreadEnv = std::getenv("M3K_SIM_THREAD");
+  const bool simThread = simThreadEnv && simThreadEnv[0] && std::strcmp(simThreadEnv, "0") != 0;
+  game.setAsyncSim(simThread);
 
   if (wantGpu && glTerrain.available()) {
     game.renderer().setGpuTerrainWanted(true);
@@ -130,7 +134,7 @@ int main(int argc, char** argv) {
     if (const char* e = std::getenv("M3K_FRAMELOG")) frameLogArg = e;
   if (!frameLogArg.empty()) {
     const bool gpuActive = wantGpu && glTerrain.available();
-    if (frameLog.open(frameLogArg, gpuActive ? "gpu" : "cpu")) std::cerr << "metroplex3k: logging frame times to " << frameLogArg << "\n";
+    if (frameLog.open(frameLogArg, gpuActive ? "gpu" : "cpu", simThread ? "thread" : "sync")) std::cerr << "metroplex3k: logging frame times to " << frameLogArg << "\n";
     else std::cerr << "metroplex3k: cannot open frame log " << frameLogArg << "\n";
   }
   auto msBetween = [](FrameLog::Clock::time_point a, FrameLog::Clock::time_point b) {
