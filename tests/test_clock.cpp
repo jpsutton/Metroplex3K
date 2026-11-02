@@ -241,10 +241,11 @@ static void testSchedule() {
   CHECK(monthlySteps().size() == 16);
   CHECK(monthlySteps()[9] == Step::MonthlyBudget && monthlySteps()[5] == Step::MonthlyResidential);
   CHECK(monthlySteps().back() == Step::MonthlyAura);
-  // Spec 14 §6.1 / Q-BE [STATIC]: dedicated items 1–2 (DM then neighbours) before shared 4–16.
-  CHECK(monthlyDedicatedSteps().size() == 2);
+  // Spec 14 §6.1 / Q-BF [STATIC]: dedicated items 1–3 (DM, neighbours, world) before shared 4–16.
+  CHECK(monthlyDedicatedSteps().size() == 3);
   CHECK(monthlyDedicatedSteps()[0] == Step::MonthlyDisasterManager);
   CHECK(monthlyDedicatedSteps()[1] == Step::MonthlyNeighbours);
+  CHECK(monthlyDedicatedSteps()[2] == Step::MonthlyWorldLayer);
   CHECK(monthlySharedSteps()[0] == Step::MonthlyRci);
   CHECK(monthlySharedSteps().back() == Step::MonthlyAura);
   CHECK(monthlySteps()[0] == Step::MonthlyDisasterManager && monthlySteps()[1] == Step::MonthlyNeighbours);
@@ -277,12 +278,13 @@ static void testSchedule() {
   CHECK(sc.cascadeLog(0) == int(Step::DailyDisasters));
   size_t daily = dailySteps().size() - 1;   // disaster instances skipped
   CHECK(sc.cascadeLog(daily) == int(Step::MonthlyDisasterManager));
-  CHECK(sc.cascadeLog(daily + 1) == int(Step::MonthlyNeighbours));   // Q-BE: neighbours after DM
-  CHECK(sc.cascadeLog(daily + 3) == int(Step::MonthlyRci));          // shared pass after world
+  CHECK(sc.cascadeLog(daily + 1) == int(Step::MonthlyNeighbours));   // Q-BF: 1→2→3
+  CHECK(sc.cascadeLog(daily + 2) == int(Step::MonthlyWorldLayer));
+  CHECK(sc.cascadeLog(daily + 3) == int(Step::MonthlyRci));          // shared pass after dedicated
   CHECK(sc.cascadeLog(daily + 16 - 1) == int(Step::MonthlyAura));
   CHECK(sc.cascadeLog(daily + 16) == -1);
 
-  // disasters disabled skip the disaster manager monthly step; neighbours still before shared
+  // disasters disabled skip the disaster manager monthly step; 2→3 still before shared
   sc.clearLog();
   sc.disastersEnabled = false;
   sc.runMonth();

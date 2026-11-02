@@ -269,7 +269,8 @@ class City {
   // schedule handlers
   void dailyPolice(); void dailyFire(); void dailyLandValue(); void dailyZoneDev(); void dailyPollution();
   void dailyCrime(); void dailyFlammability(); void dailyAura(); void weeklyTraffic();
-  void monthlyNeighbours(); void monthlyValves(); void monthlyOrdinances(); void monthlyPopulation();
+  void monthlyNeighbours(); void monthlyWorld(); void monthlyValves(); void monthlyOrdinances();
+  void monthlyPopulation();
   void monthlyTraffic(); void monthlyBudget(); void monthlyPower(); void monthlyWater();
   void monthlyPollution(); void monthlyCrime(); void monthlyAura(); void monthlyWeather();
   void updateTreatmentCaps();

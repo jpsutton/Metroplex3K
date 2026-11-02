@@ -307,8 +307,8 @@ std::vector<Step> dailySteps() {
 }
 std::vector<Step> weeklySteps() { return {Step::WeeklyStreetSim}; }
 std::vector<Step> monthlyDedicatedSteps() {
-  // Spec 14 §6.1 items 1–2 [STATIC Q-BE]: dedicated monthly-tier entries, subsystem creation order.
-  return {Step::MonthlyDisasterManager, Step::MonthlyNeighbours};
+  // Spec 14 §6.1 items 1–3 [STATIC Q-BF]: dedicated monthly-tier entries, subsystem creation order.
+  return {Step::MonthlyDisasterManager, Step::MonthlyNeighbours, Step::MonthlyWorldLayer};
 }
 std::vector<Step> monthlySharedSteps() {
   // Spec 14 §6.1 items 4–16 [STATIC]: shared monthly pass (AreaAgent cascade).
@@ -318,9 +318,7 @@ std::vector<Step> monthlySharedSteps() {
           Step::MonthlyAura};
 }
 std::vector<Step> monthlySteps() {
-  // Item 3 (world layer) before 4–16 [INFERRED]; order vs 1–2 remains [INFERRED] (kept after 1–2).
   std::vector<Step> v = monthlyDedicatedSteps();
-  v.push_back(Step::MonthlyWorldLayer);
   auto shared = monthlySharedSteps();
   v.insert(v.end(), shared.begin(), shared.end());
   return v;
@@ -423,14 +421,12 @@ void CitySchedule::runWeek() {
 
 void CitySchedule::runMonth() {
   if (clock_) clock_->pause();
-  // Spec 14 §6.1 / Q-BE [STATIC]: dedicated monthly-tier entries (items 1–2: disaster manager,
-  // then neighbours) are processed before the shared monthly pass that drives items 4–16.
+  // Spec 14 §6.1 / Q-BF [STATIC]: dedicated monthly-tier entries (items 1–3: disaster manager,
+  // neighbours, world) before the shared monthly pass that drives items 4–16.
   for (Step s : monthlyDedicatedSteps()) {
     if (s == Step::MonthlyDisasterManager && !disastersEnabled) continue;
     run(s);
   }
-  // Item 3 world layer [INFERRED]: before 4–16; relative to 1–2 inferred (after dedicated).
-  run(Step::MonthlyWorldLayer);
   for (Step s : monthlySharedSteps()) run(s);
   if (onMonth) onMonth();
   if (clock_) clock_->resume();

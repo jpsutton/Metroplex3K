@@ -639,6 +639,8 @@ void City::wire() {
   sched.setHandler(Step::DailyAura, [this] { dailyAura(); });
   sched.setHandler(Step::WeeklyStreetSim, [this] { weeklyTraffic(); });
   sched.setHandler(Step::MonthlyNeighbours, [this] { monthlyNeighbours(); });
+  // Spec 14 §6.1 item 3 / Q-BF [STATIC]: dedicated monthly-tier entry after neighbours, before shared pass.
+  sched.setHandler(Step::MonthlyWorldLayer, [this] { monthlyWorld(); });
   sched.setHandler(Step::MonthlyRci, [this] { monthlyValves(); });
   sched.setHandler(Step::MonthlyOrdinances, [this] { monthlyOrdinances(); });
   sched.setHandler(Step::MonthlyResidential, [this] { monthlyPopulation(); });
@@ -2018,6 +2020,16 @@ std::string City::debugStats() const {
 
 void City::monthlyNeighbours() { neighbours.monthly(clock.date().month, rng_); }
 
+void City::monthlyWorld() {
+  // Spec 14 §6.1 item 3 / Q-BF [STATIC]: world-layer monthly (economic phase + world charts).
+  // Phase/cycle modifiers also refresh at the start of monthlyUpdate (item 4); chart sample here
+  // runs on the dedicated world schedule entry before the shared RCI pass.
+  cal::Date d = clock.date();
+  valves.setPhase(residents_);
+  valves.setWorldModifiers(d.year, d.month);
+  valves.worldMonthly(pop.workforceFraction(), d.month, d.year);
+}
+
 int City::countResidents() const {
   int residents = 0;
   for (const auto& o : world_->occupants) {
@@ -2059,7 +2071,7 @@ void City::monthlyValves() {
   valves.monthlyUpdate(in);
   // City population = valve 3000 Slast (spec 20 s2) [DATA 13/13: equals the newest population-chart sample].
   residents_ = valves.v3000.Slast;
-  valves.worldMonthly(in.workforceFraction, d.month, d.year);
+  // World chart sample moved to monthlyWorld (dedicated item 3 / Q-BF).
 }
 
 void City::monthlyOrdinances() {
