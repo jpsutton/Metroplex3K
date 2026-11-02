@@ -233,7 +233,9 @@ struct PollutionParams {
       indWasteDisposal = 0, landfillGasRecovery = 0, carSmogging = 0;   // unsigned bytes
   int trafficAirFactor = 0;
   int garbageAbduction = 0;
-  double garbageScale = 0;        // GarbageScalingFactor x 0.001
+  // Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: GarbageScalingFactor × 0.001 (shipped 100 → 0.1).
+  // Not used by production/disposal; only the pollution query UI (trunc(G × s)).
+  double garbageScale = 0;
   // Facility monthly capacities (spec 16 4.1, 29 2.7). Per facility, at 100% funding.
   int treatmentCap = 0;           // SC3Tune [WaterTreatment] OptimalPollutionCap
   int incineratorCap = 0;         // SC3Tune [Incinerator] OptimalGarbageCap
@@ -290,6 +292,8 @@ class PollutionLayer {
   }
   int standingGarbageAt(int x, int z) const { return standing[size_t(x) * H_ + z] & 0x7FFF; }
   void setStandingGarbage(int x, int z, int g) { uint16_t& w = standing[size_t(x) * H_ + z]; w = uint16_t((w & 0x8000) | (g & 0x7FFF)); }
+  // Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: query-UI line value = trunc(G × s), G = standing garbage total.
+  int queryGarbageScaled(int x, int z) const;
   bool airPolluted(int x, int z) const { return airAt(x, z) >= params_.airThreshold; }
   const PollutionParams& params() const { return params_; }
   bool waterPolluted(int x, int z) const { return waterAt(x, z) >= params_.waterThreshold; }

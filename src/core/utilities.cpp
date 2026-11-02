@@ -345,6 +345,7 @@ WaterParams WaterParams::fromIni(const IniFile& f) {
   p.conservationFactor = int(r.num(S, "WaterConservationFactor", 0));
   p.meterFactor = int(r.num(S, "WaterMeterFactor", 0));
   p.defaultConsumption = int(r.num(S, "DefaultConsumption", 0));
+  // Spec 16 §3.1 / Q-BT [STATIC]: DefaultLeak is loaded and never read (shipped 0).
   p.defaultLeak = int(r.num(S, "DefaultLeak", 0));
   for (const auto& kv : f.section("AgentIDModifiers")) {
     if (p.modifiers.size() >= 127) break;

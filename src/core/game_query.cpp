@@ -124,6 +124,8 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   if (ti < c.flammability.grid.size()) q.flammability = c.flammability.grid[ti];
   q.airPollution = clamp8(c.pollution.airAt(x, z) / 16);       // 15-bit state scaled to the 6-band byte [INFERRED]
   q.waterPollution = clamp8(c.pollution.waterAt(x, z) / 16);
+  // Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: one query line = trunc(G × s); G = standing garbage.
+  if (!c.pollution.standing.empty()) q.garbageScaled = c.pollution.queryGarbageScaled(x, z);
   q.powered = c.powered(x, z);
 
   const auto& par = c.config().parent;

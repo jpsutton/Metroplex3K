@@ -164,6 +164,9 @@ std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q) {
   }
   if (q.airPollution >= 0) { int i = std::min(5, q.airPollution * 6 / 256); L.push_back({E.query(0x187, "Air pollution:"), band(E, 0x188, i, kU6[i])}); }
   if (q.waterPollution >= 0) { int i = std::min(5, q.waterPollution * 6 / 256); L.push_back({E.query(0x18E, "Water pollution:"), band(E, 0x18F, i, kU6[i])}); }
+  // Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: trunc(G × s). Value template is query 0x1BF ("%s").
+  // Label ID [OPEN]: query table 82E0074C has Air 0x187 / Water 0x18E only — no Garbage Pollution label.
+  if (q.garbageScaled >= 0) L.push_back({E.query(0x2A4, "Garbage pollution:"), num(0x1BF, "%s", q.garbageScaled)});
   if (q.cleanupCost >= 0) L.push_back({E.query(0x31, "Clean-up cost:"), subst(E.query(0x32, "%s"), {E.money(q.cleanupCost)})});
   if (q.fundingCost >= 0) L.push_back({E.query(0x86, "Funding cost:"), subst(E.query(0x87, "%s per month"), {E.money(q.fundingCost)})});
   return L;

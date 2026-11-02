@@ -379,6 +379,23 @@ static void testPollutionStamp() {
   CHECK(L.incinerators.empty());
 }
 
+// Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: GarbageScalingFactor ×0.001; query UI = trunc(G × s).
+static void testGarbageScalingQuery() {
+  const char* ini =
+      "[TuningParameters]\nUpdatePeriod=1\nMaxAirPolluteForUI=800\nMaxWaterPolluteForUI=1200\nMaxGarbagePolluteForUI=1000\n"
+      "GarbageAbductionAmount=0\nGarbageScalingFactor=100\n"  // shipped → s = 0.1
+      "[AgentIDModifiers]\n";
+  PollutionParams p = PollutionParams::fromIni(IniFile::fromText(ini));
+  CHECK(p.garbageScale == 100 * 0.001);
+  AgentHierarchy h;
+  PollutionLayer L; L.init(8, 8, p, &h);
+  L.setStandingGarbage(2, 3, 157);   // trunc(157 × 0.1) = 15
+  CHECK(L.queryGarbageScaled(2, 3) == 15);
+  L.setStandingGarbage(2, 3, 9);     // trunc(0.9) = 0
+  CHECK(L.queryGarbageScaled(2, 3) == 0);
+  CHECK(L.queryGarbageScaled(-1, 0) == 0);
+}
+
 static void runSweep(PollutionLayer& L, const PollutionEnv& env, int runs) { for (int i = 0; i < runs; i++) L.run(env); }
 
 static void testPollutionRun() {
@@ -840,6 +857,7 @@ int main() {
   testCrime();
   testCrimeRecord();
   testPollutionStamp();
+  testGarbageScalingQuery();
   testPollutionRun();
   testPollutionRecord();
   testAuraParams();

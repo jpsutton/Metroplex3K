@@ -582,6 +582,7 @@ PollutionParams PollutionParams::fromIni(const IniFile& f, const IniFile* tune, 
   p.landfillGasRecovery = b("LandfillGasRecoveryOrdEffect"); p.carSmogging = b("CarSmoggingOrdEffect");
   p.trafficAirFactor = int(r.num(S, "TrafficAirFactor", 0));
   p.garbageAbduction = int(r.num(S, "GarbageAbductionAmount", 0));
+  // Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: store ×0.001; query UI only (not disposal).
   p.garbageScale = r.num(S, "GarbageScalingFactor", 0) * 0.001;
   for (const auto& kv : f.section("AgentIDModifiers")) {
     int a[5] = {0, 0, 0, 0, 0};
@@ -625,6 +626,12 @@ void PollutionLayer::init(int W, int H, const PollutionParams& p, const AgentHie
   if (!order.list.empty()) { cursorX = uint32_t((order.list[0] >> 8) * 2); cursorZ = uint32_t((order.list[0] & 255) * 2); }
   disp = GarbageDisposal();
   disp.abductionCap = p.garbageAbduction;
+}
+
+int PollutionLayer::queryGarbageScaled(int x, int z) const {
+  // Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: trunc(G × s) for the pollution query UI line.
+  if (x < 0 || z < 0 || x >= W_ || z >= H_) return 0;
+  return int(std::trunc(double(standingGarbageAt(x, z)) * params_.garbageScale));
 }
 
 PollutionEntry PollutionLayer::lookup(uint32_t type) {

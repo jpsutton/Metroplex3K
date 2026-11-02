@@ -145,7 +145,8 @@ struct WaterParams {
   int towerCapa = 0, pumpCapa = 0, desaltCapa = 0;
   int towerLifeYears = 0, pumpLifeYears = 0, desaltLifeYears = 0;
   int conservationFactor = 0, meterFactor = 0;   // percent
-  int defaultConsumption = 0, defaultLeak = 0;
+  int defaultConsumption = 0;
+  int defaultLeak = 0;   // Spec 16 §3.1 / Q-BT [STATIC]: loaded from INI; no consumer ever reads it.
   std::vector<std::pair<uint32_t, int>> modifiers;  // sorted by id, <= 127 entries
   int maxWaterPolluteForUI = 11000;      // SC3Pollution.ini value, used as m (spec 3.3 step 5; OPEN)
   // [OPEN] spec 16 3.3 step 5: m is the constant (true) or running maximum of the water grid (false).
