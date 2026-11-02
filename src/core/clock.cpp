@@ -1,6 +1,7 @@
 #include "core/clock.h"
 
 #include <algorithm>
+#include <thread>
 
 namespace m3k {
 
@@ -335,21 +336,44 @@ void CitySchedule::attach(Clock& c) {
 }
 
 void CitySchedule::run(Step s) {
+  // Spec 14 §6.3 rule 6 [STATIC]: check hold condition before each step.
+  if (isHold) {
+    while (isHold() && (!stopRequested || !stopRequested())) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+  }
+  // Spec 14 §6.3 rule 6 [STATIC]: pause clock if cascade has taken > 500 ms.
+  if (!cascadePaused_ && cascadePauseMs > 0 && clock_ && !clock_->paused()) {
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - cascadeStart_).count();
+    if (elapsed > cascadePauseMs) {
+      clock_->pause();
+      cascadePaused_ = true;
+    }
+  }
   if (logging) log_.push_back(s);
   if (handlers_[int(s)]) handlers_[int(s)]();
 }
 
 void CitySchedule::runDay() {
+  cascadeStart_ = std::chrono::steady_clock::now();
+  cascadePaused_ = false;
   for (Step s : dailySteps(auraDaily)) {
     // Disaster-instance tick runs only when disasters are present.
     if (s == Step::DailyDisasterInstances && !disasterActive_) continue;
     run(s);
+  }
+  if (cascadePaused_ && clock_) {
+    clock_->resume();
+    cascadePaused_ = false;
   }
   elapsedDays++;
   if (onDay) onDay();
 }
 
 void CitySchedule::runWeek() {
+  cascadeStart_ = std::chrono::steady_clock::now();
+  cascadePaused_ = false;
   // Enrolled buildings first (snapshot: buildings added during the step wait until it ends).
   size_t n = buildings_.size();
   std::vector<Fn> snapshot;
@@ -357,6 +381,10 @@ void CitySchedule::runWeek() {
   for (auto& b : buildings_) snapshot.push_back(b.fn);
   for (auto& f : snapshot) if (f) f();
   for (Step s : weeklySteps()) run(s);
+  if (cascadePaused_ && clock_) {
+    clock_->resume();
+    cascadePaused_ = false;
+  }
   if (onWeek) onWeek();
 }
 
@@ -381,7 +409,13 @@ void CitySchedule::runYear() {
 }
 
 void CitySchedule::runMinute() {
+  cascadeStart_ = std::chrono::steady_clock::now();
+  cascadePaused_ = false;
   for (Step s : minuteSteps()) run(s);
+  if (cascadePaused_ && clock_) {
+    clock_->resume();
+    cascadePaused_ = false;
+  }
 }
 
 }  // namespace m3k

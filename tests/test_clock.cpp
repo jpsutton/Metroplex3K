@@ -1,4 +1,5 @@
 #include <string>
+#include <thread>
 #include <vector>
 #include "core/clock.h"
 #include "testutil.h"
@@ -297,6 +298,33 @@ static void testSchedule() {
   CHECK(minutes == 3);
   sc.setDisasterActive(false);
   CHECK(!clk.minuteMode());
+
+  // Spec 14 §6.3 rule 6: long cascades pause the clock for the rest of the cascade
+  Clock cPause;
+  cPause.setDate(1, 1, 2000);
+  CitySchedule scPause;
+  scPause.attach(cPause);
+  scPause.cascadePauseMs = 5;
+  bool sawPauseDuringStep = false;
+  scPause.setHandler(Step::DailyDisasters, [&]() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  });
+  scPause.setHandler(Step::DailyPolice, [&]() {
+    if (cPause.paused()) sawPauseDuringStep = true;
+  });
+  scPause.runDay();
+  CHECK(sawPauseDuringStep);
+  CHECK(!cPause.paused());
+
+  // Hold condition test
+  int holdTicks = 0;
+  scPause.isHold = [&]() {
+    holdTicks++;
+    return holdTicks < 3;
+  };
+  scPause.cascadePauseMs = 500;
+  scPause.runDay();
+  CHECK(holdTicks >= 3);
 }
 
 int main() {

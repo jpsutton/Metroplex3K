@@ -1,6 +1,7 @@
 // Simulation clock, calendar, speeds, RNG and update scheduling. See spec/14-sim-clock.md.
 // Pure state classes: no wall-clock access; callers pass millisecond timestamps.
 #pragma once
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -228,6 +229,11 @@ class CitySchedule {
   void clearLog() { log_.clear(); }
   bool logging = false;       // when true, every executed step is appended to the log (for tests)
 
+  // Spec 14 §6.3 rule 6 [STATIC]: pause clock if cascade exceeds 500 ms; wait on city hold.
+  int cascadePauseMs = 500;
+  std::function<bool()> isHold;
+  std::function<bool()> stopRequested;
+
  private:
   void run(Step s);
   Fn handlers_[int(Step::kCount)];
@@ -238,6 +244,8 @@ class CitySchedule {
   bool disasterActive_ = false;
   Clock::ListenerId minuteListener_ = 0;
   std::vector<Step> log_;
+  std::chrono::steady_clock::time_point cascadeStart_{};
+  bool cascadePaused_ = false;
 };
 
 }  // namespace m3k
