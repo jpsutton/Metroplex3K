@@ -60,9 +60,18 @@ int main() {
     // original defect: weight = pop / (hi - lo): at pop = 15000 with lo = 10000? (lo=10000) -> 15000/... see taxEffects
   }
 
+  // Spec 15 §3.2 / Q-BS [STATIC]: 3000 ±2000; 3001 unbounded; ExternalFunSupply negatives → 0.
+  { ValveTuning neg; neg.parseResLayer(IniFile::fromText("[TuningParameters]\nExternalFunSupply=-50\n"));
+    CHECK(neg.externalFunSupply == 0);
+    ValveLayer lim; lim.init(8, 8, neg);
+    CHECK(lim.v3000.Max == 2000 && lim.v3000.Min == -2000);
+    CHECK(lim.v3001.Max == INT32_MAX && lim.v3001.Min == INT32_MIN);
+    CHECK(lim.v3001.Sbase == 0); }
+
   // World cycle + monthly update
   ValveLayer vl; vl.init(16, 16, t);
-  CHECK(vl.v5001.Max == INT32_MAX && vl.v3000.Max == 2000 && vl.v7000.Min == -2000);
+  CHECK(vl.v5001.Max == INT32_MAX && vl.v3000.Max == 2000 && vl.v3000.Min == -2000 && vl.v7000.Min == -2000);
+  CHECK(vl.v3001.Max == INT32_MAX && vl.v3001.Min == INT32_MIN);
   vl.setWorldModifiers(1900, 1); CHECK(vl.v3000.f1 == -0.5f);
   vl.setWorldModifiers(1900, 3); CHECK(vl.v3000.f1 == 0.0f);
   vl.setWorldModifiers(1900, 6); CHECK(vl.v3000.f1 == -0.5f);  // position 5 mod 5 == 0

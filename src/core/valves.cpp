@@ -130,7 +130,11 @@ void ValveTuning::parseWorldLayer(const IniFile& ini) {
   if (ini.get("WorldLayer", "EconomicPhases", s)) parseEconomicPhases(s);
   for (const auto& kv : ini.section("ListOfWorldValveMapping")) parseWorldMapping(toInt(kv.first), kv.second);
 }
-void ValveTuning::parseResLayer(const IniFile& ini) { std::string s; if (ini.get("TuningParameters", "ExternalFunSupply", s)) externalFunSupply = toInt(s); }
+void ValveTuning::parseResLayer(const IniFile& ini) {
+  // Spec 15 §3.2 / Q-BS [STATIC]: 3001 Sbase = ExternalFunSupply; negatives become 0.
+  std::string s;
+  if (ini.get("TuningParameters", "ExternalFunSupply", s)) externalFunSupply = std::max(0, toInt(s));
+}
 void ValveTuning::parseComLayer(const IniFile& ini) { std::string s; if (ini.get("TuningParameters", "InitialConnectionSupply", s)) comInitialConnection = std::max(0, toInt(s)); }
 void ValveTuning::parseIndLayer(const IniFile& ini) {
   std::string s;
@@ -208,6 +212,7 @@ void ValveLayer::init(int w, int h, const ValveTuning& t) {
   setPhase(0);
 }
 void ValveLayer::applyLimits() {
+  // Spec 15 §3.2 / Q-BS [STATIC]: 3000 shares ±2000 with 5000/8000/7000; 3001 unbounded like 5001/8001.
   for (Valve* v : {&v3000, &v5000, &v8000, &v7000}) v->setLimits(2000, -2000);
   for (Valve* v : {&v3001, &v5001, &v8001}) v->setLimits(INT32_MAX, INT32_MIN);
   // Spec 15 s3.2 "Smoothing" [STATIC]: the smooth flag is set on every valve when it is created and never cleared (not
