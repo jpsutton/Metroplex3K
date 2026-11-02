@@ -817,7 +817,8 @@ void PollutionLayer::processCell(int tx, int tz, const PollutionEnv& env, int64_
     }
     Wc = nw;
   }
-  st = (st & 0xC0000000u) | (uint32_t(A) << 15) | uint32_t(Wc);
+  // Keep sea-water bit 30 only. Spec 17 §7.2.1 / Q-BV [STATIC]: bit 31 unused — leave clear.
+  st = (st & 0x40000000u) | (uint32_t(A) << 15) | uint32_t(Wc);
 }
 
 void PollutionLayer::run(const PollutionEnv& env) {
@@ -967,6 +968,8 @@ void PollutionLayer::parse(const uint8_t* p, size_t n, int W, int H) {
   const size_t cells = size_t(nx_) * nz_, tiles = size_t(W) * H;
   std::vector<uint32_t> sf(cells); for (auto& v : sf) v = r.u32();
   state = flipRows(sf, nx_, nz_);
+  // Spec 17 §7.2.1 / Q-BV [STATIC]: bit 31 unused in normal play; clear on load.
+  for (auto& v : state) v &= ~0x80000000u;
   { Bytes gs = r.bytes(37); disp.store.parse(gs.data()); }
   std::vector<uint16_t> st(tiles); for (auto& v : st) v = r.u16();
   standing = flipRows(st, W, H);

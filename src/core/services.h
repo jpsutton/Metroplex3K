@@ -286,9 +286,10 @@ class PollutionLayer {
   int airAt(int x, int z) const { return (state[size_t(x / 2) * nz_ + z / 2] >> 15) & 0x7FFF; }
   int waterAt(int x, int z) const { return state[size_t(x / 2) * nz_ + z / 2] & 0x7FFF; }
   // Sea-water (salt) flag of the tile's cell: state bit 30, set by the terrain (spec 11 section 5, 17 7.2.1).
+  // Spec 17 §7.2.1 / Q-BV [STATIC]: bit 31 is unused in normal play (clear in all shipped cities); leave clear.
   bool seaWaterAt(int x, int z) const {
     size_t i = size_t(x / 2) * nz_ + z / 2;
-    return x >= 0 && z >= 0 && i < state.size() && (state[i] >> 30 & 1);
+    return x >= 0 && z >= 0 && i < state.size() && (state[i] & 0x40000000u) != 0;
   }
   int standingGarbageAt(int x, int z) const { return standing[size_t(x) * H_ + z] & 0x7FFF; }
   void setStandingGarbage(int x, int z, int g) { uint16_t& w = standing[size_t(x) * H_ + z]; w = uint16_t((w & 0x8000) | (g & 0x7FFF)); }
@@ -314,8 +315,10 @@ class PollutionLayer {
   static float recyclingRatio(std::vector<RecyclingCentre> centres, int64_t population);
   // Landfill registration (spec 15 s7, spec 17 s7.2.5): sets bit 15 of the standing word, adds 32767 - g of room.
   // Sea-water (salt) flag of the tile's 2 x 2 cell: bit 30 of the cell state (spec 17 s7.2.1) [STATIC].
+  // Bit 31 [STATIC / Q-BV]: parallel flag unused in normal play — terrain never writes it; leave clear.
   bool seaFlagAt(int x, int z) const { return (state[size_t(x / 2) * nz_ + z / 2] & 0x40000000u) != 0; }
   // The terrain writing a sea surface at vertex (x, z) flags the cells of the up to four tiles sharing it (spec 11 s5).
+  // Only bit 30 (sea water); never bit 31 (Q-BV).
   void markSeaVertex(int x, int z) {
     for (int dx = -1; dx <= 0; dx++) for (int dz = -1; dz <= 0; dz++) {
       int tx = x + dx, tz = z + dz;

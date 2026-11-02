@@ -379,6 +379,27 @@ static void testPollutionStamp() {
   CHECK(L.incinerators.empty());
 }
 
+static void runSweep(PollutionLayer& L, const PollutionEnv& env, int runs) { for (int i = 0; i < runs; i++) L.run(env); }
+
+// Spec 17 §7.2.1 / Q-BV [STATIC]: pollution cell bit 31 unused; terrain only writes bit 30.
+static void testPollutionBit31() {
+  PollutionParams p = PollutionParams::fromIni(IniFile::fromText(kPolIni));
+  p.updatePeriod = 1;
+  AgentHierarchy h;
+  PollutionLayer L; L.init(8, 8, p, &h);
+  L.markSeaVertex(2, 2);
+  CHECK(L.seaFlagAt(1, 1) && L.seaWaterAt(1, 1));
+  size_t cell = size_t(1 / 2) * 4 + 1 / 2;
+  CHECK((L.state[cell] & 0x40000000u) != 0);
+  CHECK((L.state[cell] & 0x80000000u) == 0);
+  L.state[cell] |= 0x80000000u;
+  // Daily relaxation preserves bit 30 and clears bit 31.
+  PollutionEnv env;
+  runSweep(L, env, 16);   // 4×4 cells, one per run with UpdatePeriod=1
+  CHECK((L.state[cell] & 0x40000000u) != 0);
+  CHECK((L.state[cell] & 0x80000000u) == 0);
+}
+
 // Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: GarbageScalingFactor ×0.001; query UI = trunc(G × s).
 static void testGarbageScalingQuery() {
   const char* ini =
@@ -395,8 +416,6 @@ static void testGarbageScalingQuery() {
   CHECK(L.queryGarbageScaled(2, 3) == 0);
   CHECK(L.queryGarbageScaled(-1, 0) == 0);
 }
-
-static void runSweep(PollutionLayer& L, const PollutionEnv& env, int runs) { for (int i = 0; i < runs; i++) L.run(env); }
 
 static void testPollutionRun() {
   PollutionParams p = PollutionParams::fromIni(IniFile::fromText(kPolIni));
@@ -857,6 +876,7 @@ int main() {
   testCrime();
   testCrimeRecord();
   testPollutionStamp();
+  testPollutionBit31();
   testGarbageScalingQuery();
   testPollutionRun();
   testPollutionRecord();
