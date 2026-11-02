@@ -338,9 +338,10 @@ Tooltips: pause `225872FE:64`, run `65`, speeds 1–4 `66`–`69` (turtle, llama
 swallow). Selecting a speed un-pauses. Sounds: run 23 `UiPlaySim`, pause 24 `UiPauseSim`, speed 1–4
 → 25–28 `UiSimSpeed1`–`4`. Speed semantics (ticks per real second) are in `14-sim-clock.md`.
 The speed widget updates its highlighted button whenever the pause state or speed changes,
-whatever the cause (hotkeys, modal windows, the simulator), so it always reflects the true state. Opening a modal
-window (budget, ordinances, query, …) pauses the simulation and closing it restores the previous
-speed [INFERRED].
+whatever the cause (hotkeys, modal windows, the simulator), so it always reflects the true state.
+Opening a modal window (budget, ordinances, query, …) raises the city's **pending / modal** count
+(not the player pause count), which pauses the clock for the duration; closing the modal clears
+that count (`14-sim-clock.md` §2.3) [STATIC].
 
 ### 4.3 View controls [STATIC]
 

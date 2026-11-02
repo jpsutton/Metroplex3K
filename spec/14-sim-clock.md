@@ -120,8 +120,19 @@ The city keeps **two** nestable runtime counts on top of the clock's pause count
    Raising it also pauses the clock for the duration.
 
 Both are pure runtime state: they are not written to the city save and have no INI field [STATIC].
-Which dialogs and operations raise which count is listed in `09-ui-screens.md` where known.
-[OPEN] Not every dialog has been verified.
+
+**Which count** [STATIC]:
+
+* **City pause count** is the ordinary player pause: the bottom-bar Pause control (and its hotkey),
+  and the matching city pause/resume messages. Resume and selecting a non-zero speed clear it
+  (`09-ui-screens.md` §4.2).
+* **Pending / modal count** is raised by blocking operations: modal windows (budget, ordinances,
+  query, …), save/load, the scenario UI, the terrain editor, and other subsystem/UI paths that
+  take the city for a blocking stretch. Closing or finishing the operation clears it. These paths
+  do **not** raise the city pause count.
+
+A full inventory of every dialog is still [OPEN]; the rule above is enough to implement hold
+correctly. Details per window continue in `09-ui-screens.md`.
 
 ## 3. Periodic cascades
 
@@ -610,5 +621,4 @@ are converted as follows [STATIC]:
 * The relative order of daily items 6–11 and monthly items 1–3 (§6.1), recorded as subsystem order.
 * Which occupant-filter predicates each placement-query (#28) caller passes (the mode → scanner
   table is closed).
-* Which specific dialogs and operations raise the city pause count versus the pending/modal count
-  (§2.3 / §6.3 rule 6); see also `09-ui-screens.md`.
+* Full per-dialog inventory of pending/modal raisers (§2.3); the pause-vs-pending rule is closed.
