@@ -84,7 +84,7 @@ static int determinism(const std::string& game, const std::string& city, int day
   return 0;
 }
 
-static int stress(const std::string& game, const std::string& city, double seconds, bool async, bool calm, bool disasters, int dtMs, int W, int H) {
+static int stress(const std::string& game, const std::string& city, double seconds, bool async, bool calm, bool disasters, bool screens, int dtMs, int W, int H) {
   Game gm;
   if (!loadCity(gm, game, city, W, H)) return 1;
   gm.setAsyncSim(async);
@@ -95,7 +95,7 @@ static int stress(const std::string& game, const std::string& city, double secon
   in.mx = W / 2; in.my = H / 2;
   std::vector<double> frameMs, waitMs, endMs, simMs;
   uint64_t days = 0, joins = 0;
-  int heldFor = 0, pendingRelease = 0, escIn = 0;
+  int heldFor = 0, pendingRelease = 0, escIn = 0, screensStep = 0, screensWait = 0;
   const double period = 13.33;
   auto next = Clk::now();
   const auto t0 = Clk::now();
@@ -115,6 +115,12 @@ static int stress(const std::string& game, const std::string& city, double secon
     if (calm) {}
     else if (escIn > 0 && --escIn == 0) in.key[K_ESC] = true;
     else if (rnd(500) == 0) { in.keyDowns.push_back({'B', 2}); escIn = 20 + rnd(20); }   // Ctrl+B: budget window
+    // Leave the city with Esc and come back with a click on "Back to city" (1280x800 layout), like a player. The click
+    // flips the screen in the middle of a frame, so that frame ends with the pending-screen latch still raised.
+    if (screens) {
+      if (screensStep == 0 && rnd(200) == 0) { in.key[K_ESC] = true; screensStep = 1; screensWait = 3 + rnd(6); }
+      else if (screensStep == 1 && --screensWait <= 0) { in.mx = 637; in.my = 605; in.pressed = true; in.released = true; in.down = false; screensStep = 0; }   // a fast click: both edges in one frame, like xdotool
+    }
     if (disasters && rnd(150) == 0) {
       static const DisasterType kinds[] = {DisasterType::Fire, DisasterType::UFO, DisasterType::Tornado, DisasterType::Earthquake, DisasterType::Locusts};
       gm.startDisaster(kinds[rnd(5)]);
@@ -149,7 +155,7 @@ int main(int argc, char** argv) {
   std::string game, city;
   int days = 0, W = 1280, H = 800;
   double seconds = 0;
-  bool async = true, calm = false, disasters = false;
+  bool async = true, calm = false, disasters = false, screens = false;
   int dtMs = 13;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
@@ -159,6 +165,7 @@ int main(int argc, char** argv) {
     else if (a == "--stress" && i + 1 < argc) seconds = std::atof(argv[++i]);
     else if (a == "--calm") calm = true;
     else if (a == "--disasters") disasters = true;
+    else if (a == "--screens") screens = true;
     else if (a == "--dt" && i + 1 < argc) dtMs = std::atoi(argv[++i]);
     else if (a == "--async" && i + 1 < argc) async = std::atoi(argv[++i]) != 0;
     else if (a == "--size" && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &W, &H);
@@ -167,5 +174,5 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "usage: async_check --game DIR --city FILE (--determinism DAYS | --stress SECONDS [--async 0|1] [--size WxH])\n");
     return 2;
   }
-  return days > 0 ? determinism(game, city, days) : stress(game, city, seconds, async, calm, disasters, dtMs, W, H);
+  return days > 0 ? determinism(game, city, days) : stress(game, city, seconds, async, calm, disasters, screens, dtMs, W, H);
 }

@@ -41,6 +41,7 @@ bool Game::canRunFast(const Input& in) const {
   if (scr_ != Screen::InCity || !simReady_) return false;
   if (tool_ != ToolKind::None || anyWindowOpen() || !msgText_.empty() || cheatOpen_ || dragging_ || panning_) return false;
   if (ui_.focusId != 0) return false;
+  if (screenPending_) return false;   // syncScreenPending() is about to change the city's pending count
   if (in.pressed || in.released || in.rightPressed || in.rightDown || in.down) return false;
   if (!in.keyDowns.empty() || !in.text.empty()) return false;
   for (bool k : in.key) if (k) return false;
@@ -85,6 +86,7 @@ void Game::asyncFrameEnd() {
   if (!asyncSim_ || simJobInFlight_) return;
   publishSnapshots(false);
   if (scr_ != Screen::InCity || !simReady_ || paused_ || !managersReady_ || !world_.W) return;
+  if (city().hold()) return;   // pause or modal latch still raised (e.g. the frame that left the main menu)
   if (simAccum_ < 1.0 || vortexMs_ > 0 || minuteModeOn_ || disasters_.anyActiveNonParade()) return;
   simAccum_ -= 1.0;
   launchSimJob();
@@ -99,7 +101,13 @@ void Game::launchSimJob() {
 void Game::daySimStep(bool disasterActive) {
   // Sync item-7 gate before the day cascade (Q-BJ); emergency + scenario run as items 1 and 5 (Q-BI).
   city().sched.setDisasterActive(disasterActive);
+  if (!simWorker_.onWorker()) { sim_.tickDay(); return; }
+  // On the worker the schedule's hold wait must never block: it polls until the owner releases the hold, but the
+  // owner may be joining this very job (frame start, quit). A hold raised mid-job takes effect at the next launch.
+  auto savedHold = std::move(city().sched.isHold);
+  city().sched.isHold = nullptr;
   sim_.tickDay();
+  city().sched.isHold = std::move(savedHold);
 }
 
 void Game::finishSimJob() {
