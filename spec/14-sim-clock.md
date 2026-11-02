@@ -295,8 +295,8 @@ subsystem processes only part of its map on each run (§6.4).
 11. Flammability (#25): daily slice.
 
 Items 8–11 [STATIC]: each of these four layers is a daily scheduler agent and runs one slice (or
-aura sweep step) per simulated day. Pollution and crime also have a monthly step (monthly items
-14–15). Aura also samples its mayor-rating chart on the monthly cascade (see monthly note below).
+aura sweep step) per simulated day. Aura, pollution and crime also have a monthly step (monthly
+items 14–16). Flammability is daily-only.
 
 **Daily run order on the daily schedule tier** [STATIC]:
 
@@ -340,17 +340,21 @@ paused for the whole monthly work, §6.3 rule 4):
 11. Power (#23).
 12. Water (#24).
 13. Weather (#27): season and temperature update (below).
-14. Pollution (#11): monthly step.
-15. Crime (#12): monthly step.
-16. Aura (#10): mayor-rating chart sample (monthly; yearly and decade samples on 1 January, same
+14. Aura (#10): mayor-rating chart sample (monthly; yearly and decade samples on 1 January, same
     pattern as the demographic charts in rule 7) [STATIC].
+15. Pollution (#11): monthly step.
+16. Crime (#12): monthly step.
 
 Items 1–3 always run before items 4–16 [STATIC]. They are dedicated monthly-tier schedule
 entries, registered in subsystem creation order — disaster manager (#1), then neighbours (#2),
 then world layer (#3) — and are processed in the monthly cascade before the shared monthly pass
 that drives items 4–16 [STATIC]. Items 4–13 run in exactly this order, and items 14–16 come after
-them [STATIC]. Aura's chart sample is grouped with the pollution/crime monthly steps; its order
-among 14–16 follows subsystem order [INFERRED].
+them [STATIC].
+
+**Items 14–16 run in that order** [STATIC]: they are the n==4 handlers of the same daily-tier
+self-scheduled agents as daily items 8, 9 and 10. On the monthly cascade the daily tier is walked
+with n=4, so registration order gives aura chart → pollution monthly → crime monthly (zone and
+flammability ignore n≠2). This matches Q-BJ's post-init/load registration order.
 
 **Weather (#27), monthly.** The weather subsystem has no save records of its own; its state is
 derived from the city's geographic location and the simulation calendar [STATIC]. On each monthly
@@ -547,13 +551,13 @@ lock [STATIC].
    is a multiple of 10.
    Order on 1 January is therefore: daily work → monthly items 1–5 → demographics, ageing and
    demographic graphs → commercial, industrial → transport → budget month-end, year-end and funds
-   chart → power, water, weather → pollution and crime monthly steps → month handler → yearly handler
+   chart → power, water, weather → aura, pollution and crime monthly steps → month handler → yearly handler
 
    **Other graph histories** [STATIC]. Crime, pollution, aura (mayor rating) and traffic use the
    same chart object and the same sampling cadence as the demographic/budget graphs above:
    one monthly sample on every monthly run; on 1 January also one yearly sample; when the new
    year is a multiple of 10, also one decade sample. Each is pushed from that subsystem's own
-   monthly step (crime and pollution = monthly items 14–15; aura = monthly item 16; traffic =
+   monthly step (aura = monthly item 14; pollution = 15; crime = 16; traffic =
    inside transport monthly item 9 / `18-sim-transport.md` §10–§11). Sample values: crime =
    `avgCrime`; pollution = the UI combined air/water percent (`17-sim-services.md`); aura =
    city aura + 127; traffic = average road traffic.
