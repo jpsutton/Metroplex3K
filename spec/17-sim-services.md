@@ -795,7 +795,8 @@ For a cell with anchor (*cx, cz*): [STATIC]
       Occupant kind). Any other kind is skipped and contributes nothing. Empty tiles therefore
       **do** count; the gate is not the lot-state word (1 = occupied, etc.) and is not attribute
       0x72. Occupant kind is a fixed per-class value, so a kind-1 building still counts when
-      abandoned or under construction. [STATIC]
+      abandoned or under construction. Network pieces (kind 2) and flora (kind 5) on a tile
+      therefore skip that tile; empty tiles still count. [STATIC]
    b. Police: let *p* be the police coverage at the tile (0–255, the displayed byte of §2). If
       *p* > *P₀*, *v* = (*p* − *P₀*)·*s_hi* + *E₀*; otherwise *v* = *E₀* − (*P₀* − *p*)·*s_lo*. Add
       round-to-nearest(*v*), ties to even.
@@ -912,9 +913,10 @@ each jail (`10-save-format.md` §6.2.5).
 
 ## Open questions
 
-* Aura: which non-building occupant classes use kinds other than 1 (so they are skipped by
+* Aura non-kind-1 classes closed: network pieces = kind 2, flora = kind 5 (`13` Occupant kind;
   §8.4). (Chart series order closed: index 0 = newest, §8.6.)
 * Education funding third list closed: libraries and museums share it (§6.2).
+* RCI indicator demand unit closed: *u* = *N*/1000, full slot |*u*| = 1 (`09` §4.5).
 * The (now decoded) `garbageStore` block of the pollution record (§7.4). (Police record fields
   closed, see Persisted state.)
 * Fire strike closed: identical machine to police, avg flammability vs `MaxAcceptableFlam` (§3.4).
