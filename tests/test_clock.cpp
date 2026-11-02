@@ -236,19 +236,24 @@ static void testSpeed() {
 static void testSchedule() {
   CHECK(Clock::kTimerIntervalMs == 1000);   // spec 14 §2.2 Q-AS
   CHECK(dailySteps().size() == 11);
-  // Spec 14 §6.1 / Q-BI [STATIC]: items 1–5 exact order (emergency → police → fire → LV → scenario).
-  CHECK(dailySharedSteps()[0] == Step::DailyDisasters);
-  CHECK(dailySharedSteps()[1] == Step::DailyPolice);
-  CHECK(dailySharedSteps()[2] == Step::DailyFire);
-  CHECK(dailySharedSteps()[3] == Step::DailyLandValue);
-  CHECK(dailySharedSteps()[4] == Step::DailyScenario);
-  CHECK(dailySteps()[0] == Step::DailyDisasters && dailySteps()[4] == Step::DailyScenario);
-  // Spec 14 §6.1 / Q-BG [STATIC]: shared pass then item 7 (DisasterInstances) last.
+  // Spec 14 §6.1 / Q-BI [STATIC]: items 1–5 exact order.
+  CHECK(dailyDriverSteps().size() == 5);
+  CHECK(dailyDriverSteps()[0] == Step::DailyDisasters);
+  CHECK(dailyDriverSteps()[1] == Step::DailyPolice);
+  CHECK(dailyDriverSteps()[2] == Step::DailyFire);
+  CHECK(dailyDriverSteps()[3] == Step::DailyLandValue);
+  CHECK(dailyDriverSteps()[4] == Step::DailyScenario);
+  // Spec 14 §6.1 / Q-BJ [STATIC]: item 7 after 1–5, before self-scheduled 8→11→6→9→10.
+  CHECK(dailySelfScheduledSteps().size() == 5);
+  CHECK(dailySelfScheduledSteps()[0] == Step::DailyAura);
+  CHECK(dailySelfScheduledSteps()[1] == Step::DailyFlammability);
+  CHECK(dailySelfScheduledSteps()[2] == Step::DailyZoneDev);
+  CHECK(dailySelfScheduledSteps()[3] == Step::DailyPollution);
+  CHECK(dailySelfScheduledSteps()[4] == Step::DailyCrime);
   CHECK(dailySharedSteps().size() == 10);
-  CHECK(dailySharedSteps()[6] == Step::DailyAura);   // item 8 before pollution/crime/flam (Q-AR)
-  CHECK(dailySharedSteps().back() == Step::DailyFlammability);
+  CHECK(dailySteps()[5] == Step::DailyDisasterInstances);
   CHECK(dailySteps()[6] == Step::DailyAura);
-  CHECK(dailySteps().back() == Step::DailyDisasterInstances);
+  CHECK(dailySteps().back() == Step::DailyCrime);
   CHECK(monthlySteps().size() == 16);
   CHECK(monthlySteps()[9] == Step::MonthlyBudget && monthlySteps()[5] == Step::MonthlyResidential);
   CHECK(monthlySteps().back() == Step::MonthlyAura);
@@ -285,14 +290,17 @@ static void testSchedule() {
   CHECK(!clk.paused());
   CHECK(news == 0x1F4);   // age 10
   CHECK(sc.elapsedDays == 1);
-  // log order: shared daily items 1–5 then 6/8–11 (no item 7 without disasters), then monthly
+  // log order: driver 1–5, self-scheduled (no item 7), then monthly
   CHECK(sc.cascadeLog(0) == int(Step::DailyDisasters));
   CHECK(sc.cascadeLog(1) == int(Step::DailyPolice));
   CHECK(sc.cascadeLog(2) == int(Step::DailyFire));
   CHECK(sc.cascadeLog(3) == int(Step::DailyLandValue));
   CHECK(sc.cascadeLog(4) == int(Step::DailyScenario));
-  CHECK(sc.cascadeLog(6) == int(Step::DailyAura));
-  CHECK(sc.cascadeLog(9) == int(Step::DailyFlammability));
+  CHECK(sc.cascadeLog(5) == int(Step::DailyAura));
+  CHECK(sc.cascadeLog(6) == int(Step::DailyFlammability));
+  CHECK(sc.cascadeLog(7) == int(Step::DailyZoneDev));
+  CHECK(sc.cascadeLog(8) == int(Step::DailyPollution));
+  CHECK(sc.cascadeLog(9) == int(Step::DailyCrime));
   size_t daily = dailySharedSteps().size();   // item 7 skipped when inactive
   CHECK(sc.cascadeLog(daily) == int(Step::MonthlyDisasterManager));
   CHECK(sc.cascadeLog(daily + 1) == int(Step::MonthlyNeighbours));   // Q-BF: 1→2→3
@@ -309,12 +317,13 @@ static void testSchedule() {
   CHECK(sc.cascadeLog(1) == int(Step::MonthlyWorldLayer));
   CHECK(sc.cascadeLog(2) == int(Step::MonthlyRci));
 
-  // Q-BG: with disasters active, item 7 runs after the shared daily pass (after flammability)
+  // Q-BJ: with disasters active, item 7 after 1–5, before aura/self-scheduled
   sc.clearLog();
   sc.setDisasterActive(true);
   sc.runDay();
-  CHECK(sc.cascadeLog(9) == int(Step::DailyFlammability));
-  CHECK(sc.cascadeLog(10) == int(Step::DailyDisasterInstances));
+  CHECK(sc.cascadeLog(4) == int(Step::DailyScenario));
+  CHECK(sc.cascadeLog(5) == int(Step::DailyDisasterInstances));
+  CHECK(sc.cascadeLog(6) == int(Step::DailyAura));
   sc.setDisasterActive(false);
 
   // weekly: enrolled buildings first, in order, additions during the step wait

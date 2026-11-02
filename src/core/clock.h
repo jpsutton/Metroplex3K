@@ -194,12 +194,12 @@ enum class Step : int {
 };
 
 const char* stepName(Step s);
-// Run order of each cascade (spec 14 §6.1): aura daily sweep before pollution/crime/flam;
-// aura mayor-rating chart sample is monthly item 16 (Q-AR / de09d09).
-// Daily: shared pass (1–6, 8–11) then disaster-instance day ticks (item 7) (Q-BG).
-// Monthly: dedicated items 1–3 before shared pass 4–16 (Q-BE / Q-BF).
-std::vector<Step> dailySharedSteps();       // items 1–6 and 8–11
-std::vector<Step> dailySteps();             // shared + item 7 (DisasterInstances) last
+// Run order of each cascade (spec 14 §6.1). Monthly: dedicated 1–3 before shared 4–16 (Q-BE/BF).
+// Daily (Q-BI / Q-BJ): driver 1–5, then item 7 (if active), then self-scheduled 8→11→6→9→10.
+std::vector<Step> dailyDriverSteps();          // items 1–5
+std::vector<Step> dailySelfScheduledSteps();   // 8 aura, 11 flam, 6 zone, 9 pollution, 10 crime
+std::vector<Step> dailySharedSteps();          // driver + self-scheduled (no item 7)
+std::vector<Step> dailySteps();                // driver + item 7 + self-scheduled
 std::vector<Step> weeklySteps();
 std::vector<Step> monthlyDedicatedSteps();  // items 1–3: DM, neighbours, world
 std::vector<Step> monthlySharedSteps();     // items 4–16 (AreaAgent monthly pass)

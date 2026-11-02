@@ -299,18 +299,28 @@ const char* stepName(Step s) {
   return (i >= 0 && i < int(Step::kCount)) ? n[i] : "?";
 }
 
-std::vector<Step> dailySharedSteps() {
-  // Spec 14 §6.1 shared daily pass [STATIC Q-BG]. Items 1–5 exact creation order (Q-BI):
-  // emergency → police → fire → land value → scenario. Item 6 + 8–11 order [INFERRED] (aura before
-  // pollution/crime/flam per Q-AR).
+std::vector<Step> dailyDriverSteps() {
+  // Spec 14 §6.1 / Q-BI [STATIC]: items 1–5 in subsystem creation order.
   return {Step::DailyDisasters, Step::DailyPolice, Step::DailyFire, Step::DailyLandValue,
-          Step::DailyScenario, Step::DailyZoneDev, Step::DailyAura, Step::DailyPollution,
-          Step::DailyCrime, Step::DailyFlammability};
+          Step::DailyScenario};
+}
+std::vector<Step> dailySelfScheduledSteps() {
+  // Spec 14 §6.1 / Q-BJ [STATIC]: post-init aura then flammability; after load zone → pollution → crime.
+  return {Step::DailyAura, Step::DailyFlammability, Step::DailyZoneDev, Step::DailyPollution,
+          Step::DailyCrime};
+}
+std::vector<Step> dailySharedSteps() {
+  std::vector<Step> v = dailyDriverSteps();
+  auto self = dailySelfScheduledSteps();
+  v.insert(v.end(), self.begin(), self.end());
+  return v;
 }
 std::vector<Step> dailySteps() {
-  // Spec 14 §6.1 / Q-BG [STATIC]: item 7 (active disaster instance day ticks) after the shared pass.
-  std::vector<Step> v = dailySharedSteps();
+  // Spec 14 §6.1 / Q-BJ [STATIC]: item 7 after 1–5, before self-scheduled layers.
+  std::vector<Step> v = dailyDriverSteps();
   v.push_back(Step::DailyDisasterInstances);
+  auto self = dailySelfScheduledSteps();
+  v.insert(v.end(), self.begin(), self.end());
   return v;
 }
 std::vector<Step> weeklySteps() { return {Step::WeeklyStreetSim}; }
@@ -398,10 +408,10 @@ void CitySchedule::run(Step s) {
 
 void CitySchedule::runDay() {
   cascadePaused_ = false;
-  // Spec 14 §6.1 / Q-BG [STATIC]: shared daily pass (items 1–6, 8–11), then item 7.
-  for (Step s : dailySharedSteps()) run(s);
-  // Active disaster instance day ticks — separate daily-tier entry after the shared pass.
+  // Spec 14 §6.1 / Q-BJ [STATIC]: items 1–5, then item 7 (if active), then self-scheduled layers.
+  for (Step s : dailyDriverSteps()) run(s);
   if (disasterActive_) run(Step::DailyDisasterInstances);
+  for (Step s : dailySelfScheduledSteps()) run(s);
   if (cascadePaused_ && clock_) {
     clock_->resume();
     cascadePaused_ = false;
