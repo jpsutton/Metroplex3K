@@ -57,6 +57,8 @@ struct TrafficParams {
   uint8_t minFundingForNoStrike = 100;
   int strikeChanceAtZeroFunding = 75;  // percent
   int maxStrikeMonths = 24;
+  // Spec 18 §2.1 / Q-BU [STATIC]: loaded from INI; no consumer ever reads it (shipped 128).
+  // TrafficSimLobotomy itself is never read — the switch stays forced off.
   uint8_t lobotomyDensity = 128;
   // [TrafficTripDestinationThresholds]: from Res/Com/Ind/Mixed, three percentages each.
   uint8_t dest[4][3] = {{10, 40, 100}, {70, 80, 100}, {50, 70, 100}, {33, 66, 100}};

@@ -8,14 +8,16 @@ using namespace m3k;
 static void testParams() {
   TrafficParams d;
   CHECK(d.cellCostRoad == 4 && d.annoyanceLevel == 150 && d.dest[0][0] == 10 && d.dest[3][1] == 66);
+  CHECK(d.lobotomyDensity == 128);  // Spec 18 §2.1 / Q-BU: loaded, never read
   auto ini = IniFile::fromText(
       "[TrafficLayer]\nTripCellCostBaseRoad=7;\nTripMaxDistanceToRoadInd=9\nTripMaxDistanceToRoadDefault=5\n"
-      "MonthlyDensityDecrement=75\nMysticalERoads=12.5\n"
+      "MonthlyDensityDecrement=75\nMysticalERoads=12.5\nTrafficSimLobotomyDensity=99\n"
       "[TrafficTripDestinationThresholds]\nFromResidential=1,2,3\nFromCommercial=1,2\n");
   auto p = TrafficParams::fromIni(ini);
   CHECK(p.cellCostRoad == 7);
   CHECK(p.maxDistInd == 5 && p.maxDistDefault == 6);  // defect reproduced
   CHECK(p.monthlyDensityDecrement == 75 && p.mysticalERoads == 12.5f);
+  CHECK(p.lobotomyDensity == 99);  // still unread by simulation
   CHECK(p.dest[0][0] == 1 && p.dest[0][2] == 3);
   CHECK(p.dest[1][0] == 70);  // malformed -> built-in
 }

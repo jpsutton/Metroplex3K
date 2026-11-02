@@ -96,6 +96,8 @@ TrafficParams TrafficParams::fromIni(const IniFile& ini) {
   u8("MinFundingForNoStrike", p.minFundingForNoStrike);
   in("StrikeChanceAtZeroFunding", p.strikeChanceAtZeroFunding);
   in("MaxLengthofStrikeInMonths", p.maxStrikeMonths);
+  // Spec 18 §2.1 / Q-BU [STATIC]: TrafficSimLobotomyDensity is loaded and never read (shipped 128).
+  // TrafficSimLobotomy is not loaded; the lobotomy switch stays forced off.
   u8("TrafficSimLobotomyDensity", p.lobotomyDensity);
 
   const std::string T = "TrafficTripDestinationThresholds";
