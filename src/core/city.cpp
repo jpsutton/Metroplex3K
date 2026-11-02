@@ -1193,6 +1193,119 @@ PlacementCosts makeCosts(const Budget& b, const CityConfig& cfg) {
 }
 }  // namespace
 
+
+namespace {
+// Orthogonal on-ramp pieces [DATA Sacramento]: 3 columns × 2 carriageways.
+// Column i=0..2, carriage c=0..1 → 15130 + 4*i + c. Reverse approach swaps column and carriage.
+// Spec 12 §7 called this a "3-tile lot"; the shipped cities place six 1×1 network pieces (agent 17202).
+void placeOrthogonalOnRamp(WorldNetworkMap& map, const OnRampPlan& plan) {
+  if (!plan.ok || plan.diagonal || plan.footprint.size() != 3) return;
+  const int ax = plan.footprint[1].first, az = plan.footprint[1].second;
+  // Highway side: unit step from the middle footprint tile toward a neighbouring highway piece.
+  int hx = 0, hz = 0;
+  for (int s : {-1, 1}) {
+    if (plan.orientation == 0) {  // footprint along z → highway along ±x
+      auto o = map.occupantAt(ax + s, az, LAYER_SURFACE);
+      if (o.present && (o.id == 73 || o.id == 11258 || o.id == 15051 || o.id == 15098)) { hx = s; break; }
+    } else {
+      auto o = map.occupantAt(ax, az + s, LAYER_SURFACE);
+      if (o.present && (o.id == 73 || o.id == 11258 || o.id == 15051 || o.id == 15098)) { hz = s; break; }
+    }
+  }
+  if (hx == 0 && hz == 0) {
+    // Fall back to the side recorded by planOnRamp's search (perpendicular to footprint).
+    if (plan.orientation == 0) hx = 1; else hz = 1;
+  }
+  // Approach direction along the footprint: +1 if footprint[2] is the "far" end used by rot=2 in Sacramento.
+  const int dx = plan.footprint[2].first - plan.footprint[0].first;
+  const int dz = plan.footprint[2].second - plan.footprint[0].second;
+  const bool forward = (dx + dz) > 0;   // [INFERRED] rot 2 ↔ positive footprint axis
+  const int rot = forward ? 2 : 0;
+  auto altAt = [&](int x, int z) {
+    int c[4]; map.tileCorners(x, z, c); return *std::min_element(c, c + 4);
+  };
+  for (int i = 0; i < 3; i++) {
+    const int col = forward ? i : 2 - i;
+    const int x0 = plan.footprint[size_t(i)].first, z0 = plan.footprint[size_t(i)].second;
+    for (int c = 0; c < 2; c++) {
+      const int car = forward ? c : 1 - c;
+      const uint32_t id = 15130u + uint32_t(4 * col + car);
+      const int x = x0 + c * hx, z = z0 + c * hz;
+      if (!map.onMap(x, z)) continue;
+      map.placePiece(x, z, LAYER_SURFACE, id, rot, altAt(x, z));
+    }
+  }
+}
+}  // namespace
+
+std::vector<std::pair<int, int>> City::routeNetworkPath(NetworkKind k, int x0, int z0, int x1, int z1) const {
+  std::vector<std::pair<int, int>> path;
+  if (!world_ || !cfg_.haveTiling) return path;
+  Tool tool = k == NetworkKind::Road ? TOOL_ROAD : k == NetworkKind::Rail ? TOOL_RAIL : k == NetworkKind::Power ? TOOL_POWER
+            : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
+  WorldNetworkMap map(*const_cast<World*>(world_), flagsFromRuleSets(cfg_.tiling));
+  RoutedPath rp = ::m3k::routePath(map, tool, {x0, z0}, {x1, z1});
+  path.reserve(rp.tiles.size());
+  for (const auto& t : rp.tiles) if (t.valid) path.push_back({t.x, t.z});
+  return path;
+}
+
+City::Quote City::quoteOnRamp(int ax, int az) const {
+  Quote q;
+  if (!world_ || !cfg_.haveTiling) return q;
+  WorldNetworkMap map(*const_cast<World*>(world_), flagsFromRuleSets(cfg_.tiling));
+  OnRampPlan plan = planOnRamp(map, ax, az);
+  if (!plan.ok) return q;
+  PlacementCosts pc = makeCosts(budget, cfg_);
+  int cost = pc.cost(toolParams(TOOL_ONRAMP).costKey);
+  if (cost == 0 && budget.cfg.placementCost.empty() && !budget.freePlacement) cost = 50;
+  // Point-tool charge: one tile × highway key 16001 (spec 12 §7 / commitPath).
+  q.valid = true; q.cost = cost;
+  return q;
+}
+
+std::vector<std::pair<int, int>> City::onRampPreview(int ax, int az) const {
+  std::vector<std::pair<int, int>> out;
+  if (!world_ || !cfg_.haveTiling) return out;
+  WorldNetworkMap map(*const_cast<World*>(world_), flagsFromRuleSets(cfg_.tiling));
+  OnRampPlan plan = planOnRamp(map, ax, az);
+  if (!plan.ok) return out;
+  // Show the three footprint tiles; dual-carriageway partners are implied.
+  for (auto& t : plan.footprint) out.push_back(t);
+  return out;
+}
+
+bool City::buildOnRamp(int ax, int az) {
+  lastFailNoMoney = false;
+  if (!world_ || !cfg_.haveTiling) return false;
+  WorldNetworkMap map(*world_, flagsFromRuleSets(cfg_.tiling));
+  PlacementCosts costs = makeCosts(budget, cfg_);
+  struct Host : ToolHost {
+    City& c;
+    explicit Host(City& cc) : c(cc) {}
+    long funds() const override { return long(c.budget.funds); }
+    void charge(int a) override { c.budget.funds -= a; }
+    void sound(int id) override { if (c.onSound) c.onSound(id); }
+    void message(const std::string& m) override { if (c.onMessage) c.onMessage(m); }
+    WorldNetworkMap* map = nullptr;
+    bool buildOnRamp(const OnRampPlan& plan) override {
+      if (!plan.ok || !map) return false;
+      if (plan.diagonal) {
+        // Diagonal ramp piece pick is still [OPEN] in the spec; refuse rather than guess IDs.
+        return false;
+      }
+      placeOrthogonalOnRamp(*map, plan);
+      return true;
+    }
+  } host(*this);
+  host.map = &map;
+  RoutedPath rp = routePath(map, TOOL_ONRAMP, {ax, az}, {ax, az});
+  CommitResult r = commitPath(map, cfg_.tiling, costs, host, TOOL_ONRAMP, rp);
+  if (r.status == COMMIT_OK) { rebuildIndex(); return true; }
+  if (r.status == COMMIT_NO_MONEY) lastFailNoMoney = true;
+  return false;
+}
+
 bool City::buildNetworkFallback(NetworkKind k, const std::vector<std::pair<int, int>>& path) {
   PlacementCosts pc = makeCosts(budget, cfg_);
   Tool tool = k == NetworkKind::Power ? TOOL_POWER : k == NetworkKind::Pipe ? TOOL_PIPE : TOOL_ROAD;

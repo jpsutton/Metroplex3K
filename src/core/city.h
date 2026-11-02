@@ -98,6 +98,10 @@ class City {
   bool plop(uint32_t occId, int x, int z, int cost);
   bool plopAgent(uint32_t occId, uint32_t agentType, int sizeX, int sizeZ, int x, int z, int cost);
   bool buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path);
+  // Spec 12 §6.2 drag router (highway dual carriageway, per-tool water/slope). Empty when tiling is off.
+  std::vector<std::pair<int, int>> routeNetworkPath(NetworkKind k, int x0, int z0, int x1, int z1) const;
+  // Spec 12 §7: highway on-ramp point tool (menu 02B5DEBB). Places the 3×2 piece group.
+  bool buildOnRamp(int ax, int az);
   // Spec 12 §6.4 / §8: first yes/no confirm a drag would raise (bridge, then tunnel, then connection).
   enum class NetworkConfirmKind { None, Bridge, Tunnel, Connection };
   struct NetworkConfirm {
@@ -117,6 +121,9 @@ class City {
   Quote quotePlop(uint32_t occId, int x, int z) const;
   Quote quoteBulldoze(int x0, int z0, int x1, int z1) const;
   Quote quoteNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path) const;
+  Quote quoteOnRamp(int ax, int az) const;
+  // Preview tiles for an on-ramp at the cursor (empty when the plan fails).
+  std::vector<std::pair<int, int>> onRampPreview(int ax, int az) const;
   // Footprint of a building (1x1 when unknown).
   void footprint(uint32_t occId, int& sx, int& sz) const;
 

@@ -259,6 +259,8 @@ struct TestHost : ToolHost {
   int charged = 0;
   bool bridgeOk = true;
   bool connOk = true;
+  bool rampOk = true;
+  int ramps = 0;
   std::vector<int> sounds;
   std::vector<std::string> msgs;
   int connPrice = -1, connKind = -1;
@@ -266,6 +268,7 @@ struct TestHost : ToolHost {
   void charge(int a) override { charged += a; money -= a; }
   bool confirmBridge(int, bool) override { return bridgeOk; }
   bool confirmConnection(int k, int p) override { connKind = k; connPrice = p; return connOk; }
+  bool buildOnRamp(const OnRampPlan& plan) override { if (!rampOk || !plan.ok) return false; ramps++; return true; }
   void sound(int e) override { sounds.push_back(e); }
   void message(const std::string& s) override { msgs.push_back(s); }
 };
@@ -449,6 +452,15 @@ static void testOnRamp() {
   CHECK(pl.ok && !pl.diagonal && pl.footprint.size() == 3);
   SimpleNetworkMap empty(10, 10);
   CHECK(!planOnRamp(empty, 5, 4).ok);
+  // commitPath charges one highway-tile (16001) and asks the host to place the lot.
+  auto rules = makeRules({{"ROAD_GRND_final.txt", roadFinal()}});
+  PlacementCosts costs; costs.byType[16001] = 40;
+  TestHost host;
+  RoutedPath rp = routePath(m, TOOL_ONRAMP, {5, 4}, {5, 4});
+  auto cr = commitPath(m, rules, costs, host, TOOL_ONRAMP, rp);
+  CHECK(cr.status == COMMIT_OK && cr.rampPlaced == 1 && host.ramps == 1 && host.charged == 40);
+  TestHost no; no.rampOk = false;
+  CHECK(commitPath(m, rules, costs, no, TOOL_ONRAMP, rp).status == COMMIT_INVALID);
 }
 
 static void testTopology() {

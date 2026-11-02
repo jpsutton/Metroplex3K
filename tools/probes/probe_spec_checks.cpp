@@ -330,6 +330,26 @@ int main(int argc, char** argv) {
         break;
       }
     }
+    if (std::getenv("M3K_ONRAMP")) {
+      int n=0;
+      for (const auto& o : s.game.world().occupants) if (o.agentType == 17202) {
+        std::printf("     offramp occId=%u key=%08X size=%dx%d at (%d,%d) rot=%u\n", o.occId, o.keyType, o.sizeX, o.sizeZ, o.x, o.z, o.rot);
+        n++;
+      }
+      int p=0; for (const auto& x : s.game.world().surface) if (x.pieceId>=15130 && x.pieceId<=15141) {
+        if (p<30) std::printf("     ramp-piece %u at (%d,%d) rot=%u\n", x.pieceId, x.x, x.z, x.rot); p++;
+      }
+      // resolve agent 17202 from GameData by scanning common id ranges
+      if (GameData* gd = s.game.city().gameData()) {
+        for (uint32_t id = 1; id < 0x10000; id++) {
+          if (const OccAttr* a = gd->occupant(id, true)) if (a->agentType == 17202)
+            std::printf("     net-occ %u agent %u size %ux%u\n", id, a->agentType, a->sizeX, a->sizeZ);
+          if (const OccAttr* a = gd->occupant(id, false)) if (a->agentType == 17202)
+            std::printf("     bldg-occ %u agent %u size %ux%u\n", id, a->agentType, a->sizeX, a->sizeZ);
+        }
+      }
+      std::printf("     offramp occupants %d ramp-pieces %d\n", n, p);
+    }
     if (std::getenv("M3K_LANDMARKS")) {   // landmark picker membership: agent types under 18000 in the hierarchy
       int n = 0, lo = 1 << 30, hi = 0;
       for (const auto& kv : c.config().parent) if (c.agentHierarchy().isAncestorOrSelf(kv.first, 18000)) { n++; lo = std::min<int>(lo, int(kv.first)); hi = std::max<int>(hi, int(kv.first)); }

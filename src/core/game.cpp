@@ -13,6 +13,9 @@
 
 namespace m3k {
 
+// Sentinel toolArg_ for the highway on-ramp point tool (menu 02B5DEBB); not a NetworkKind.
+constexpr int kToolOnRamp = 7;
+
 static std::vector<std::string> splitFields(const std::string& s) {
   std::vector<std::string> v; std::string cur;
   for (char c : s) { if (c == ',') { v.push_back(trimSpaces(cur)); cur.clear(); } else cur.push_back(c); }
@@ -383,6 +386,7 @@ void Game::dispatch(const MenuItemInfo& mi) {
   switch (t) {
     case 0xC2B5DE77: setTool(ToolKind::Road, int(NetworkKind::Road)); toolName_ = name; return;
     case 0x42B5DE86: setTool(ToolKind::Road, int(NetworkKind::Highway)); toolName_ = name; return;
+    case 0x02B5DEBB: setTool(ToolKind::Road, kToolOnRamp); toolName_ = name; return;   // on-ramp (spec 12 §7)
     case 0x42B5DE98: setTool(ToolKind::Road, int(NetworkKind::Rail)); toolName_ = name; return;
     case 0xC2B5DEA6: setTool(ToolKind::Road, int(NetworkKind::Subway)); toolName_ = name; return;
     case 0x42C2F8BF: setTool(ToolKind::Road, int(NetworkKind::Power)); toolName_ = name; return;
@@ -798,6 +802,12 @@ void Game::drawHud() {
 // ---------------------------------------------------------------- map interaction
 
 std::vector<std::pair<int, int>> Game::routePath(int x0, int z0, int x1, int z1) {
+  // Prefer the network-tools router (spec 12 §6.2) so highway gets both carriageways and each
+  // tool applies its own slope / water / staircase rules. Fall back to a plain L when tiling is off.
+  if (toolArg_ != kToolOnRamp) {
+    auto path = sim_.city().routeNetworkPath(NetworkKind(toolArg_ ? toolArg_ : 1), x0, z0, x1, z1);
+    if (!path.empty()) return path;
+  }
   // Straight / one bend: the longer leg first.
   std::vector<std::pair<int, int>> path;
   int x = x0, z = z0;
@@ -814,7 +824,9 @@ City::Quote Game::quoteTool(int x0, int z0, int x1, int z1) {
   switch (tool_) {
     case ToolKind::Zone: return c.quoteZone(x0, z0, x1, z1, toolArg_);
     case ToolKind::Demolish: return c.quoteBulldoze(x0, z0, x1, z1);
-    case ToolKind::Road: return c.quoteNetwork(NetworkKind(toolArg_ ? toolArg_ : 1), routePath(x0, z0, x1, z1));
+    case ToolKind::Road:
+      if (toolArg_ == kToolOnRamp) return c.quoteOnRamp(x1, z1);
+      return c.quoteNetwork(NetworkKind(toolArg_ ? toolArg_ : 1), routePath(x0, z0, x1, z1));
     case ToolKind::Plop: return c.quotePlop(toolOcc_, x1, z1);
     case ToolKind::Terrain: {
       City::Quote q; q.valid = true;
@@ -853,6 +865,13 @@ void Game::buildScene() {
       break;
     }
     case ToolKind::Road: {
+      if (toolArg_ == kToolOnRamp) {
+        auto tiles = sim_.city().onRampPreview(x1, z1);
+        for (const auto& p : tiles) { TilePreview t; t.x0 = t.x1 = p.first; t.z0 = t.z1 = p.second; scene_.previews.push_back(t); }
+        q = quoteTool(x1, z1, x1, z1);
+        if (tiles.empty()) { pv.x0 = pv.x1 = x1; pv.z0 = pv.z1 = z1; scene_.previews.push_back(pv); }
+        break;
+      }
       if (dragging_) {
         for (const auto& p : routePath(x0, z0, x1, z1)) { TilePreview t; t.x0 = t.x1 = p.first; t.z0 = t.z1 = p.second; scene_.previews.push_back(t); }
         q = quoteTool(x0, z0, x1, z1);
@@ -891,6 +910,14 @@ void Game::executeTool(int x0, int z0, int x1, int z1) {
       break;
     case ToolKind::Zone: sim_.paintZoneType(x0, z0, x1, z1, toolArg_); dirty_ = true; break;
     case ToolKind::Road: {
+      if (toolArg_ == kToolOnRamp) {
+        City::Quote q = quoteTool(x1, z1, x1, z1);
+        if (!q.valid) { sound(30); break; }
+        if (q.cost != 0 && q.cost > sim_.funds) { sound(32); break; }
+        if (sim_.city().buildOnRamp(x1, z1)) dirty_ = true;
+        else sound(sim_.city().lastFailNoMoney ? 32 : 30);
+        break;
+      }
       City::Quote q = quoteTool(x0, z0, x1, z1);
       if (!q.valid) { sound(30); break; }
       if (q.cost != 0 && q.cost > sim_.funds) { sound(32); break; }
@@ -977,6 +1004,7 @@ std::string Game::cursorForTool() const {
     case ToolKind::Terrain:
       switch (toolArg_) { case 1: return "RAISE TERRAIN"; case 2: return "LOWER TERRAIN"; case 4: return "LEVEL TERRAIN"; case 32: return "PAINT WATER"; default: return "PLANT TREE"; }
     case ToolKind::Road:
+      if (toolArg_ == kToolOnRamp) return "ONRAMP";
       switch (NetworkKind(toolArg_ ? toolArg_ : 1)) {
         case NetworkKind::Rail: return "RAIL ROAD"; case NetworkKind::Power: return "POWER LINES"; case NetworkKind::Pipe: return "WATER PIPES";
         case NetworkKind::Subway: return "SUBWAY TUBE"; case NetworkKind::Highway: return "AVENUE"; default: return "ROAD";
