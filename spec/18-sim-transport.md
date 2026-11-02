@@ -100,8 +100,8 @@ parsed value is truncated to 8 bits. [STATIC] unless noted.
 | `MinFundingForNoStrike` | u8 % | 100 | Transit funding below this percentage can cause a strike (§8.2) |
 | `StrikeChanceAtZeroFunding` | % | 75 | Stored ×0.01. Strike-chance slope (§8.2) |
 | `MaxLengthofStrikeInMonths` | int | 24 | Upper bound on strike length (§8.2) |
-| `TrafficSimLobotomy` | — | — | **Not read.** The "lobotomy" switch is always off [STATIC] |
-| `TrafficSimLobotomyDensity` | u8 | 128 | Read, but no consumer was found [OPEN] |
+| `TrafficSimLobotomy` | — | — | **Not read.** The "lobotomy" switch is forced off (a related module global is set to 0 and never taken from the INI) [STATIC] |
+| `TrafficSimLobotomyDensity` | u8 | 128 | Loaded from the INI into a module global that no code ever reads. Implementations may ignore the key (shipped value 128). [STATIC] |
 
 The "Default" column is the built-in value that applies when the key is missing. The shipped INI
 overrides most of these. The engine must read the INI.
@@ -1072,7 +1072,7 @@ occupants (any other argument disables it). It has no simulation effect [STATIC]
 5. (Resolved: piece attribute 0x136 matrix, §5.4.) Still open: the meaning of the city-wide
    boolean *B*. (Resolved: span flags 0x4000 are restored from the saved piece word.)
 7. Airport/seaport puzzle development rules (§12): `15-sim-growth.md`.
-8. `TrafficSimLobotomyDensity`: loaded, but has no known effect.
+8. (Resolved: `TrafficSimLobotomyDensity` is loaded and never read, §2.1; same as the unread `TrafficSimLobotomy` switch.)
 9. Strike side effects outside the trip model (news, advisor, automata).
 10. The direction of the history arrays in the save record (index 0 = most recent is inferred).
 11. (Q-AL, narrowed): London road-density overshoot / long car paths remain parked; first-month
