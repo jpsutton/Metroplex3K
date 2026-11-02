@@ -197,12 +197,12 @@ The **set speed** operation, with requested speed `s`, runs these steps [STATIC]
 
 1. If `s` equals both the current and the selected speed, do nothing.
 2. If the simulation is in the paused state: set current = 0, and if `s ≠ 0`, set
-   selected = min(`s`, 4).
-3. Otherwise `s` must be 1–4; if it is not, the request is rejected. Set current = selected = `s`.
+   selected = min(`s`, 4). There is **no** lower bound here: a negative `s` is kept as-is
+   (only values above 4 are clamped to 4) [STATIC].
+3. Otherwise `s` must be 1–4; if it is not (including `s ≤ 0`), the request is rejected. Set
+   current = selected = `s`.
 4. Apply `F` for the current speed (table above).
 5. Announce "speed changed" with the selected speed.
-
-[OPEN] Step 2 with a negative `s` is untested. Recommended: reject negative values, as step 3 does.
 
 Speed changes are requested by the speed buttons and hotkeys (`09-ui-screens.md`). A newly created
 city was expected to start at speed 2 (Llama) [STATIC], but the original **starts a new city at
