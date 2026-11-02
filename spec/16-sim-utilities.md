@@ -138,10 +138,12 @@ Each month, in this order: [STATIC]
    * If the plant is flagged expired, only recompute its output (2.4).
    * Otherwise run the overwork check (2.5); if it explodes, stop processing that plant.
    * Otherwise, if age > *Lmax* (strictly greater, so a plant spends exactly one month at age
-     *Lmax* with output 0 before it is retired), the plant is **retired**: its occupant is replaced in place by the
-     occupant's expired variant, which inherits *Lmax* and *Ld* and is flagged expired [STATIC;
-     the visual variant and its zero output are INFERRED].
-   * Recompute output *O* (2.4).
+     *Lmax* with output 0 before it is retired), the plant is **retired**: its occupant is
+     replaced in place by a **new occupant of the same agent type** with lot state **8**
+     (destroyed), the same *Lmax* and *Ld*, and the expired flag set. It is not a different
+     occupant/resource ID. [STATIC]
+   * Recompute output *O* (2.4). An expired plant's *O* is **0** (age ≥ *Lmax* in §2.4; the
+     expired branch only recomputes, it does not restore capacity). [STATIC]
 5–6. Ageing counts and distribution, in one pass over the plant list in list order [STATIC]. Before
    the pass, clear both counters and every plant's "reached" mark. For each plant that is **not yet
    reached**:
@@ -247,8 +249,8 @@ For each facility, in list order: [STATIC]
 
 1. If the facility is not functional, or is retired this month, its output is 0. A water facility
    is retired when age ≥ *Lmax* (greater **or equal**; power plants use strictly greater, 2.6) and
-   is then replaced by its expired variant as for power plants. [STATIC; the two tests really
-   differ in the original]
+   is then replaced the same way as a power plant (same agent type, lot state 8, expired flag,
+   output 0 — §2.6 step 4). [STATIC; the two age tests really differ in the original]
 2. If its tile is not powered (`16` §2), output is 0.
 3. Pumps: examine the **ring** of tiles at Chebyshev distance 1 around the pump tile (the 8 border
    tiles of the 3 × 3 box). If any is fresh (non-salt) water: output = capacity, status "good".
@@ -577,7 +579,8 @@ absent, re-derive *Lmax* and *Ld* (§2.3) and start *W* at 0. [STATIC layout][IN
 ## Open questions
 
 * Closed: the per-tile power consumption byte is the building record's attribute 0xC9 (§2.6).
-* The expired-plant variant: which occupant replaces a retired plant, and whether it ever produces.
+* Closed: expired-plant replacement is same agent type at lot state 8, flagged expired, output 0
+  (§2.6 step 4).
 * Water: exact row-sweep order of the spreading front; water treatment plant behaviour
   (`OptimalPollutionCap`). Closed: `DefaultLeak` is loaded and never read (§3.1).
 * Garbage: closed — `GarbageScalingFactor` is query-UI only (§4.1 / `17` §7.2.2); recycling ratio
