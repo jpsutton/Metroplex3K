@@ -109,11 +109,18 @@ Pausing is **counted** (nestable) [STATIC]:
 * *Resume*: if the count is > 0, decrement it. On the transition 1 → 0, set `last = now`, so that
   the paused interval is discarded.
 
-The city keeps its own pause count on top of the clock's. On the first city-level pause it
-announces "simulation paused" to the user interface [STATIC]. UI components ask the city to pause
-and resume, for example when a modal dialog opens and closes [INFERRED, medium confidence]. Which
-dialogs pause the simulation is listed in `09-ui-screens.md`. [OPEN] Not every dialog has been
-verified.
+The city keeps **two** nestable runtime counts on top of the clock's pause count [STATIC]:
+
+1. **City pause count.** Raised by Pause and cleared by Resume. On the transition 0 → 1 the city
+   announces "simulation paused" to the user interface and pauses the clock. This is the ordinary
+   player/UI pause.
+2. **Pending / modal count.** A separate nestable count raised when a subsystem or UI begins a
+   blocking operation (modal dialogs, save/load and similar) and cleared when that operation ends.
+   Raising it also pauses the clock for the duration.
+
+Both are pure runtime state: they are not written to the city save and have no INI field [STATIC].
+Which dialogs and operations raise which count is listed in `09-ui-screens.md` where known.
+[OPEN] Not every dialog has been verified.
 
 ## 3. Periodic cascades
 
@@ -378,15 +385,20 @@ lock [STATIC].
    minute. That work is the active disaster instances' minute work, then the scenario's minute work
    [STATIC]. Minute mode is also what slows the game during disasters (§4). There is never any
    hourly work, so the hour period does nothing [STATIC].
-6. **Long cascades and holds.** Before each step of a cascade the simulation checks two conditions
-   [STATIC]:
-   * If the cascade has already taken more than 500 ms of real time, the clock is paused for the
-     rest of the cascade, so that the time is not credited (as in rule 4). A further condition of
-     this check is [OPEN].
-   * While the city reports a hold (for example a pending pause or a modal operation) and the
-     simulation has not been told to stop, the simulation waits before starting the next step. The
-     wait is re-checked about once per second. No step is skipped; the cascade continues where it
-     stopped once the hold clears. [OPEN] What exactly raises the hold.
+6. **Long cascades and holds.** Before each step of a cascade the simulation checks two kinds of
+   condition [STATIC]:
+   * **Backlog pause.** If the simulator's own pending-work queue has **more than 3** entries, or
+     the shared application message queue has **more than 500** entries, the city takes the same
+     busy / clock-pause path as the monthly begin (rule 4) for the rest of that cascade, so the
+     time is not credited. Both thresholds are **pending-item counts**, not milliseconds of wall
+     time. (An earlier reading of the constant 500 as "500 ms" was wrong.) The busy mark used here
+     is **not** part of the hold below.
+   * **Hold wait.** The city reports a **hold** when either of the two city counts in §2.3 (pause
+     count or pending/modal count) is non-zero. Hold is **not** the monthly busy mark, not a
+     disaster lock, and not save/INI state [STATIC]. While a hold is reported and the simulation
+     has not been told to stop, the simulation waits before starting the next step. The wait is
+     re-checked about once per second. No step is skipped; the cascade continues where it stopped
+     once the hold clears.
 7. **Budget month-end and year-end.** The budget month-end (monthly item 10) performs the whole
    month-end of `19-sim-economy.md` §7. When the closing month is December (the run on 1 January)
    it also performs the year-end. There is no separate yearly trigger for the budget [STATIC].
@@ -514,5 +526,6 @@ are converted as follows [STATIC]:
 * What subsystem #27 does in its monthly step, and what #28 is.
 * What advances the aura layer's sweep (§6.1).
 * The relative order of daily items 6–10 and monthly items 1–3 (§6.1), recorded as subsystem order.
-* The extra condition of the long-cascade check and the source of the city "hold" (§6.3 rule 6).
 * The interval of the timer callback that drives the clock (§2.2).
+* Which specific dialogs and operations raise the city pause count versus the pending/modal count
+  (§2.3 / §6.3 rule 6); see also `09-ui-screens.md`.
