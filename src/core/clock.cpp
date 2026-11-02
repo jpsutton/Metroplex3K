@@ -299,11 +299,17 @@ const char* stepName(Step s) {
   return (i >= 0 && i < int(Step::kCount)) ? n[i] : "?";
 }
 
-std::vector<Step> dailySteps() {
-  // Spec 14 §6.1 items 8–11 [STATIC]: aura before pollution, crime, flammability (Q-AR).
+std::vector<Step> dailySharedSteps() {
+  // Spec 14 §6.1 items 1–6 and 8–11 [STATIC Q-BG shared pass]. Aura before pollution/crime/flam (Q-AR).
   return {Step::DailyDisasters, Step::DailyPolice, Step::DailyFire, Step::DailyLandValue,
-          Step::DailyScenario, Step::DailyZoneDev, Step::DailyDisasterInstances,
-          Step::DailyAura, Step::DailyPollution, Step::DailyCrime, Step::DailyFlammability};
+          Step::DailyScenario, Step::DailyZoneDev, Step::DailyAura, Step::DailyPollution,
+          Step::DailyCrime, Step::DailyFlammability};
+}
+std::vector<Step> dailySteps() {
+  // Spec 14 §6.1 / Q-BG [STATIC]: item 7 (active disaster instance day ticks) after the shared pass.
+  std::vector<Step> v = dailySharedSteps();
+  v.push_back(Step::DailyDisasterInstances);
+  return v;
 }
 std::vector<Step> weeklySteps() { return {Step::WeeklyStreetSim}; }
 std::vector<Step> monthlyDedicatedSteps() {
@@ -390,11 +396,10 @@ void CitySchedule::run(Step s) {
 
 void CitySchedule::runDay() {
   cascadePaused_ = false;
-  for (Step s : dailySteps()) {
-    // Disaster-instance tick runs only when disasters are present.
-    if (s == Step::DailyDisasterInstances && !disasterActive_) continue;
-    run(s);
-  }
+  // Spec 14 §6.1 / Q-BG [STATIC]: shared daily pass (items 1–6, 8–11), then item 7.
+  for (Step s : dailySharedSteps()) run(s);
+  // Active disaster instance day ticks — separate daily-tier entry after the shared pass.
+  if (disasterActive_) run(Step::DailyDisasterInstances);
   if (cascadePaused_ && clock_) {
     clock_->resume();
     cascadePaused_ = false;

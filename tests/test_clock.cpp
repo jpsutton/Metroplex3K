@@ -237,7 +237,12 @@ static void testSchedule() {
   CHECK(Clock::kTimerIntervalMs == 1000);   // spec 14 §2.2 Q-AS
   CHECK(dailySteps().size() == 11);
   CHECK(dailySteps()[0] == Step::DailyDisasters && dailySteps()[4] == Step::DailyScenario);
-  CHECK(dailySteps()[7] == Step::DailyAura);   // before pollution/crime/flam (spec 14 §6.1 item 8)
+  // Spec 14 §6.1 / Q-BG [STATIC]: shared pass then item 7 (DisasterInstances) last.
+  CHECK(dailySharedSteps().size() == 10);
+  CHECK(dailySharedSteps()[6] == Step::DailyAura);   // item 8 before pollution/crime/flam (Q-AR)
+  CHECK(dailySharedSteps().back() == Step::DailyFlammability);
+  CHECK(dailySteps()[6] == Step::DailyAura);
+  CHECK(dailySteps().back() == Step::DailyDisasterInstances);
   CHECK(monthlySteps().size() == 16);
   CHECK(monthlySteps()[9] == Step::MonthlyBudget && monthlySteps()[5] == Step::MonthlyResidential);
   CHECK(monthlySteps().back() == Step::MonthlyAura);
@@ -274,9 +279,11 @@ static void testSchedule() {
   CHECK(!clk.paused());
   CHECK(news == 0x1F4);   // age 10
   CHECK(sc.elapsedDays == 1);
-  // log order: daily steps (no DisasterInstances without disasters), then monthly
+  // log order: shared daily (no DisasterInstances without disasters), then monthly
   CHECK(sc.cascadeLog(0) == int(Step::DailyDisasters));
-  size_t daily = dailySteps().size() - 1;   // disaster instances skipped
+  CHECK(sc.cascadeLog(6) == int(Step::DailyAura));
+  CHECK(sc.cascadeLog(9) == int(Step::DailyFlammability));
+  size_t daily = dailySharedSteps().size();   // item 7 skipped when inactive
   CHECK(sc.cascadeLog(daily) == int(Step::MonthlyDisasterManager));
   CHECK(sc.cascadeLog(daily + 1) == int(Step::MonthlyNeighbours));   // Q-BF: 1→2→3
   CHECK(sc.cascadeLog(daily + 2) == int(Step::MonthlyWorldLayer));
@@ -291,6 +298,14 @@ static void testSchedule() {
   CHECK(sc.cascadeLog(0) == int(Step::MonthlyNeighbours));
   CHECK(sc.cascadeLog(1) == int(Step::MonthlyWorldLayer));
   CHECK(sc.cascadeLog(2) == int(Step::MonthlyRci));
+
+  // Q-BG: with disasters active, item 7 runs after the shared daily pass (after flammability)
+  sc.clearLog();
+  sc.setDisasterActive(true);
+  sc.runDay();
+  CHECK(sc.cascadeLog(9) == int(Step::DailyFlammability));
+  CHECK(sc.cascadeLog(10) == int(Step::DailyDisasterInstances));
+  sc.setDisasterActive(false);
 
   // weekly: enrolled buildings first, in order, additions during the step wait
   std::vector<std::string> wk;
