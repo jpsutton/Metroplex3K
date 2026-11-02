@@ -183,7 +183,7 @@ void Game::initManagers() {
   city().sched.setHandler(Step::DailyScenario, [this] {
     if (scen_) scen_->dayTick();
   });
-  // Spec 14 §6.1 / Q-BG [STATIC]: item 7 after shared pass (gated by disasterActive_).
+  // Spec 14 §6.1 / Q-BJ [STATIC]: item 7 after daily 1–5, before self-scheduled (gated by disasterActive_).
   city().sched.setHandler(Step::DailyDisasterInstances, [this] {
     CityDisasterWorld dw(world_, city());
     DisasterOutput out;
@@ -793,7 +793,7 @@ void Game::tickSim(uint32_t dtMs) {
   const uint32_t factor = SpeedControl::kFactor[std::max(1, std::min(4, speed_))];
   // One simulated day: sim step, disaster day tick, month/anniversary hooks, scenario and weekly hooks.
   auto dayStep = [&] {
-    // Sync item-7 gate before the day cascade (Q-BG); emergency + scenario run as items 1 and 5 (Q-BI).
+    // Sync item-7 gate before the day cascade (Q-BJ); emergency + scenario run as items 1 and 5 (Q-BI).
     city().sched.setDisasterActive(disasters_.anyActiveNonParade());
     sim_.tickDay();
     int month = city().clock.date().month;
