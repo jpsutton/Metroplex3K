@@ -218,7 +218,7 @@ still powered. Each plant counts only towards the first network that reaches it.
 | `WaterConservationFactor` | percent | Demand reduction under the water-conservation ordinance. [STATIC] |
 | `WaterMeterFactor` | percent | Demand reduction under the water-meter ordinance. [STATIC] |
 | `DefaultConsumption` | water units per tile | Consumption for occupants not listed in `[AgentIDModifiers]`. [STATIC] |
-| `DefaultLeak` | — | Read but no consumer found. [OPEN] |
+| `DefaultLeak` | — | Loaded from the INI into a module global that no code ever reads. Implementations may ignore the key (shipped value 0). [STATIC] |
 
 `[AgentIDModifiers]`: *agentType*`=`*n* (text after the number is a comment). At most 127
 entries are kept; they are sorted by ID and looked up by binary search. A building's monthly
@@ -402,7 +402,7 @@ lose water first. [INFERRED]
 |---|---|---|
 | `SC3Pollution.ini [AgentIDModifiers]` | 5th field | Garbage produced per building (per 2 × 2 cell share, see 4.2). [STATIC] |
 | `SC3Pollution.ini [TuningParameters]` | `GarbageAbductionAmount` | Garbage that may silently vanish per **month** (the counter resets at every month-end, 4.3). |
-| | `GarbageScalingFactor` | Stored as value × 0.001. It is **not** used by production or disposal; the per-tile reduction that earlier drafts attributed to it is the recycling ratio (4.3). [STATIC for disposal; its remaining use OPEN] |
+| | `GarbageScalingFactor` | Stored as value × 0.001 (shipped 100 → 0.1). **Not** used by production or disposal — the per-tile reduction that earlier drafts attributed to it is the recycling ratio (4.3). Its only consumer is the pollution query UI, which multiplies a pollution-layer garbage total by the stored factor and truncates to an integer for one query line (`17-sim-services.md` §7.2.2). [STATIC] |
 | | `GarbagePollutedThreshold`, `MaxGarbagePolluteForUI` | Threshold for "garbage-polluted" tile tests and the scale maximum of the garbage map. |
 | | `TrashPresortOrdEffect`, `TireRecyclingOrdEffect`, `BackyardCompostingOrdEffect`, `PaperReductionOrdEffect`, `IndWasteDisposalOrdEffect` | Percent reductions of garbage (4.2). |
 | `SC3Tune.ini [Incinerator]` | `OptimalGarbageCap` | Garbage one incinerator burns **per pollution run** (per simulated day with the shipped `UpdatePeriod` 30) at 100 % funding; the monthly capacity is 30 × the value. Held internally as ×30 and divided by 30 per run. [STATIC; DATA: Liverpool, 3 incinerators: current-month counter 135 000 = 3 × 1 500 × 30, 12-month total 1 620 000] |
@@ -578,10 +578,10 @@ absent, re-derive *Lmax* and *Ld* (§2.3) and start *W* at 0. [STATIC layout][IN
 
 * Closed: the per-tile power consumption byte is the building record's attribute 0xC9 (§2.6).
 * The expired-plant variant: which occupant replaces a retired plant, and whether it ever produces.
-* Water: exact row-sweep order of the spreading front; role of `DefaultLeak`; water treatment
-  plant behaviour (`OptimalPollutionCap`).
-* Garbage: the remaining use of `GarbageScalingFactor` (not disposal). Closed: recycling ratio (4.3), abduction resets monthly (4.3), store
-  (4.4), counter labels (4.5).
+* Water: exact row-sweep order of the spreading front; water treatment plant behaviour
+  (`OptimalPollutionCap`). Closed: `DefaultLeak` is loaded and never read (§3.1).
+* Garbage: closed — `GarbageScalingFactor` is query-UI only (§4.1 / `17` §7.2.2); recycling ratio
+  (4.3), abduction resets monthly (4.3), store (4.4), counter labels (4.5).
 * Pumps: whether the ring test uses the land-value water-tile test (§3.3 step 3, INFERRED).
   Purchased water entering `supply` is INFERRED (§3.4 step 4); what the purchase accumulators
   hold when the deal component is not the last component is OPEN. The original clears them
