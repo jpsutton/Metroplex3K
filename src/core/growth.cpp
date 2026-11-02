@@ -812,45 +812,183 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
       if (placed == 0) c.spacingReleaseSegment(sx0, sz0, sx1, sz1);
       return placed;
     }
-    case 0x2207D9EE: {  // airport buildings (arrangement step 2 [OPEN] omitted)
+    case 0x2207D9EE: {  // airport buildings (spec 15 §5.5) [STATIC]
       if (uncommitted <= 0) return 0;
-      if (L.small.empty() && L.large.empty() && L.filler.empty()) return 0;
+      struct AirportFamily {
+        int family = 0;
+        std::vector<BuildingChoice> T, Ev, Eh, Pv, Ph, F;
+      };
+      std::map<int, AirportFamily> fams;
+      for (const auto* v : {&L.filler, &L.small, &L.large}) {
+        for (const auto& m : *v) {
+          AirportFamily& af = fams[m.family];
+          af.family = m.family;
+          const uint32_t fw = m.flagWord;
+          const int part = m.line;
+          const bool edge1 = (m.sizeX == 1 && m.sizeZ == 1);
+          const bool edge2 = (m.sizeX == 2 && m.sizeZ == 2);
+          if (edge1 && part == 4) af.T.push_back(m);
+          if (edge1 && (fw & 0x800) && part == 5) af.Ev.push_back(m);
+          if (edge1 && (fw & 0x400) && part == 5) af.Eh.push_back(m);
+          if (edge2 && (fw & 0x400) && part == 6) af.Pv.push_back(m);
+          if (edge2 && (fw & 0x800) && part == 6) af.Ph.push_back(m);
+          if (edge1 && ((fw & 0x100) || part == 0)) af.F.push_back(m);
+        }
+      }
+      std::vector<AirportFamily> registered;
+      for (auto& kv : fams) {
+        const auto& af = kv.second;
+        if (!af.T.empty() && !af.Ev.empty() && !af.Eh.empty() &&
+            !af.Pv.empty() && !af.Ph.empty() && !af.F.empty()) {
+          registered.push_back(af);
+        }
+      }
+      if (registered.empty()) return 0;
+
       if (r.w() > 10) r.x1 = r.x0 + 9;
       if (r.h() > 10) r.z1 = r.z0 + 9;
       used.assign(size_t(r.w()) * r.h(), 0);
-      std::vector<BuildingChoice> pool = L.small; pool.insert(pool.end(), L.large.begin(), L.large.end());
-      if (pool.empty()) pool = L.filler;
-      // (1) edge tile with the best frontage: low-x column, high-z row, high-x column, low-z row
-      std::vector<std::pair<int, int>> edge;
-      for (int z = r.z0; z <= r.z1; z++) edge.push_back({r.x0, z});
-      for (int x = r.x0; x <= r.x1; x++) edge.push_back({x, r.z1});
-      for (int z = r.z0; z <= r.z1; z++) edge.push_back({r.x1, z});
-      for (int x = r.x0; x <= r.x1; x++) edge.push_back({x, r.z0});
-      int bestS = -1; std::pair<int, int> bt = edge[0];
-      for (auto& t : edge) {
-        // Frontage score [INFERRED]: transport adjacency; segment flag of the block also counts (spec 10 s6.3).
-        int s = (c.isTransport(t.first - 1, t.second) ? 1 : 0) + (c.isTransport(t.first + 1, t.second) ? 1 : 0) +
-                (c.isTransport(t.first, t.second - 1) ? 1 : 0) + (c.isTransport(t.first, t.second + 1) ? 1 : 0) +
-                (c.spacingSegmentBlock(t.first, t.second) ? 1 : 0);
-        if (s >= 2) { bt = t; bestS = s; break; }
-        if (s > bestS) { bestS = s; bt = t; }
+
+      auto pickFamily = [&]() -> const AirportFamily& {
+        return registered[size_t(rng.rand(int(registered.size())))];
+      };
+
+      const BuildingChoice& sample1x1 = registered[0].T[0];
+
+      auto neighborPart = [&](int x, int z, int s) -> int {
+        int nx = x, nz = z;
+        switch (s) {
+          case 0: nx--; break;
+          case 1: nz++; break;
+          case 2: nx++; break;
+          case 3: default: nz--; break;
+        }
+        if (nx < 0 || nz < 0 || nx >= c.mapW() || nz >= c.mapH()) return 0;
+        LotInfo l = c.lotAt(nx, nz);
+        return (l.present && l.port) ? l.partIndex : 0;
+      };
+
+      auto getEdgeTiles = [&](int s) {
+        std::vector<std::pair<int, int>> tiles;
+        switch (s) {
+          case 0: for (int z = r.z0; z <= r.z1; z++) tiles.push_back({r.x0, z}); break;
+          case 1: for (int x = r.x0; x <= r.x1; x++) tiles.push_back({x, r.z1}); break;
+          case 2: for (int z = r.z0; z <= r.z1; z++) tiles.push_back({r.x1, z}); break;
+          case 3: default: for (int x = r.x0; x <= r.x1; x++) tiles.push_back({x, r.z0}); break;
+        }
+        return tiles;
+      };
+
+      // (1) Terminal on best frontage [STATIC].
+      // Sides scanned in order 0–3.
+      // Score: 0 if cannot be built on (canAt fails or point-flag near); 1 if can; 2 if can and outward p == 2.
+      // First tile with score >= 2 wins (scan stops).
+      bool foundStep1 = false;
+      int winX = -1, winZ = -1;
+      for (int s = 0; s < 4; s++) {
+        for (auto& [x, z] : getEdgeTiles(s)) {
+          if (!canAt(sample1x1, x, z) || c.spacingPointNear(x, z)) continue;
+          int score = (neighborPart(x, z, s) == 2) ? 2 : 1;
+          if (score >= 2) {
+            winX = x; winZ = z;
+            foundStep1 = true;
+            break;
+          }
+        }
+        if (foundStep1) break;
       }
-      const BuildingChoice* b1 = pickFrom(pool);
-      // Spec 10 s6.3 [STATIC]: reserve a point before placing; release if placement fails.
-      if (b1 && canAt(*b1, bt.first, bt.second) && c.spacingReservePoint(bt.first, bt.second)) {
-        int n = putAt(*b1, bt.first, bt.second);
-        if (n) return n;
-        c.spacingReleasePoint(bt.first, bt.second);
+      if (foundStep1) {
+        const auto& fam = pickFamily();
+        const BuildingChoice* b = pickFrom(fam.T);
+        if (b && c.spacingReservePoint(winX, winZ)) {
+          BuildingChoice bc = *b; bc.rot = 0;
+          if (canAt(bc, winX, winZ)) {
+            int n = putAt(bc, winX, winZ);
+            if (n) return n;
+          }
+          c.spacingReleasePoint(winX, winZ);
+        }
       }
-      // (3) random tile on a runway-reserved (segment-flagged) block
-      const BuildingChoice* b3 = pickFrom(pool);
-      for (int attempt = 0; attempt < 16; attempt++) {
+
+      // (2) Arrangement [STATIC]. If step 1 fails: rand(100) < 55 run (2a), else (2b).
+      if (rng.rand(100) < 55) {
+        // (2a) Strip along the best part-2 edge.
+        int bestSide = -1, maxCount = -1;
+        for (int s = 0; s < 4; s++) {
+          int cnt = 0;
+          for (auto& [x, z] : getEdgeTiles(s)) {
+            if (neighborPart(x, z, s) == 2 && canAt(sample1x1, x, z)) cnt++;
+          }
+          if (cnt > maxCount) {
+            maxCount = cnt;
+            bestSide = s;
+          }
+        }
+        if (maxCount >= 2) {
+          int placedCount = 0;
+          for (auto& [x, z] : getEdgeTiles(bestSide)) {
+            if (neighborPart(x, z, bestSide) == 2 && canAt(sample1x1, x, z)) {
+              const auto& fam = pickFamily();
+              const auto& list = (bestSide == 0 || bestSide == 2) ? fam.Ev : fam.Eh;
+              const BuildingChoice* b = pickFrom(list);
+              if (b) {
+                BuildingChoice bc = *b; bc.rot = 0;
+                if (canAt(bc, x, z)) {
+                  placedCount += putAt(bc, x, z);
+                  if (placedCount >= 6) break;
+                }
+              }
+            }
+          }
+          if (placedCount > 0) return placedCount;
+        }
+      } else {
+        // (2b) 2 x 2 pair on a part-1/2 frontage.
+        if (r.w() >= 2 && r.h() >= 2) {
+          bool placed2b = false;
+          for (int s = 0; s < 4; s++) {
+            auto tiles = getEdgeTiles(s);
+            if (tiles.size() < 2) continue;
+            for (size_t i = 0; i + 1 < tiles.size(); i++) {
+              int p0 = neighborPart(tiles[i].first, tiles[i].second, s);
+              int p1 = neighborPart(tiles[i + 1].first, tiles[i + 1].second, s);
+              if ((p0 == 1 || p0 == 2) && (p1 == 1 || p1 == 2)) {
+                int ax = 0, az = 0;
+                switch (s) {
+                  case 0: ax = r.x0; az = tiles[i].second; break;
+                  case 1: ax = tiles[i].first; az = r.z1 - 1; break;
+                  case 2: ax = r.x1 - 1; az = tiles[i].second; break;
+                  case 3: default: ax = tiles[i].first; az = r.z0; break;
+                }
+                const auto& fam = pickFamily();
+                const auto& list = (s == 0 || s == 2) ? fam.Pv : fam.Ph;
+                const BuildingChoice* b = pickFrom(list);
+                if (b) {
+                  BuildingChoice bc = *b; bc.rot = 0;
+                  if (canAt(bc, ax, az)) {
+                    int n = putAt(bc, ax, az);
+                    if (n) { placed2b = true; return n; }
+                  }
+                }
+                placed2b = true;
+                break;
+              }
+            }
+            if (placed2b) break;
+          }
+        }
+      }
+
+      // (3) Random filler [STATIC].
+      const auto& fam = pickFamily();
+      const BuildingChoice* b3 = pickFrom(fam.F);
+      if (b3) {
         int rx = r.x0 + rng.rand(r.w()), rz = r.z0 + rng.rand(r.h());
-        if (!c.spacingSegmentBlock(rx, rz) || !b3 || !canAt(*b3, rx, rz)) continue;
-        if (!c.spacingReservePoint(rx, rz)) continue;
-        int n = putAt(*b3, rx, rz);
-        if (n) return n;
-        c.spacingReleasePoint(rx, rz);
+        BuildingChoice bc = *b3; bc.rot = 0;
+        if (canAt(bc, rx, rz)) {
+          int n = putAt(bc, rx, rz);
+          if (n) return n;
+        }
       }
       return 0;
     }

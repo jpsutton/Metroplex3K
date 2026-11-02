@@ -47,6 +47,7 @@ struct TestCity : GrowthCity {
   int eq() const override { return eqv; }
   void placeBuilding(const BuildingChoice& b, int x, int z) override {
     LotInfo l; l.present = true; l.ax = x; l.az = z; l.state = 4; l.agentType = b.agentType; l.sizeX = b.sizeX; l.sizeZ = b.sizeZ; l.flagWord = b.flagWord;
+    l.port = b.port; l.partIndex = b.line;
     lots.push_back(l);
   }
   void removeBuilding(const LotInfo& lot) override {
@@ -379,6 +380,38 @@ int main() {
     for (int x = 10; x <= 14; x++) { LotInfo l; l.present = true; l.ax = x; l.az = 13; l.state = 1; l.agentType = 4242; d.lots.push_back(l); }
     for (int x = 10; x <= 14; x++) { LotInfo l; l.present = true; l.ax = x; l.az = 9; l.state = 1; l.agentType = 4242; d.lots.push_back(l); }
     zm.visitTile(d, rng, 10, 10); CHECK(d.lots.size() == 10);
+  }
+  // ---- airport buildings (spec 15 s5.5) ----
+  {
+    ZoneManager zm; SimRand rng(7);
+    DevRule ab; ab.id = 0x2207D9EE;
+    const uint32_t at = 12310;
+    auto addB = [&](uint32_t occ, int sx, int sz, uint32_t fw, int line) {
+      BuildingChoice b = bc(occ, at, sx, sz, fw); b.line = line; b.family = 1; b.port = true;
+      (sx >= 2 || sz >= 2 ? ab.lists[at].large : ab.lists[at].small).push_back(b);
+    };
+    addB(50, 1, 1, 0, 4);        // T
+    addB(51, 1, 1, 0x800, 5);    // Ev
+    addB(52, 1, 1, 0x400, 5);    // Eh
+    addB(53, 2, 2, 0x400, 6);    // Pv
+    addB(54, 2, 2, 0x800, 6);    // Ph
+    addB(55, 1, 1, 0x100, 0);    // F
+    Category k; k.agentType = at;
+
+    // Step 1: terminal on best frontage when outward neighbour has p = 2
+    TestCity c(32, 32);
+    // Lot is [10, 10] to [15, 15]. Place an outward neighbour at (12, 9) with p = 2 (side 3, low-z outward -z).
+    LotInfo outP2; outP2.present = true; outP2.ax = 12; outP2.az = 9; outP2.port = true; outP2.partIndex = 2;
+    c.lots.push_back(outP2);
+    int n = zm.runRule(c, rng, ab, Rect{10, 10, 15, 15}, k, 2000, 0, 2000, 3);
+    CHECK(n == 1);
+    CHECK(c.lots.size() == 2 && c.lots.back().ax == 12 && c.lots.back().az == 10 && c.lots.back().partIndex == 4);
+
+    // If member lists incomplete: family not registered, rule returns 0
+    DevRule incomplete; incomplete.id = 0x2207D9EE;
+    incomplete.lists[at].small.push_back(bc(50, at, 1, 1, 0));
+    TestCity c2(32, 32);
+    CHECK(zm.runRule(c2, rng, incomplete, Rect{10, 10, 15, 15}, k, 2000, 0, 2000, 3) == 0);
   }
   // ---- config parsing ----
   {

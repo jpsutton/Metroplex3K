@@ -296,7 +296,11 @@ class GrowthAdapter : public growth::GrowthCity {
     const Occupant& o = c_.world_->occupants[size_t(oi)];
     l.present = true; l.ax = o.x; l.az = o.z; l.state = o.state; l.agentType = o.agentType;
     l.sizeX = o.sizeX; l.sizeZ = o.sizeZ;
-    if (c_.game_) { const OccAttr* a = c_.game_->occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT); if (a) l.flagWord = a->buildingFlags; }
+    l.port = (o.keyType == T_OCC_ATTR_PORT);
+    if (c_.game_) {
+      const OccAttr* a = c_.game_->occupant(o.occId, false, l.port);
+      if (a) { l.flagWord = a->buildingFlags; l.partIndex = a->partIndex; }
+    }
     l.removable = isDeveloperType(o.agentType);
     return l;
   }
@@ -375,6 +379,7 @@ class GrowthAdapter : public growth::GrowthCity {
   bool spacingSegmentBlock(int x, int z) const override { return c_.spacingSegmentBlock(x, z); }
   bool spacingReservePoint(int x, int z) override { return c_.spacingReservePoint(x, z); }
   void spacingReleasePoint(int x, int z) override { c_.spacingReleasePoint(x, z); }
+  bool spacingPointNear(int x, int z) const override { return c_.spacingPointNear(x, z); }
   void removeBuilding(const growth::LotInfo& lot) override {
     int oi = c_.occupantAt(lot.ax, lot.az);
     if (oi < 0) return;

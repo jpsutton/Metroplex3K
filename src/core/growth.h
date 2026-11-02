@@ -110,6 +110,8 @@ struct LotInfo {
   uint32_t agentType = 0;
   int sizeX = 1, sizeZ = 1;
   uint32_t flagWord = 0;        // attribute 0xCA
+  int partIndex = 0;            // attribute 0x1F4 (puzzle-part index)
+  bool port = false;            // key group T_OCC_ATTR_PORT
   bool removable = true;        // developer-replaceable
   bool kind5 = false;           // "special kind 5" building (spec 15 section 5.3 e)
   uint32_t baseState() const { return state & ~0x200u; }
@@ -173,6 +175,7 @@ class GrowthCity {
   virtual bool spacingSegmentBlock(int, int) const { return true; }
   virtual bool spacingReservePoint(int, int) { return true; }
   virtual void spacingReleasePoint(int, int) {}
+  virtual bool spacingPointNear(int, int) const { return false; }
   virtual bool landfillRegistered(int, int) const { return false; }
   virtual void registerLandfill(int, int) {}
   virtual void creditLandfillRoom(int) {}
