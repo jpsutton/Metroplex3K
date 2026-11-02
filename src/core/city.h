@@ -169,7 +169,9 @@ class City {
   // Pure runtime — not saved, no INI. Busy (monthly / backlog) is separate and does not feed hold.
   // raisePause: ordinary player pause (bottom-bar / hotkey); resume + non-zero speed clear it.
   // raisePending: modal windows, save/load, scenario UI, terrain editor, other blocking paths.
-  void raisePause(bool announce = true);
+  // `announce` would fire onMessage("simulation paused"); the shell leaves it false — the ticker
+  // carries the pause notice (no dialog in the original).
+  void raisePause(bool announce = false);
   void resumePause();
   void raisePending();
   void clearPending();

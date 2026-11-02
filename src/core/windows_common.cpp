@@ -217,7 +217,7 @@ bool editField(Ui& ui, const WinEnv& E, const std::string& name, Rect fr, std::s
 }
 
 void spriteAt(Ui& ui, GameData* gd, uint32_t cat, uint32_t id, int ax, int ay) {
-  if (!gd || !id || !ui.fb) return;
+  if (!gd || !id || !ui.pixels) return;
   const SpriteImage* sp = gd->sprite(cat, id);
   if (!sp) return;
   const Plane* pl = gd->spritePlane(cat, id + 1);
@@ -231,7 +231,7 @@ void spriteAt(Ui& ui, GameData* gd, uint32_t cat, uint32_t id, int ax, int ay) {
       int a = pl ? pl->v[size_t(y) * pl->w + x] * 255 / 31 : int(c >> 24);
       if (!pl && (c & 0xFFFFFF) == 0xFF00FF) a = 0;
       if (a <= 0) continue;
-      uint32_t& d = (*ui.fb)[size_t(dy) * ui.W + dx];
+      uint32_t& d = ui.at(dx, dy);
       uint32_t o = 0xFF000000u;
       for (int k = 0; k < 24; k += 8) o |= uint32_t((int((c >> k) & 255) * a + int((d >> k) & 255) * (255 - a) + 127) / 255) << k;
       d = o;
@@ -446,7 +446,7 @@ WindowResult CreditsWindow::draw(Ui& ui, const WinEnv& E) {
   Rect view{r.x + 10, r.y + logoH + 8, r.w - 20, r.h - logoH - 16};
   // Clip by rendering into a sub-buffer.
   std::vector<uint32_t> buf(size_t(view.w) * view.h, bgCol);
-  Ui sub = ui; sub.fb = &buf; sub.W = view.w; sub.H = view.h;
+  Ui sub = ui; sub.setTarget(&buf, view.w, view.h);
   int lh = wui::lineHeight(ui) + 2;
   int totalLines = 0;
   for (auto& row : rows) totalLines += row.lineCount();
@@ -471,7 +471,7 @@ WindowResult CreditsWindow::draw(Ui& ui, const WinEnv& E) {
   for (int y = 0; y < view.h; y++)
     for (int x = 0; x < view.w; x++) {
       int dx = view.x + x, dy = view.y + y;
-      if (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) (*ui.fb)[size_t(dy) * ui.W + dx] = buf[size_t(y) * view.w + x];
+      if (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) ui.at(dx, dy) = buf[size_t(y) * view.w + x];
     }
   if (ui.in.key[K_ESC] || ui.in.pressed) R.close = true;
   return R;
@@ -496,7 +496,8 @@ void TickerWidget::push(const NewsItem& n, int width, const Ui& ui) {
   if (n.cls == 1) alarm = true;
 }
 
-void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t, int32_t today, GameRng* rng, bool paused) {
+void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t, int32_t today, GameRng* rng, bool paused,
+                          uint8_t pauseR, uint8_t pauseG, uint8_t pauseB) {
   accumMs += int(dtMs);
   int px = TickerScroll::advance(accumMs);
   if (px) {
@@ -512,7 +513,8 @@ void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t,
       int right = 0;
       for (auto& i : items) right = std::max(right, i.x + ui.textWidth(i.n.text) + i.gap);
       if (!items.empty() && right > width) break;
-      Item it; it.n.text = kMsg; it.n.cls = 6; it.n.number = 0; it.gap = gap;
+      Item it; it.n.text = kMsg; it.n.cls = 1; it.n.number = 0; it.gap = gap;
+      it.n.r = pauseR; it.n.g = pauseG; it.n.b = pauseB;
       it.x = std::max(width, right);
       items.push_back(it);
     }
@@ -536,7 +538,7 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
   std::vector<uint32_t> buf(size_t(r.w) * r.h);
   for (int y = 0; y < r.h; y++)
     for (int x = 0; x < r.w; x++) buf[size_t(y) * r.w + x] = rgb(20, 24, 60);
-  Ui sub = ui; sub.fb = &buf; sub.W = r.w; sub.H = r.h;
+  Ui sub = ui; sub.setTarget(&buf, r.w, r.h);
   int fh = ui.fonts->ui().height();
   int ty = (r.h - fh) / 2;
   for (auto& it : items) {
@@ -557,7 +559,7 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
   for (int y = 0; y < r.h; y++)
     for (int x = 0; x < r.w; x++) {
       int dx = r.x + x, dy = r.y + y;
-      if (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) (*ui.fb)[size_t(dy) * ui.W + dx] = buf[size_t(y) * r.w + x];
+      if (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) ui.at(dx, dy) = buf[size_t(y) * r.w + x];
     }
   ui.frame(r, false);
   return R;

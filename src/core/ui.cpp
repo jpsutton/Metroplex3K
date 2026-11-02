@@ -5,8 +5,8 @@
 
 namespace m3k {
 
-void Ui::begin(std::vector<uint32_t>* f, int w, int h, const Input& i) {
-  fb = f; W = w; H = h; in = i;
+void Ui::begin(uint32_t* px, int w, int h, const Input& i, int pitchPx) {
+  fb = nullptr; pixels = px; W = w; H = h; pitch = pitchPx > 0 ? pitchPx : w; in = i;
   tooltip.clear(); idCounter_ = 0; windowRects.clear();
   // Windows not drawn last frame were closed: forget their offsets so they reopen at home.
   for (auto it = winOffsets_.begin(); it != winOffsets_.end();) {
@@ -16,6 +16,20 @@ void Ui::begin(std::vector<uint32_t>* f, int w, int h, const Input& i) {
   // Last frame's press landed on a title bar not covered by a later window: that window follows the pointer now.
   if (pressKey_) { dragKey_ = pressKey_; pressKey_ = 0; }
   if (!in.down) dragKey_ = 0;
+}
+
+void Ui::begin(std::vector<uint32_t>* f, int w, int h, const Input& i) {
+  begin(f && !f->empty() ? f->data() : nullptr, w, h, i, w);
+  fb = f;
+}
+
+void Ui::setTarget(uint32_t* px, int w, int h, int pitchPx) {
+  fb = nullptr; pixels = px; W = w; H = h; pitch = pitchPx > 0 ? pitchPx : w;
+}
+
+void Ui::setTarget(std::vector<uint32_t>* f, int w, int h) {
+  setTarget(f && !f->empty() ? f->data() : nullptr, w, h, w);
+  fb = f;
 }
 
 uint64_t Ui::windowKey(const char* name) {
@@ -45,14 +59,14 @@ Rect Ui::movable(Rect home, uint64_t key, int barH) {
 
 void Ui::fill(Rect r, uint32_t c) {
   int x0 = std::max(0, r.x), y0 = std::max(0, r.y), x1 = std::min(W, r.x + r.w), y1 = std::min(H, r.y + r.h);
-  for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) (*fb)[size_t(y) * W + x] = c;
+  for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) at(x, y) = c;
 }
 
 void Ui::fillAlpha(Rect r, uint32_t c, float a) {
   int x0 = std::max(0, r.x), y0 = std::max(0, r.y), x1 = std::min(W, r.x + r.w), y1 = std::min(H, r.y + r.h);
   uint32_t cr = c & 255, cg = (c >> 8) & 255, cb = (c >> 16) & 255;
   for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) {
-    uint32_t& d = (*fb)[size_t(y) * W + x];
+    uint32_t& d = at(x, y);
     uint32_t dr = d & 255, dg = (d >> 8) & 255, db = (d >> 16) & 255;
     d = 0xFF000000u | (uint32_t(db + (float(cb) - db) * a) << 16) | (uint32_t(dg + (float(cg) - dg) * a) << 8) | uint32_t(dr + (float(cr) - dr) * a);
   }
@@ -70,7 +84,7 @@ void Ui::blitRect(const Image& im, int dx, int dy, int sx, int sy, int sw, int s
     for (int i = 0; i < sw; i++) {
       int x = dx + i; if (x < 0 || x >= W || sx + i >= im.w) continue;
       uint32_t p = im.px[size_t(sy + j) * im.w + sx + i];
-      if (p >> 24) (*fb)[size_t(y) * W + x] = p;
+      if (p >> 24) at(x, y) = p;
     }
   }
 }
@@ -86,7 +100,7 @@ void Ui::panel(Rect r, const std::string& title) {
 }
 
 void Ui::text(int x, int y, const std::string& s, const char* font, uint32_t col) {
-  fonts->get(font).draw(*fb, W, H, x, y, s, col ? col : textCol);
+  fonts->get(font).draw(pixels, W, H, x, y, s, col ? col : textCol, pitch);
 }
 int Ui::textWidth(const std::string& s, const char* font) const { return fonts->get(font).measure(s); }
 void Ui::textCentered(Rect r, const std::string& s, const char* font, uint32_t col) {
@@ -101,7 +115,7 @@ void Ui::blit(const Image& im, int x, int y, int sx, int sw) {
     for (int i = 0; i < sw; i++) {
       int dx = x + i; if (dx < 0 || dx >= W) continue;
       uint32_t p = im.px[size_t(j) * im.w + sx + i];
-      if (p >> 24) (*fb)[size_t(dy) * W + dx] = p;
+      if (p >> 24) at(dx, dy) = p;
     }
   }
 }

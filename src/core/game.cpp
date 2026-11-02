@@ -22,8 +22,16 @@ void Game::setPaused(bool p) {
   // Spec 14 §2.3 / Q-AZ: city pause count = ordinary player pause (bottom-bar / hotkey).
   // Resume and selecting a non-zero speed clear it. Modals use raisePending instead.
   if (!simReady_) return;
-  if (p) sim_.city().raisePause();
-  else sim_.city().resumePause();
+  if (p) {
+    // Ticker (0x2F9) is the pause announcement — no message-box dialog (observed: original has none).
+    sim_.city().raisePause(false);
+    // Spec 22 4.7.2: 0x2F9 is the pause ticker item (class 1, repeats until withdrawn).
+    if (haveData_ && !pauseNewsItem_) pauseNewsItem_ = postNews(kTblNewsTriggered, 0x2F9);
+  } else {
+    sim_.city().resumePause();
+    // Stop feeding new pause copies; items already on the strip finish scrolling off.
+    if (pauseNewsItem_) { news_.withdraw(pauseNewsItem_); pauseNewsItem_ = 0; }
+  }
 }
 
 static std::vector<std::string> splitFields(const std::string& s) {
@@ -487,11 +495,19 @@ void Game::dispatch(const MenuItemInfo& mi) {
 
 static const char* kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
-void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
+void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixels, int outPitchBytes) {
   W_ = w; H_ = h; frameDt_ = dtMs;
   syncScreenPending();
   if (audio_) { audio_->setAudioZoom(cam_.zoom + 1); audio_->update(dtMs); }
-  if (screen_.size() != size_t(w) * h) screen_.assign(size_t(w) * h, 0xFF302820u);
+  const bool ext = outPixels != nullptr;
+  if (!ext) {
+    if (screen_.size() != size_t(w) * h) screen_.assign(size_t(w) * h, 0xFF302820u);
+    drawPx_ = screen_.data();
+    drawPitch_ = w;
+  } else {
+    drawPx_ = outPixels;
+    drawPitch_ = outPitchBytes > 0 ? outPitchBytes / int(sizeof(uint32_t)) : w;
+  }
   // Dialogs opened from a city (Load / Save As) keep the city view and HUD behind them, frozen.
   const bool cityBackdrop = (scr_ == Screen::LoadList || scr_ == Screen::NewCity) && world_.W && simReady_;
   bool world3d = (scr_ == Screen::InCity || scr_ == Screen::TerrainEdit || cityBackdrop) && world_.W;
@@ -517,12 +533,17 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
     }
     ropt_.animTick = animTick_;
     renderer_.render(cam_, ropt_, &scene_);
-    renderer_.swapPixels(screen_);
+    if (ext) renderer_.blitTo(drawPx_, drawPitch_);
+    else {
+      renderer_.swapPixels(screen_);
+      drawPx_ = screen_.data();   // swap moves storage; refresh before UI draws into it
+    }
   } else if (scr_ != Screen::Intro) {
     stopAmbience();
-    std::fill(screen_.begin(), screen_.end(), 0xFF3A2C20u);
+    for (int y = 0; y < h; y++)
+      for (int x = 0; x < w; x++) drawPx_[size_t(y) * drawPitch_ + x] = 0xFF3A2C20u;
   }
-  ui_.begin(&screen_, w, h, in);
+  ui_.begin(drawPx_, w, h, in, drawPitch_);
   if (haveData_ && (skinH_ != h || skinW_ != w)) { skin_ = Skin(); skin_.load(data_, h, w); skinH_ = h; skinW_ = w; }
   ui_.skin = (haveData_ && skin_.loaded()) ? &skin_ : nullptr;
   uiHit_ = false;
@@ -594,7 +615,7 @@ void Game::drawFpsCounter(uint32_t dtMs) {
   ui_.fill({box.x, box.y, 1, box.h}, green);
   ui_.fill({box.x + box.w - 1, box.y, 1, box.h}, green);
   const int tx = box.x + pad, ty = box.y + pad;
-  fpsFont_.draw(screen_, W_, H_, tx, ty, t, green);
+  fpsFont_.draw(drawPx_, W_, H_, tx, ty, t, green, drawPitch_);
   // Frame-time sparkline: one pixel column per recent frame (oldest left → newest right).
   const int gx = box.x + pad + (innerW - graphW) / 2, gy = ty + textH + gap;
   int peak = 33;   // at least a 30 FPS scale so short frames still read
@@ -602,7 +623,7 @@ void Game::drawFpsCounter(uint32_t dtMs) {
   // 16.7 ms guide (60 FPS target), snapped to a pixel row.
   const int guideY = gy + graphH - 1 - std::min(graphH - 1, (17 * graphH) / peak);
   for (int x = gx; x < gx + graphW; x += stride)
-    if (x >= 0 && x < W_ && guideY >= 0 && guideY < H_) screen_[size_t(guideY) * W_ + x] = dim;
+    if (x >= 0 && x < W_ && guideY >= 0 && guideY < H_) drawPx_[size_t(guideY) * drawPitch_ + x] = dim;
   for (int i = 0; i < fpsHistCount_; i++) {
     const int idx = (fpsHistPos_ - fpsHistCount_ + i + kFpsHist * 2) % kFpsHist;
     const int ms = fpsHist_[idx];
@@ -612,7 +633,7 @@ void Game::drawFpsCounter(uint32_t dtMs) {
     const uint32_t col = ms >= 33 ? rgb(255, 64, 0) : ms >= 20 ? rgb(255, 200, 0) : green;
     for (int dy = 0; dy < h; dy++) {
       const int y = gy + graphH - 1 - dy;
-      if (y >= 0 && y < H_) screen_[size_t(y) * W_ + x] = col;
+      if (y >= 0 && y < H_) drawPx_[size_t(y) * drawPitch_ + x] = col;
     }
   }
 }

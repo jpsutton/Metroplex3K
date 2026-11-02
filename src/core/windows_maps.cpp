@@ -113,7 +113,7 @@ WindowResult MapWindow::draw(Ui& ui, const WinEnv& E, const MapSource& src) {
           if (categorical(def->layer)) { if (v != 0xFF) col = MapWindow::legendColour(def->layer, v, 0); }
           else col = MapWindow::legendColour(def->layer, 0, float(v) / 255.f);
         }
-        (*ui.fb)[size_t(mm.y + 1 + py) * ui.W + mm.x + 1 + px] = col;
+        ui.at(mm.x + 1 + px, mm.y + 1 + py) = col;
       }
     E.spot("minimap", mm);
     if (ui.clicked(mm) && ui.in.mx > mm.x && ui.in.my > mm.y) {

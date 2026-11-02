@@ -2,6 +2,7 @@
 // blits it with SDL. Follows spec/25-rendering.md: terrain (section 6), sprites/draw order
 // (sections 4-5), overlays (section 9), picking (section 3).
 #pragma once
+#include <cstring>
 #include <functional>
 #include <map>
 #include <memory>
@@ -152,6 +153,19 @@ class Renderer {
   void swapPixels(std::vector<uint32_t>& out) {
     if (out.size() != fb_.size()) out.assign(fb_.size(), 0);
     fb_.swap(out);
+  }
+  // Copy the rendered frame into a (possibly pitched) destination. Used when the host locks a streaming
+  // texture and wants the city view written straight into GPU staging memory.
+  void blitTo(uint32_t* dst, int pitchPx) const {
+    if (!dst || fbW_ <= 0 || fbH_ <= 0) return;
+    if (pitchPx <= 0) pitchPx = fbW_;
+    const int rowBytes = fbW_ * int(sizeof(uint32_t));
+    if (pitchPx == fbW_) {
+      std::memcpy(dst, fb_.data(), size_t(rowBytes) * size_t(fbH_));
+    } else {
+      for (int y = 0; y < fbH_; y++)
+        std::memcpy(dst + size_t(y) * pitchPx, fb_.data() + size_t(y) * fbW_, size_t(rowBytes));
+    }
   }
   int width() const { return fbW_; }
   int height() const { return fbH_; }

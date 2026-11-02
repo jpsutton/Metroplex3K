@@ -40,7 +40,9 @@ enum Key { K_ENTER, K_ESC, K_BACKSPACE, K_UP, K_DOWN, K_PAGEUP, K_PAGEDOWN, K_TA
 
 class Ui {
  public:
-  std::vector<uint32_t>* fb = nullptr;
+  std::vector<uint32_t>* fb = nullptr;   // optional owning vector (packed); pixels aliases its data when set
+  uint32_t* pixels = nullptr;            // row-major framebuffer (may have pitch > W)
+  int pitch = 0;                         // pixels per row
   int W = 0, H = 0;
   const Fonts* fonts = nullptr;
   Input in;
@@ -53,7 +55,15 @@ class Ui {
   int focusId = 0;       // text box with keyboard focus
   int activeId = 0;      // widget being dragged
 
+  // Packed vector target (pitch = w). Prefer begin(pixels, ...) when the host supplies a pitched buffer.
   void begin(std::vector<uint32_t>* f, int w, int h, const Input& i);
+  // Raw framebuffer; pitchPx 0 means tightly packed (pitch = w).
+  void begin(uint32_t* px, int w, int h, const Input& i, int pitchPx = 0);
+  // Retarget drawing without resetting input / window-drag state (sub-buffer clip helpers).
+  void setTarget(std::vector<uint32_t>* f, int w, int h);
+  void setTarget(uint32_t* px, int w, int h, int pitchPx = 0);
+  uint32_t& at(int x, int y) { return pixels[size_t(y) * pitch + x]; }
+  const uint32_t& at(int x, int y) const { return pixels[size_t(y) * pitch + x]; }
   // Frames of the windows drawn this frame (windows register theirs through wui::centered), so the host can tell
   // whether the pointer is over a window instead of guessing sizes.
   mutable std::vector<Rect> windowRects;

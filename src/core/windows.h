@@ -586,8 +586,10 @@ class TickerWidget {
   // Advance by dtMs: step 2 px each time more than 50 ms elapsed, and pull the next item from `t`
   // when the strip has room (items separated by 20 px). `width` = strip width.
   // `paused`: keep scrolling, but fill the strip with repeated "Simulation Paused" copies (gap of ~4
-  // characters) instead of pulling news from `t`.
-  void update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t, int32_t today, GameRng* rng, bool paused = false);
+  // characters) instead of pulling news from `t`. `pauseR/G/B` colour those copies (ticker-data style
+  // for 0x2F9 when the shell has it; otherwise white).
+  void update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t, int32_t today, GameRng* rng, bool paused = false,
+              uint8_t pauseR = 255, uint8_t pauseG = 255, uint8_t pauseB = 255);
   void push(const NewsItem& n, int width);     // append at the right edge / after the last item (glyph-count width estimate)
   void push(const NewsItem& n, int width, const Ui& ui);   // same with measured text width
   // Draws the strip inside r. Click on an item with a map location -> TickerClick (and PlaySound 47).

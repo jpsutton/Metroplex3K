@@ -122,6 +122,7 @@ void Game::enterCity() {
   // Sim.init rebuilds the City; windows referencing it are closed first.
   closeModelessWindows();
   ticker_ = TickerWidget();   // every new, loaded or scenario city starts with an empty strip
+  pauseNewsItem_ = 0;
   streetHost_.reset(); street_.reset();
   sim_.init(&world_, haveData_ ? &data_ : nullptr, &cityCfg_, 12345u + uint32_t(world_.W));
   sim_.city().onSound = [this](int id) { sound(id); };
@@ -153,7 +154,11 @@ void Game::enterCity() {
   openRoot_ = openFly_ = 0;
   lastMonth_ = sim_.city().clock.date().month;
   // City start / load ticker items (spec 22 4.7.2); mode 3 is used for every ordinary city [OPEN: mode names].
-  if (haveData_) for (const NewsKey& k : cityStartNews(3, 0, rng_)) postNews(k.table, k.id);
+  // 0x2F9 is the pause item — keep its number so Resume can withdraw it (same section).
+  if (haveData_) for (const NewsKey& k : cityStartNews(3, 0, rng_)) {
+    uint32_t n = postNews(k.table, k.id);
+    if (k.id == 0x2F9) pauseNewsItem_ = n;
+  }
 }
 
 void Game::adopt(World&& w) {
@@ -507,7 +512,8 @@ void Game::finishIntro() {
 void Game::drawIntro(uint32_t dtMs) {
   if (!introTried_) startIntro();
   if (scr_ != Screen::Intro || !intro_) { if (scr_ == Screen::Intro) finishIntro(); return; }
-  std::fill(screen_.begin(), screen_.end(), 0xFF000000u);
+  for (int y = 0; y < H_; y++)
+    for (int x = 0; x < W_; x++) drawPx_[size_t(y) * drawPitch_ + x] = 0xFF000000u;
   if (ui_.in.key[K_ESC] || ui_.in.key[K_ENTER] || ui_.in.pressed || ui_.in.rightPressed) { intro_->skip(); finishIntro(); return; }
   introMs_ += dtMs;
   intro_->update(introMs_);
@@ -516,10 +522,13 @@ void Game::drawIntro(uint32_t dtMs) {
   if (f) {
     std::vector<uint32_t> win = composeIntroWindow(*f, intro_->frameWidth(), intro_->frameHeight(), W_, H_);
     // composeIntroWindow yields 0xAARRGGBB; the screen format is the Ui's (RGBA8 little endian = A<<24|B<<16|G<<8|R).
-    for (size_t i = 0; i < win.size() && i < screen_.size(); i++) {
-      uint32_t c = win[i];
-      screen_[i] = 0xFF000000u | ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
-    }
+    for (int y = 0; y < H_; y++)
+      for (int x = 0; x < W_; x++) {
+        size_t i = size_t(y) * W_ + x;
+        if (i >= win.size()) break;
+        uint32_t c = win[i];
+        drawPx_[size_t(y) * drawPitch_ + x] = 0xFF000000u | ((c & 0xFF) << 16) | (c & 0xFF00) | ((c >> 16) & 0xFF);
+      }
   }
   ui_.textCentered({0, H_ - 24, W_, 20}, "Press Escape to skip", "main10", rgb(160, 160, 160));
 }

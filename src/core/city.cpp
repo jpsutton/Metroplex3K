@@ -603,7 +603,7 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
 
 void City::raisePause(bool announce) {
   if (++cityPauseCount_ == 1) {
-    // Game::message sets msgText_ which blocks handleMap; skip announce when starting already-paused.
+    // Optional onMessage path; the shell does not use it (ticker shows pause; no dialog).
     if (announce && onMessage) onMessage("simulation paused");
     // Nestable clock pause: always push, even if already busy-paused (monthly/backlog).
     clock.pause();

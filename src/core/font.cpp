@@ -47,8 +47,9 @@ int Font::measure(const std::string& s) const {
   return std::max(best, x);
 }
 
-void Font::draw(std::vector<uint32_t>& fb, int fbW, int fbH, int x0, int y0, const std::string& s, uint32_t col) const {
-  if (!loaded()) return;
+void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::string& s, uint32_t col, int pitch) const {
+  if (!loaded() || !fb) return;
+  if (pitch <= 0) pitch = fbW;
   int x = x0, y = y0;
   uint32_t cr = col & 255, cg = (col >> 8) & 255, cb = (col >> 16) & 255;
   for (unsigned char c : s) {
@@ -62,7 +63,7 @@ void Font::draw(std::vector<uint32_t>& fb, int fbW, int fbH, int x0, int y0, con
         int dx = x + gx - g.l;
         if (dx < 0 || dx >= fbW || gx < 0 || gx >= w_) continue;
         uint8_t idx = atlas_[size_t(gy) * w_ + gx];
-        uint32_t& d = fb[size_t(dy) * fbW + dx];
+        uint32_t& d = fb[size_t(dy) * pitch + dx];
         if (multi_) {
           uint16_t pv = pal_[idx];
           if (pv == 0xF81F) continue;

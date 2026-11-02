@@ -155,7 +155,7 @@ class SpeedControl {
 
   // Set-speed operation. Returns false when rejected. `changed` receives the announced speed.
   bool setSpeed(int s);
-  // City-level counted pause. First pause announces "simulation paused" (returns true on 0->1).
+  // City-level counted pause. First pause may optionally announce via onMessage (shell leaves it off).
   bool pause();
   bool resume();   // returns true on 1->0
   void applyTo(Clock& c) const { c.setCompression(factor()); }

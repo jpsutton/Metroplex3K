@@ -44,26 +44,6 @@ static void audioCallback(void* user, Uint8* stream, int len) {
   a->mixAudio(reinterpret_cast<int16_t*>(stream), size_t(len) / 4);
 }
 
-// Upload the game framebuffer into a streaming texture (Phase 1 present path). Prefer LockTexture so the
-// upload is a single pitch-aware memcpy into GPU-visible staging memory; fall back to UpdateTexture.
-static void uploadFrame(SDL_Texture* tex, const std::vector<uint32_t>& px, int w, int h) {
-  void* texPixels = nullptr;
-  int pitch = 0;
-  if (tex && SDL_LockTexture(tex, nullptr, &texPixels, &pitch) == 0) {
-    const auto* src = reinterpret_cast<const uint8_t*>(px.data());
-    auto* dst = static_cast<uint8_t*>(texPixels);
-    const int rowBytes = w * 4;
-    if (pitch == rowBytes) {
-      std::memcpy(dst, src, size_t(rowBytes) * size_t(h));
-    } else {
-      for (int y = 0; y < h; y++) std::memcpy(dst + size_t(y) * pitch, src + size_t(y) * rowBytes, size_t(rowBytes));
-    }
-    SDL_UnlockTexture(tex);
-  } else if (tex) {
-    SDL_UpdateTexture(tex, nullptr, px.data(), w * 4);
-  }
-}
-
 int main(int argc, char** argv) {
   std::string gameArg, cityArg, langArg;
   for (int i = 1; i < argc; i++) {
@@ -180,7 +160,6 @@ int main(int argc, char** argv) {
     int w, h; SDL_GetWindowSize(win, &w, &h);
     uint32_t now = SDL_GetTicks();
     openAudio();
-    game.frame(in, w, h, now - last); last = now;
 
     const bool vsyncNow = game.engineOptions().vsync;
     if (vsyncNow != wantVsync) {
@@ -192,7 +171,17 @@ int main(int argc, char** argv) {
       if (tex) SDL_DestroyTexture(tex);
       tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, w, h); tw = w; th = h;
     }
-    uploadFrame(tex, game.screen(), w, h);
+    // Zero-copy present: lock the streaming texture and have Game draw straight into GPU staging memory.
+    void* texPixels = nullptr;
+    int texPitch = 0;
+    if (tex && SDL_LockTexture(tex, nullptr, &texPixels, &texPitch) == 0) {
+      game.frame(in, w, h, now - last, static_cast<uint32_t*>(texPixels), texPitch);
+      SDL_UnlockTexture(tex);
+    } else {
+      game.frame(in, w, h, now - last);
+      if (tex) SDL_UpdateTexture(tex, nullptr, game.screen().data(), w * 4);
+    }
+    last = now;
     SDL_RenderClear(ren); SDL_RenderCopy(ren, tex, nullptr, nullptr); SDL_RenderPresent(ren);
     if (game.windowTitle() != curTitle) { curTitle = game.windowTitle(); SDL_SetWindowTitle(win, curTitle.c_str()); }
     if (game.cursorName() != curName) {

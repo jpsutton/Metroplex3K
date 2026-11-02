@@ -819,9 +819,10 @@ void testTicker() {
   // Paused: keeps scrolling and fills the strip with "Simulation Paused" copies ~4 glyphs apart.
   {
     TickerWidget p;
-    p.update(16, strip.w, h.ui, nullptr, 0, nullptr, true);
+    p.update(16, strip.w, h.ui, nullptr, 0, nullptr, true, 255, 248, 0);
     CHECK(p.items.size() == 1 && p.items[0].x == strip.w);   // first copy enters at the right edge
-    for (int k = 0; k < 120; k++) p.update(51, strip.w, h.ui, nullptr, 0, nullptr, true);
+    CHECK(p.items[0].n.r == 255 && p.items[0].n.g == 248 && p.items[0].n.b == 0);
+    for (int k = 0; k < 120; k++) p.update(51, strip.w, h.ui, nullptr, 0, nullptr, true, 255, 248, 0);
     CHECK(p.items.size() >= 2);
     bool allMsg = true;
     for (auto& i : p.items) allMsg = allMsg && i.n.text == "Simulation Paused";
@@ -829,8 +830,13 @@ void testTicker() {
     int w = h.ui.textWidth("Simulation Paused");
     CHECK(p.items[1].x - (p.items[0].x + w) == h.ui.textWidth("0000"));
     int px0 = p.items[0].x;
-    for (int k = 0; k < 4; k++) p.update(16, strip.w, h.ui, nullptr, 0, nullptr, true);
+    for (int k = 0; k < 4; k++) p.update(16, strip.w, h.ui, nullptr, 0, nullptr, true, 255, 248, 0);
     CHECK(p.items[0].x < px0);                 // still scrolling while paused
+    // Resume: already-placed pause copies keep scrolling; no new ones are added.
+    size_t nPause = p.items.size();
+    for (int k = 0; k < 4; k++) p.update(51, strip.w, h.ui, nullptr, 0, nullptr, false);
+    CHECK(p.items.size() <= nPause);
+    for (auto& i : p.items) CHECK(i.n.text == "Simulation Paused");
   }
   // Move item on screen and click it.
   t.items[0].x = 20; t.items[1].x = 300;

@@ -29,7 +29,7 @@ bool thumbSprite(GameData* gd, const ResKey& appearance, int maxW, int maxH, uin
 void spriteCentred(Ui& ui, GameData* gd, const ResKey& appearance, Rect box, Rect clip) {
   uint32_t cat = 0, id = 0;
   bool dbl = false;
-  if (!ui.fb || !thumbSprite(gd, appearance, box.w, box.h, cat, id, &dbl)) return;
+  if (!ui.pixels || !thumbSprite(gd, appearance, box.w, box.h, cat, id, &dbl)) return;
   const int k = dbl ? 2 : 1;
   const SpriteImage* sp = gd->sprite(cat, id);
   const Plane* pl = gd->spritePlane(cat, id + 1);
@@ -48,7 +48,7 @@ void spriteCentred(Ui& ui, GameData* gd, const ResKey& appearance, Rect box, Rec
       int a = pl ? pl->v[size_t(sy) * pl->w + sx] * 255 / 31 : int(s >> 24);
       if (!pl && (s & 0xFFFFFF) == 0xFF00FF) a = 0;
       if (a <= 0) continue;
-      uint32_t& d = (*ui.fb)[size_t(dy) * ui.W + dx];
+      uint32_t& d = ui.at(dx, dy);
       uint32_t o = 0xFF000000u;
       for (int sh = 0; sh < 24; sh += 8) o |= uint32_t((int((s >> sh) & 255) * a + int((d >> sh) & 255) * (255 - a) + 127) / 255) << sh;
       d = o;
@@ -75,7 +75,7 @@ void fillClip(Ui& ui, Rect r, Rect clip, uint32_t c) {
 
 // Image scaled (nearest) to fit and centred in `box`.
 void imageFit(Ui& ui, const Image& im, Rect box) {
-  if (im.empty() || !ui.fb) return;
+  if (im.empty() || !ui.pixels) return;
   double sc = std::min(1.0, std::min(double(box.w) / im.w, double(box.h) / im.h));
   int w = std::max(1, int(im.w * sc)), h = std::max(1, int(im.h * sc));
   int x0 = box.x + (box.w - w) / 2, y0 = box.y + (box.h - h) / 2;
@@ -84,7 +84,7 @@ void imageFit(Ui& ui, const Image& im, Rect box) {
     if (dx < 0 || dy < 0 || dx >= ui.W || dy >= ui.H) continue;
     uint32_t c = im.px[size_t(y * im.h / h) * im.w + size_t(x * im.w / w)];
     if ((c >> 24) == 0) continue;
-    (*ui.fb)[size_t(dy) * ui.W + dx] = c | 0xFF000000u;
+    ui.at(dx, dy) = c | 0xFF000000u;
   }
 }
 

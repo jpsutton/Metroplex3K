@@ -61,7 +61,10 @@ class Game {
   Game();
   ~Game();
   bool init(const fs::path& gameRoot, std::string& err);  // empty root => NeedData screen
-  void frame(const Input& in, int w, int h, uint32_t dtMs);
+  // If outPixels is non-null, the frame is drawn into that pitched buffer (pitchBytes = bytes per row;
+  // 0 = tightly packed w*4) and screen() is left untouched. Hosts that lock a streaming texture can pass
+  // the locked pointer to avoid a post-frame upload memcpy.
+  void frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixels = nullptr, int outPitchBytes = 0);
   const std::vector<uint32_t>& screen() const { return screen_; }
   bool wantQuit() const { return quit_; }
   void dropPath(const std::string& path);
@@ -206,7 +209,8 @@ class Game {
   void syncScreenPending();
   void applyCheat(const CheatResult& r);
   void updateHover(int tx, int tz, bool onTile);
-  void postNews(uint32_t table, uint32_t id);
+  // Posts a ticker item; returns its item number, or 0 if the string is missing.
+  uint32_t postNews(uint32_t table, uint32_t id);
   void sirenAndGo();
   void startScenarioHooks();
   void checkScenarioEnd();
@@ -260,6 +264,8 @@ class Game {
   Fonts fonts_;
   Ui ui_;
   std::vector<uint32_t> screen_;
+  uint32_t* drawPx_ = nullptr;   // active frame destination (screen_ or host-locked buffer)
+  int drawPitch_ = 0;            // pixels per row for drawPx_
   int W_ = 0, H_ = 0;
   Screen scr_ = Screen::NeedData;
   bool quit_ = false;
@@ -425,6 +431,7 @@ class Game {
   NewsTicker news_;
   TickerDb tickerDb_;
   std::unique_ptr<NewsTickerSink> sink_;
+  uint32_t pauseNewsItem_ = 0;   // live 0x2F9 "Simulation Paused" item (spec 22 4.7.2); withdrawn while running
   GameRng rng_{12345};
   GameRng newsRng_{4242};   // the building subsystem's own generator for building-news variants (spec 22 s4.7.1)
   DisasterManager disasters_;

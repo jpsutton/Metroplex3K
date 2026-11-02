@@ -349,7 +349,9 @@ void Game::stopAmbience() {
 void Game::drawTicker(Rect r) {
   cal::Date d = sim_.city().clock.date();
   int32_t today = tickerStamp(d.month, d.day, d.year);
-  ticker_.update(frameDt_, r.w, ui_, &news_, today, &rng_, paused_);
+  // Pause fillers use the same ticker-data colour as the real 0x2F9 news item.
+  TickerStyle pauseStyle = tickerDb_.style(kTblNewsTriggered, 0x2F9);
+  ticker_.update(frameDt_, r.w, ui_, &news_, today, &rng_, paused_, pauseStyle.r, pauseStyle.g, pauseStyle.b);
   // Paused indicator flashes 750 ms on / 750 ms off, starting lit.
   pauseFlashMs_ = paused_ ? (pauseFlashMs_ + frameDt_) % 1500 : 0;
   WinEnv E = env();
@@ -360,12 +362,12 @@ void Game::drawTicker(Rect r) {
   }
 }
 
-void Game::postNews(uint32_t table, uint32_t id) {
+uint32_t Game::postNews(uint32_t table, uint32_t id) {
   WinEnv E = env();
   std::string text = E.text(table, id, "");   // expands %CITY% / %MAYOR% style tokens
-  if (text.empty()) return;
+  if (text.empty()) return 0;
   cal::Date d = sim_.city().clock.date();
-  news_.post(table, id, tickerStamp(d.month, d.day, d.year), false, 0, 0, &text);
+  return news_.post(table, id, tickerStamp(d.month, d.day, d.year), false, 0, 0, &text);
 }
 
 // ================================================================================== snapshots (spec 09 6.13)

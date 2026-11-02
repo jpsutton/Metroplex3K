@@ -111,7 +111,7 @@ BottomBarLayout bottomBarLayout(int screenW) {
 
 // ---- blitting -------------------------------------------------------------------------------
 void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst) {
-  if (!ui.fb || im.empty() || src.w <= 0 || src.h <= 0 || dst.w <= 0 || dst.h <= 0) return;
+  if (!ui.pixels || im.empty() || src.w <= 0 || src.h <= 0 || dst.w <= 0 || dst.h <= 0) return;
   for (int j = 0; j < dst.h; j++) {
     int dy = dst.y + j; if (dy < 0 || dy >= ui.H) continue;
     int sy = src.y + (src.h == dst.h ? j : j * src.h / dst.h);
@@ -122,9 +122,9 @@ void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst) {
       if (sx < 0 || sx >= im.w) continue;
       uint32_t p = im.px[size_t(sy) * im.w + sx];
       uint32_t a = p >> 24;
-      if (a == 255) { (*ui.fb)[size_t(dy) * ui.W + dx] = p; continue; }
+      if (a == 255) { ui.at(dx, dy) = p; continue; }
       if (!a) continue;
-      uint32_t& d = (*ui.fb)[size_t(dy) * ui.W + dx];   // partial alpha (button shadow): blend over what is there
+      uint32_t& d = ui.at(dx, dy);   // partial alpha (button shadow): blend over what is there
       uint32_t out = 0xFF000000u;
       for (int sh = 0; sh < 24; sh += 8) out |= (((p >> sh) & 255) * a + ((d >> sh) & 255) * (255 - a) + 127) / 255 << sh;
       d = out;

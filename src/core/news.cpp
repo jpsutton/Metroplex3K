@@ -183,6 +183,8 @@ NewsKey buildingNews(uint32_t a, int count, bool landmark, GameRng& rng) {
 std::vector<NewsKey> cityStartNews(int mode, int advisorCount, GameRng& rng) {
   std::vector<NewsKey> v;
   auto add = [&](uint32_t id) { v.push_back({kTblNewsTriggered, id}); };
+  // 0x2F9 is the "Simulation Paused" item (class 1, repeats=0). The shell keeps its item number and
+  // withdraws it on Resume so it cannot monopolise the strip while the sim is running (spec 22 4.7.2).
   if (mode == 3) { add(0x2ED + rng.rand(6)); add(0x2F9); }
   else if (mode == 7) {
     for (uint32_t i = 0x64; i <= 0x68; ++i) add(i);
