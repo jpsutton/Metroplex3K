@@ -103,6 +103,9 @@ class Game {
   void typeCheat(const std::string& s);
   void setPaused(bool p);
   void setDirty(bool d) { dirty_ = d; }            // mark the city modified (save prompts); tools/tests
+  // City-raster skip stats (Phase 1 leftover): frames that ran renderer_.render vs reused the city cache.
+  uint64_t cityRasterFrames() const { return cityRasterFrames_; }
+  uint64_t cityCacheHits() const { return cityCacheHits_; }
   bool paused() const { return paused_; }
   const std::string& lastMessage() const { return lastMsg_; }
   NewsTicker& news() { return news_; }
@@ -125,7 +128,7 @@ class Game {
   bool tileScreenPos(int tx, int tz, int& sx, int& sy);
   const World& world() const { return world_; }
   World& mutableWorld() { return world_; }
-  void terrainChanged() { renderer_.invalidateShade(); }  // after editing world_.alt/water directly (tests/tools)
+  void terrainChanged() { invalidateCityView(); }  // after editing world_.alt/water directly (tests/tools)
   bool windowOpen(const std::string& name) const;
   const EngineOptions& engineOptions() const { return engineOpts_; }
   EngineOptions& mutableEngineOptions() { return engineOpts_; }
@@ -251,6 +254,11 @@ class Game {
   std::vector<std::pair<int, int>> routePath(int x0, int z0, int x1, int z1);
   void executeTool(int x0, int z0, int x1, int z1);
   void buildScene();
+  void bumpCityVisual() { ++cityVisualSerial_; }
+  void invalidateCityView() { renderer_.invalidateShade(); bumpCityVisual(); }
+  uint64_t cityViewSignature() const;
+  void blitCityToDest();
+  void applyCostLabelFromScene();
   // scenarios (game_scenario.cpp bridge)
   void scenarioDayTick();
   void scenarioMinuteTick();
@@ -264,6 +272,11 @@ class Game {
   Fonts fonts_;
   Ui ui_;
   std::vector<uint32_t> screen_;
+  std::vector<uint32_t> cityFb_;  // last city-only raster (no HUD); reused when the view signature matches
+  bool cityFbValid_ = false;
+  uint64_t lastCitySig_ = 0;
+  uint64_t cityVisualSerial_ = 0;   // bumps when the world / shade / layer overlay changes
+  uint64_t cityRasterFrames_ = 0, cityCacheHits_ = 0;
   uint32_t* drawPx_ = nullptr;   // active frame destination (screen_ or host-locked buffer)
   int drawPitch_ = 0;            // pixels per row for drawPx_
   int W_ = 0, H_ = 0;

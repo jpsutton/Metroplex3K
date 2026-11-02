@@ -57,9 +57,13 @@ int main(int argc, char** argv) {
   for (int run = 0; run < 2; run++) {
     gm.setPaused(run == 0);
     gm.frame(in, W, H, 16);
+    const uint64_t ras0 = gm.cityRasterFrames(), hit0 = gm.cityCacheHits();
     auto t = SteadyClock::now();
     for (int i = 0; i < frames; i++) gm.frame(in, W, H, 16);
-    std::printf("Game::frame %s: %7.2f ms/frame\n", run ? "running" : "paused ", msSince(t) / frames);
+    const uint64_t ras = gm.cityRasterFrames() - ras0, hit = gm.cityCacheHits() - hit0;
+    std::printf("Game::frame %s: %7.2f ms/frame  city raster %llu / cache hit %llu\n",
+                run ? "running" : "paused ", msSince(t) / frames,
+                (unsigned long long)ras, (unsigned long long)hit);
   }
 
   // Music decode cost: what playSong does under the audio lock on a cache miss.

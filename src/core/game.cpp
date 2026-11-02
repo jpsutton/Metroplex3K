@@ -495,6 +495,62 @@ void Game::dispatch(const MenuItemInfo& mi) {
 
 static const char* kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
+uint64_t Game::cityViewSignature() const {
+  uint64_t h = 1469598103934665603ull;
+  auto mix = [&](uint64_t v) { h ^= v; h *= 1099511628211ull; };
+  auto mixf = [&](float f) { uint32_t u = 0; std::memcpy(&u, &f, sizeof u); mix(u); };
+  mixf(cam_.u); mixf(cam_.v);
+  mix(uint64_t(cam_.zoom)); mix(uint64_t(cam_.rot));
+  mix(uint64_t(W_)); mix(uint64_t(H_));
+  mix(uint64_t(animTick_)); mix(cityVisualSerial_); mix(uint64_t(shake_));
+  mix(ropt_.grid); mix(ropt_.objects); mix(ropt_.terrain); mix(ropt_.underground);
+  mix(ropt_.zonePaint); mix(ropt_.background); mix(ropt_.edgeFaces); mix(ropt_.constructionSites);
+  mix(ropt_.flora); mix(ropt_.pipes); mix(ropt_.subways); mix(ropt_.automata);
+  mix(uint64_t(ropt_.ownImageFlags));
+  mix(reinterpret_cast<uintptr_t>(ropt_.overlay));
+  mix(uint64_t(layers_.mode)); mix(layers_.transport); mix(layers_.powerLines); mix(layers_.flora);
+  mix(layers_.zonedBuildings); mix(layers_.otherBuildings); mix(layers_.zones);
+  mix(uint64_t(layers_.underground)); mix(uint64_t(layers_.layer));
+  mix(uint64_t(world_.occupants.size())); mix(uint64_t(world_.surface.size()));
+  mix(uint64_t(world_.pipes.size())); mix(uint64_t(world_.subway.size()));
+  mix(uint64_t(scene_.sprites.size()));
+  for (const auto& sp : scene_.sprites) {
+    mix(sp.category); mix(sp.spriteId); mix(uint32_t(sp.x)); mix(uint32_t(sp.z));
+    mix(uint32_t(sp.height)); mix(sp.magnify2x); mix(sp.moving);
+  }
+  mix(uint64_t(scene_.previews.size()));
+  for (const auto& p : scene_.previews) {
+    mix(uint64_t(p.x0)); mix(uint64_t(p.z0)); mix(uint64_t(p.x1)); mix(uint64_t(p.z1));
+    mix(p.valid); mix(p.customColour); mix(p.r); mix(p.g); mix(p.b); mix(p.alpha);
+  }
+  mix(scene_.cost.show); mix(uint64_t(scene_.cost.tileX)); mix(uint64_t(scene_.cost.tileZ));
+  mix(uint64_t(scene_.cost.cost)); mix(scene_.cost.affordable);
+  return h;
+}
+
+void Game::blitCityToDest() {
+  if (!drawPx_ || !cityFbValid_ || cityFb_.size() != size_t(W_) * H_) return;
+  const int rowBytes = W_ * int(sizeof(uint32_t));
+  if (drawPitch_ == W_) {
+    std::memcpy(drawPx_, cityFb_.data(), size_t(rowBytes) * size_t(H_));
+  } else {
+    for (int y = 0; y < H_; y++)
+      std::memcpy(drawPx_ + size_t(y) * drawPitch_, cityFb_.data() + size_t(y) * W_, size_t(rowBytes));
+  }
+}
+
+void Game::applyCostLabelFromScene() {
+  costShow_ = false;
+  if (!scene_.cost.show || !world_.inTiles(scene_.cost.tileX, scene_.cost.tileZ)) return;
+  int alt = world_.altAt(scene_.cost.tileX, scene_.cost.tileZ);
+  int sx = 0, sy = 0;
+  renderer_.projectSub(cam_, scene_.cost.tileX * 256 + 128, scene_.cost.tileZ * 256 + 128, alt * 256, sx, sy);
+  costX_ = sx - 2; costY_ = sy + 40;
+  costText_ = "$" + groupDigits(scene_.cost.cost);
+  costOk_ = scene_.cost.affordable;
+  costShow_ = true;
+}
+
 void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixels, int outPitchBytes) {
   W_ = w; H_ = h; frameDt_ = dtMs;
   syncScreenPending();
@@ -512,9 +568,10 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
   const bool cityBackdrop = (scr_ == Screen::LoadList || scr_ == Screen::NewCity) && world_.W && simReady_;
   bool world3d = (scr_ == Screen::InCity || scr_ == Screen::TerrainEdit || cityBackdrop) && world_.W;
   if (world3d) {
-    if (renderer_.width() != w || renderer_.height() != h) renderer_.resize(w, h);
+    if (renderer_.width() != w || renderer_.height() != h) { renderer_.resize(w, h); cityFbValid_ = false; }
     if (scr_ == Screen::InCity) {
       tickSim(dtMs);
+      if (simDayThisFrame_) bumpCityVisual();
       streetSimFrame(dtMs);
       updateAmbience(dtMs);
       ropt_.overlay = (showMap_ && mapWin_.showInCityView) ? mapWin_.activeOverlay() : nullptr;
@@ -523,8 +580,6 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
         ropt_.overlay = &layerOverlay_;
       }
     } else { ropt_.overlay = nullptr; stopAmbience(); }
-    costShow_ = false;
-    renderer_.setCostTextHook([this](int sx, int sy, const std::string& text, bool ok) { costText_ = text; costX_ = sx; costY_ = sy; costOk_ = ok; costShow_ = true; });
     // Building animations: wall-clock tick (~15 Hz, same period as automata), not sim day.
     // Driving them from sim_.day froze them between day ticks and raced at high speed.
     if (!paused_ && scr_ == Screen::InCity) {
@@ -532,14 +587,29 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
       while (animAccMs_ >= kAnimPeriodMs) { animAccMs_ -= kAnimPeriodMs; ++animTick_; }
     }
     ropt_.animTick = animTick_;
-    renderer_.render(cam_, ropt_, &scene_);
-    if (ext) renderer_.blitTo(drawPx_, drawPitch_);
-    else {
-      renderer_.swapPixels(screen_);
-      drawPx_ = screen_.data();   // swap moves storage; refresh before UI draws into it
+    const uint64_t sig = cityViewSignature();
+    const bool needRaster = !cityFbValid_ || cityFb_.size() != size_t(w) * h || sig != lastCitySig_;
+    if (needRaster) {
+      costShow_ = false;
+      renderer_.setCostTextHook([this](int sx, int sy, const std::string& text, bool ok) {
+        costText_ = text; costX_ = sx; costY_ = sy; costOk_ = ok; costShow_ = true;
+      });
+      renderer_.render(cam_, ropt_, &scene_);
+      // Keep a city-only copy so UI-only frames can skip the rasteriser.
+      if (cityFb_.size() != size_t(w) * h) cityFb_.assign(size_t(w) * h, 0);
+      renderer_.swapPixels(cityFb_);
+      cityFbValid_ = true;
+      lastCitySig_ = sig;
+      ++cityRasterFrames_;
+    } else {
+      ++cityCacheHits_;
+      applyCostLabelFromScene();
     }
+    blitCityToDest();
+    if (!ext) drawPx_ = screen_.data();
   } else if (scr_ != Screen::Intro) {
     stopAmbience();
+    cityFbValid_ = false;
     for (int y = 0; y < h; y++)
       for (int x = 0; x < w; x++) drawPx_[size_t(y) * drawPitch_ + x] = 0xFF3A2C20u;
   }
@@ -1034,7 +1104,7 @@ void Game::executeTool(int x0, int z0, int x1, int z1) {
     case ToolKind::Terrain:
       if (toolArg_ == 4 && terra_) {
         TerraPlan p = terra_->planLevel(x0, z0, x1, z1);
-        auto r = terra_->apply(p, fundsRef()); renderer_.invalidateShade();
+        auto r = terra_->apply(p, fundsRef()); invalidateCityView();
         sound(r.status == ApplyStatus::Applied ? 15 : (r.status == ApplyStatus::NoMoney ? 32 : 30));
       }
       break;
@@ -1216,7 +1286,7 @@ void Game::handleMap() {
         TerraPlan p = toolArg_ == 1 ? terra_->planRaise(tx, tz) : toolArg_ == 2 ? terra_->planLower(tx, tz) : terra_->planWater(tx, tz);
         auto r = terra_->apply(p, fundsRef());
         if (r.status != ApplyStatus::Applied && in.pressed) sound(r.status == ApplyStatus::NoMoney ? 32 : 30);
-        renderer_.invalidateShade();
+        invalidateCityView();
         if (scr_ == Screen::InCity) { sim_.city().markOccupantsDirty(); dirty_ = true; }
       }
     }

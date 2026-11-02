@@ -113,7 +113,7 @@ void Game::attachWorld() {
   cam_.zoom = world_.view.valid ? std::max(0, std::min(4, world_.view.zoom)) : 2;
   cam_.rot = world_.view.valid ? (world_.view.rotation & 3) : 0;
   renderer_.centreOnWorld(cam_, world_.view.valid ? world_.view.centreX : world_.W / 2.f, world_.view.valid ? world_.view.centreZ : world_.H / 2.f);
-  renderer_.invalidateShade();
+  invalidateCityView();
   scene_ = RenderScene();
   hoverValid_ = false;
 }

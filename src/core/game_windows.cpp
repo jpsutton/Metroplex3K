@@ -333,6 +333,7 @@ void Game::applyLayers() {
 
 void Game::refreshLayerOverlay() {
   layerOverlayAge_ = 0;
+  bumpCityVisual();
   if (layers_.mode != CityLayers::LayerView || !world_.W) { layerOverlay_ = DataOverlay(); return; }
   const auto& views = cityLayerViews();
   const DataLayer dl = views[size_t(std::max(0, std::min(int(views.size()) - 1, layers_.layer)))].layer;
@@ -604,7 +605,7 @@ void Game::handleWindowResult(const WindowResult& r) {
           data_.unmountSets();
           if (B) data_.mountBuildingSet(B);
           if (F) data_.mountFloraSet(F);
-          renderer_.invalidateShade();
+          invalidateCityView();
         }
         dirty_ = true;
         break;

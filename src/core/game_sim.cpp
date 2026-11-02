@@ -555,7 +555,7 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
         if (cmd.x >= 0 && cmd.z >= 0 && cmd.x <= world_.W && cmd.z <= world_.H) {
           int v = world_.altAt(cmd.x, cmd.z) + cmd.a;
           world_.alt[world_.vIdx(cmd.x, cmd.z)] = uint8_t(std::max(0, std::min(255, v)));
-          renderer_.invalidateShade();
+          invalidateCityView();
         }
         break;
       case DisasterCommand::MarkRadiation: c.markRadiation(cmd.x, cmd.z); break;
