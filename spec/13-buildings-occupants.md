@@ -361,10 +361,12 @@ The occupant manager saves occupant instances, not this subsystem. The full byte
   1–5 shipped, always square in shipped files) [STATIC][DATA]. No separate lot rectangle is stored.
   It is anchor plus footprint.
 * **Occupant kind** (small integer, not saved). Every occupant class exposes a fixed kind value
-  used by several simulation tests. Building and facility classes report **1**. Other classes
-  report other small integers (2 and 5 are attested). This is **not** the lot-state word below
-  and is **not** attribute 0x72. The aura cell average (`17-sim-services.md` §8.4) counts a tile
-  when the occupant query succeeds and the occupant is absent or kind 1. [STATIC]
+  used by several simulation tests. Building and facility classes report **1**. Network tile
+  pieces (road, rail, highway, pipe, power line, subway, …) report **2**. Flora (trees) report
+  **5**. Other small integers exist on some non-tile classes; the aura gate only cares that they
+  are not 1. This is **not** the lot-state word below and is **not** attribute 0x72. The aura
+  cell average (`17-sim-services.md` §8.4) counts a tile when the occupant query succeeds and the
+  occupant is absent or kind 1. [STATIC]
 * **State word** (u32). The low bits hold exactly one state: 1 occupied/functional, 2 abandoned,
   4 under construction, 8 destroyed (rubble), 16 fire-damaged (ashes), 32 eaten (crops; §6)
   [DATA values; meanings from `SC3BuildingLayer.ini`]. Bit 0x200 is an independent **protected**
