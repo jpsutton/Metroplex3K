@@ -776,9 +776,8 @@ void Game::tickSim(uint32_t dtMs) {
     int wd = cal::weekday(city().clock.jdn());
     if (wd == 1 && lastWeekDay_ != int(city().clock.jdn())) { lastWeekDay_ = int(city().clock.jdn()); weeklyHook(); }
   };
-  // While a disaster instance is active the clock runs at minute resolution (spec 21 s4.1, spec 14 s4): the instances
-  // advance once per simulated minute and a day passes every 1440 minutes. msPerMinute has a 50 ms floor.
-  if (vortexMs_ > 0) {   // whirlpool object lifetime (real time); the manager only ends on the host's signal
+  // Whirlpool lifetime is real wall-clock (not batched with the sim timer).
+  if (vortexMs_ > 0) {
     vortexMs_ -= int(dtMs);
     if (vortexMs_ <= 0) {
       vortexMs_ = 0;
@@ -787,33 +786,43 @@ void Game::tickSim(uint32_t dtMs) {
       applyDisasterOutput(out);
     }
   }
-  const bool minuteMode = disasters_.anyActiveNonParade();
-  if (minuteMode) {
-    if (!minuteModeOn_) { minuteModeOn_ = true; minutesDone_ = int(simAccum_ * 1440.0); simAccum_ = 0; minuteAccMs_ = 0; }
-    const uint32_t msPerDay = uint32_t(86400000ull / std::max<uint32_t>(1, factor));
-    const uint32_t msPerMinute = std::max<uint32_t>(std::max<uint32_t>(msPerDay / 24, 50) / 60, 50);
-    minuteAccMs_ += dtMs;
-    int guard = 0;
-    while (minuteAccMs_ >= msPerMinute && guard++ < 256) {
-      minuteAccMs_ -= msPerMinute;
-      {
-        CityDisasterWorld dw(world_, city());
-        DisasterOutput out;
-        disasters_.minuteTick(dw, inputsFor(city(), disastersOn_, cheats_), out);
-        applyDisasterOutput(out);
+  // Spec 14 §2.2 [STATIC]: clock timer callback every 1000 ms real time (Q-AS / 484d0cd).
+  // Frame dt accumulates; each callback may process several minute/day ticks at high speed.
+  clockCbAccMs_ += dtMs;
+  auto advanceCb = [&](uint32_t stepMs) {
+    const bool minuteMode = disasters_.anyActiveNonParade();
+    if (minuteMode) {
+      if (!minuteModeOn_) { minuteModeOn_ = true; minutesDone_ = int(simAccum_ * 1440.0); simAccum_ = 0; minuteAccMs_ = 0; }
+      const uint32_t msPerDay = uint32_t(86400000ull / std::max<uint32_t>(1, factor));
+      const uint32_t msPerMinute = std::max<uint32_t>(std::max<uint32_t>(msPerDay / 24, 50) / 60, 50);
+      minuteAccMs_ += stepMs;
+      int guard = 0;
+      while (minuteAccMs_ >= msPerMinute && guard++ < 256) {
+        minuteAccMs_ -= msPerMinute;
+        {
+          CityDisasterWorld dw(world_, city());
+          DisasterOutput out;
+          disasters_.minuteTick(dw, inputsFor(city(), disastersOn_, cheats_), out);
+          applyDisasterOutput(out);
+        }
+        if (++minutesDone_ >= 1440) { minutesDone_ = 0; dayStep(); }
+        if (!disasters_.anyActiveNonParade()) break;
       }
-      if (++minutesDone_ >= 1440) { minutesDone_ = 0; dayStep(); }
-      if (!disasters_.anyActiveNonParade()) break;
+    } else {
+      if (minuteModeOn_) { minuteModeOn_ = false; simAccum_ = minutesDone_ / 1440.0; minutesDone_ = 0; }
+      // Game days per real second from the clock compression factor of the speed (spec 14 4).
+      simAccum_ += stepMs / 1000.0 * double(factor) / 86400.0;
+      int guard = 0;
+      while (simAccum_ >= 1.0 && guard++ < 16) {
+        simAccum_ -= 1.0;
+        dayStep();
+      }
     }
-  } else {
-    if (minuteModeOn_) { minuteModeOn_ = false; simAccum_ = minutesDone_ / 1440.0; minutesDone_ = 0; }
-    // Game days per real second from the clock compression factor of the speed (spec 14 4).
-    simAccum_ += dtMs / 1000.0 * double(factor) / 86400.0;
-    int guard = 0;
-    while (simAccum_ >= 1.0 && guard++ < 16) {
-      simAccum_ -= 1.0;
-      dayStep();
-    }
+  };
+  int cbGuard = 0;
+  while (clockCbAccMs_ >= Clock::kTimerIntervalMs && cbGuard++ < 64) {
+    clockCbAccMs_ -= Clock::kTimerIntervalMs;
+    advanceCb(Clock::kTimerIntervalMs);
   }
   if (shake_ > 0) shake_--;
 }

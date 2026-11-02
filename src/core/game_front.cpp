@@ -136,7 +136,7 @@ void Game::enterCity() {
     cal::Date d = sim_.city().clock.date();
     news_.post(k.table, k.id, tickerStamp(d.month, d.day, d.year), true, x, z, &text);
   };
-  simReady_ = true; paused_ = true; dirty_ = false; simAccum_ = 0;
+  simReady_ = true; paused_ = true; dirty_ = false; simAccum_ = 0; clockCbAccMs_ = 0;
   // Spec 14 §2.3: new/loaded city starts paused — raise city pause count once (hold).
   // No announce: Game::message would set msgText_ and block map input.
   sim_.city().raisePause(false);

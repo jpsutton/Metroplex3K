@@ -229,6 +229,7 @@ static void testSpeed() {
 }
 
 static void testSchedule() {
+  CHECK(Clock::kTimerIntervalMs == 1000);   // spec 14 §2.2 Q-AS
   CHECK(dailySteps().size() == 11);
   CHECK(dailySteps()[0] == Step::DailyDisasters && dailySteps()[4] == Step::DailyScenario);
   CHECK(dailySteps()[7] == Step::DailyAura);   // before pollution/crime/flam (spec 14 §6.1 item 8)

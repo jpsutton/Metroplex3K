@@ -297,6 +297,8 @@ class Game {
   int minutesDone_ = 0;
   int vortexMs_ = 0;            // remaining life of an active whirlpool vortex
   uint32_t minuteAccMs_ = 0;
+  // Spec 14 §2.2: clock timer callback is 1000 ms real time; frame dt accumulates here.
+  uint32_t clockCbAccMs_ = 0;
   MenuTree menu_;
   bool menuLoaded_ = false;
   uint32_t openRoot_ = 0, openFly_ = 0;

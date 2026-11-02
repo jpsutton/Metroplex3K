@@ -90,8 +90,12 @@ class Clock {
   void setTimeSource(std::function<uint32_t()> f) { timeSource_ = std::move(f); }
   uint32_t now() const { return timeSource_ ? timeSource_() : lastNow_; }
 
+  // Spec 14 §2.2 [STATIC]: host timer that drives the clock fires every 1000 ms of real time.
+  // One callback may process several minute/day ticks when the simulated period is < 1 s.
+  static constexpr uint32_t kTimerIntervalMs = 1000;
+
   void start(uint32_t nowMs) { last_ = lastNow_ = nowMs; acc_ = 0; }
-  // Timer callback (spec 2.2). Call at least every 50 ms.
+  // Timer callback (spec 2.2). Host should call about every kTimerIntervalMs (1000 ms).
   void tick(uint32_t nowMs);
 
   // Counted pause (spec 2.3).
