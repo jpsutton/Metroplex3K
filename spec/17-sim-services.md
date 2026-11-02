@@ -20,7 +20,7 @@ How often the runs happen [STATIC unless tagged]:
 | Layer | Runs |
 |---|---|
 | Police (§3.3), fire (§4) | once per simulated day, on the daily command, as daily area work (`14-sim-clock.md` §6.2, police before fire) |
-| Crime (§7.1), pollution and garbage disposal (§7.2, `16-sim-utilities.md` §4.3), aura (§8), flammability (§4) | not part of the scheduler's area work [STATIC]. [OPEN] What triggers their runs. Question for testing: does one crime/pollution/aura slice advance per simulated day, at every speed? Recommended until answered: one run per simulated day, after the daily area work |
+| Crime (§7.1), pollution and garbage disposal (§7.2, `16-sim-utilities.md` §4.3), aura (§8), flammability (§4) | once per simulated day, on the daily cascade, as daily scheduler agents (`14-sim-clock.md` §6.1 items 8–11). Aura also samples its mayor-rating chart on the monthly cascade [STATIC] |
 | Health, education (§5, §6) | once per month, in the population layer's month-day work (`14-sim-clock.md` §6.3 rule 7) |
 
 With one run per day the shipped values give full sweeps of 30 days (police, fire, pollution),
@@ -745,7 +745,7 @@ layout]
 
 ### 8.3 Sweep schedule
 
-Run frequency: see §1 (trigger [OPEN]; recommended once per simulated day). Each run processes *N* = ⌊W·H / (16·*T*)⌋ cells, so a full
+Run frequency: see §1 (once per simulated day on the daily cascade). Each run processes *N* = ⌊W·H / (16·*T*)⌋ cells, so a full
 sweep takes *T* runs (shipped *T* = 50).
 
 The cursor is a phase *k* plus an anchor tile *(cx, cz)*. For each phase it walks the anchors
@@ -898,6 +898,5 @@ each jail (`10-save-format.md` §6.2.5).
 * Fire strike machine assumed identical to police.
 * The (now decoded) `garbageStore` block of the pollution record (§7.4). (Police record fields
   closed, see Persisted state.)
-* What triggers the crime, pollution, aura and flammability runs, and how often (§1).
 * Whether the agent-type distance of §7.1.2 is the parent-step count.
 * Flammability visiting order within a run (§4).
