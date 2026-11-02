@@ -87,10 +87,13 @@ class Game {
   Screen currentScreen() const { return scr_; }
 
   // Scripted access for headless tools/tests.
-  void openWindow(const std::string& name);        // budget, ordinances, neighbours, deals, advisors, prefs, props, goals, map, layers, graphs, charts
+  void openWindow(const std::string& name);        // budget, ordinances, neighbours, deals, advisors, prefs, props, goals, map, layers, graphs, charts, engine
   void runMenuItem(uint32_t menuItemId) { execute(menuItemId); }
   // Run a MenuItem.INI command class id directly (tools, windows, ...). For tools/tests.
   void runCommand(uint32_t target, uint32_t arg1 = 0) { runTarget(target, arg1); }
+  ToolKind currentTool() const { return tool_; }
+  int toolArg() const { return toolArg_; }
+  const CityLayers& layers() const { return layers_; }
   void startDisaster(DisasterType t);
   void setDisastersOn(bool on);   // city flag + schedule monthly DM gate; probes and scripts
   bool disasterActive() const { return disasters_.anyActiveNonParade(); }
@@ -121,6 +124,9 @@ class Game {
   World& mutableWorld() { return world_; }
   void terrainChanged() { renderer_.invalidateShade(); }  // after editing world_.alt/water directly (tests/tools)
   bool windowOpen(const std::string& name) const;
+  const EngineOptions& engineOptions() const { return engineOpts_; }
+  EngineOptions& mutableEngineOptions() { return engineOpts_; }
+  int framesPerSecond() const { return fps_; }   // half-second average, updated whether or not the counter shows
   // Test hook: every window control drawn registers (name, rect) here (cleared by the caller).
   void setSpotSink(std::vector<Spot>* s) { spotSink_ = s; }
 
@@ -135,6 +141,7 @@ class Game {
   void drawCredits(uint32_t dtMs);
   void drawInCity(uint32_t dtMs);
   void drawHud();
+  void drawFpsCounter(uint32_t dtMs);
   void drawNavigator(int barH);
   void rebuildMiniMap();
   bool navigatorArt() const;
@@ -176,6 +183,8 @@ class Game {
   std::string str(uint32_t table, uint32_t id);
   WinEnv env();
   void setTool(ToolKind k, int a = 0, uint32_t occ = 0);
+  // Spec 09 §7.2 / 25 §9.3 [INFERRED]: pipe/subway tools force the underground view so pieces are visible.
+  void syncViewForTool(ToolKind k, int a, uint32_t occ);
   void tickSim(uint32_t dtMs);
   void ensureFonts();
   void initAudio();
@@ -277,6 +286,13 @@ class Game {
   PrefsState prefsState_;
   PreferencesDialog prefsDlg_;
   bool showPrefs_ = false;
+  EngineOptions engineOpts_;
+  EngineOptionsDialog engineDlg_;
+  bool showEngine_ = false;
+  // Frame counter overlay (engine option): built-in monospace font, scale follows the window height.
+  uint32_t fpsAccMs_ = 0;
+  int fpsFrames_ = 0, fps_ = 0, fpsScale_ = 0;
+  Font fpsFont_;
   fs::path prefsPath_;
 
   // in-city

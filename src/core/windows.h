@@ -337,6 +337,20 @@ class PreferencesDialog {
   WindowResult draw(Ui& ui, const WinEnv& E, PrefsState& s);
 };
 
+// ---- Engine options (Metroplex3K only, no counterpart in the original) ------------------------------------------------
+// Opened from the HUD button right of the help "?" button. Drawn with the original dialog art when the skin has it.
+struct EngineOptions {
+  bool showFps = false;   // frame counter in the upper-left corner
+  static EngineOptions fromPreferences(const Preferences& p);
+  void toPreferences(Preferences& p) const;
+};
+
+class EngineOptionsDialog {
+ public:
+  // Edits `s` in place; each change is reported as PrefsChanged (text = key). OK / Esc / close box -> close.
+  WindowResult draw(Ui& ui, const WinEnv& E, EngineOptions& s);
+};
+
 // ---- 6.9 City properties ----------------------------------------------------------------------------------------------------------------------------------
 struct CityPropsState {
   std::string name, mayor, description;

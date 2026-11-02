@@ -34,6 +34,7 @@ void Game::loadSettings() {
     nc_size_ = int(prefs_.getInt("newcity.size", nc_size_));
   }
   prefsState_ = prefsFromSettings(general_, prefs_);
+  engineOpts_ = EngineOptions::fromPreferences(prefs_);
   showTip_ = persist_ && prefsState_.showTips && false;
 }
 
@@ -42,6 +43,7 @@ void Game::saveSettings() {
   prefs_.setBool("music.on", general_.musicOn); prefs_.setBool("sfx.on", general_.sfxOn); prefs_.setBool("ambient.on", general_.ambienceOn);
   prefs_.setInt("music.volume", general_.musicVolume); prefs_.setInt("sfx.volume", general_.sfxVolume); prefs_.setInt("ambient.volume", general_.ambienceVolume);
   prefs_.set("newcity.name", nc_name_); prefs_.set("newcity.mayor", nc_mayor_); prefs_.setInt("newcity.size", nc_size_);
+  engineOpts_.toPreferences(prefs_);
   if (persist_ && !prefsPath_.empty()) {
     std::error_code ec; fs::create_directories(prefsPath_.parent_path(), ec);
     prefs_.save(prefsPath_);

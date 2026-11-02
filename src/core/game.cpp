@@ -318,6 +318,7 @@ bool Game::windowOpen(const std::string& n) const {
   if (n == "deals") return showDeals_;
   if (n == "advisors") return showAdv_;
   if (n == "prefs") return showPrefs_;
+  if (n == "engine") return showEngine_;
   if (n == "props") return showProps_;
   if (n == "goals") return showGoals_;
   if (n == "map") return showMap_;
@@ -356,6 +357,37 @@ void Game::setTool(ToolKind k, int a, uint32_t occ) {
   tool_ = k; toolArg_ = a; toolOcc_ = occ; dragging_ = false;
   hoverValid_ = false; scene_.previews.clear(); scene_.cost.show = false; costShow_ = false;
   if (k == ToolKind::None) toolName_.clear();
+  syncViewForTool(k, a, occ);
+}
+
+void Game::syncViewForTool(ToolKind k, int a, uint32_t occ) {
+  // Spec 09 §7.2 / 25 §9.3 [INFERRED]: pipes and subway pieces only draw in the underground view
+  // (render.cpp). Selecting those tools must enter that view; surface build tools leave it.
+  auto goUnder = [&](int net) {   // 0 = subways, 1 = water pipes (CityLayers::underground)
+    layers_.mode = CityLayers::Underground;
+    layers_.underground = net;
+    layersDlg_.edit = layers_;
+    applyLayers();
+  };
+  auto leaveUnder = [&] {
+    if (layers_.mode != CityLayers::Underground) return;
+    layers_.mode = CityLayers::AboveGround;
+    layersDlg_.edit = layers_;
+    applyLayers();
+  };
+  if (k == ToolKind::Road) {
+    if (a == int(NetworkKind::Pipe)) goUnder(1);
+    else if (a == int(NetworkKind::Subway)) goUnder(0);
+    else leaveUnder();   // road, rail, power, highway, on-ramp
+    return;
+  }
+  if (k == ToolKind::Plop) {
+    // Subway station (0xE9) and subway-to-rail (0x3E8A) are placed on the subway layer.
+    if (occ == 0xE9 || occ == 0x3E8A) goUnder(0);
+    else leaveUnder();
+    return;
+  }
+  if (k == ToolKind::Zone || k == ToolKind::Terrain) leaveUnder();
 }
 
 void Game::runTarget(uint32_t target, uint32_t arg1, const std::string& name) {
@@ -528,6 +560,18 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
     ui_.fill(r, rgb(255, 255, 200)); ui_.frame(r, true);
     ui_.text(r.x + 4, r.y + 2, ui_.tooltip);
   }
+  drawFpsCounter(dtMs);
+}
+
+void Game::drawFpsCounter(uint32_t dtMs) {
+  fpsAccMs_ += dtMs; fpsFrames_++;
+  if (fpsAccMs_ >= 500) { fps_ = int((uint32_t(fpsFrames_) * 1000 + fpsAccMs_ / 2) / fpsAccMs_); fpsAccMs_ = 0; fpsFrames_ = 0; }
+  if (!engineOpts_.showFps) return;
+  const int s = std::max(1, H_ / 300);   // 6x9 cell per scale step: 9 px at 480, 18 px at 600-899, 27 px at 900-1199, ...
+  if (s != fpsScale_) { fpsFont_.makeBuiltin(s); fpsScale_ = s; }
+  const std::string t = std::to_string(fps_) + " FPS";
+  fpsFont_.draw(screen_, W_, H_, 5 * s, 5 * s, t, rgb(0, 0, 0));   // drop shadow keeps it readable over light terrain
+  fpsFont_.draw(screen_, W_, H_, 4 * s, 4 * s, t, rgb(0, 255, 0));
 }
 
 void Game::drawMessage() {
@@ -748,10 +792,17 @@ void Game::drawHud() {
     bool hc = false;
     skin_.imageButtonCells(ui_, skin_.get("help"), 4, {place.p3x, place.p3y, 40, 39}, tip(0x3C, "Query"), tool_ == ToolKind::Query, true, hc);
     if (hc) setTool(ToolKind::Query);
+    // Engine options (Metroplex3K only): skinned push button right of the "?"; above it when the RCI indicator
+    // leaves no room in the bar (640x480 art).
+    Rect eb{place.p3x + 44, place.p3y + (39 - 22) / 2, 36, 22};
+    if (eb.x + eb.w > navX - RciGeometry::imgW - 2) eb = {place.p3x + 2, place.p3y - 24, 36, 22};
+    if (ui_.hover(eb)) { uiHit_ = true; ui_.tooltip = "Metroplex3K options"; }
+    if (ui_.button(eb, "M3K", true, showEngine_)) openWindow("engine");
   } else {
     if (ui_.button({fbx, H_ - bh + 3, 44, 24}, paused_ ? "Run" : "Pause")) { setPaused(!paused_); sound(paused_ ? 24 : 23); }
     for (int i = 1; i <= 4; i++)
       if (ui_.button({fbx + 48 + (i - 1) * 26, H_ - bh + 3, 24, 24}, std::to_string(i), true, !paused_ && speed_ == i)) setSpeedBtn(i);
+    if (ui_.button({fbx + 156, H_ - bh + 3, 44, 24}, "M3K", true, showEngine_)) openWindow("engine");
   }
 
   drawNavigator(bh);

@@ -101,6 +101,34 @@ int main() {
   drag(20, 30, 46, 30);
   frame(2);
 
+  // Pipes: tool switches to underground water-pipes view so pieces are visible (09 §7.2 / 25 §9.3).
+  game.runCommand(0x22C2F8C5);
+  CHECK(game.currentTool() == ToolKind::Road);
+  CHECK(game.toolArg() == int(NetworkKind::Pipe));
+  CHECK(game.layers().mode == CityLayers::Underground && game.layers().underground == 1);
+  CHECK(drag(20, 40, 28, 40));
+  CHECK(city.isPipe(24, 40));
+  // Surface tool leaves the underground view.
+  game.runCommand(0xC2B5DE77);
+  CHECK(game.layers().mode == CityLayers::AboveGround);
+
+  // Engine options: HUD button opens the dialog (blocking); the frame counter draws bright green in the upper left.
+  game.openWindow("engine");
+  CHECK(game.windowOpen("engine"));
+  in.key[K_ESC] = true; frame();
+  CHECK(!game.windowOpen("engine"));
+  game.mutableEngineOptions().showFps = true;
+  frame(40);
+  CHECK(game.framesPerSecond() == 63);   // 16 ms frames
+  {
+    // Scale 2 at 800 px tall: text starts at (8, 8) in a 12x18 cell; count pure-green pixels in the first cells.
+    int green = 0;
+    for (int y = 8; y < 26; y++) for (int x = 8; x < 8 + 12 * 6; x++) if (game.screen()[size_t(y) * W + x] == rgb(0, 255, 0)) green++;
+    CHECK(green > 40);
+  }
+  game.mutableEngineOptions().showFps = false;
+  frame();
+
   // Run the simulation for a couple of years.
   game.setPaused(false);
   for (int i = 0; i < 500; i++) frame(1, 2000);

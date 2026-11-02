@@ -970,6 +970,22 @@ void testUserBuildings() {
 
 }  // namespace
 
+void testEngineOptions() {
+  Harness h;
+  EngineOptions s;
+  EngineOptionsDialog d;
+  h.drawFn = [&] { return d.draw(h.ui, h.E, s); };
+  h.frame(); CHECK(h.inked() > 1000);
+  WindowResult r = h.click("showFps");
+  CHECK(s.showFps && r.has(Act::PrefsChanged) && r.find(Act::PrefsChanged)->text == "showFps");
+  r = h.click("ok"); CHECK(r.close && r.has(Act::Done));
+  CHECK(h.key(K_ESC).close);
+  // Round trip through the preferences file.
+  Preferences p; s.toPreferences(p);
+  CHECK(p.get("engine.showFps") == "1" && EngineOptions::fromPreferences(p).showFps);
+  CHECK(!EngineOptions::fromPreferences(Preferences()).showFps);
+}
+
 int main() {
   testHelpers();
   testBudget();
@@ -993,5 +1009,6 @@ int main() {
   testMessageBox();
   testTipAndCredits();
   testScenarioViewIsPlain();
+  testEngineOptions();
   TEST_MAIN_END();
 }

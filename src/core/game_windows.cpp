@@ -72,7 +72,7 @@ void Game::syncScreenPending() {
 
 bool Game::anyBlockingWindow() const {
   // Spec 14 §2.3 / 09 §4.2 (Q-AZ): these raise pending/modal, not the player pause count.
-  return showBudget_ || showOrd_ || showDeals_ || showAdv_ || showProps_ || showPicker_ || showTip_ || showPrefs_ ||
+  return showBudget_ || showOrd_ || showDeals_ || showAdv_ || showProps_ || showPicker_ || showTip_ || showPrefs_ || showEngine_ ||
          showQuery_ || showGoals_ || showLayers_ || showBrm_ || showBle_ || msgBox_.active || petView_ != nullptr;
 }
 
@@ -114,6 +114,7 @@ void Game::openWindow(const std::string& name) {
   }
   else if (name == "deals") showDeals_ = true;
   else if (name == "advisors") { advWin_.open(0); advWin_.ordinances = &sim_.city().ordinances; showAdv_ = true; }
+  else if (name == "engine") showEngine_ = true;
   else if (name == "prefs") { prefsState_ = prefsFromSettings(general_, prefs_); applySettingsToAudio(); showPrefs_ = true; }
   else if (name == "props") {
     if (!schemesLoaded_) loadSchemes();
@@ -461,6 +462,10 @@ void Game::drawWindows(uint32_t dtMs) {
   if (showPrefs_) {
     finish(prefsDlg_.draw(ui_, E, prefsState_), showPrefs_);
     if (!showPrefs_) { saveSettings(); applySettingsToAudio(); }
+  }
+  if (showEngine_) {
+    finish(engineDlg_.draw(ui_, E, engineOpts_), showEngine_);
+    if (!showEngine_) saveSettings();
   }
   if (showPicker_) {
     finish(picker_.draw(ui_, E, pickerEntries_), showPicker_);
