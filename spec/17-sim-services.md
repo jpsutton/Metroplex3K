@@ -445,7 +445,8 @@ visited. [STATIC]
   and count), re-shuffle the list and restart at index 0; then fetch the next cell. [STATIC]
 * The sweep average is the "average crime" used by the police strike (§3.4) and is pushed to the crime
   history chart (12 monthly, 10 yearly and 10 per-decade samples; same chart format as the aura layer).
-  [STATIC chart layout; push schedule INFERRED from the aura layer]
+  Monthly sample = `avgCrime`, pushed in the crime month-end; on 1 January also yearly, and every
+  10th year also decade (`14-sim-clock.md` §6.3 rule 7) [STATIC]
 
 ### 7.2 Pollution
 

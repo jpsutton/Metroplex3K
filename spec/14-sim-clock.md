@@ -531,6 +531,15 @@ lock [STATIC].
    Order on 1 January is therefore: daily work → monthly items 1–5 → demographics, ageing and
    demographic graphs → commercial, industrial → transport → budget month-end, year-end and funds
    chart → power, water, weather → pollution and crime monthly steps → month handler → yearly handler
+
+   **Other graph histories** [STATIC]. Crime, pollution, aura (mayor rating) and traffic use the
+   same chart object and the same sampling cadence as the demographic/budget graphs above:
+   one monthly sample on every monthly run; on 1 January also one yearly sample; when the new
+   year is a multiple of 10, also one decade sample. Each is pushed from that subsystem's own
+   monthly step (crime and pollution = monthly items 14–15; aura = monthly item 16; traffic =
+   inside transport monthly item 9 / `18-sim-transport.md` §10–§11). Sample values: crime =
+   `avgCrime`; pollution = the UI combined air/water percent (`17-sim-services.md`); aura =
+   city aura + 127; traffic = average road traffic.
    and anniversaries.
 8. **RNG and cheats.** Generator state is **not** saved; every generator is reseeded from the clock
    when the city is loaded (§8) [STATIC]. Cheat effects: see `27-platform.md` §5. Only the cheat log
@@ -631,8 +640,6 @@ are converted as follows [STATIC]:
 
 ## Open questions
 
-* Graph histories owned by subsystems other than the budget and demographics (crime, pollution,
-  traffic graphs and so on): when they are sampled.
 * The relative order of daily items 6–11 and monthly items 1–3 (§6.1), recorded as subsystem order.
 * Full per-tool table of which placement-query (#28) callers pass occupancy-filter mode `0` vs `1`
   (§6.1); the two-mode rule and filler/protected override are closed.
