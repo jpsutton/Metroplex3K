@@ -365,11 +365,33 @@ item scrolls the view to the location and plays sound 47 `UiClickOnNewsticker`. 
 Background image `02F78C6D:42FB77F6` (41×88 px). Three vertical bars labelled R/C/I
 (`225872FE:41`/`42`/`43`), drawn in RGB (0,192,0), (0,0,192) and (192,192,0) respectively. Bar
 horizontal extents inside the image: R x=5…10, C x=14…19, I x=23…28. The zero line is at y=51;
-positive demand grows upward and negative demand downward, scaled by 16 pixels per demand unit,
-clipped to the image (constants 16.0, 51, 62 in the indicator) [STATIC constants; INFERRED mapping].
-Demand values: `15-sim-growth.md`. A button under the indicator ("visit SimCity Exchange",
-`041F2625:190`) opens the user's web browser after a confirmation; failure messages are
-`041F2625:1F9`–`1FC`.
+positive demand grows upward and negative demand downward. Constants stored on the widget: scale
+**16.0** px per demand unit, zero-line y **51**, clip bound **62** [STATIC].
+
+**Demand-unit mapping** [STATIC]. The indicator listens for the valve publish of
+`15-sim-growth.md` §3.2 step 6 and keeps one float per family valve (3000 → R, 5000 → C,
+8000 → I). On each publish of valve *id* with integer reading *N*:
+
+* demand unit *u* = *N* × 0.001 (i.e. *u* = *N* / 1000);
+* bar length in pixels = trunc(*u* × 16.0), growing up from y=51 when *u* > 0 and down when
+  *u* < 0; *u* = 0 clears the bar.
+
+So |*u*| = 1.0 (≡ |*N*| = 1000 ≡ |*V*| = `Max` for the ±2000 R/C/I valves) is a **full**
+positive or negative slot (16 px). A skin that uses *V* × 3 / 2000 as the unit is wrong: the
+engine unit is *N*/1000 (= *V*/`Max` when `Max` = 2000), not *V* × 3 / 2000.
+
+Shipped Berlin (`Berlin, Germany.sc3`) load-time family valves [DATA]:
+
+| Valve | *V* | *N* (= *V*×1000/`Max`) | unit *u* | ≈ screenshot fraction of slot |
+|---|---:|---:|---:|---|
+| 3000 (R) | +1140 | +570 | +0.57 | ~+50–60 % |
+| 5000 (C) | +880 | +440 | +0.44 | ~+40 % |
+| 8000 (I) | −1680 | −840 | −0.84 | ~−80 % |
+
+(`Max` = 2000, `Min` = −2000 for these three; amenity valves 3001/5001/8001 are not drawn.)
+
+A button under the indicator ("visit SimCity Exchange", `041F2625:190`) opens the user's web
+browser after a confirmation; failure messages are `041F2625:1F9`–`1FC`.
 
 ## 5. Player tools
 
