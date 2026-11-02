@@ -486,7 +486,9 @@ returns the value of the tile's cell. [STATIC]
 `MaxGarbagePolluteForUI` (map scale maxima, which also set the relaxation rates in 7.2.4);
 `AirPollutedThreshold`, `WaterPollutedThreshold`, `GarbagePollutedThreshold`; the twelve ordinance
 percentages (unsigned bytes); `TrafficAirFactor`; `GarbageAbductionAmount`; `GarbageScalingFactor`
-(stored × 0.001 as a real number, *s*). [STATIC]
+(stored × 0.001 as a real number, *s*; shipped 100 → *s* = 0.1). *s* is **not** used by the
+daily pollution/disposal pass; the pollution query UI multiplies a pollution-layer garbage total
+by *s* and truncates to an integer for one query line. [STATIC]
 
 `[AgentIDModifiers]` *id*`=`*air*`:`*rA*`,`*water*`:`*rW*`,`*garbage*: air amount, air radius (tiles,
 u8), water amount, water radius (u8), and garbage amount. The amounts are signed. **Trees** (ID 300,
@@ -917,9 +919,10 @@ each jail (`10-save-format.md` §6.2.5).
   §8.4). (Chart series order closed: index 0 = newest, §8.6.)
 * Education funding third list closed: libraries and museums share it (§6.2).
 * RCI indicator demand unit closed: *u* = *N*/1000, full slot |*u*| = 1 (`09` §4.5).
-* The (now decoded) `garbageStore` block of the pollution record (§7.4). (Police record fields
+* `garbageStore` block of the pollution record closed (§7.4 / `16` §4.4). (Police record fields
   closed, see Persisted state.)
 * Fire strike closed: identical machine to police, avg flammability vs `MaxAcceptableFlam` (§3.4).
+* `GarbageScalingFactor` closed: query-UI scale factor *s* only (§7.2.2 / `16` §4.1); not disposal.
 * Flammability record trailer fields beyond the visit-order cursor (closed: visit order is
   row-major x-fastest with a continuing cursor, §4).
 * Agent-type distance closed: parent-step count (`13` §4.1 / §7.1.2).
