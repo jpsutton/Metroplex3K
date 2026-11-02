@@ -864,15 +864,56 @@ the two 0x100 members; S1, S2, S5 and S6 empty; the 0x660 member is not used by 
 Pieces used: row A first 0xA10, middle 0xA00, last 0xA80; line-3 row 0xC00 (S8); line-2 row
 0x600 rotated 270° (S6 empty → S7); line-3 middle the first filler. A 7 × 3 lot gives 21 pieces.
 
-**Airport buildings `0x2207D9EE`** (zone 14) [STATIC]. Used only when `V − P > 0`. The lot is
-cut to at most 10 × 10 (keeping its low-x/low-y corner). Attempts, in order, until one succeeds:
-(1) the edge tiles of the lot are scanned (low-x column, then high-y row, high-x column, low-y
-row; the order depends on the lot's orientation) for the tile with the best frontage score; the
-first tile scoring ≥ 2 (else the best one) receives a random building of a random category
-[INFERRED: a terminal-type building facing the road; scoring OPEN]; (2) with `rand(100) < 55` one
-arrangement step, else another [OPEN]; (3) otherwise a random building of a random category of
-the rule is placed at a uniformly random tile of the (cut) lot, if that tile passes the
-placement check.
+**Airport buildings `0x2207D9EE`** (zone 14) [STATIC]. Used only when `V − P > 0` and the rule has
+at least one registered family. The lot is cut to at most 10 × 10 (keeping its low-x / low-z
+corner).
+
+*Member lists.* When a family is bound, each member is filed by its building flag word
+(attribute 0xCA), its edge, and its puzzle-part index (attribute 0x1F4). A family is registered
+only if all six lists are non-empty:
+
+| List | Flag | Edge | Part | Role |
+|---|---|---|---|---|
+| T | — | 1 | 4 | terminal (step 1) |
+| Ev | `0x800` | 1 | 5 | 1 × 1 strip, vertical sides (0, 2) |
+| Eh | `0x400` | 1 | 5 | 1 × 1 strip, horizontal sides (1, 3) |
+| Pv | `0x400` | 2 | 6 | 2 × 2 pair building, vertical sides (0, 2) |
+| Ph | `0x800` | 2 | 6 | 2 × 2 pair building, horizontal sides (1, 3) |
+| F | `0x100`, or part 0 | 1 | — | filler (step 3) |
+
+*Outward neighbour.* For an edge tile, the one-tile neighbour just outside the lot in that edge's
+outward direction is examined. If it holds an airport/seaport part occupant, let `p` be its part
+index; otherwise there is no neighbour part.
+
+Attempts, in order, until one succeeds:
+
+**(1) Terminal on best frontage** [STATIC]. Sides are scanned in order 0–3 (0 = low-x column
+outward −x; 1 = high-z row outward +z; 2 = high-x column outward +x; 3 = low-z row outward −z).
+Each edge tile scores: 0 if it cannot be built on (placement / airport point-flag check fails);
+1 if it can; 2 if it can and the outward neighbour has `p = 2`. The first tile with score ≥ 2
+wins (scan stops). If no tile scores ≥ 2, step 1 fails — a mere best-of-1 is **not** used
+(Correction: the previous revision said "else the best one"). On success a random member of T
+from a random family is placed there (orientation 0), after reserving the airport point flag on
+that tile (`10-save-format.md` §6.3); the flag is released if placing fails.
+
+**(2) Arrangement** [STATIC]. If step 1 fails: with `rand(100) < 55` run (2a), else (2b).
+
+*(2a) Strip along the best part-2 edge.* For each side, count the edge tiles whose
+outward neighbour has `p = 2` and that pass the placement checks. Pick the side with the highest
+count (ties keep the earlier side); require count ≥ 2. Walking that edge from its low end, place
+a random member of Ev (sides 0, 2) or Eh (sides 1, 3) on each counted tile, orientation 0, up to
+6 successes. Step (2a) succeeds if at least one building was placed.
+
+*(2b) 2 × 2 pair on a part-1/2 frontage.* Requires the cut lot to be at least 2 × 2. Sides are
+tried in order 0–3. On each side, walk consecutive pairs of edge tiles; a tile is eligible when
+its outward neighbour has `p = 1` or `p = 2`. The first pair of consecutive eligible tiles wins:
+place one random member of Pv (sides 0, 2) or Ph (sides 1, 3) anchored on the first tile of the
+pair (orientation 0). The 2 × 2 footprint extends into the lot from that edge.
+
+**(3) Random filler** [STATIC]. If step 2 fails: pick a random family and a random member of F;
+pick a uniformly random tile of the cut lot; if that tile passes the placement check, place the
+filler (orientation 0). Correction: the previous revision said "a random building of a random
+category"; it is specifically a filler-list member.
 
 **Row houses `0x61F44687`** [STATIC]. Used only when `⌊(V − P) × 50 / Max⌋ ≥ 1`.
 *Member lists.* When a family is bound, each member is filed by the bits of its building flag
@@ -1437,9 +1478,9 @@ mapping (§3.5). This document owns the record. Its byte layout, as far as it is
 * `unfit` = failed trip (§4.2) is inferred; confirm against the original.
 * Source of the extra demand on valves 5001 and 8001 (§3.3, "Amenity demand of commerce and
   industry"): saved `Dlast` is 1.3–2.1 × the building sum. Interim: carry the saved ratio.
-* Non-scatter rules (§5.5): the airport
-  buildings arrangement step (2), and the exact flag bits of the estate member lists. Housing
-  projects A/B/C, row houses, estates and the runway sequence are now specified.
+* Non-scatter rules (§5.5): the exact flag bits of the estate member lists. Housing projects
+  A/B/C, row houses, estates, the runway sequence, and the airport-buildings steps (1)–(3) are
+  now specified.
 * What sets the clean-industry flag (§4.5 step 3).
 * Whether network pieces and flora are part of the modifier-map iteration (§6.4 step 2; the
   clean-side fit supports it).
