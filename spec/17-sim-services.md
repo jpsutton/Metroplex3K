@@ -332,7 +332,10 @@ Staff counts are only summed for the record.
 
 Libraries and museums are funded from the education department too: they are included in the
 department's funding pass and upkeep total. Their effect and capacity do not depend on funding.
-[STATIC for the inclusion; INFERRED that the third list holds libraries and museums]
+The funding pass keeps three facility lists by kind (0 = school, 1 = college, anything else =
+third): libraries (kind 2) and museums (kind 3) share that third list. College funding also has
+its own dedicated list; EQ distribution still uses four separate kind groups
+(`20-sim-population.md` §4.2). [STATIC]
 
 ### 6.3 Coverage of the population
 
@@ -911,7 +914,7 @@ each jail (`10-save-format.md` §6.2.5).
 
 * Aura: which non-building occupant classes use kinds other than 1 (so they are skipped by
   §8.4). (Chart series order closed: index 0 = newest, §8.6.)
-* Which list holds libraries/museums in the education funding pass (§6.2).
+* Education funding third list closed: libraries and museums share it (§6.2).
 * The (now decoded) `garbageStore` block of the pollution record (§7.4). (Police record fields
   closed, see Persisted state.)
 * Fire strike closed: identical machine to police, avg flammability vs `MaxAcceptableFlam` (§3.4).

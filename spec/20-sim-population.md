@@ -176,9 +176,10 @@ INFERRED: the saved desk sums are exact multiples of `OptimalDeskCount` in every
 
 ### 4.2 Distribution (step 3 of §3.2)
 
-Facilities are grouped by kind, one group each for schools, colleges, libraries and museums
-[INFERRED]. Each group *g* has two per-age arrays, `gain_g[a]` and `seats_g[a]`, which are cleared
-every month. For each facility *f* in the group: [STATIC]
+Facilities are grouped by kind, one group each for schools (0), colleges (1), libraries (2) and
+museums (3) [STATIC]. (The education funding pass is different: libraries and museums share one
+list there — `17-sim-services.md` §6.2.) Each group *g* has two per-age arrays, `gain_g[a]` and
+`seats_g[a]`, which are cleared every month. For each facility *f* in the group: [STATIC]
 
 1. Let *lo*, *hi* be its served ages and `Σp = p[lo] + … + p[hi]`. If *lo* > *hi* or Σp ≤ 0, the
    facility does nothing this month.
