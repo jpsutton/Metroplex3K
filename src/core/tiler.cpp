@@ -37,6 +37,21 @@ uint32_t defaultFlagsForKind(int kind) {
   return 0;
 }
 
+uint32_t runtimeOccupantFlags(uint32_t agentType) {
+  // Spec 13 §3.1a [STATIC]. Utility / station / landmark-deal words unchanged; generic buildings
+  // are a constant 0x104 with no per-agent-type table (Q-BC).
+  if ((agentType >= 12111 && agentType <= 12118) || agentType == 12853) return kOccFlagPowerPlant;
+  if (agentType == 12810 || agentType == 12820 || agentType == 12830 || agentType == 12840)
+    return kOccFlagWaterFacility;
+  if (agentType == 12210 || agentType == 12230 || agentType == 12360 || agentType == 12361)
+    return kOccFlagTransitStation;
+  // A few landmark / business-deal classes (spec 13 §3.1a / §8).
+  if ((agentType >= 18000 && agentType <= 18045) || agentType == 19999 ||
+      (agentType >= 19000 && agentType <= 19004))
+    return kOccFlagLandmarkDeal;
+  return kOccFlagGenericBuilding;
+}
+
 void INetworkMap::tileCorners(int x, int z, int c[4]) const {
   c[0] = cornerHeight(x, z);
   c[1] = cornerHeight(x + 1, z);

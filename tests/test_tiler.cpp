@@ -577,6 +577,39 @@ static void testWorldAdapter() {
   CHECK(map.pieces(LAYER_SURFACE).size() == 2);
 }
 
+static void testRuntimeOccupantFlags() {
+  // Spec 13 §3.1a / Q-BC: generic (zoned and ordinary) buildings are a constant 0x104 —
+  // no per-agent-type variation. Utility / station / landmark-deal words unchanged.
+  CHECK(runtimeOccupantFlags(3100) == kOccFlagGenericBuilding);
+  CHECK(runtimeOccupantFlags(3500) == kOccFlagGenericBuilding);
+  CHECK(runtimeOccupantFlags(5000) == kOccFlagGenericBuilding);
+  CHECK(runtimeOccupantFlags(9300) == kOccFlagGenericBuilding);
+  CHECK(runtimeOccupantFlags(10100) == kOccFlagGenericBuilding);  // ordinary civic
+  CHECK(runtimeOccupantFlags(13130) == kOccFlagGenericBuilding);  // police (other building class → 0x104)
+  CHECK(runtimeOccupantFlags(12111) == kOccFlagPowerPlant);
+  CHECK(runtimeOccupantFlags(12853) == kOccFlagPowerPlant);
+  CHECK(runtimeOccupantFlags(12810) == kOccFlagWaterFacility);
+  CHECK(runtimeOccupantFlags(12820) == kOccFlagWaterFacility);
+  CHECK(runtimeOccupantFlags(12210) == kOccFlagTransitStation);
+  CHECK(runtimeOccupantFlags(12360) == kOccFlagTransitStation);
+  CHECK(runtimeOccupantFlags(18001) == kOccFlagLandmarkDeal);
+  CHECK(runtimeOccupantFlags(19000) == kOccFlagLandmarkDeal);
+  // Same agent type always yields the same word (no table lookup).
+  CHECK(runtimeOccupantFlags(4027) == runtimeOccupantFlags(4034));
+  CHECK(runtimeOccupantFlags(4027) == kOccFlagGenericBuilding);
+
+  // WorldNetworkMap surfaces building classFlags for foreign occupants.
+  World w;
+  w.init(8, 8);
+  Occupant house; house.x = 3; house.z = 3; house.agentType = 3100; house.occId = 1;
+  house.classFlags = runtimeOccupantFlags(house.agentType);
+  w.occupants.push_back(house);
+  WorldNetworkMap map(w, [](uint32_t) { return uint32_t(0); });
+  map.rebuild();
+  auto o = map.occupantAt(3, 3, LAYER_SURFACE);
+  CHECK(o.present && o.flags == kOccFlagGenericBuilding);
+}
+
 int main() {
   testParsers();
   testTilerFinal();
@@ -592,5 +625,6 @@ int main() {
   testRoadCondition();
   testPersist();
   testWorldAdapter();
+  testRuntimeOccupantFlags();
   TEST_MAIN_END();
 }

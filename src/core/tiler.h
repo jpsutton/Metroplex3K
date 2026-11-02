@@ -25,6 +25,19 @@ enum OccFlags : uint32_t {
   OF_PIPE = 0x800000,
 };
 
+// Spec 13 §3.1a class flag words for non-network Occupant instances [STATIC].
+constexpr uint32_t kOccFlagGenericBuilding = 0x104;     // zoned / ordinary / other building classes (Q-BC)
+constexpr uint32_t kOccFlagFlora = 0x404;
+constexpr uint32_t kOccFlagPowerPlant = 0x400104;
+constexpr uint32_t kOccFlagWaterFacility = 0x800104;
+constexpr uint32_t kOccFlagTransitStation = 0x4104;
+constexpr uint32_t kOccFlagLandmarkDeal = 0x40000104;   // a few landmark/deal classes
+constexpr uint32_t kOccFlagAutomata = 0x100A204;
+
+// Run-time occupant flag word for a building/prop Occupant by agent type (spec 13 §3.1a).
+// Generic (zoned and ordinary) buildings are a constant 0x104 — no per-agent-type table (Q-BC).
+uint32_t runtimeOccupantFlags(uint32_t agentType);
+
 enum NetLayer { LAYER_SURFACE = 0, LAYER_PIPE = 1, LAYER_SUBWAY = 2 };
 constexpr int kNumLayers = 3;
 NetLayer layerOfKind(int kind);

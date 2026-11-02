@@ -69,7 +69,9 @@ class WorldNetworkMap : public INetworkMap {
       if (b != bld_.end()) {
         const Occupant& oc = w_.occupants[b->second];
         o.present = true; o.id = oc.occId; o.rot = oc.rot;
-        o.flags = buildingFlags_ ? buildingFlags_(oc.occId) : 0;
+        // Spec 13 §3.1a: prefer the occupant's class flag word (generic buildings = 0x104).
+        o.flags = oc.classFlags ? oc.classFlags
+                                : (buildingFlags_ ? buildingFlags_(oc.occId) : runtimeOccupantFlags(oc.agentType));
         o.removable = true;
       }
     }

@@ -704,9 +704,10 @@ void City::rebuildIndex() {
   }
   classifyNetwork();
   occDirty_ = netDirty_ = true;
-  // #28 Placement query: refresh capability / building flags and rebuild occupancy scanners (strides 1/2/4).
-  if (game_) {
-    for (auto& o : world_->occupants) {
+  // #28 Placement query + 13 §3.1a class flags: refresh attrs and rebuild occupancy scanners.
+  for (auto& o : world_->occupants) {
+    o.classFlags = runtimeOccupantFlags(o.agentType);
+    if (game_) {
       if (const OccAttr* a = game_->occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT)) {
         o.caps = a->flags;
         o.buildingFlags = a->buildingFlags;
@@ -931,6 +932,7 @@ int City::addOccupant(const Occupant& o) {
   int i = int(world_->occupants.size()) - 1;
   Occupant& placed = world_->occupants[size_t(i)];
   if (!placed.uid) placed.uid = nextUid_++;
+  if (!placed.classFlags) placed.classFlags = runtimeOccupantFlags(placed.agentType);
   if (game_) {
     if (const OccAttr* a = game_->occupant(placed.occId, false, placed.keyType == T_OCC_ATTR_PORT)) {
       if (!placed.caps) placed.caps = a->flags;

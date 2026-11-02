@@ -3,6 +3,7 @@
 
 #include "core/game.h"
 #include "core/game_scenario.h"
+#include "core/tiler.h"
 
 namespace m3k {
 
@@ -86,6 +87,8 @@ class CityDisasterWorld : public DisasterWorld {
     o.valid = true; o.id = oc.uid; o.ax = oc.x; o.az = oc.z; o.w = oc.sizeX; o.h = oc.sizeZ;
     o.agentType = oc.agentType;
     o.burning = oc.state == 16;
+    // Spec 13 §3.1a run-time class flag word; generic buildings = 0x104 (Q-BC).
+    o.flags = oc.classFlags ? oc.classFlags : runtimeOccupantFlags(oc.agentType);
     // Zoned building lots (agent types 3000-9999) are "lots" for the destroy and UFO rules; farm fields are the filler
     // members flagged 0x100|0x400 of the farm family (spec 15 s4.3.2).
     const uint32_t kind = oc.agentType / 1000;

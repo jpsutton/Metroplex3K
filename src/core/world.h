@@ -23,6 +23,8 @@ struct Occupant {
   uint32_t state = 1;       // 1 occupied, 2 abandoned, 4 construction, 8 rubble, 16 fire; |0x200 = lot protected
   uint32_t caps = 0;        // runtime only: occupant capability flags (attr 0x72); 0x400 = ignorable for #28
   uint32_t buildingFlags = 0;  // runtime only: attr 0xCA; bit 0x100 = filler lot
+  // Spec 13 §3.1a run-time class flag word (not saved). Generic buildings = 0x104 (Q-BC).
+  uint32_t classFlags = 0;
   // Placement-query / network retile queries (spec 14 §6.1). Ordinary buildings answer false to both.
   bool removable = false;      // same boolean network retile / crossable checks use
   bool altClearable = false;   // alternate clearable query (filter mode f ≠ 1)
