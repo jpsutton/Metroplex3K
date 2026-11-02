@@ -647,6 +647,20 @@ static void testAuraRun() {
     for (int i = 0; i < 16; i++) a.run(e);
     CHECK(a.aura(10, 10) == 0 && a.cityAura == 0);
   }
+  {   // Spec 17 §8.4 / Q-BH [STATIC]: empty tiles count; non-kind-1 skipped; kind 1 counts in any lot state.
+    AuraLayer a; a.init(64, 64, p, &h);
+    // Mark one tile as non-kind-1; all others (including empty) count.
+    AuraEnv e = baseEnv(100, 0);
+    e.tileCounts = [](int x, int z) { return !(x == 4 && z == 4); };
+    for (int i = 0; i < 16; i++) a.run(e);
+    CHECK(a.aura(4, 4) != 0);   // cell still has 15 counted empty tiles
+    // All skipped → 0
+    AuraLayer b; b.init(64, 64, p, &h);
+    AuraEnv skip = baseEnv(100, 0);
+    skip.tileCounts = [](int, int) { return false; };
+    for (int i = 0; i < 16; i++) b.run(skip);
+    CHECK(b.aura(4, 4) == 0);
+  }
   {   // clamp to +-127
     AuraLayer a; a.init(64, 64, p, &h);
     SimOccupant big; big.agentType = 19999; big.x = 32; big.z = 32;

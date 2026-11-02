@@ -165,7 +165,7 @@ struct SimOccupant {
   int flammability = 0;       // attribute 0x6E, 0 = absent
   int powerUse = -1;          // attribute 0xC9 candidate; -1 = unset -> default rule
   int densityClass = 1;       // multiplier for the default power rule (spec 29 item 2.8)
-  int buildingKind = 1;       // aura "kind" test; 1 = building
+  int occupantKind = 1;       // spec 13 Occupant kind / aura §8.4; 1 = building/facility (Q-BH)
   int x1() const { return x + sizeX - 1; }
   int z1() const { return z + sizeZ - 1; }
 };

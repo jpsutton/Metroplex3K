@@ -1648,6 +1648,7 @@ std::vector<us::SimOccupant> City::simOccupants(bool operatingOnly) const {
     s.id = o.occId; s.agentType = o.agentType; s.group = o.agentType;
     s.x = o.x; s.z = o.z; s.sizeX = o.sizeX; s.sizeZ = o.sizeZ;
     s.hasState = true; s.state = o.state;
+    s.occupantKind = occupantKind(o.agentType);
     if (game_) if (const OccAttr* a = game_->occupant(o.occId)) if (a->powerAttr >= 0) s.powerUse = a->powerAttr;   // [OBSERVED] attribute 0xC9 is the power use (Σ over a shipped city = 96% of its saved production table)
     v.push_back(s);
   }
@@ -1977,6 +1978,13 @@ void City::dailyAura() {
   env.airAt = [this](int x, int z) { return pollution.airAt(x, z); };
   env.waterAt = [this](int x, int z) { return pollution.waterAt(x, z); };
   env.garbageAt = [this](int x, int z) { return pollution.standingGarbageAt(x, z); };
+  // Spec 17 §8.4 / Q-BH [STATIC]: query must succeed; empty tiles count; kind 1 counts (any lot state).
+  env.tileCounts = [this](int x, int z) {
+    if (!inMap(x, z)) return false;
+    int oi = occupantAt(x, z);
+    if (oi < 0) return true;
+    return occupantKind(world_->occupants[size_t(oi)].agentType) == 1;
+  };
   env.eq = pop.cityEQ();
   env.lifeExpectancy = pop.cityLifeExpectancy();
   env.ordinances = usOrdinances();

@@ -52,6 +52,16 @@ uint32_t runtimeOccupantFlags(uint32_t agentType) {
   return kOccFlagGenericBuilding;
 }
 
+int occupantKind(uint32_t agentType) {
+  // Spec 13 Occupant kind / 17 §8.4 [STATIC Q-BH]: buildings and facilities → 1.
+  // Non-building classes attested at 2 and 5 (which exact classes is still OPEN in 17).
+  // Flora / automata flag words map to those attested non-1 values when used as Occupants.
+  uint32_t f = runtimeOccupantFlags(agentType);
+  if (f == kOccFlagFlora) return 2;
+  if (f == kOccFlagAutomata) return 5;
+  return 1;
+}
+
 void INetworkMap::tileCorners(int x, int z, int c[4]) const {
   c[0] = cornerHeight(x, z);
   c[1] = cornerHeight(x + 1, z);

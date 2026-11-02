@@ -377,7 +377,9 @@ struct AuraParams {
 struct AuraEnv {
   std::function<int(int, int)> policeAt, fireAt, crimeAt, airAt, waterAt, garbageAt;
   std::function<bool(int, int)> irradiated;
-  std::function<bool(int, int)> tileCounts;   // occupant absent or building kind 1; null = true
+  // Spec 17 §8.4 / Q-BH [STATIC]: true when occupant query succeeds and tile is empty or kind 1.
+  // Null = every in-bounds tile counts (tests). Kind is fixed per class — not lot state / 0x72.
+  std::function<bool(int, int)> tileCounts;
   int eq = 0, lifeExpectancy = 0;
   OrdinanceSet ordinances;
 };

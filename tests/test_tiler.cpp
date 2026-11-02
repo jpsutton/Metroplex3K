@@ -598,6 +598,13 @@ static void testRuntimeOccupantFlags() {
   CHECK(runtimeOccupantFlags(4027) == runtimeOccupantFlags(4034));
   CHECK(runtimeOccupantFlags(4027) == kOccFlagGenericBuilding);
 
+  // Spec 13 Occupant kind / 17 §8.4 [STATIC Q-BH]: buildings and facilities → kind 1.
+  CHECK(occupantKind(3100) == 1);
+  CHECK(occupantKind(12111) == 1);
+  CHECK(occupantKind(12810) == 1);
+  CHECK(occupantKind(12210) == 1);
+  CHECK(occupantKind(18001) == 1);
+
   // WorldNetworkMap surfaces building classFlags for foreign occupants.
   World w;
   w.init(8, 8);
