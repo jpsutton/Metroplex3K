@@ -310,11 +310,14 @@ Only counted trips add density and transit income.
 Let p = the effective mass-transit chance (§8.1). For generators subject to the chance, draw
 m = rand(100):
 
-* on the step-2 (uncounted, first-time) path, transit is allowed iff m < p;
+* on the step-2 (uncounted, first-time) path, transit is allowed iff m < p
+  (equivalently denied when p ≤ m);
 * on the step-3 path, transit is allowed iff m ≤ p.
 
 When transit is not allowed, the trip is routed with rail, bus and subway all forbidden (car
 only). Industrial and Other generators always route with their fixed permissions [STATIC].
+The three permission flags are handed to the trip driver in order **(rail, bus, subway)** —
+not (bus, rail, subway) [STATIC].
 
 ### 4.7 Random number generator
 
