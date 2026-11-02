@@ -15,6 +15,7 @@
 #include <vector>
 #include "core/clock.h"
 #include "core/weather.h"
+#include "core/placement_query.h"
 #include "core/economy.h"
 #include "core/gamedata.h"
 #include "core/growth.h"
@@ -163,6 +164,7 @@ class City {
   Clock clock;
   CitySchedule sched;
   Weather weather;   // subsystem #27 (spec 14 §6.1 monthly item 13); no save records
+  PlacementQuery placement;  // subsystem #28 (spec 14 §6.1); on-demand only, no save records
   // Spec 14 §2.3 / §6.3 rule 6 [STATIC]: two nestable runtime city counts. Hold = either non-zero.
   // Pure runtime — not saved, no INI. Busy (monthly / backlog) is separate and does not feed hold.
   // Player/UI pause (0→1 pauses clock). `announce` posts "simulation paused" (skip on start-paused).

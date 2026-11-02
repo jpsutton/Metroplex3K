@@ -172,7 +172,7 @@ enum class Subsystem : int {
   Terrain = 1, OccupantManager, NetworkManager, FloraLayer, ZoneManager, Disasters, Neighbours,
   RciLayer, Ordinances, Aura, Pollution, Crime, Police, Fire, ResidentialLayer, CommercialLayer,
   IndustrialLayer, LandValue, StreetSim, Traffic, Budget, WorldLayer, Power, Water, Flammability,
-  SpacingGrid, Weather, Geometry28, Scenario, AdvisorManager, PetitionerManager = 37
+  SpacingGrid, Weather, PlacementQuery, Scenario, AdvisorManager, PetitionerManager = 37
 };
 
 enum class Step : int {

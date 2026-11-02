@@ -711,6 +711,14 @@ void City::rebuildIndex() {
   }
   classifyNetwork();
   occDirty_ = netDirty_ = true;
+  // #28 Placement query: live refs to occupant / network indexes (no owned state).
+  PlacementLayers pl;
+  pl.world = world_;
+  pl.occ = occ_.empty() ? nullptr : occ_.data();
+  pl.transport = transport_.empty() ? nullptr : transport_.data();
+  pl.powerLine = powerLine_.empty() ? nullptr : powerLine_.data();
+  pl.pipe = pipe_.empty() ? nullptr : pipe_.data();
+  placement.bind(pl);
 }
 
 void City::applyRoadCondition(int percent) {
