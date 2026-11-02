@@ -679,9 +679,9 @@ static void testAuraRun() {
     for (int i = 0; i < 16; i++) a.run(e);
     CHECK(a.aura(10, 10) == 0 && a.cityAura == 0);
   }
-  {   // Spec 17 §8.4 / Q-BH [STATIC]: empty tiles count; non-kind-1 skipped; kind 1 counts in any lot state.
+  {   // Spec 17 §8.4 / Q-BH / Q-BR [STATIC]: empty tiles count; network/flora (non-kind-1) skipped.
     AuraLayer a; a.init(64, 64, p, &h);
-    // Mark one tile as non-kind-1; all others (including empty) count.
+    // One tile acts as network/flora (kind 2/5); all others (including empty) count.
     AuraEnv e = baseEnv(100, 0);
     e.tileCounts = [](int x, int z) { return !(x == 4 && z == 4); };
     for (int i = 0; i < 16; i++) a.run(e);

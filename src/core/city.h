@@ -308,7 +308,7 @@ class City {
   std::vector<uint8_t> spacing_;                   // spacing grid cells, index bx * (H/4) + bz (empty: no record)
 
   std::vector<int32_t> occ_;
-  std::vector<uint8_t> transport_, powerLine_, pipe_;
+  std::vector<uint8_t> transport_, powerLine_, pipe_, subway_;
   bool occDirty_ = true, netDirty_ = true;
   int residents_ = 0;
   uint32_t nextUid_ = 1;

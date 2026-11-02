@@ -685,7 +685,7 @@ uint32_t City::kindOf(const NetPiece& p) const {
 
 void City::classifyNetwork() {
   size_t N = size_t(world_->W) * world_->H;
-  transport_.assign(N, 0); powerLine_.assign(N, 0); pipe_.assign(N, 0);
+  transport_.assign(N, 0); powerLine_.assign(N, 0); pipe_.assign(N, 0); subway_.assign(N, 0);
   for (const auto& p : world_->surface) {
     if (!world_->inTiles(p.x, p.z)) continue;
     uint32_t k = kindOf(p);
@@ -693,6 +693,7 @@ void City::classifyNetwork() {
     else if (k == 1 || k == 2 || k == 4) transport_[idx(p.x, p.z)] = uint8_t(k);
   }
   for (const auto& p : world_->pipes) if (world_->inTiles(p.x, p.z)) pipe_[idx(p.x, p.z)] = 1;
+  for (const auto& p : world_->subway) if (world_->inTiles(p.x, p.z)) subway_[idx(p.x, p.z)] = 1;
 }
 
 void City::rebuildIndex() {
@@ -1979,12 +1980,17 @@ void City::dailyAura() {
   env.airAt = [this](int x, int z) { return pollution.airAt(x, z); };
   env.waterAt = [this](int x, int z) { return pollution.waterAt(x, z); };
   env.garbageAt = [this](int x, int z) { return pollution.standingGarbageAt(x, z); };
-  // Spec 17 §8.4 / Q-BH [STATIC]: query must succeed; empty tiles count; kind 1 counts (any lot state).
+  // Spec 17 §8.4 / Q-BH / Q-BR [STATIC]: empty or kind 1 counts; network (2) and flora (5) skip the tile.
   env.tileCounts = [this](int x, int z) {
     if (!inMap(x, z)) return false;
+    const size_t i = idx(x, z);
+    // Network tile pieces report kind 2 (roads/rail/hwy/pipe/power/subway).
+    if (transport_[i] || powerLine_[i] || pipe_[i] || (i < subway_.size() && subway_[i])) return false;
+    // Flora (trees) report kind 5 — stored on the flora layer, not as Occupants.
+    if (i < world_->flora.size() && world_->flora[i]) return false;
     int oi = occupantAt(x, z);
     if (oi < 0) return true;
-    return occupantKind(world_->occupants[size_t(oi)].agentType) == 1;
+    return occupantKind(world_->occupants[size_t(oi)].agentType) == kOccKindBuilding;
   };
   env.eq = pop.cityEQ();
   env.lifeExpectancy = pop.cityLifeExpectancy();

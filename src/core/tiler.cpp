@@ -52,14 +52,16 @@ uint32_t runtimeOccupantFlags(uint32_t agentType) {
   return kOccFlagGenericBuilding;
 }
 
+int occupantKindFromFlags(uint32_t flags) {
+  // Spec 13 Occupant kind / 17 §8.4 [STATIC Q-BR]: network pieces → 2, flora → 5, buildings → 1.
+  if (flags & OF_NETPIECE) return kOccKindNetwork;
+  if (flags == kOccFlagFlora) return kOccKindFlora;
+  if (flags == kOccFlagAutomata) return 3;  // non-1; exact automata kind not needed by aura
+  return kOccKindBuilding;
+}
+
 int occupantKind(uint32_t agentType) {
-  // Spec 13 Occupant kind / 17 §8.4 [STATIC Q-BH]: buildings and facilities → 1.
-  // Non-building classes attested at 2 and 5 (which exact classes is still OPEN in 17).
-  // Flora / automata flag words map to those attested non-1 values when used as Occupants.
-  uint32_t f = runtimeOccupantFlags(agentType);
-  if (f == kOccFlagFlora) return 2;
-  if (f == kOccFlagAutomata) return 5;
-  return 1;
+  return occupantKindFromFlags(runtimeOccupantFlags(agentType));
 }
 
 void INetworkMap::tileCorners(int x, int z, int c[4]) const {

@@ -38,9 +38,13 @@ constexpr uint32_t kOccFlagAutomata = 0x100A204;
 // Generic (zoned and ordinary) buildings are a constant 0x104 — no per-agent-type table (Q-BC).
 uint32_t runtimeOccupantFlags(uint32_t agentType);
 
-// Spec 13 Occupant kind / 17 §8.4 [STATIC Q-BH]: fixed per-class small integer (not lot state, not 0x72).
-// Building and facility classes report 1; other attested values include 2 and 5.
+// Spec 13 Occupant kind / 17 §8.4 [STATIC Q-BH / Q-BR]: fixed per-class small integer (not lot state, not 0x72).
+// Buildings/facilities = 1; network tile pieces = 2; flora = 5. Other non-1 values exist on some classes.
+constexpr int kOccKindBuilding = 1;
+constexpr int kOccKindNetwork = 2;
+constexpr int kOccKindFlora = 5;
 int occupantKind(uint32_t agentType);
+int occupantKindFromFlags(uint32_t flags);
 
 enum NetLayer { LAYER_SURFACE = 0, LAYER_PIPE = 1, LAYER_SUBWAY = 2 };
 constexpr int kNumLayers = 3;

@@ -598,12 +598,16 @@ static void testRuntimeOccupantFlags() {
   CHECK(runtimeOccupantFlags(4027) == runtimeOccupantFlags(4034));
   CHECK(runtimeOccupantFlags(4027) == kOccFlagGenericBuilding);
 
-  // Spec 13 Occupant kind / 17 §8.4 [STATIC Q-BH]: buildings and facilities → kind 1.
-  CHECK(occupantKind(3100) == 1);
-  CHECK(occupantKind(12111) == 1);
-  CHECK(occupantKind(12810) == 1);
-  CHECK(occupantKind(12210) == 1);
-  CHECK(occupantKind(18001) == 1);
+  // Spec 13 Occupant kind / 17 §8.4 [STATIC Q-BH / Q-BR]: buildings → 1; network → 2; flora → 5.
+  CHECK(occupantKind(3100) == kOccKindBuilding);
+  CHECK(occupantKind(12111) == kOccKindBuilding);
+  CHECK(occupantKind(12810) == kOccKindBuilding);
+  CHECK(occupantKind(12210) == kOccKindBuilding);
+  CHECK(occupantKind(18001) == kOccKindBuilding);
+  CHECK(occupantKindFromFlags(OF_NETPIECE | OF_ROAD) == kOccKindNetwork);
+  CHECK(occupantKindFromFlags(OF_NETPIECE | OF_PIPE) == kOccKindNetwork);
+  CHECK(occupantKindFromFlags(kOccFlagFlora) == kOccKindFlora);
+  CHECK(occupantKindFromFlags(kOccFlagGenericBuilding) == kOccKindBuilding);
 
   // WorldNetworkMap surfaces building classFlags for foreign occupants.
   World w;
