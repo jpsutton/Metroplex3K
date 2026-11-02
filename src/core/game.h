@@ -94,7 +94,7 @@ class Game {
   void setDisastersOn(bool on) { disastersOn_ = on; disasters_.setDisastersEnabled(on); }   // city flag; probes and scripts
   bool disasterActive() const { return disasters_.anyActiveNonParade(); }
   void typeCheat(const std::string& s);
-  void setPaused(bool p) { paused_ = p; }
+  void setPaused(bool p);
   void setDirty(bool d) { dirty_ = d; }            // mark the city modified (save prompts); tools/tests
   bool paused() const { return paused_; }
   const std::string& lastMessage() const { return lastMsg_; }

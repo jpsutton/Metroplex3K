@@ -299,16 +299,15 @@ static void testSchedule() {
   sc.setDisasterActive(false);
   CHECK(!clk.minuteMode());
 
-  // Spec 14 §6.3 rule 6: long cascades pause the clock for the rest of the cascade
+  // Spec 14 §6.3 rule 6: backlog pause when pending-work queue > 3 (item count, not ms)
   Clock cPause;
   cPause.setDate(1, 1, 2000);
   CitySchedule scPause;
   scPause.attach(cPause);
-  scPause.cascadePauseMs = 5;
+  int pending = 0;
+  scPause.pendingWorkCount = [&]() { return pending; };
   bool sawPauseDuringStep = false;
-  scPause.setHandler(Step::DailyDisasters, [&]() {
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  });
+  scPause.setHandler(Step::DailyDisasters, [&]() { pending = 4; });
   scPause.setHandler(Step::DailyPolice, [&]() {
     if (cPause.paused()) sawPauseDuringStep = true;
   });
@@ -316,13 +315,14 @@ static void testSchedule() {
   CHECK(sawPauseDuringStep);
   CHECK(!cPause.paused());
 
-  // Hold condition test
+  // Hold condition test (pause∨pending counts; poll fast for the unit test)
   int holdTicks = 0;
+  scPause.holdPollMs = 1;
+  scPause.pendingWorkCount = nullptr;
   scPause.isHold = [&]() {
     holdTicks++;
     return holdTicks < 3;
   };
-  scPause.cascadePauseMs = 500;
   scPause.runDay();
   CHECK(holdTicks >= 3);
 }

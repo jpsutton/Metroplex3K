@@ -1,7 +1,6 @@
 // Simulation clock, calendar, speeds, RNG and update scheduling. See spec/14-sim-clock.md.
 // Pure state classes: no wall-clock access; callers pass millisecond timestamps.
 #pragma once
-#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -229,10 +228,17 @@ class CitySchedule {
   void clearLog() { log_.clear(); }
   bool logging = false;       // when true, every executed step is appended to the log (for tests)
 
-  // Spec 14 §6.3 rule 6 [STATIC]: pause clock if cascade exceeds 500 ms; wait on city hold.
-  int cascadePauseMs = 500;
+  // Spec 14 §6.3 rule 6 [STATIC]: hold wait + backlog pause (queue depths, not wall-clock ms).
+  // Hold = city pause count or pending/modal count non-zero (§2.3). Busy ≠ hold.
   std::function<bool()> isHold;
   std::function<bool()> stopRequested;
+  int holdPollMs = 1000;   // re-check interval while held (~1 s); tests may lower this
+  // Backlog: simulator pending-work queue > 3, or shared app message queue > 500 → same
+  // busy/clock-pause path as monthly begin for the rest of the cascade.
+  std::function<int()> pendingWorkCount;    // unset → 0
+  std::function<int()> messageQueueCount;   // unset → 0
+  int pendingWorkBacklogLimit = 3;
+  int messageQueueBacklogLimit = 500;
 
  private:
   void run(Step s);
@@ -244,7 +250,6 @@ class CitySchedule {
   bool disasterActive_ = false;
   Clock::ListenerId minuteListener_ = 0;
   std::vector<Step> log_;
-  std::chrono::steady_clock::time_point cascadeStart_{};
   bool cascadePaused_ = false;
 };
 

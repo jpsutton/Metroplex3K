@@ -137,6 +137,9 @@ void Game::enterCity() {
     news_.post(k.table, k.id, tickerStamp(d.month, d.day, d.year), true, x, z, &text);
   };
   simReady_ = true; paused_ = true; dirty_ = false; simAccum_ = 0;
+  // Spec 14 §2.3: new/loaded city starts paused — raise city pause count once (hold).
+  // No announce: Game::message would set msgText_ and block map input.
+  sim_.city().raisePause(false);
   speed_ = std::max(1, std::min(4, world_.info.gameSpeed));
   showPicker_ = false;
   cheats_.resetSession();

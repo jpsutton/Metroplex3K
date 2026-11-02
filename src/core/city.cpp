@@ -608,8 +608,33 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   }
 }
 
+void City::raisePause(bool announce) {
+  if (++cityPauseCount_ == 1) {
+    // Game::message sets msgText_ which blocks handleMap; skip announce when starting already-paused.
+    if (announce && onMessage) onMessage("simulation paused");
+    // Nestable clock pause: always push, even if already busy-paused (monthly/backlog).
+    clock.pause();
+  }
+}
+void City::resumePause() {
+  if (cityPauseCount_ == 0) return;
+  if (--cityPauseCount_ == 0) {
+    // Pop the clock pause we pushed; leave monthly/backlog pauses intact.
+    if (clock.paused()) clock.resume();
+  }
+}
+void City::raisePending() {
+  if (++cityPendingCount_ == 1) clock.pause();
+}
+void City::clearPending() {
+  if (cityPendingCount_ == 0) return;
+  if (--cityPendingCount_ == 0 && clock.paused()) clock.resume();
+}
+
 void City::wire() {
   sched.attach(clock);
+  // Spec 14 §6.3 rule 6: hold = city pause ∨ pending/modal counts (Q-AQ / 7b41478).
+  sched.isHold = [this] { return hold(); };
   sched.disastersEnabled = false;
   sched.setHandler(Step::DailyPolice, [this] { dailyPolice(); });
   sched.setHandler(Step::DailyFire, [this] { dailyFire(); });

@@ -1,6 +1,7 @@
 #include "core/clock.h"
 
 #include <algorithm>
+#include <chrono>
 #include <thread>
 
 namespace m3k {
@@ -336,17 +337,19 @@ void CitySchedule::attach(Clock& c) {
 }
 
 void CitySchedule::run(Step s) {
-  // Spec 14 §6.3 rule 6 [STATIC]: check hold condition before each step.
+  // Spec 14 §6.3 rule 6 [STATIC]: hold wait — pause∨pending/modal counts (§2.3); not busy.
   if (isHold) {
+    int poll = holdPollMs > 0 ? holdPollMs : 1000;
     while (isHold() && (!stopRequested || !stopRequested())) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      std::this_thread::sleep_for(std::chrono::milliseconds(poll));
     }
   }
-  // Spec 14 §6.3 rule 6 [STATIC]: pause clock if cascade has taken > 500 ms.
-  if (!cascadePaused_ && cascadePauseMs > 0 && clock_ && !clock_->paused()) {
-    auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - cascadeStart_).count();
-    if (elapsed > cascadePauseMs) {
+  // Spec 14 §6.3 rule 6 [STATIC]: backlog pause — pending-work > 3 or message queue > 500
+  // (item counts, not ms). Same busy/clock-pause path as monthly begin; busy ≠ hold.
+  if (!cascadePaused_ && clock_ && !clock_->paused()) {
+    int pw = pendingWorkCount ? pendingWorkCount() : 0;
+    int mq = messageQueueCount ? messageQueueCount() : 0;
+    if (pw > pendingWorkBacklogLimit || mq > messageQueueBacklogLimit) {
       clock_->pause();
       cascadePaused_ = true;
     }
@@ -356,7 +359,6 @@ void CitySchedule::run(Step s) {
 }
 
 void CitySchedule::runDay() {
-  cascadeStart_ = std::chrono::steady_clock::now();
   cascadePaused_ = false;
   for (Step s : dailySteps(auraDaily)) {
     // Disaster-instance tick runs only when disasters are present.
@@ -372,7 +374,6 @@ void CitySchedule::runDay() {
 }
 
 void CitySchedule::runWeek() {
-  cascadeStart_ = std::chrono::steady_clock::now();
   cascadePaused_ = false;
   // Enrolled buildings first (snapshot: buildings added during the step wait until it ends).
   size_t n = buildings_.size();
@@ -409,7 +410,6 @@ void CitySchedule::runYear() {
 }
 
 void CitySchedule::runMinute() {
-  cascadeStart_ = std::chrono::steady_clock::now();
   cascadePaused_ = false;
   for (Step s : minuteSteps()) run(s);
   if (cascadePaused_ && clock_) {

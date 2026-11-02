@@ -161,6 +161,16 @@ class City {
   // ---- subsystems (public: state classes) ----
   Clock clock;
   CitySchedule sched;
+  // Spec 14 §2.3 / §6.3 rule 6 [STATIC]: two nestable runtime city counts. Hold = either non-zero.
+  // Pure runtime — not saved, no INI. Busy (monthly / backlog) is separate and does not feed hold.
+  // Player/UI pause (0→1 pauses clock). `announce` posts "simulation paused" (skip on start-paused).
+  void raisePause(bool announce = true);
+  void resumePause();
+  void raisePending();  // modal / blocking op (also pauses clock)
+  void clearPending();
+  int cityPauseCount() const { return cityPauseCount_; }
+  int cityPendingCount() const { return cityPendingCount_; }
+  bool hold() const { return cityPauseCount_ > 0 || cityPendingCount_ > 0; }
   Budget budget;
   Ordinances ordinances;
   NeighbourDeals neighbours;
@@ -308,6 +318,8 @@ class City {
   int lastTaxRate_ = -1;
   std::set<ResKey> preserved_;   // records that failed to parse: keep raw
   int refreshSkips_ = 0;
+  int cityPauseCount_ = 0;
+  int cityPendingCount_ = 0;
 };
 
 }  // namespace m3k

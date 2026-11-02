@@ -16,6 +16,15 @@ namespace m3k {
 // Sentinel toolArg_ for the highway on-ramp point tool (menu 02B5DEBB); not a NetworkKind.
 constexpr int kToolOnRamp = 7;
 
+void Game::setPaused(bool p) {
+  if (p == paused_) return;
+  paused_ = p;
+  // Spec 14 §2.3: city pause count (player/UI pause); separate from pending/modal.
+  if (!simReady_) return;
+  if (p) sim_.city().raisePause();
+  else sim_.city().resumePause();
+}
+
 static std::vector<std::string> splitFields(const std::string& s) {
   std::vector<std::string> v; std::string cur;
   for (char c : s) { if (c == ',') { v.push_back(trimSpaces(cur)); cur.clear(); } else cur.push_back(c); }
@@ -162,7 +171,7 @@ void Game::hotkeyCommand(int cmd, int, int arg2) {
     case 19: openWindow("advisors"); break;
     case 21: openWindow("ordinances"); break;
     case 33: case 91: case 102: quit_ = true; break;
-    case 35: paused_ = !paused_; sound(paused_ ? 24 : 23); break;
+    case 35: setPaused(!paused_); sound(paused_ ? 24 : 23); break;
     case 36: speed_ = std::max(1, speed_ - 1); break;
     case 37: speed_ = std::min(4, speed_ + 1); break;
     case 40: cheatOpen_ = true; break;
@@ -712,7 +721,7 @@ void Game::drawHud() {
   // Pause / run / speed (spec 09 4.2). With the skin the art is anchored at P2 (pause), P1 (run) and P4 (speed lights).
   auto tip = [&](uint32_t id, const char* fb) { std::string t = str(0x225872FE, id); return t.empty() ? std::string(fb) : t; };
   const int fbx = 520;  // fallback (no art) button strip
-  auto setSpeedBtn = [&](int sp) { speed_ = sp; paused_ = false; sound(24 + sp); };
+  auto setSpeedBtn = [&](int sp) { speed_ = sp; setPaused(false); sound(24 + sp); };
   const Image* imPause = skinBar ? skin_.get("pause") : nullptr;
   if (skinBar && imPause && skin_.get("run") && skin_.get("speed.0")) {
     Rect pr{place.p2x, place.p2y, 22, 22}, rr{place.p1x, place.p1y, 26, 22};
@@ -724,8 +733,8 @@ void Game::drawHud() {
     if (ra) ui_.blit(*ra, rr.x, rr.y);
     if (ui_.hover(pr)) ui_.tooltip = tip(0x64, "Pause");
     if (ui_.hover(rr)) ui_.tooltip = tip(0x65, "Run");
-    if (ui_.clicked(pr) && !paused_) { paused_ = true; sound(24); }
-    if (ui_.clicked(rr) && paused_) { paused_ = false; sound(23); }
+    if (ui_.clicked(pr) && !paused_) { setPaused(true); sound(24); }
+    if (ui_.clicked(rr) && paused_) { setPaused(false); sound(23); }
     int sp = std::max(1, std::min(4, speed_));
     ui_.blit(*skin_.get("speed." + std::to_string(sp - 1)), place.p4x, place.p4y);
     static const char* spTip[4] = {"Turtle", "Llama", "Cheetah", "African Swallow"};
@@ -740,7 +749,7 @@ void Game::drawHud() {
     skin_.imageButtonCells(ui_, skin_.get("help"), 4, {place.p3x, place.p3y, 40, 39}, tip(0x3C, "Query"), tool_ == ToolKind::Query, true, hc);
     if (hc) setTool(ToolKind::Query);
   } else {
-    if (ui_.button({fbx, H_ - bh + 3, 44, 24}, paused_ ? "Run" : "Pause")) { paused_ = !paused_; sound(paused_ ? 24 : 23); }
+    if (ui_.button({fbx, H_ - bh + 3, 44, 24}, paused_ ? "Run" : "Pause")) { setPaused(!paused_); sound(paused_ ? 24 : 23); }
     for (int i = 1; i <= 4; i++)
       if (ui_.button({fbx + 48 + (i - 1) * 26, H_ - bh + 3, 24, 24}, std::to_string(i), true, !paused_ && speed_ == i)) setSpeedBtn(i);
   }

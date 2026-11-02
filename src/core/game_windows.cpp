@@ -46,11 +46,19 @@ WinEnv Game::env() {
 // ---------------------------------------------------------------- modal handling (spec 09 4.2)
 
 void Game::modalOpened() {
-  if (modalDepth_++ == 0) { wasPausedBeforeModal_ = paused_; paused_ = true; }
+  if (modalDepth_++ == 0) {
+    wasPausedBeforeModal_ = paused_;
+    paused_ = true;
+    // Spec 14 §2.3: pending/modal count (separate from player pause); raises city hold.
+    if (simReady_) sim_.city().raisePending();
+  }
 }
 
 void Game::modalClosed() {
-  if (modalDepth_ > 0 && --modalDepth_ == 0) paused_ = wasPausedBeforeModal_;
+  if (modalDepth_ > 0 && --modalDepth_ == 0) {
+    paused_ = wasPausedBeforeModal_;
+    if (simReady_) sim_.city().clearPending();
+  }
 }
 
 bool Game::anyBlockingWindow() const {
