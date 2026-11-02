@@ -587,7 +587,7 @@ void Game::drawNewCity() {
   if (!schemesLoaded_) loadSchemes();
   const uint32_t ink = rgb(0x31, 0x34, 0x7B), white = rgb(255, 255, 255);
   // From inside a city the dialog sits 47 px left and 32 px higher (spec 09 7a.5, observed).
-  Rect r{(W_ - 639) / 2 - (inCity ? 47 : 0), (H_ - 368) / 2 - (inCity ? 32 : 0), 639, 368};
+  Rect r = ui_.movable({(W_ - 639) / 2 - (inCity ? 47 : 0), (H_ - 368) / 2 - (inCity ? 32 : 0), 639, 368});
   ui_.panel(r, cap(0x029541F4, 0x228, "New City Options"));
   bool cancel = false;
   { Rect hit; bool c = false; if (skin_.dialogCloseBox(ui_, r, hit, c) && c) cancel = true; }
@@ -857,7 +857,7 @@ void Game::drawLoadList() {
   ensureFileIcons();
   fileFrame_++;
   const uint32_t label = rgb(0x7B, 0x82, 0xB5), ink = rgb(0x31, 0x34, 0x7B), white = rgb(255, 255, 255);
-  Rect r{(W_ - 478) / 2, (H_ - 353) / 2, 478, 353};
+  Rect r = ui_.movable({(W_ - 478) / 2, (H_ - 353) / 2, 478, 353});
   std::string titles[] = {cap(0x029541F4, 0x220, "Load Saved City"), cap(0x029541F4, 0x2CF, "Load Starter Town"),
                           cap(0x029541F4, 0x24C, "Load Real City Terrain"), cap(0x041F2625, 2, "Load Scenario")};
   ui_.panel(r, saveMode_ ? cap(0x029541F4, 0x226, "Save As") : titles[fileKind_]);
@@ -1082,7 +1082,7 @@ void Game::drawCredits(uint32_t dtMs) {
 }
 
 void Game::drawScenarioEnd() {
-  Rect r{W_ / 2 - 260, H_ / 2 - 180, 520, 360};
+  Rect r = ui_.movable({W_ / 2 - 260, H_ / 2 - 180, 520, 360});
   ui_.panel(r, str(0x041F2625, 4).empty() ? "Scenario over" : str(0x041F2625, 4));
   ScenarioController::Outcome o;
   if (scen_) o = scen_->outcome();

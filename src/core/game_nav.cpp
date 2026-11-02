@@ -4,6 +4,7 @@
 // rotate-left (47,133), rotate-right (112,133), layers (131,24) button centres [OBSERVED].
 #include <algorithm>
 #include "core/game.h"
+#include "core/overview.h"
 
 namespace m3k {
 
@@ -26,7 +27,6 @@ void Game::rebuildMiniMap() {
   if (!world_.W || !N) { miniMap_ = Image(); return; }
   miniMap_.w = miniMap_.h = 2 * kMapHalf;
   miniMap_.px.assign(size_t(miniMap_.w) * miniMap_.h, 0);
-  City& c = sim_.city();
   for (int py = 0; py < miniMap_.h; py++)
     for (int px = 0; px < miniMap_.w; px++) {
       // Diamond in view space: dx = (v-u)/2, dy = (u+v)/2 - N/2 at 128 px across, scaled to the map size.
@@ -37,18 +37,8 @@ void Game::rebuildMiniMap() {
       int x, z;
       Renderer::viewToWorldVertex(cam_.rot, world_.W, world_.H, int(u), int(v), x, z);
       if (x < 0 || z < 0 || x >= world_.W || z >= world_.H) continue;
-      size_t i = world_.tIdx(x, z);
-      uint32_t col;
-      if (world_.waterAt(x, z) > world_.altAt(x, z)) col = rgb(112, 114, 172);
-      else col = rgb(146, 153, 100);
-      int oi = c.occupantAt(x, z);
-      if (c.isRoadTile(x, z) || c.isPowerLine(x, z)) col = rgb(104, 104, 112);
-      else if (oi >= 0) col = rgb(196, 196, 204);
-      else if (i < world_.zone.size() && world_.zone[i]) {
-        int zt = world_.zone[i];
-        col = zt <= 3 ? rgb(96, 190, 96) : zt <= 7 ? rgb(96, 120, 210) : rgb(210, 190, 70);
-      }
-      miniMap_.px[size_t(py) * miniMap_.w + px] = col;
+      // Same colours as the save file's overview thumbnail: zones over banded terrain.
+      miniMap_.px[size_t(py) * miniMap_.w + px] = overviewTileColour(world_, x, z);
     }
 }
 
@@ -144,7 +134,7 @@ void Game::drawNavigator(int barH) {
   cellBtn("nav.btn.1", 133, 112, 26, 29, tip(0xB, "Zoom out"), [&] { zoomBy(-1); });
   cellBtn("nav.btn.2", 47, 133, 26, 29, tip(0xC, "Rotate counter-clockwise"), [&] { rot(-1); });
   cellBtn("nav.btn.3", 112, 133, 26, 29, tip(0xD, "Rotate clockwise"), [&] { rot(1); });
-  cellBtn("nav.layers", 131, 24, 36, 35, tip(0xA7, "Layer views"), [&] { openWindow("map"); });
+  cellBtn("nav.layers", 131, 24, 36, 35, tip(0xA7, "Layer views"), [&] { if (showLayers_) showLayers_ = false; else openWindow("layers"); });
 }
 
 }  // namespace m3k

@@ -86,7 +86,7 @@ class Game {
   Screen currentScreen() const { return scr_; }
 
   // Scripted access for headless tools/tests.
-  void openWindow(const std::string& name);        // budget, ordinances, neighbours, deals, advisors, prefs, props, goals, map, graphs, charts
+  void openWindow(const std::string& name);        // budget, ordinances, neighbours, deals, advisors, prefs, props, goals, map, layers, graphs, charts
   void runMenuItem(uint32_t menuItemId) { execute(menuItemId); }
   // Run a MenuItem.INI command class id directly (tools, windows, ...). For tools/tests.
   void runCommand(uint32_t target, uint32_t arg1 = 0) { runTarget(target, arg1); }
@@ -206,7 +206,11 @@ class Game {
   void stopAmbience();
   void updateAmbience(uint32_t dtMs);                  // picks the ambient FSC area from the view (game_query.cpp)
   TileSoundContext tileSoundContext(int tx, int tz);   // audio classification of a tile (game_query.cpp)
-  void buildMapSource(MapSource& src);
+  // pollutionKind: 0 air, 1 water, 2 garbage; -1 = the map window's selector.
+  void buildMapSource(MapSource& src, int pollutionKind = -1);
+  // View City Layers: copy layers_ into the render options; refresh the data-layer overlay from live data.
+  void applyLayers();
+  void refreshLayerOverlay();
   void buildBudgetView(BudgetView& v);
   void buildPickerEntries(PickerCategory c);
   void takeSnapshot(int size);
@@ -321,7 +325,7 @@ class Game {
   // windows
   bool showBudget_ = false, showOrd_ = false, showNeigh_ = false, showDeals_ = false, showAdv_ = false,
        showProps_ = false, showGoals_ = false, showMap_ = false, showGraphs_ = false, showCharts_ = false,
-       showPicker_ = false, showQuery_ = false, showTip_ = false;
+       showPicker_ = false, showQuery_ = false, showTip_ = false, showLayers_ = false;
   BudgetWindow budgetWin_;
   OrdinancesWindow ordWin_;
   NeighboursWindow neighWin_;
@@ -329,9 +333,13 @@ class Game {
   AdvisorWindow advWin_;
   CityPropertiesDialog propsDlg_;
   CityPropsState propsState_;
-  Image neighMap_;   // city thumbnail for the Neighbors Map centre cell
+  Image neighRegion_;   // Neighbors Map region image (spec 11 section 9), rebuilt when the window opens
   ScenarioGoalsWindow goalsWin_;
   MapWindow mapWin_;
+  CityLayersDialog layersDlg_;
+  CityLayers layers_;            // applied View City Layers settings
+  DataOverlay layerOverlay_;     // City Layer Views overlay (mode LayerView)
+  int layerOverlayAge_ = 0;      // frames since layerOverlay_ was rebuilt
   GraphsWindow graphsWin_;
   ChartsWindow chartsWin_;
   TickerWidget ticker_;
