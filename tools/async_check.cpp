@@ -18,6 +18,7 @@
 #include "core/clock.h"
 #include "core/disasters.h"
 #include "core/game.h"
+#include "core/render.h"
 
 using namespace m3k;
 using Clk = std::chrono::steady_clock;
@@ -49,6 +50,53 @@ static bool loadCity(Game& gm, const std::string& game, const std::string& city,
   gm.requestFile(city);
   for (int i = 0; i < 40 && !gm.world().W; i++) gm.frame(in, W, H, 16);
   return gm.world().W > 0;
+}
+
+// Terrain layer cache on vs off must give identical pixels, including right after world edits.
+static int terrainCacheParity(const std::string& game, const std::string& city) {
+  Game gm;
+  if (!loadCity(gm, game, city, 1280, 800)) return 1;
+  World w = gm.world();   // private copy we are free to edit
+  GameData data; std::string err;
+  if (!data.open(game, err)) { std::fprintf(stderr, "data: %s\n", err.c_str()); return 1; }
+  Renderer off, on;
+  for (Renderer* r : {&off, &on}) { r->setWorld(&w, &data); r->resize(1280, 800); }
+  on.setTerrainLayerCache(true);
+  int mismatches = 0, renders = 0, hits = 0;
+  auto compare = [&](const Camera& cam, const RenderOptions& opt, const char* what) {
+    off.render(cam, opt); on.render(cam, opt);
+    renders++; hits += on.lastStageTimes().terrainLayerHit ? 1 : 0;
+    if (off.pixels() != on.pixels()) { mismatches++; std::printf("MISMATCH: %s (zoom %d rot %d)\n", what, cam.zoom, cam.rot); }
+  };
+  RenderOptions opt;
+  for (int z = 0; z <= 4; z++)
+    for (int rot = 0; rot < 4; rot++) {
+      Camera cam; cam.zoom = z; cam.rot = rot; cam.u = float(w.W) / 2 + float(rot) * 3; cam.v = float(w.H) / 2;
+      for (int tick = 0; tick < 3; tick++) { opt.animTick = tick; compare(cam, opt, "repeat with animation tick"); }
+    }
+  Camera cam; cam.zoom = 2; cam.u = float(w.W) / 2; cam.v = float(w.H) / 2;
+  opt.animTick = 0;
+  compare(cam, opt, "baseline");
+  opt.grid = !opt.grid; compare(cam, opt, "grid toggled"); opt.grid = !opt.grid; compare(cam, opt, "grid restored");
+  opt.zonePaint = false; compare(cam, opt, "zonePaint off"); opt.zonePaint = true;
+  opt.edgeFaces = false; compare(cam, opt, "edgeFaces off"); opt.edgeFaces = true;
+  opt.background = false; compare(cam, opt, "background off"); opt.background = true;
+  opt.underground = true; compare(cam, opt, "underground"); opt.underground = false;
+  opt.objects = false; compare(cam, opt, "objects off"); opt.objects = true;
+  cam.u += 0.25f; compare(cam, opt, "camera nudge");
+  // World edits made behind the renderer's back must show up on the very next render.
+  for (int x = 100; x < 130; x++) for (int z = 100; z < 130; z++) w.zone[size_t(w.tIdx(x, z))] = 3;
+  compare(cam, opt, "zone edit");
+  for (int x = 100; x < 110; x++) for (int z = 100; z < 110; z++) w.alt[size_t(w.vIdx(x, z))] = uint8_t(w.alt[size_t(w.vIdx(x, z))] + 4);
+  off.invalidateShade(); on.invalidateShade();
+  compare(cam, opt, "altitude edit");
+  off.setTileTint(120, 120, 7); on.setTileTint(120, 120, 7); compare(cam, opt, "tile tint");
+  off.clearTileTints(); on.clearTileTints(); compare(cam, opt, "tint cleared");
+  DataOverlay ov; ov.slot = 3; ov.row.assign(size_t(w.W) * w.H, 8);
+  opt.overlay = &ov; compare(cam, opt, "overlay"); ov.row[size_t(w.tIdx(120, 120))] = 20; compare(cam, opt, "overlay edit"); opt.overlay = nullptr;
+  compare(cam, opt, "overlay removed");
+  std::printf("terrain cache parity: %d renders, %d served from cache, %d mismatches\n", renders, hits, mismatches);
+  return mismatches ? 1 : 0;
 }
 
 static int determinism(const std::string& game, const std::string& city, int days) {
@@ -84,16 +132,18 @@ static int determinism(const std::string& game, const std::string& city, int day
   return 0;
 }
 
-static int stress(const std::string& game, const std::string& city, double seconds, bool async, bool calm, bool disasters, bool screens, int dtMs, int W, int H) {
+static int stress(const std::string& game, const std::string& city, double seconds, bool async, bool calm, bool disasters, bool screens, bool terrainCache, int dtMs, int W, int H) {
   Game gm;
   if (!loadCity(gm, game, city, W, H)) return 1;
   gm.setAsyncSim(async);
+  gm.renderer().setTerrainLayerCache(terrainCache);
   gm.setPaused(false);
   std::mt19937 rng(12345);
+  uint64_t layerHits = 0;
   auto rnd = [&](int n) { return int(rng() % uint32_t(n)); };
   Input in;
   in.mx = W / 2; in.my = H / 2;
-  std::vector<double> frameMs, waitMs, endMs, simMs, rasterMs, gameMs, stSetup, stBands, stBg, stTerrain, stItems, stTail;
+  std::vector<double> frameMs, waitMs, endMs, simMs, rasterMs, gameMs, stSetup, stBands, stBg, stTerrain, stItems, stTail, hitRaster, hitSetup, hitBands, missRaster, hitKey, hitBuild;
   uint64_t days = 0, joins = 0;
   int heldFor = 0, pendingRelease = 0, escIn = 0, screensStep = 0, screensWait = 0;
   const double period = 13.33;
@@ -136,6 +186,8 @@ static int stress(const std::string& game, const std::string& city, double secon
     if (p.rastered) {
       rasterMs.push_back(p.rasterMs);
       const Renderer::StageTimes& st = gm.renderer().lastStageTimes();
+      layerHits += st.terrainLayerHit ? 1 : 0;
+      if (st.terrainLayerHit) { hitRaster.push_back(p.rasterMs); hitSetup.push_back(st.setupMs); hitBands.push_back(st.bandsWallMs); hitKey.push_back(st.layerKeyMs); hitBuild.push_back(st.buildItemsMs); } else missRaster.push_back(p.rasterMs);
       stSetup.push_back(st.setupMs); stBands.push_back(st.bandsWallMs); stBg.push_back(st.bgCpuMs);
       stTerrain.push_back(st.terrainCpuMs); stItems.push_back(st.itemsCpuMs); stTail.push_back(st.tailMs);
     }
@@ -152,6 +204,8 @@ static int stress(const std::string& game, const std::string& city, double secon
   std::printf("sim_wait_ms  p50 %.2f p95 %.2f p99 %.2f max %.2f\n", pct(waitMs, .5), pct(waitMs, .95), pct(waitMs, .99), mx(waitMs));
   std::printf("sim_ms       p50 %.2f p95 %.2f p99 %.2f max %.2f\n", pct(simMs, .5), pct(simMs, .95), pct(simMs, .99), mx(simMs));
   std::printf("async_end_ms p50 %.2f p95 %.2f p99 %.2f max %.2f\n", pct(endMs, .5), pct(endMs, .95), pct(endMs, .99), mx(endMs));
+  std::printf("terrain layer cache: %s, served %llu of %zu rastered frames\n", terrainCache ? "on" : "off", (unsigned long long)layerHits, rasterMs.size());
+  if (terrainCache) std::printf("cache hit frames: raster p50 %.2f p95 %.2f (setup %.2f [key hash %.2f, buildItems %.2f] + bands %.2f); miss frames: raster p50 %.2f p95 %.2f\n", pct(hitRaster, .5), pct(hitRaster, .95), pct(hitSetup, .5), pct(hitKey, .5), pct(hitBuild, .5), pct(hitBands, .5), pct(missRaster, .5), pct(missRaster, .95));
   std::printf("raster_ms    p50 %.2f p95 %.2f p99 %.2f max %.2f  (%zu rastered frames)\n", pct(rasterMs, .5), pct(rasterMs, .95), pct(rasterMs, .99), mx(rasterMs), rasterMs.size());
   std::printf("stages p50: setup(serial) %.2f  bands(wall) %.2f  | band cpu-time: bg %.2f terrain %.2f items(sprites) %.2f  | tail(serial) %.2f ms\n",
               pct(stSetup, .5), pct(stBands, .5), pct(stBg, .5), pct(stTerrain, .5), pct(stItems, .5), pct(stTail, .5));
@@ -165,6 +219,7 @@ static int stress(const std::string& game, const std::string& city, double secon
 int main(int argc, char** argv) {
   std::string game, city;
   int days = 0, W = 1280, H = 800;
+  bool cacheParity = false, terrainCache = false;
   double seconds = 0;
   bool async = true, calm = false, disasters = false, screens = false;
   int dtMs = 13;
@@ -174,6 +229,8 @@ int main(int argc, char** argv) {
     else if (a == "--city" && i + 1 < argc) city = argv[++i];
     else if (a == "--determinism" && i + 1 < argc) days = std::atoi(argv[++i]);
     else if (a == "--stress" && i + 1 < argc) seconds = std::atof(argv[++i]);
+    else if (a == "--terrain-cache-parity") cacheParity = true;
+    else if (a == "--terrain-cache") terrainCache = true;
     else if (a == "--calm") calm = true;
     else if (a == "--disasters") disasters = true;
     else if (a == "--screens") screens = true;
@@ -181,9 +238,10 @@ int main(int argc, char** argv) {
     else if (a == "--async" && i + 1 < argc) async = std::atoi(argv[++i]) != 0;
     else if (a == "--size" && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &W, &H);
   }
+  if (!game.empty() && !city.empty() && cacheParity) return terrainCacheParity(game, city);
   if (game.empty() || city.empty() || (days <= 0 && seconds <= 0)) {
-    std::fprintf(stderr, "usage: async_check --game DIR --city FILE (--determinism DAYS | --stress SECONDS [--async 0|1] [--size WxH])\n");
+    std::fprintf(stderr, "usage: async_check --game DIR --city FILE (--terrain-cache-parity | --determinism DAYS | --stress SECONDS [--async 0|1] [--size WxH])\n");
     return 2;
   }
-  return days > 0 ? determinism(game, city, days) : stress(game, city, seconds, async, calm, disasters, screens, dtMs, W, H);
+  return days > 0 ? determinism(game, city, days) : stress(game, city, seconds, async, calm, disasters, screens, terrainCache, dtMs, W, H);
 }

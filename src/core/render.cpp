@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <cmath>
 #include <cstdlib>
 #include "core/workpool.h"
@@ -153,6 +154,7 @@ DataOverlay makeZoneOverlay(const World& w) {
 // ======================================================================================
 
 void Renderer::setNoiseSeed(uint32_t seed) {
+  terrainLayerValid_ = false;
   uint32_t s = seed ? seed : 0x9E3779B9u;
   auto rnd = [&]() { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return s; };
   for (auto& n : noiseLand_) n = int8_t(int(rnd() % 3) * 8 - 8);
@@ -180,7 +182,7 @@ void Renderer::setTileTint(int x, int z, uint8_t row) {
 }
 
 void Renderer::setWorld(const World* w, GameData* data) {
-  world_ = w; data_ = data; shadeValid_ = false; itemsValid_ = false;
+  world_ = w; data_ = data; shadeValid_ = false; itemsValid_ = false; terrainLayerValid_ = false;
   tint_.clear(); siteCache_.clear(); bldIniTried_ = false; bldIniOk_ = false;
   for (int i = 0; i < 5; i++) { back_[i] = Image(); backTried_[i] = false; }
   pal_ = TerrainPalettes(); palOverride_ = false;
@@ -189,7 +191,7 @@ void Renderer::setWorld(const World* w, GameData* data) {
   if (!noiseInit_) setNoiseSeed(0x6D33B1u);
 }
 
-void Renderer::resize(int w, int h) { fbW_ = w; fbH_ = h; fb_.assign(size_t(w) * h, 0xFF000000u); }
+void Renderer::resize(int w, int h) { fbW_ = w; fbH_ = h; fb_.assign(size_t(w) * h, 0xFF000000u); terrainLayerValid_ = false; }
 
 namespace {
 
@@ -1432,6 +1434,46 @@ void Renderer::drawFallbackBoxes(const Camera& cam) {
   }
 }
 
+// ---- terrain layer cache -------------------------------------------------------------------------------------
+namespace {
+// Fast 64-bit content hash (8 bytes per step); only used to detect change, not for anything security related.
+uint64_t hashBytes(uint64_t h, const void* data, size_t n) {
+  const uint8_t* p = static_cast<const uint8_t*>(data);
+  while (n >= 8) {
+    uint64_t v; std::memcpy(&v, p, 8);
+    h = (h ^ v) * 0x9E3779B97F4A7C15ull;
+    h ^= h >> 29;
+    p += 8; n -= 8;
+  }
+  uint64_t tail = 0;
+  if (n) std::memcpy(&tail, p, n);
+  h = (h ^ tail ^ (uint64_t(n) << 56)) * 0x9E3779B97F4A7C15ull;
+  return h ^ (h >> 32);
+}
+template <class T> uint64_t hashVec(uint64_t h, const std::vector<T>& v) {
+  return hashBytes(h ^ uint64_t(v.size()), v.data(), v.size() * sizeof(T));
+}
+}  // namespace
+
+uint64_t Renderer::terrainLayerKey(const Camera& cam, const RenderOptions& opt) const {
+  const World& w = *world_;
+  uint64_t h = 1469598103934665603ull;
+  auto mix = [&](uint64_t v) { h = (h ^ v) * 0x9E3779B97F4A7C15ull; h ^= h >> 31; };
+  uint32_t u, v;
+  std::memcpy(&u, &cam.u, 4); std::memcpy(&v, &cam.v, 4);
+  mix(u); mix(v); mix(uint64_t(cam.zoom)); mix(uint64_t(cam.rot));
+  mix(uint64_t(fbW_)); mix(uint64_t(fbH_)); mix(uint64_t(w.W)); mix(uint64_t(w.H));
+  const bool netSprites = opt.objects && (data_ || spriteFn_);
+  mix(uint64_t(opt.terrain) | uint64_t(opt.underground) << 1 | uint64_t(opt.zonePaint) << 2 | uint64_t(opt.background) << 3 |
+      uint64_t(opt.grid) << 4 | uint64_t(opt.edgeFaces) << 5 | uint64_t(netSprites) << 6);
+  h = hashVec(h, w.alt); h = hashVec(h, w.water); h = hashVec(h, w.zone); h = hashVec(h, tint_);
+  // The road mask (grey network paint) is drawn from the surface pieces only in this mode.
+  if (opt.zonePaint && !opt.underground && !netSprites)
+    for (const auto& np : w.surface) { mix(uint64_t(uint32_t(np.x)) << 32 | uint32_t(np.z)); }
+  if (opt.overlay) { mix(uint64_t(opt.overlay->slot) + 1); h = hashVec(h, opt.overlay->row); } else mix(0);
+  return h;
+}
+
 void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderScene* scene) {
   if (fbW_ <= 0 || fbH_ <= 0) return;
   if (!world_) { std::fill(fb_.begin(), fb_.end(), 0xFF302820u); return; }
@@ -1442,9 +1484,29 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
   const auto st0 = StageClock::now();
   // Serial setup: caches, shared terrain state and the sorted draw list.
   if (opt.background) loadBackground(zoom);
-  if (opt.terrain) prepareTerrain(opt);
+  // Terrain layer cache: decide hit/miss before prepareTerrain, which only feeds the terrain pass.
+  const bool gpuTerrainWillRun = opt.terrain && gpuTerrainWanted_ && gpuTerrainFn_;
+  bool layerHit = false, layerStore = false;
+  double keyMs = 0, itemsBuildMs = 0;
+  if (terrainCacheOn_ && opt.terrain && !gpuTerrainWillRun) {
+    const auto k0 = StageClock::now();
+    const uint64_t key = terrainLayerKey(cam, opt);
+    keyMs = stageMs(k0, StageClock::now());
+    if (terrainLayerValid_ && key == terrainLayerKey_ && terrainLayer_.size() == fb_.size()) layerHit = true;
+    else {
+      layerStore = true;
+      terrainLayerKey_ = key;
+      terrainLayerValid_ = false;
+      if (terrainLayer_.size() != fb_.size()) terrainLayer_.assign(fb_.size(), 0);
+    }
+  }
+  if (opt.terrain) { if (layerHit) ensureShade(); else prepareTerrain(opt); }
+  const auto bi0 = StageClock::now();
   buildItems(cam, opt, scene);
+  itemsBuildMs = stageMs(bi0, StageClock::now());
   stages_ = StageTimes();
+  stages_.layerKeyMs = keyMs; stages_.buildItemsMs = itemsBuildMs;
+  stages_.terrainLayerHit = layerHit;
   stages_.setupMs = stageMs(st0, StageClock::now());
 
   // Phase 2: optional GPU terrain fill (CPU builds triangle list; host compute writes pixels).
@@ -1468,25 +1530,34 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
   pool.run(bands, [&](int b) {
     const int y0 = fbH_ * b / bands, y1 = fbH_ * (b + 1) / bands;
     auto t = StageClock::now();
-    if (!gpuTerrain) {
-      std::fill(fb_.begin() + ptrdiff_t(y0) * fbW_, fb_.begin() + ptrdiff_t(y1) * fbW_, 0xFF302820u);
-      if (opt.background) drawBackground(zoom, y0, y1);
-    }
-    bgNs += nsSince(t); t = StageClock::now();
-    if (opt.terrain) {
-      if (gpuTerrain) {
-        if (opt.grid) drawTerrainGrid(cam, opt, y0, y1);
-        if (opt.edgeFaces) drawEdgeFaces(cam, y0, y1);
-      } else {
-        drawTerrain(cam, opt, y0, y1);
-        if (opt.edgeFaces) drawEdgeFaces(cam, y0, y1);
+    const size_t rowOff = size_t(y0) * fbW_, rowN = size_t(y1 - y0) * fbW_;
+    if (layerHit) {
+      // Cached background + terrain + grid + edge faces for these rows.
+      std::memcpy(fb_.data() + rowOff, terrainLayer_.data() + rowOff, rowN * sizeof(uint32_t));
+      terrainNs += nsSince(t); t = StageClock::now();
+    } else {
+      if (!gpuTerrain) {
+        std::fill(fb_.begin() + ptrdiff_t(y0) * fbW_, fb_.begin() + ptrdiff_t(y1) * fbW_, 0xFF302820u);
+        if (opt.background) drawBackground(zoom, y0, y1);
       }
+      bgNs += nsSince(t); t = StageClock::now();
+      if (opt.terrain) {
+        if (gpuTerrain) {
+          if (opt.grid) drawTerrainGrid(cam, opt, y0, y1);
+          if (opt.edgeFaces) drawEdgeFaces(cam, y0, y1);
+        } else {
+          drawTerrain(cam, opt, y0, y1);
+          if (opt.edgeFaces) drawEdgeFaces(cam, y0, y1);
+        }
+      }
+      if (layerStore) std::memcpy(terrainLayer_.data() + rowOff, fb_.data() + rowOff, rowN * sizeof(uint32_t));
+      terrainNs += nsSince(t); t = StageClock::now();
     }
-    terrainNs += nsSince(t); t = StageClock::now();
     drawItems(opt, y0, y1);
     itemsNs += nsSince(t);
   });
   stages_.bandsWallMs = stageMs(sb0, StageClock::now());
+  if (layerStore) terrainLayerValid_ = true;
   stages_.bgCpuMs = double(bgNs.load()) / 1e6;
   stages_.terrainCpuMs = double(terrainNs.load()) / 1e6;
   stages_.itemsCpuMs = double(itemsNs.load()) / 1e6;

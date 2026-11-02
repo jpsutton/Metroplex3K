@@ -239,8 +239,16 @@ class Renderer : public ICityRasterizer {
     double bandsWallMs = 0;  // wall time of the parallel band pass
     double bgCpuMs = 0, terrainCpuMs = 0, itemsCpuMs = 0;   // background, terrain (+grid/edges), sprites
     double tailMs = 0;       // serial: fallback boxes, previews, cost label
+    double layerKeyMs = 0, buildItemsMs = 0;   // part of setupMs: cache key hash, sprite draw-list build
+    bool terrainLayerHit = false;   // terrain layer cache served this frame (bg + terrain + grid + edges not redrawn)
   };
   const StageTimes& lastStageTimes() const { return stages_; }
+  // Terrain layer cache (off by default): remember the background + terrain + grid + edge-face pixels and, while
+  // nothing they depend on changed, copy them back instead of redrawing, so a frame only draws sprites. The cache
+  // key is a hash of everything that pass reads (camera, size, flags, altitude/water/zone/tint arrays, overlay rows,
+  // surface pieces when the road mask is drawn), so it needs no invalidation calls from the host.
+  void setTerrainLayerCache(bool on) { terrainCacheOn_ = on; terrainLayerValid_ = false; }
+  bool terrainLayerCache() const { return terrainCacheOn_; }
 
   // ---- configuration / injection ----
   void setPalettes(const TerrainPalettes& p) { pal_ = p; palOverride_ = true; }
@@ -341,6 +349,10 @@ class Renderer : public ICityRasterizer {
 
   int bands_ = 0;
   StageTimes stages_;
+  uint64_t terrainLayerKey(const Camera& cam, const RenderOptions& opt) const;
+  bool terrainCacheOn_ = false, terrainLayerValid_ = false;
+  uint64_t terrainLayerKey_ = 0;
+  std::vector<uint32_t> terrainLayer_;   // fb_-sized snapshot taken after the terrain pass, before sprites
   std::vector<Item> items_;
   std::vector<int> occ_;  // view tile -> index into items_ (last drawn), -1 none
   bool itemsValid_ = false;
