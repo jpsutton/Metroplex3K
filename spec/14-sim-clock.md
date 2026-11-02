@@ -390,15 +390,31 @@ petitioners have their own timing (`22-advisors-news-petitioners.md`).
 **Placement query (#28).** On-demand only; no save records [STATIC]. Other subsystems (placement
 tools, power/water and network code) call it to:
 
-* test whether a rectangle of tiles is clear for placement, against configurable combinations of
-  the occupant, network and related layers (four mode flags select which layers participate), and
-  optionally accumulate a placement cost;
+* test whether a rectangle of tiles is clear for placement (§ below), optionally accumulating a
+  placement cost;
 * collect the footprint cells of occupants matching a filter;
 * find the nearest matching occupant to a point and return its tile bounding box (and a map-region
   highlight notification that utilities also raise for their own regions).
 
 It holds live references to the city layers it queries; it does not own persistent state of its own
 [STATIC].
+
+**Clearance modes** [STATIC]. The city keeps three occupancy scanners that index occupants at
+strides 1, 2 and 4 tiles (created with the city; not saved as their own records). Clearance always
+walks the terrain cells of the rectangle. Mode `m` ∈ {0,1,2,3} then selects which scanners
+participate:
+
+| Mode | 1-tile scanner | 2-tile scanner | 4-tile scanner |
+|---|---|---|---|
+| 0 | yes | yes | yes |
+| 1 | yes | — | — |
+| 2 | yes | — | yes |
+| 3 | yes | yes | — |
+
+On the 1-tile scanner, a hit fails the cell unless the occupant both exposes capability flag
+`0x400` and passes the caller-supplied occupancy filter; a passing hit may add to the optional
+cost. On the 2-tile and 4-tile scanners, any hit fails the cell (no filter). The exact filter
+predicates each caller passes are still [OPEN].
 
 **Per-building work (weekly).** Besides the layer-wide steps above, every building that has a
 lot is itself enrolled in the schedule when it is added to the city, and withdrawn when it is
@@ -592,7 +608,7 @@ are converted as follows [STATIC]:
 * Graph histories owned by subsystems other than the budget and demographics (crime, pollution,
   traffic graphs and so on): when they are sampled.
 * The relative order of daily items 6–11 and monthly items 1–3 (§6.1), recorded as subsystem order.
-* The exact four mode-flag combinations of the placement-query clearance check (#28), and which
-  occupant-filter bits each caller passes.
+* Which occupant-filter predicates each placement-query (#28) caller passes (the mode → scanner
+  table is closed).
 * Which specific dialogs and operations raise the city pause count versus the pending/modal count
   (§2.3 / §6.3 rule 6); see also `09-ui-screens.md`.
