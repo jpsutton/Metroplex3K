@@ -168,7 +168,7 @@ enum class Subsystem : int {
   Terrain = 1, OccupantManager, NetworkManager, FloraLayer, ZoneManager, Disasters, Neighbours,
   RciLayer, Ordinances, Aura, Pollution, Crime, Police, Fire, ResidentialLayer, CommercialLayer,
   IndustrialLayer, LandValue, StreetSim, Traffic, Budget, WorldLayer, Power, Water, Flammability,
-  SpacingGrid, Unknown27, Geometry28, Scenario, AdvisorManager, PetitionerManager = 37
+  SpacingGrid, Weather, Geometry28, Scenario, AdvisorManager, PetitionerManager = 37
 };
 
 enum class Step : int {
@@ -180,7 +180,7 @@ enum class Step : int {
   // monthly (in order)
   MonthlyDisasterManager, MonthlyNeighbours, MonthlyWorldLayer, MonthlyRci, MonthlyOrdinances,
   MonthlyResidential, MonthlyCommercial, MonthlyIndustrial, MonthlyTraffic, MonthlyBudget,
-  MonthlyPower, MonthlyWater, MonthlyUnknown27, MonthlyPollution, MonthlyCrime, MonthlyAura,
+  MonthlyPower, MonthlyWater, MonthlyWeather, MonthlyPollution, MonthlyCrime, MonthlyAura,
   // per minute (only while a disaster instance is active)
   MinuteDisasterInstances, MinuteScenario,
   kCount

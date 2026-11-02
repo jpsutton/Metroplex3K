@@ -653,6 +653,7 @@ void City::wire() {
   sched.setHandler(Step::MonthlyBudget, [this] { monthlyBudget(); });
   sched.setHandler(Step::MonthlyPower, [this] { monthlyPower(); });
   sched.setHandler(Step::MonthlyWater, [this] { monthlyWater(); });
+  sched.setHandler(Step::MonthlyWeather, [this] { monthlyWeather(); });
   sched.setHandler(Step::MonthlyPollution, [this] { monthlyPollution(); });
   sched.setHandler(Step::MonthlyCrime, [this] { monthlyCrime(); });
   sched.setHandler(Step::MonthlyAura, [this] { monthlyAura(); });
@@ -2295,6 +2296,11 @@ void City::monthlyAura() {
   // Spec 14 §6.1 monthly item 16 / 17 §8.5 [STATIC]: mayor-rating chart sample (cityAura+127).
   cal::Date d = clock.date();
   aura.monthEnd(d.month, d.year);
+}
+void City::monthlyWeather() {
+  // Spec 14 §6.1 monthly item 13 / Q-AT: season + temperature update (#27 Weather).
+  cal::Date d = clock.date();
+  weather.monthEnd(d.month, &rng_);
 }
 
 // ============================================================================ persistence

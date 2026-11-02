@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include "core/clock.h"
+#include "core/weather.h"
 #include "core/economy.h"
 #include "core/gamedata.h"
 #include "core/growth.h"
@@ -161,6 +162,7 @@ class City {
   // ---- subsystems (public: state classes) ----
   Clock clock;
   CitySchedule sched;
+  Weather weather;   // subsystem #27 (spec 14 §6.1 monthly item 13); no save records
   // Spec 14 §2.3 / §6.3 rule 6 [STATIC]: two nestable runtime city counts. Hold = either non-zero.
   // Pure runtime — not saved, no INI. Busy (monthly / backlog) is separate and does not feed hold.
   // Player/UI pause (0→1 pauses clock). `announce` posts "simulation paused" (skip on start-paused).
@@ -266,7 +268,7 @@ class City {
   void dailyCrime(); void dailyFlammability(); void dailyAura(); void weeklyTraffic();
   void monthlyNeighbours(); void monthlyValves(); void monthlyOrdinances(); void monthlyPopulation();
   void monthlyTraffic(); void monthlyBudget(); void monthlyPower(); void monthlyWater();
-  void monthlyPollution(); void monthlyCrime(); void monthlyAura();
+  void monthlyPollution(); void monthlyCrime(); void monthlyAura(); void monthlyWeather();
   void updateTreatmentCaps();
  public:
   // Spacing grid 01FD7A8C (spec 10 s6.3): one byte per 4 x 4 block; bits 2-5 = overlap counter. add(): if any block of

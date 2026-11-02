@@ -273,7 +273,7 @@ const char* stepName(Step s) {
       "WeeklyStreetSim",
       "MonthlyDisasterManager", "MonthlyNeighbours", "MonthlyWorldLayer", "MonthlyRci", "MonthlyOrdinances",
       "MonthlyResidential", "MonthlyCommercial", "MonthlyIndustrial", "MonthlyTraffic", "MonthlyBudget",
-      "MonthlyPower", "MonthlyWater", "MonthlyUnknown27", "MonthlyPollution", "MonthlyCrime", "MonthlyAura",
+      "MonthlyPower", "MonthlyWater", "MonthlyWeather", "MonthlyPollution", "MonthlyCrime", "MonthlyAura",
       "MinuteDisasterInstances", "MinuteScenario"};
   int i = int(s);
   return (i >= 0 && i < int(Step::kCount)) ? n[i] : "?";
@@ -290,7 +290,7 @@ std::vector<Step> monthlySteps() {
   return {Step::MonthlyDisasterManager, Step::MonthlyNeighbours, Step::MonthlyWorldLayer, Step::MonthlyRci,
           Step::MonthlyOrdinances, Step::MonthlyResidential, Step::MonthlyCommercial, Step::MonthlyIndustrial,
           Step::MonthlyTraffic, Step::MonthlyBudget, Step::MonthlyPower, Step::MonthlyWater,
-          Step::MonthlyUnknown27, Step::MonthlyPollution, Step::MonthlyCrime, Step::MonthlyAura};
+          Step::MonthlyWeather, Step::MonthlyPollution, Step::MonthlyCrime, Step::MonthlyAura};
 }
 std::vector<Step> minuteSteps() { return {Step::MinuteDisasterInstances, Step::MinuteScenario}; }
 
