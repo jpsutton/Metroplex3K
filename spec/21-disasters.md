@@ -65,7 +65,7 @@ for fire) and the divisor for the disaster sound's intensity; the second is the 
 
 | Key | Units | Meaning |
 |-----|-------|---------|
-| `MaxEmergencyDuration` | months | Upper bound on how long a declared emergency (and its emergency-worker relief bonus) lasts; see §10. |
+| `MaxEmergencyDuration` | days | Upper bound on how long a declared emergency (and its emergency-worker relief bonus) lasts; see §10. Shipped value `8`. |
 | `MinDisasterCostToGetRelief` | § (simoleons) | Accumulated destruction cost of the current disaster must **exceed** this for relief to be paid. |
 | `ReliefAsPercentageOfCostWithoutEW` | percent | Relief paid as a percentage of the accumulated destruction cost when no emergency was declared. |
 | `ReliefAsPercentageOfCostWithEW` | percent | Same, when an emergency ("EW") was declared. |
@@ -130,7 +130,8 @@ hours; riot brew 80 minutes, riot duration 20–240 minutes. Because a simulated
 resolution takes at least 72 s real time (`14-sim-clock.md` §4), 60 minute ticks last at least
 3 s real time. `[INFERRED: that the random checks and the per-instance updates are driven by
 the agents named above, as stated in 14-sim-clock.md; the issuer of command 3 is OPEN there]`
-The emergency elapsed counter advances on the monthly callback. [INFERRED]
+The emergency elapsed counter advances once per simulated day (daily item 1 in
+`14-sim-clock.md` §6.1), not on the monthly random-check tick. [STATIC]
 
 ### 4.2 Per-type random rules
 
@@ -1001,13 +1002,15 @@ The player can declare an emergency (the "emergency" button of the disaster UI).
    active, the false-alarm counter is reset to 0 after the notification below.
 4. A notification is broadcast carrying (disaster active?, false-alarm counter < 3) so the advisor
    can comment.
-5. If false-alarm counter < 3: the emergency becomes active, its elapsed-month counter is reset,
-   and if a disaster is active the "emergency declared during disaster" (EW) flag is set.
+5. If false-alarm counter < 3: the emergency becomes active, its elapsed-day counter is reset to
+   0, and if a disaster is active the "emergency declared during disaster" (EW) flag is set.
    With 3 or more consecutive false alarms the declaration is refused.
 
-While an emergency is active the elapsed counter is incremented once per simulated month; when it
-exceeds `MaxEmergencyDuration` the emergency ends (active cleared, counter reset, an
-"emergency ended" notification is broadcast). [STATIC]
+While an emergency is active the elapsed counter is incremented once per simulated **day** (the
+disaster layer's daily schedule entry — `14-sim-clock.md` §6.1 daily item 1). After each increment,
+if the counter is greater than `MaxEmergencyDuration` the emergency ends (active cleared, counter
+reset, an "emergency ended" notification is broadcast). With the shipped value 8 that is the 9th
+day after declaration. [STATIC]
 
 ### 10.2 Disaster cost and relief
 

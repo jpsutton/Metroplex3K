@@ -282,7 +282,7 @@ subsystem processes only part of its map on each run (§6.4).
 
 **Daily** (every day tick, before the city day handler):
 
-1. Disasters (#6): daily area work.
+1. Disasters (#6): daily emergency-elapsed tick (`21-disasters.md` §10.1).
 2. Police (#13): coverage slice.
 3. Fire (#14): coverage slice.
 4. Land value (#18): daily work.
@@ -309,8 +309,9 @@ flammability later). Item 7 runs only when disasters are present (`21-disasters.
 **Monthly** (day 1 of each month, after the daily and any weekly work of the same day; the clock is
 paused for the whole monthly work, §6.3 rule 4):
 
-1. Disaster manager (#6): monthly disaster-manager step, when disasters are enabled
-   [INFERRED: only when disasters are enabled].
+1. Disaster manager (#6): monthly random-occurrence checks for each disaster type
+   (`21-disasters.md` §4.1). Runs only while the city disasters-enabled flag is on — the same
+   flag that registers or unregisters those checks (`21-disasters.md` §4.3) [STATIC].
 2. Neighbours (#7): neighbour growth (January) and deal ageing (`19-sim-economy.md` §10.5–§10.6).
 3. World layer (#22): economic-phase update (`15-sim-growth.md`).
 4. RCI development layer (#8).
