@@ -118,10 +118,9 @@ are set when the city is created or loaded:
 | Valve | `Max` | `Min` | Provenance |
 |---|---|---|---|
 | 7000 (jobs) | 2000 | −2000 | [STATIC] |
-| 5000, 8000 | 2000 | −2000 | [STATIC] |
+| 3000, 5000, 8000 | 2000 | −2000 | [STATIC] |
+| 3001 | 2 147 483 647 | −2 147 483 648 | [STATIC]; `Sbase` = the layer's `ExternalFunSupply` (negative values become 0) |
 | 5001, 8001 | 2 147 483 647 | −2 147 483 648 | [STATIC]; `Sbase` = the layer's `InitialConnectionSupply` (negative values become 0) |
-| 3000 | 2000 | −2000 | [INFERRED, high: every shipped save fits these limits, e.g. a residential valve with `D − S` = 22 310 and `capPct` 20 holds `V` = 1600 = 2000 − 400; the setting code was not located] |
-| 3001 | 2 147 483 647 | −2 147 483 648 | [INFERRED, high: `V = D − S` exactly in all shipped saves] |
 
 `capPct` is non-zero only on the R/C/I valves (shipped saves: 6–100). It is set by the
 **cap rule** below and saved, so a loaded city keeps it until the next month-end.
