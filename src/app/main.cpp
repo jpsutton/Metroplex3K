@@ -1,5 +1,5 @@
-// Metroplex3K desktop host (SDL2). All game logic is in src/core (Game); this file only pumps events
-// and presents the framebuffer, so other hosts (e.g. Android) can reuse the core unchanged.
+// Metroplex3K desktop host (SDL2). All game logic is in src/core (Game); this file pumps events and
+// drives a FrameBackend so other hosts (Android, later GPU present) can reuse the core unchanged.
 #include <SDL.h>
 
 #include <cstdlib>
@@ -9,6 +9,7 @@
 
 #include "core/game.h"
 #include "core/gamedir.h"
+#include "sdl_presenter.h"
 
 using namespace m3k;
 
@@ -78,7 +79,9 @@ int main(int argc, char** argv) {
   SDL_Renderer* ren = SDL_CreateRenderer(win, -1, rflags);
   if (!ren) ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
   if (!ren) { std::cerr << "renderer: " << SDL_GetError() << "\n"; return 1; }
-  SDL_RenderSetVSync(ren, wantVsync ? 1 : 0);   // honour runtime toggles; no-op if already set at create
+
+  SdlPresenter presenter(ren);
+  presenter.setVsync(wantVsync);
 
   // Audio: opened only when game data with AUDIO.INI is present (also after data is dropped in later);
   // otherwise the game stays silent.
@@ -101,7 +104,6 @@ int main(int argc, char** argv) {
   openAudio();
 
   SDL_StartTextInput();
-  SDL_Texture* tex = nullptr; int tw = 0, th = 0;
   Input in;
   uint32_t last = SDL_GetTicks();
   bool panDrag = false;
@@ -164,25 +166,20 @@ int main(int argc, char** argv) {
     const bool vsyncNow = game.engineOptions().vsync;
     if (vsyncNow != wantVsync) {
       wantVsync = vsyncNow;
-      SDL_RenderSetVSync(ren, wantVsync ? 1 : 0);
+      presenter.setVsync(wantVsync);
     }
 
-    if (!tex || tw != w || th != h) {
-      if (tex) SDL_DestroyTexture(tex);
-      tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, w, h); tw = w; th = h;
-    }
-    // Zero-copy present: lock the streaming texture and have Game draw straight into GPU staging memory.
-    void* texPixels = nullptr;
-    int texPitch = 0;
-    if (tex && SDL_LockTexture(tex, nullptr, &texPixels, &texPitch) == 0) {
-      game.frame(in, w, h, now - last, static_cast<uint32_t*>(texPixels), texPitch);
-      SDL_UnlockTexture(tex);
+    FrameBuffer fb;
+    if (presenter.beginFrame(w, h, fb)) {
+      game.frame(in, now - last, fb);
+      presenter.endFrame();
     } else {
       game.frame(in, w, h, now - last);
-      if (tex) SDL_UpdateTexture(tex, nullptr, game.screen().data(), w * 4);
+      presenter.upload(game.screen().data(), w, h);
     }
     last = now;
-    SDL_RenderClear(ren); SDL_RenderCopy(ren, tex, nullptr, nullptr); SDL_RenderPresent(ren);
+    presenter.present();
+
     if (game.windowTitle() != curTitle) { curTitle = game.windowTitle(); SDL_SetWindowTitle(win, curTitle.c_str()); }
     if (game.cursorName() != curName) {
       curName = game.cursorName();
@@ -198,10 +195,9 @@ int main(int argc, char** argv) {
       }
       SDL_SetCursor(cursor ? cursor : SDL_GetDefaultCursor());
     }
-    if (!wantVsync) SDL_Delay(8);   // with vsync, SDL_RenderPresent already paces the loop
+    if (!wantVsync) SDL_Delay(8);   // with vsync, present() already paces the loop
   }
 done:
-  if (tex) SDL_DestroyTexture(tex);
   if (adev) SDL_CloseAudioDevice(adev);
   SDL_Quit();
   return 0;

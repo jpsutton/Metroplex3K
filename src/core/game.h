@@ -1,5 +1,6 @@
 // Game shell: screens (intro, main menu, new city, terrain editor, load/save, in-city HUD, windows) built on
-// the Ui toolkit. Platform independent: the host feeds Input each frame and presents screen().
+// the Ui toolkit. Platform independent: the host feeds Input each frame; an optional FrameBackend supplies
+// the present target (SDL today, GPU later). Headless tools use screen().
 //
 // Implementation is split over several files:
 //   game.cpp          init, menu tree, tool menu, HUD, map interaction
@@ -14,6 +15,7 @@
 #include <string>
 #include <vector>
 #include "core/audio.h"
+#include "core/frame_backend.h"
 #include "core/bat.h"
 #include "core/automata.h"
 #include "core/cheats.h"
@@ -65,6 +67,10 @@ class Game {
   // 0 = tightly packed w*4) and screen() is left untouched. Hosts that lock a streaming texture can pass
   // the locked pointer to avoid a post-frame upload memcpy.
   void frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixels = nullptr, int outPitchBytes = 0);
+  // Same as frame(..., dest.pixels, dest.pitchBytes) when a FrameBackend::beginFrame filled `dest`.
+  void frame(const Input& in, uint32_t dtMs, const FrameBuffer& dest) {
+    frame(in, dest.w, dest.h, dtMs, dest.pixels, dest.pitchBytes);
+  }
   const std::vector<uint32_t>& screen() const { return screen_; }
   bool wantQuit() const { return quit_; }
   void dropPath(const std::string& path);
