@@ -409,8 +409,8 @@ layer does the following [STATIC]:
    compare every table entry with the occupant's agent type using the agent-type ancestor match of
    `13-buildings-occupants.md` §4.1, which reports whether an entry matches and at what distance. Take the matching entry with the smallest distance (the first one in
    ascending-ID order wins ties), or (0, 0) if none matches. **Insert** the result into the table
-   under the occupant's agent type, so it is cached and also saved (§7.3). [STATIC; the distance
-   metric is INFERRED, see 13 §4.1]
+   under the occupant's agent type, so it is cached and also saved (§7.3). [STATIC; distance =
+   parent-step count, `13-buildings-occupants.md` §4.1]
 3. If *m* = 0, stop. Otherwise take the occupant's tile rectangle [x₀..x₁] × [z₀..z₁], grow it by *r*
    on every side, and clip it to [0, W−1] × [0, H−1].
 4. For **every tile** in that rectangle add *m* (removal: −*m*) to *P* of the tile's cell. A cell lying
@@ -915,6 +915,6 @@ each jail (`10-save-format.md` §6.2.5).
 * The (now decoded) `garbageStore` block of the pollution record (§7.4). (Police record fields
   closed, see Persisted state.)
 * Fire strike closed: identical machine to police, avg flammability vs `MaxAcceptableFlam` (§3.4).
-* Whether the agent-type distance of §7.1.2 is the parent-step count.
 * Flammability record trailer fields beyond the visit-order cursor (closed: visit order is
   row-major x-fastest with a continuing cursor, §4).
+* Agent-type distance closed: parent-step count (`13` §4.1 / §7.1.2).

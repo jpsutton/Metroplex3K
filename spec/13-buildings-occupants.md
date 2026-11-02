@@ -186,14 +186,14 @@ Three distinct number spaces exist:
 ### 4.1 Agent-type matching (ancestor lookup)
 
 Tables keyed by agent type often list only some types. To find the entry for an occupant of agent
-type T [INFERRED, medium; the original's exact metric was not traced]:
+type T [STATIC]:
 
-1. If the table has an entry for T, use it.
-2. Otherwise walk up `[AgentTypeHierarchy]` (`child=parent`) from T. The distance of an entry E is
-   the number of child→parent steps from T to E; an entry that is not T or an ancestor of T does not
-   match.
-3. Use the matching entry with the smallest distance (ties: lowest agent type). If none matches,
-   the table's default applies (usually zero).
+1. If the table has an entry for T, use it (distance 0).
+2. Otherwise walk up `[AgentTypeHierarchy]` (`child=parent`) from T. The **distance** of an entry E
+   is the number of child→parent steps from T to E [STATIC]: the type-hierarchy service returns
+   that step count when E is an ancestor of T, and reports no match otherwise.
+3. Use the matching entry with the smallest distance (ties: first found / ascending ID order as
+   stated by the consumer). If none matches, the table's default applies (usually zero).
 
 This nearest-ancestor rule is used by the crime and pollution layers (`17-sim-services.md` §7.1.2,
 §7.2.3) and the "type or descendant" test of `12-networks.md` §9.1. The aura layer and land value
