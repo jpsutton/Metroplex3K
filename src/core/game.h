@@ -85,6 +85,8 @@ class Game {
   std::function<void()> audioLock, audioUnlock;
   Sim& sim() { return sim_; }
   City& city() { return sim_.city(); }
+  Renderer& renderer() { return renderer_; }
+  ICityRasterizer& cityRasterizer() { return renderer_; }
 
   // Startup options.
   const std::string& language() const { return data_.language; }

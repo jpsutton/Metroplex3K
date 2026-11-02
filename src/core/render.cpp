@@ -387,12 +387,16 @@ void gouraudTri(const Ctx& c, const float* p0, const float* p1, const float* p2,
             [&](int y, int xa, int xe, const float* L, const float* R) {
     int n = xe - xa;
     float inv = 1.f / float(n + 1);
-    float dr = (R[0] - L[0]) * inv, dg = (R[1] - L[1]) * inv, db = (R[2] - L[2]) * inv;
+    // 16.16 fixed-point colour steps — same formula as the Phase 2 compute span fill (bit-exact CPU/GPU).
+    const int32_t L0 = int32_t(L[0] * 65536.f), L1 = int32_t(L[1] * 65536.f), L2 = int32_t(L[2] * 65536.f);
+    const int32_t d0 = int32_t((R[0] - L[0]) * inv * 65536.f);
+    const int32_t d1 = int32_t((R[1] - L[1]) * inv * 65536.f);
+    const int32_t d2 = int32_t((R[2] - L[2]) * inv * 65536.f);
     int ni = ((seed + 143 * (y - ytop)) % 1024 + 1024) % 1024;
     int x0 = std::max(xa, 0), x1 = std::min(xe, c.W);
     for (int x = x0; x < x1; x++) {
       int i = x - xa;
-      int r = int(L[0] + dr * i), g = int(L[1] + dg * i), b = int(L[2] + db * i);
+      int r = int((L0 + d0 * i) / 65536), g = int((L1 + d1 * i) / 65536), b = int((L2 + d2 * i) / 65536);
       if (nm == NoiseMode::Rgb) { r += c.noiseL[(ni + 3 * i) & 1023]; g += c.noiseL[(ni + 3 * i + 1) & 1023]; b += c.noiseL[(ni + 3 * i + 2) & 1023]; }
       else if (nm == NoiseMode::Mono) { int nz = c.noiseE[(ni + i) & 1023]; r += nz; g += nz; b += nz; }
       else { r = clamp255(r); g = clamp255(g); b = clamp255(b); }
@@ -407,21 +411,24 @@ void shoreTri(const Ctx& c, const float* p0, const float* p1, const float* p2, i
             [&](int y, int xa, int xe, const float* L, const float* R) {
     int n = xe - xa;
     float inv = 1.f / float(n + 1);
-    float dr = (R[0] - L[0]) * inv, dg = (R[1] - L[1]) * inv, db = (R[2] - L[2]) * inv;
+    const int32_t L0 = int32_t(L[0] * 65536.f), L1 = int32_t(L[1] * 65536.f), L2 = int32_t(L[2] * 65536.f);
+    const int32_t d0 = int32_t((R[0] - L[0]) * inv * 65536.f);
+    const int32_t d1 = int32_t((R[1] - L[1]) * inv * 65536.f);
+    const int32_t d2 = int32_t((R[2] - L[2]) * inv * 65536.f);
     int ni = ((seed + 143 * (y - ytop)) % 1024 + 1024) % 1024;
     int x0 = std::max(xa, 0), x1 = std::min(xe, c.W);
     for (int x = x0; x < x1; x++) {
       int i = x - xa;
-      int P[3] = {int(L[0] + dr * i), int(L[1] + dg * i), int(L[2] + db * i)};
-      int d2 = 0;
-      for (int k = 0; k < 3; k++) { int d = P[k] - key[k]; d2 += d * d; }
+      int P[3] = {int((L0 + d0 * i) / 65536), int((L1 + d1 * i) / 65536), int((L2 + d2 * i) / 65536)};
+      int d2sq = 0;
+      for (int k = 0; k < 3; k++) { int d = P[k] - key[k]; d2sq += d * d; }
       int o[3];
-      if (d2 <= 256) {
+      if (d2sq <= 256) {
         int nz = c.noiseE[(ni + 3 * i) & 1023];
         for (int k = 0; k < 3; k++) o[k] = rep[k] + nz;
       } else {
         for (int k = 0; k < 3; k++) {
-          int v = d2 < 1024 ? (rep[k] * (1024 - d2) + P[k] * (d2 - 256)) / 768 : P[k];
+          int v = d2sq < 1024 ? (rep[k] * (1024 - d2sq) + P[k] * (d2sq - 256)) / 768 : P[k];
           o[k] = v + c.noiseL[(ni + 3 * i + k) & 1023];
         }
       }
@@ -727,6 +734,205 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, 
         gridEdge(ctx, P[0][0], P[0][1], P[2][0], P[2][1], true, delta);   // upper-left edge
         gridEdge(ctx, P[0][0], P[0][1], P[1][0], P[1][1], false, delta);  // upper-right edge
       }
+    }
+  }
+}
+
+void Renderer::collectTerrainTris(const Camera& cam, const RenderOptions& opt, std::vector<GpuTerrainTri>& out) {
+  if (!world_ || fbW_ <= 0 || fbH_ <= 0) return;
+  const World& w = *world_;
+  const int z = cam.zoom;
+  const float A = float(1 << z);
+  const int y0 = 0, y1 = fbH_;
+
+  float u0, v0, u1, v1, u2, v2, u3, v3;
+  screenToView(cam, 0, 0, u0, v0); screenToView(cam, fbW_, 0, u1, v1);
+  screenToView(cam, 0, fbH_, u2, v2); screenToView(cam, fbW_, fbH_, u3, v3);
+  int pad = 4 + (maxAlt_ + 1) / 2;
+  int umin = int(std::floor(std::min(std::min(u0, u1), std::min(u2, u3)))) - 2;
+  int umax = int(std::ceil(std::max(std::max(u0, u1), std::max(u2, u3)))) + 2 + pad;
+  int vmin = int(std::floor(std::min(std::min(v0, v1), std::min(v2, v3)))) - 2 - pad;
+  int vmax = int(std::ceil(std::max(std::max(v0, v1), std::max(v2, v3)))) + 2 + pad;
+  umin = std::max(umin, 0); vmin = std::max(vmin, 0);
+  umax = std::min(umax, w.W - 1); vmax = std::min(vmax, w.H - 1);
+
+  auto basicTint = [&](int row, int c[3]) {
+    fetch(pal_.basic, row, 31, c[0], c[1], c[2]);
+    farZoomAdjust(z, c[0], c[1], c[2]);
+  };
+  const Image* wpal = &pal_.water;
+  auto pushTri = [&](const float* a, const float* b, const float* c, int seed, int ytop, int mode,
+                     const int* key, const int* rep) {
+    GpuTerrainTri t{};
+    for (int i = 0; i < 5; i++) { t.p0[i] = a[i]; t.p1[i] = b[i]; t.p2[i] = c[i]; }
+    t.seed = seed; t.ytop = ytop; t.mode = mode;
+    if (key) for (int i = 0; i < 3; i++) t.key[i] = key[i];
+    if (rep) for (int i = 0; i < 3; i++) t.rep[i] = rep[i];
+    out.push_back(t);
+  };
+  auto emitQuad = [&](const float P[4][5], int mode, int seed, int ytop, bool splitLR) {
+    if (splitLR) {
+      pushTri(P[2], P[0], P[1], seed, ytop, mode, nullptr, nullptr);
+      pushTri(P[2], P[1], P[3], seed, ytop, mode, nullptr, nullptr);
+    } else {
+      pushTri(P[0], P[2], P[3], seed, ytop, mode, nullptr, nullptr);
+      pushTri(P[0], P[3], P[1], seed, ytop, mode, nullptr, nullptr);
+    }
+  };
+  auto emitShore = [&](const float P[4][5], int seed, int ytop, bool splitLR, const int key[3], const int rep[3]) {
+    if (splitLR) {
+      pushTri(P[2], P[0], P[1], seed, ytop, 3, key, rep);
+      pushTri(P[2], P[1], P[3], seed, ytop, 3, key, rep);
+    } else {
+      pushTri(P[0], P[2], P[3], seed, ytop, 3, key, rep);
+      pushTri(P[0], P[3], P[1], seed, ytop, 3, key, rep);
+    }
+  };
+
+  for (int s = umin + vmin; s <= umax + vmax; s++) {
+    for (int u = std::max(umin, s - vmax); u <= std::min(umax, s - vmin); u++) {
+      int v = s - u;
+      float qx[4], qy[4]; int wx[4], wz[4];
+      tileQuad(cam, u, v, qx, qy, wx, wz);
+      int alt[4], wat[4];
+      for (int i = 0; i < 4; i++) { alt[i] = w.altAt(wx[i], wz[i]); wat[i] = w.waterAt(wx[i], wz[i]); }
+      float gy[4];
+      float minY = 1e9f, maxY = -1e9f, minX = 1e9f, maxX = -1e9f;
+      for (int i = 0; i < 4; i++) {
+        gy[i] = qy[i] - float(alt[i]) * A;
+        float top = std::min(gy[i], qy[i] - float(std::max(alt[i], wat[i])) * A);
+        minY = std::min(minY, top); maxY = std::max(maxY, gy[i]);
+        minX = std::min(minX, qx[i]); maxX = std::max(maxX, qx[i]);
+      }
+      if (maxY < float(y0) || minY > float(y1) || maxX < 0 || minX > fbW_) continue;
+      int tx0 = std::min(std::min(wx[0], wx[1]), std::min(wx[2], wx[3])), tz0 = std::min(std::min(wz[0], wz[1]), std::min(wz[2], wz[3]));
+      if (!w.inTiles(tx0, tz0)) continue;
+      const int tIdx = w.tIdx(tx0, tz0);
+      const int seed = seedFor(tx0, tz0);
+      const int ytop = int(std::ceil(minY));
+      const bool splitLR = alt[2] == alt[1] && alt[0] != alt[3];
+
+      int col[4][3];
+      for (int i = 0; i < 4; i++) landVertexColour(wx[i], wz[i], z, opt.underground, col[i][0], col[i][1], col[i][2]);
+      int overlayRow = 0xFF;
+      if (opt.overlay && opt.overlay->row.size() == size_t(w.W) * w.H) overlayRow = opt.overlay->row[tIdx];
+      float P[4][5];
+      for (int i = 0; i < 4; i++) { P[i][0] = qx[i]; P[i][1] = gy[i]; }
+
+      if (overlayRow != 0xFF) {
+        const Image& im = opt.overlay->slot == 0 ? pal_.basic : pal_.data[std::max(0, std::min(2, opt.overlay->slot - 1))];
+        for (int i = 0; i < 4; i++) {
+          int r, g, b;
+          fetch(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])] / 2, r, g, b);
+          farZoomAdjust(z, r, g, b);
+          P[i][2] = float(r); P[i][3] = float(g); P[i][4] = float(b);
+        }
+        emitQuad(P, 2, seed, ytop, splitLR);
+      } else {
+        int tintRow = (tint_.size() == size_t(w.W) * w.H) ? tint_[tIdx] : 0;
+        if (opt.underground && !tintRow) {
+          int t = alt[0], r = alt[1], l = alt[2], b = alt[3];
+          bool gentle = ((t == r && l == b) || (t == l && r == b)) &&
+                        std::abs(t - b) <= 2 && std::abs(t - l) <= 2 && std::abs(t - r) <= 2;
+          if (!gentle) tintRow = 52;
+        }
+        bool dry[4], anyDry = false, allDry = true;
+        for (int i = 0; i < 4; i++) { dry[i] = alt[i] > wat[i]; anyDry |= dry[i]; allDry &= dry[i]; }
+        int tintCol[3] = {0, 0, 0};
+        if (tintRow) basicTint(tintRow, tintCol);
+        if (tintRow)
+          for (int i = 0; i < 4; i++) if (dry[i] || !anyDry) for (int k = 0; k < 3; k++) col[i][k] = (col[i][k] + tintCol[k]) / 2;
+        if (!tintRow && allDry && opt.zonePaint && !opt.underground) {
+          int zt = w.zone[tIdx];
+          float tr = 0, tg = 0, tb = 0, ta = 0;
+          if (roadMask_[tIdx]) { tr = 90; tg = 90; tb = 95; ta = 0.85f; }
+          else if (zt >= 1 && zt <= 3) { tr = 40; tg = 210; tb = 60; ta = 0.45f; }
+          else if (zt >= 5 && zt <= 7) { tr = 60; tg = 100; tb = 250; ta = 0.45f; }
+          else if (zt >= 9 && zt <= 11) { tr = 240; tg = 210; tb = 40; ta = 0.45f; }
+          else if (zt) { tr = 200; tg = 120; tb = 200; ta = 0.45f; }
+          if (ta > 0) for (int i = 0; i < 4; i++) {
+            col[i][0] += int((tr - col[i][0]) * ta); col[i][1] += int((tg - col[i][1]) * ta); col[i][2] += int((tb - col[i][2]) * ta);
+          }
+        }
+        if (anyDry && !allDry) {
+          int key[3] = {160, 160, 160};
+          farZoomAdjust(z, key[0], key[1], key[2]);
+          int rep[3];
+          fetch(*wpal, 0, 0, rep[0], rep[1], rep[2]);
+          farZoomAdjust(z, rep[0], rep[1], rep[2]);
+          if (tintRow) for (int k = 0; k < 3; k++) { rep[k] = (rep[k] + tintCol[k]) / 2; }
+          for (int i = 0; i < 4; i++) {
+            int* c = dry[i] ? col[i] : key;
+            P[i][2] = float(c[0]); P[i][3] = float(c[1]); P[i][4] = float(c[2]);
+            if (!dry[i]) P[i][1] = qy[i] - float(wat[i]) * A;
+          }
+          emitShore(P, seed, ytop, splitLR, key, rep);
+        } else {
+          for (int i = 0; i < 4; i++) { P[i][2] = float(col[i][0]); P[i][3] = float(col[i][1]); P[i][4] = float(col[i][2]); }
+          emitQuad(P, 0, seed, ytop, splitLR);
+          if (!anyDry) {
+            float W4[4][5];
+            for (int i = 0; i < 4; i++) {
+              int r, g, b;
+              fetch(*wpal, std::max(0, wat[i] - alt[i]), 0, r, g, b);
+              farZoomAdjust(z, r, g, b);
+              if (tintRow) { r = (r + tintCol[0]) / 2; g = (g + tintCol[1]) / 2; b = (b + tintCol[2]) / 2; }
+              W4[i][0] = qx[i]; W4[i][1] = qy[i] - float(wat[i]) * A;
+              W4[i][2] = float(r); W4[i][3] = float(g); W4[i][4] = float(b);
+            }
+            emitQuad(W4, 1, seed, ytop, splitLR);
+            for (int i = 0; i < 4; i++) P[i][1] = W4[i][1];
+          }
+        }
+      }
+    }
+  }
+}
+
+void Renderer::drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int y0, int y1) {
+  if (!opt.grid || !world_) return;
+  const World& w = *world_;
+  const int z = cam.zoom;
+  const float A = float(1 << z);
+  Ctx ctx{fb_.data(), fbW_, y1, z, noiseLand_, noiseEdge_, y0};
+  float u0, v0, u1, v1, u2, v2, u3, v3;
+  screenToView(cam, 0, 0, u0, v0); screenToView(cam, fbW_, 0, u1, v1);
+  screenToView(cam, 0, fbH_, u2, v2); screenToView(cam, fbW_, fbH_, u3, v3);
+  int pad = 4 + (maxAlt_ + 1) / 2;
+  int umin = int(std::floor(std::min(std::min(u0, u1), std::min(u2, u3)))) - 2;
+  int umax = int(std::ceil(std::max(std::max(u0, u1), std::max(u2, u3)))) + 2 + pad;
+  int vmin = int(std::floor(std::min(std::min(v0, v1), std::min(v2, v3)))) - 2 - pad;
+  int vmax = int(std::ceil(std::max(std::max(v0, v1), std::max(v2, v3)))) + 2 + pad;
+  umin = std::max(umin, 0); vmin = std::max(vmin, 0);
+  umax = std::min(umax, w.W - 1); vmax = std::min(vmax, w.H - 1);
+  const int delta = z <= 1 ? -8 : -16;
+  for (int s = umin + vmin; s <= umax + vmax; s++) {
+    for (int u = std::max(umin, s - vmax); u <= std::min(umax, s - vmin); u++) {
+      int v = s - u;
+      float qx[4], qy[4]; int wx[4], wz[4];
+      tileQuad(cam, u, v, qx, qy, wx, wz);
+      int alt[4], wat[4];
+      for (int i = 0; i < 4; i++) { alt[i] = w.altAt(wx[i], wz[i]); wat[i] = w.waterAt(wx[i], wz[i]); }
+      float gy[4], minY = 1e9f, maxY = -1e9f, minX = 1e9f, maxX = -1e9f;
+      for (int i = 0; i < 4; i++) {
+        gy[i] = qy[i] - float(alt[i]) * A;
+        float top = std::min(gy[i], qy[i] - float(std::max(alt[i], wat[i])) * A);
+        minY = std::min(minY, top); maxY = std::max(maxY, gy[i]);
+        minX = std::min(minX, qx[i]); maxX = std::max(maxX, qx[i]);
+      }
+      if (maxY < float(y0) || minY > float(y1) || maxX < 0 || minX > fbW_) continue;
+      int tx0 = std::min(std::min(wx[0], wx[1]), std::min(wx[2], wx[3])), tz0 = std::min(std::min(wz[0], wz[1]), std::min(wz[2], wz[3]));
+      if (!w.inTiles(tx0, tz0)) continue;
+      bool dry[4], anyDry = false, allDry = true;
+      for (int i = 0; i < 4; i++) { dry[i] = alt[i] > wat[i]; anyDry |= dry[i]; allDry &= dry[i]; }
+      float py[4] = {gy[0], gy[1], gy[2], gy[3]};
+      if (anyDry && !allDry) {
+        for (int i = 0; i < 4; i++) if (!dry[i]) py[i] = qy[i] - float(wat[i]) * A;
+      } else if (!anyDry) {
+        for (int i = 0; i < 4; i++) py[i] = qy[i] - float(wat[i]) * A;
+      }
+      gridEdge(ctx, qx[0], py[0], qx[2], py[2], true, delta);
+      gridEdge(ctx, qx[0], py[0], qx[1], py[1], false, delta);
     }
   }
 }
@@ -1233,17 +1439,36 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
   if (opt.background) loadBackground(zoom);
   if (opt.terrain) prepareTerrain(opt);
   buildItems(cam, opt, scene);
+
+  // Phase 2: optional GPU terrain fill (CPU builds triangle list; host compute writes pixels).
+  bool gpuTerrain = false;
+  if (opt.terrain && gpuTerrainWanted_ && gpuTerrainFn_) {
+    std::fill(fb_.begin(), fb_.end(), 0xFF302820u);
+    if (opt.background) drawBackground(zoom, 0, fbH_);
+    gpuTris_.clear();
+    collectTerrainTris(cam, opt, gpuTris_);
+    gpuTerrain = gpuTerrainFn_(fb_.data(), fbW_, fbH_, zoom, noiseLand_, noiseEdge_,
+                               gpuTris_.data(), int(gpuTris_.size()));
+  }
+
   // Rasterise in horizontal bands on the worker pool. Each band replays the same primitives in the same
   // order, clipped to its rows, so the image is identical to a single-threaded render.
   WorkerPool& pool = WorkerPool::shared();
   const int bands = bands_ > 0 ? std::min(bands_, fbH_) : fbH_ < 128 ? 1 : std::min(fbH_ / 32, pool.threads() * 2);
   pool.run(bands, [&](int b) {
     const int y0 = fbH_ * b / bands, y1 = fbH_ * (b + 1) / bands;
-    std::fill(fb_.begin() + ptrdiff_t(y0) * fbW_, fb_.begin() + ptrdiff_t(y1) * fbW_, 0xFF302820u);
-    if (opt.background) drawBackground(zoom, y0, y1);
+    if (!gpuTerrain) {
+      std::fill(fb_.begin() + ptrdiff_t(y0) * fbW_, fb_.begin() + ptrdiff_t(y1) * fbW_, 0xFF302820u);
+      if (opt.background) drawBackground(zoom, y0, y1);
+    }
     if (opt.terrain) {
-      drawTerrain(cam, opt, y0, y1);
-      if (opt.edgeFaces) drawEdgeFaces(cam, y0, y1);
+      if (gpuTerrain) {
+        if (opt.grid) drawTerrainGrid(cam, opt, y0, y1);
+        if (opt.edgeFaces) drawEdgeFaces(cam, y0, y1);
+      } else {
+        drawTerrain(cam, opt, y0, y1);
+        if (opt.edgeFaces) drawEdgeFaces(cam, y0, y1);
+      }
     }
     drawItems(opt, y0, y1);
   });

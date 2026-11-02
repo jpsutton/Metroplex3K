@@ -7,8 +7,10 @@
 #include <iostream>
 #include <string>
 
+#include "core/city_rasterizer.h"
 #include "core/game.h"
 #include "core/gamedir.h"
+#include "gl_compute.h"
 #include "sdl_presenter.h"
 
 using namespace m3k;
@@ -57,13 +59,20 @@ int main(int argc, char** argv) {
                    "Language: NAME (English, French, German, ...), $M3K_LANGUAGE, else the OS locale (an installed language).\n"
                    "Game data: DIR (game root, its Apps folder, or a parent), $M3K_GAME_DIR, the saved choice,\n"
                    "or auto-detected GOG install locations. You can also drop the folder or the GOG installer\n"
-                   "onto the window, or type the path on the first screen.\n";
+                   "onto the window, or type the path on the first screen.\n"
+                   "Render: $M3K_RENDER=cpu|gpu (default cpu). gpu uses OpenGL compute for terrain when available.\n";
       return 0;
     }
   }
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { std::cerr << "SDL_Init: " << SDL_GetError() << "\n"; return 1; }
   SDL_Window* win = SDL_CreateWindow("Metroplex3K", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 800, SDL_WINDOW_RESIZABLE);
   if (!win) { std::cerr << "window: " << SDL_GetError() << "\n"; return 1; }
+
+  // Phase 2 compute terrain: init before SDL_Renderer so the hidden GL context is ready.
+  GlComputeTerrain glTerrain;
+  const bool wantGpu = renderBackendFromEnv() == RenderBackendKind::Gpu;
+  if (wantGpu && !glTerrain.init())
+    std::cerr << "metroplex3k: M3K_RENDER=gpu requested but OpenGL 4.3 compute is unavailable; using CPU terrain.\n";
 
   std::srand(uint32_t(SDL_GetTicks()));
   Game game;
@@ -72,6 +81,15 @@ int main(int argc, char** argv) {
   std::string err;
   if (!game.init(root, err) && !err.empty()) std::cerr << err << "\n";
   if (!cityArg.empty()) game.requestFile(cityArg);
+
+  if (wantGpu && glTerrain.available()) {
+    game.renderer().setGpuTerrainWanted(true);
+    game.renderer().setGpuTerrainFn(
+        [&glTerrain](uint32_t* fb, int w, int h, int zoom, const int8_t* nL, const int8_t* nE,
+                     const GpuTerrainTri* tris, int n) {
+          return glTerrain.fill(fb, w, h, zoom, nL, nE, tris, n);
+        });
+  }
 
   // Create the renderer after prefs load so the initial vsync flag matches Engine Options / OwnPrefs.
   bool wantVsync = game.engineOptions().vsync;

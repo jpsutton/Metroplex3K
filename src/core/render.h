@@ -140,23 +140,56 @@ struct PickResult {
   uint32_t category = 0, spriteId = 0;
 };
 
-class Renderer {
+// Host/game surface for the city view. Renderer is the software implementation; Phase 2 may wrap it.
+class ICityRasterizer {
+ public:
+  virtual ~ICityRasterizer() = default;
+  virtual void setWorld(const World* w, GameData* data) = 0;
+  virtual void resize(int w, int h) = 0;
+  virtual void render(const Camera& cam, const RenderOptions& opt, const RenderScene* scene = nullptr) = 0;
+  virtual const std::vector<uint32_t>& pixels() const = 0;
+  virtual void swapPixels(std::vector<uint32_t>& out) = 0;
+  virtual void blitTo(uint32_t* dst, int pitchPx) const = 0;
+  virtual int width() const = 0;
+  virtual int height() const = 0;
+  virtual void screenToView(const Camera& cam, int sx, int sy, float& u, float& v) const = 0;
+  virtual void projectSub(const Camera& cam, int32_t x, int32_t z, int32_t height, int& sx, int& sy) = 0;
+  virtual bool pick(const Camera& cam, int sx, int sy, PickResult& out) = 0;
+  virtual bool pickTile(const Camera& cam, int sx, int sy, int& tx, int& tz) = 0;
+  virtual bool pickGround(const Camera& cam, int sx, int sy, int& tx, int& tz) = 0;
+  virtual void centreOnWorld(Camera& cam, float x, float z) const = 0;
+  virtual void invalidateShade() = 0;
+  virtual void setBandCount(int n) = 0;
+  using TextHook = std::function<void(int sx, int sy, const std::string& text, bool affordable)>;
+  virtual void setCostTextHook(TextHook h) = 0;
+  virtual void setCostFont(const Font* f) = 0;
+};
+
+// Triangle record for the Phase 2 compute terrain fill (CPU setup → GPU raster). Layout must match the GLSL SSBO.
+struct GpuTerrainTri {
+  float p0[5], p1[5], p2[5];   // x,y,r,g,b per vertex
+  int32_t seed, ytop, mode;    // mode: 0 gouraud-rgb, 1 gouraud-mono, 2 gouraud-none, 3 shore
+  int32_t key[3];              // shore colour-key
+  int32_t rep[3];              // shore water replacement
+};
+
+class Renderer : public ICityRasterizer {
  public:
   // `data` may be null (no game files): procedural fallback palettes are used and no sprites drawn.
-  void setWorld(const World* w, GameData* data);
-  void resize(int w, int h);
-  void render(const Camera& cam, const RenderOptions& opt, const RenderScene* scene = nullptr);
+  void setWorld(const World* w, GameData* data) override;
+  void resize(int w, int h) override;
+  void render(const Camera& cam, const RenderOptions& opt, const RenderScene* scene = nullptr) override;
 
-  const std::vector<uint32_t>& pixels() const { return fb_; }
+  const std::vector<uint32_t>& pixels() const override { return fb_; }
   // Hand the rendered frame to `out` without copying; the renderer takes `out`'s old storage (render()
   // clears it). Afterwards pixels() holds stale data until the next render().
-  void swapPixels(std::vector<uint32_t>& out) {
+  void swapPixels(std::vector<uint32_t>& out) override {
     if (out.size() != fb_.size()) out.assign(fb_.size(), 0);
     fb_.swap(out);
   }
   // Copy the rendered frame into a (possibly pitched) destination. Used when the host locks a streaming
   // texture and wants the city view written straight into GPU staging memory.
-  void blitTo(uint32_t* dst, int pitchPx) const {
+  void blitTo(uint32_t* dst, int pitchPx) const override {
     if (!dst || fbW_ <= 0 || fbH_ <= 0) return;
     if (pitchPx <= 0) pitchPx = fbW_;
     const int rowBytes = fbW_ * int(sizeof(uint32_t));
@@ -167,8 +200,16 @@ class Renderer {
         std::memcpy(dst + size_t(y) * pitchPx, fb_.data() + size_t(y) * fbW_, size_t(rowBytes));
     }
   }
-  int width() const { return fbW_; }
-  int height() const { return fbH_; }
+  int width() const override { return fbW_; }
+  int height() const override { return fbH_; }
+
+  // Phase 2: host-registered GPU terrain fill. Receives collected GpuTerrainTri[]; writes into fb.
+  // Return false to fall back to the CPU band path for this frame.
+  using GpuTerrainFn = std::function<bool(uint32_t* fb, int w, int h, int zoom,
+                                          const int8_t* noiseLand, const int8_t* noiseEdge,
+                                          const GpuTerrainTri* tris, int triCount)>;
+  void setGpuTerrainFn(GpuTerrainFn fn) { gpuTerrainFn_ = std::move(fn); }
+  void setGpuTerrainWanted(bool on) { gpuTerrainWanted_ = on; }
 
   // Coordinate helpers (view space <-> world space <-> screen).
   static void viewToWorldVertex(int rot, int W, int H, int u, int v, int& x, int& z);
@@ -176,21 +217,21 @@ class Renderer {
   // Sub-tile (256/tile) world -> view, spec 25 section 2.2.
   static void worldToViewSub(int rot, int W, int H, int32_t x, int32_t z, int32_t& a, int32_t& b);
   static void viewToWorldSub(int rot, int W, int H, int32_t a, int32_t b, int32_t& x, int32_t& z);
-  void screenToView(const Camera& cam, int sx, int sy, float& u, float& v) const;
+  void screenToView(const Camera& cam, int sx, int sy, float& u, float& v) const override;
   // Projected screen position of a world sub-tile point (spec 2.3, integer truncation).
-  void projectSub(const Camera& cam, int32_t x, int32_t z, int32_t height, int& sx, int& sy);
+  void projectSub(const Camera& cam, int32_t x, int32_t z, int32_t height, int& sx, int& sy) override;
 
   // Spec section 3 picking: sprite objects by per-pixel opacity, otherwise terrain polygons;
   // nearest depth key wins. Returns false if nothing/off-map.
-  bool pick(const Camera& cam, int sx, int sy, PickResult& out);
-  bool pickTile(const Camera& cam, int sx, int sy, int& tx, int& tz);
+  bool pick(const Camera& cam, int sx, int sy, PickResult& out) override;
+  bool pickTile(const Camera& cam, int sx, int sy, int& tx, int& tz) override;
   // Terrain only (ignores objects): tile whose raised polygon contains the point.
-  bool pickGround(const Camera& cam, int sx, int sy, int& tx, int& tz);
-  void centreOnWorld(Camera& cam, float x, float z) const;
+  bool pickGround(const Camera& cam, int sx, int sy, int& tx, int& tz) override;
+  void centreOnWorld(Camera& cam, float x, float z) const override;
 
-  void invalidateShade() { shadeValid_ = false; }
+  void invalidateShade() override { shadeValid_ = false; }
   // Number of horizontal bands render() rasterises in parallel; 0 = automatic (by height and pool size).
-  void setBandCount(int n) { bands_ = n; }
+  void setBandCount(int n) override { bands_ = n; }
 
   // ---- configuration / injection ----
   void setPalettes(const TerrainPalettes& p) { pal_ = p; palOverride_ = true; }
@@ -206,9 +247,8 @@ class Renderer {
   void setTileTint(int x, int z, uint8_t basicRow);
   void clearTileTints() { tint_.clear(); }
   // Cost text: called each render with the screen anchor, the text and affordability.
-  using TextHook = std::function<void(int sx, int sy, const std::string& text, bool affordable)>;
-  void setCostTextHook(TextHook h) { textHook_ = std::move(h); }
-  void setCostFont(const Font* f) { costFont_ = f; }  // used when no hook is set
+  void setCostTextHook(TextHook h) override { textHook_ = std::move(h); }
+  void setCostFont(const Font* f) override { costFont_ = f; }  // used when no hook is set
   const CostLabel& lastCostLabel() const { return label_; }
   int lastCostScreenX() const { return labelX_; }
   int lastCostScreenY() const { return labelY_; }
@@ -246,6 +286,8 @@ class Renderer {
   void drawBackground(int zoom, int y0, int y1);
   void prepareTerrain(const RenderOptions& opt);
   void drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, int y1);
+  void collectTerrainTris(const Camera& cam, const RenderOptions& opt, std::vector<GpuTerrainTri>& out);
+  void drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int y0, int y1);
   void drawEdgeFaces(const Camera& cam, int y0, int y1);
   void drawPreviews(const Camera& cam, const RenderScene& scene);
   void drawFallbackBoxes(const Camera& cam);   // data-less demo: coloured boxes instead of sprites
@@ -294,6 +336,10 @@ class Renderer {
   bool itemsValid_ = false;
   Camera itemsCam_;
   RenderOptions itemsOpt_;
+
+  GpuTerrainFn gpuTerrainFn_;
+  bool gpuTerrainWanted_ = false;
+  std::vector<GpuTerrainTri> gpuTris_;
 };
 
 }  // namespace m3k
