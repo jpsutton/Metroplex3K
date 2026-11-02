@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <set>
 #include <sstream>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace m3k {
 
@@ -1614,6 +1616,34 @@ void StreetSim::removeBuilding(int id) {
     I.pedSources.erase(std::remove_if(I.pedSources.begin(), I.pedSources.end(), [&](const PedSource& s) { return s.id == b.pedSrc && b.pedSrc; }), I.pedSources.end());
     return;
   }
+}
+
+void StreetSim::removeBuildings(const std::vector<int>& ids) {
+  Impl& I = *p_;
+  if (ids.empty()) return;
+  const std::unordered_set<int> del(ids.begin(), ids.end());
+  std::unordered_set<int> pedDel;
+  std::unordered_map<MixCell*, std::vector<uint32_t>> tablesOf;   // affected cell -> its tables minus the removed ones
+  std::vector<BuildingSrc> kept;
+  kept.reserve(I.buildings.size());
+  for (const BuildingSrc& b : I.buildings) {
+    if (!del.count(b.id)) { kept.push_back(b); continue; }
+    if (b.pedSrc) pedDel.insert(b.pedSrc);
+    if (b.veh.instance) {
+      MixCell& c = I.cellAt(b.x, b.y);
+      auto& tabs = tablesOf.try_emplace(&c, c.tables).first->second;
+      auto it = std::find(tabs.begin(), tabs.end(), b.veh.instance);
+      if (it != tabs.end()) tabs.erase(it);
+    }
+  }
+  I.buildings.swap(kept);
+  // One reset + re-merge per cell: the final state of a sequence of single removals.
+  for (auto& [c, tabs] : tablesOf) {
+    I.resetCell(*c);
+    for (uint32_t t : tabs) { I.mergeTable(*c, t); c->tables.push_back(t); }
+  }
+  if (!pedDel.empty())
+    I.pedSources.erase(std::remove_if(I.pedSources.begin(), I.pedSources.end(), [&](const PedSource& s) { return pedDel.count(s.id) != 0; }), I.pedSources.end());
 }
 
 static int addSpawner(StreetSim::Impl& I, int x, int y, int kind) {

@@ -394,6 +394,36 @@ static void testScriptsAndMix() {
   sim.update(5000000); CHECK(sim.eventMode() == 2);
 }
 
+// removeBuildings must leave the same mix tables and sources as removing each building on its own.
+static void testBulkRemoveBuildings() {
+  AutomataData D; buildData(D);
+  auto populate = [&](StreetSim& sim, std::vector<int>& ids) {
+    // Several sources share cell (3,3); two use the same table; (5,5) keeps one source.
+    ids.push_back(sim.addBuilding(3, 3, ResKey(), {kVclProdType, kVclProdGroup, 2}));
+    ids.push_back(sim.addBuilding(3, 3, ResKey(), {kVclProdType, kVclProdGroup, 2}));
+    ids.push_back(sim.addBuilding(3, 3, ResKey(), {kVclProdType, kVclProdGroup, 1}));
+    ids.push_back(sim.addBuilding(5, 5, ResKey(), {kVclProdType, kVclProdGroup, 2}));
+    ids.push_back(sim.addBuilding(6, 1, ResKey(), {kVclProdType, kVclProdGroup, 2}));
+  };
+  AutoView v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
+  TestHost H1, H2; H1.density = H2.density = 0;
+  StreetSim a(D, H1, StreetSim::Config()), b(D, H2, StreetSim::Config());
+  a.setView(v); b.setView(v);
+  std::vector<int> ia, ib;
+  populate(a, ia); populate(b, ib);
+  const std::vector<int> removeA = {ia[0], ia[2], ia[4]}, removeB = {ib[0], ib[2], ib[4]};
+  for (int id : removeA) a.removeBuilding(id);
+  b.removeBuildings(removeB);
+  for (int x = 0; x < 8; x++)
+    for (int y = 0; y < 8; y++) CHECK(a.mixTable(x, y) == b.mixTable(x, y));
+  // Remaining sources are still removable (ids and per-cell tables survived).
+  a.removeBuilding(ia[1]); a.removeBuilding(ia[3]);
+  b.removeBuildings({ib[1], ib[3]});
+  for (int x = 0; x < 8; x++)
+    for (int y = 0; y < 8; y++) CHECK(a.mixTable(x, y) == b.mixTable(x, y));
+  CHECK(b.mixTable(3, 3).size() == 1);
+}
+
 static void testExitNodeLeavesPiece() {
   AutomataData D; buildData(D);
   D.addRecord({kTrBlkType, kTrBlkGroup, 0x1000}, trblkVehExitNode(0x1000, 64000));
@@ -509,6 +539,7 @@ int main() {
   testParsers();
   testRoadTraffic();
   testScriptsAndMix();
+  testBulkRemoveBuildings();
   testPeds();
   testExitNodeLeavesPiece();
   testOtherAutomata();

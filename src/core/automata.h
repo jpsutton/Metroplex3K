@@ -247,6 +247,8 @@ class StreetSim {
   // Sources.
   int addBuilding(int tileX, int tileY, const ResKey& pedProd, const ResKey& vehProd);  // attr 0x6B / 0x6C
   void removeBuilding(int sourceId);
+  // Same end state as calling removeBuilding for each id, in O(buildings) instead of O(n^2).
+  void removeBuildings(const std::vector<int>& sourceIds);
   int addSeaport(int tileX, int tileY);
   int addAirport(int tileX, int tileY);
   int addMarina(int tileX, int tileY);
