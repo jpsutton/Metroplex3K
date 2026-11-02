@@ -104,11 +104,11 @@ struct IniReader {
   bool has(const std::string& sec, const std::string& key) const;
 };
 
-// ---- 132-byte history chart (spec 10 section 6.19) ----
+// ---- 132-byte history chart (spec 10 §6.12 / 17 §8.6 / Q-BL) ----
 struct Chart {
   uint32_t monthly[12] = {}, yearly[10] = {}, decade[10] = {}, max = 0;
   static Chart fresh(uint32_t initial, uint32_t scale);
-  // Index 0 is newest; older samples shift towards the end.
+  // Spec 10 §6.12 [STATIC Q-BL]: index 0 = newest; new sample inserts at 0, oldest drops off the end.
   void pushMonthly(uint32_t v);
   void pushYearly(uint32_t v);
   void pushDecade(uint32_t v);

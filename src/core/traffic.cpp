@@ -930,7 +930,7 @@ void TrafficSim::computeStats(int road, int hwy, int rail, int sub) {
   rec_.avgTransit = dt ? uint32_t(sumTransit / dt) : 0;
   if (rec_.tripsFailed > 0 && rec_.tripsAttempted > 0) rec_.failureRatio = float(rec_.tripsFailed) / float(rec_.tripsAttempted);
   rec_.tripsAttempted = rec_.tripsFailed = 0;
-  // history: index 0 = most recent (INFERRED)
+  // history monthly series: index 0 = newest [STATIC Q-BL / spec 10 §6.12]
   for (int i = 11; i > 0; i--) rec_.history[i] = rec_.history[i - 1];
   rec_.history[0] = rec_.avgRoad;
 }

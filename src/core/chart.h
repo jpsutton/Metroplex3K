@@ -1,4 +1,4 @@
-// 132-byte graph-history block (spec/10-save-format.md section 6.19).
+// 132-byte graph-history block (spec/10-save-format.md §6.12 / Q-BL).
 #pragma once
 #include <algorithm>
 #include <cstdint>
@@ -28,6 +28,7 @@ struct Chart {
     c.floorMax = floorMax;
     return c;
   }
+  // Spec 10 §6.12 [STATIC Q-BL]: index 0 = newest (FIFO insert at 0).
   void pushMonthly(uint32_t v) { push(monthly, 12, v); }
   void pushYearly(uint32_t v) { push(yearly, 10, v); }
   void pushDecade(uint32_t v) { push(decade, 10, v); }
@@ -59,7 +60,7 @@ struct Chart {
  private:
   void push(uint32_t* arr, int n, uint32_t v) {
     if (!autoScale && v > max) v = max;
-    for (int i = n - 1; i > 0; i--) arr[i] = arr[i - 1];  // index 0 = newest
+    for (int i = n - 1; i > 0; i--) arr[i] = arr[i - 1];  // Q-BL: index 0 = newest
     arr[0] = v;
     if (autoScale && v > max) {
       uint32_t m = uint32_t(float(largest()) * scaleFactor);

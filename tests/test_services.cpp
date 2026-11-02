@@ -708,6 +708,15 @@ static void testAuraRecord() {
   CHECK(c.yearly[0] == 90 && c.decade[0] == 127);
   chartMonthEnd(c, 80, 1, 2010);
   CHECK(c.yearly[0] == 80 && c.decade[0] == 80);
+
+  // Spec 10 §6.12 / Q-BL [STATIC]: index 0 = newest; FIFO drops oldest off the far end.
+  Chart fifo = Chart::fresh(0, 1000);
+  for (uint32_t i = 1; i <= 13; i++) fifo.pushMonthly(i);
+  CHECK(fifo.monthly[0] == 13 && fifo.monthly[11] == 2);   // 1 dropped; 2 is oldest kept
+  for (uint32_t i = 1; i <= 11; i++) fifo.pushYearly(100 + i);
+  CHECK(fifo.yearly[0] == 111 && fifo.yearly[9] == 102);
+  for (uint32_t i = 1; i <= 11; i++) fifo.pushDecade(200 + i);
+  CHECK(fifo.decade[0] == 211 && fifo.decade[9] == 202);
 }
 
 // ---------------- Health / education ----------------
