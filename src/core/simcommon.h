@@ -67,10 +67,18 @@ class AgentHierarchy {
   bool isAncestorOrSelf(uint32_t type, uint32_t anc) const { return distance(type, anc) >= 0; }
   bool parentOf(uint32_t type, uint32_t& parent) const { auto it = parent_.find(type); if (it == parent_.end()) return false; parent = it->second; return true; }
   bool empty() const { return parent_.empty(); }
-  // `type` followed by its ancestors, nearest first (stops at a self-parent or after 64 steps).
+  // `type` followed by its ancestors, nearest first (stops at a self-parent, a cycle, or after 64 steps).
   std::vector<uint32_t> chain(uint32_t type) const {
     std::vector<uint32_t> c{type};
-    for (int d = 0; d < 64; d++) { auto it = parent_.find(c.back()); if (it == parent_.end() || it->second == c.back()) break; c.push_back(it->second); }
+    for (int d = 0; d < 64; d++) {
+      auto it = parent_.find(c.back());
+      if (it == parent_.end() || it->second == c.back()) break;
+      // Cycle guard: CitySim.ini has a 0↔52 loop in the shipped hierarchy.
+      bool seen = false;
+      for (uint32_t x : c) if (x == it->second) { seen = true; break; }
+      if (seen) break;
+      c.push_back(it->second);
+    }
     return c;
   }
   // Every type listed in [AgentTypeHierarchy], ascending ID.

@@ -330,6 +330,24 @@ int main(int argc, char** argv) {
         break;
       }
     }
+    if (std::getenv("M3K_TRIPCAT")) {
+      int hist[5] = {};
+      std::map<uint32_t, int> uncat;
+      for (const auto& o : s.game.world().occupants) {
+        int cat = categoryOfTypeChain(c.agentHierarchy().chain(o.agentType));
+        if (cat < 0) { hist[0]++; uncat[o.agentType]++; }
+        else if (cat <= 3) hist[cat + 1]++;
+      }
+      std::printf("   trip cats -1/R/C/I/O: %d %d %d %d %d\n", hist[0], hist[1], hist[2], hist[3], hist[4]);
+      int shown = 0;
+      for (auto& kv : uncat) {
+        if (shown++ >= 25) break;
+        auto ch = c.agentHierarchy().chain(kv.first);
+        std::printf("     uncat agent %u n=%d chain", kv.first, kv.second);
+        for (uint32_t id : ch) std::printf(" %u", id);
+        std::printf("\n");
+      }
+    }
     if (std::getenv("M3K_ONRAMP")) {
       int n=0;
       for (const auto& o : s.game.world().occupants) if (o.agentType == 17202) {

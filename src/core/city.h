@@ -183,6 +183,7 @@ class City {
   const CityConfig& config() const { return cfg_; }
   GameData* gameData() const { return game_; }
   World* world() { return world_; }
+  const World* world() const { return world_; }
   void markOccupantsDirty() { occDirty_ = true; }
   int jailCapacity() const;
   void recomputeLandValue();   // recompute every land-value block now (tools / tests)

@@ -177,26 +177,26 @@ int main(int argc, char** argv) {
     }
     std::printf("   trips attempted/failed ours %u/%u theirs %u/%u; failure ratio ours %.3f theirs %.3f\n", A.tripsAttempted, A.tripsFailed,
                 B.tripsAttempted, B.tripsFailed, A.failureRatio, B.failureRatio);
-    {  // trip generator census of their city: spec 18 4.1 categories by parent chain vs our type/1000 rule
-      const auto& hier = t.agentHierarchy();
-      std::map<int, int> spec, mine, specFunctional;
-      for (const auto& o : theirs.game.world().occupants) {
-        std::vector<uint32_t> chain{o.agentType};
-        uint32_t p = o.agentType;
-        for (int g = 0; g < 32 && hier.parentOf(p, p); g++) chain.push_back(p);
-        int cs = categoryOfTypeChain(chain);
-        uint32_t k = o.agentType / 1000;
-        int cm = k == 3 ? 0 : k == 5 ? 1 : k == 8 ? 2 : -1;
-        spec[cs]++; mine[cm]++;
-        if ((o.state & ~0x200u) == 1) specFunctional[cs]++;
-      }
-      std::printf("   trip generators (their city) by category -1/R/C/I/Other: spec");
-      for (int k = -1; k < 4; k++) std::printf(" %d", spec[k]);
+    {  // trip generator census: spec 18 4.1 categories by parent chain on both cities
+      auto census = [](const City& city, const us::AgentHierarchy& hier, std::map<int, int>& all, std::map<int, int>& functional) {
+        for (const auto& o : city.world()->occupants) {
+          int cs = categoryOfTypeChain(hier.chain(o.agentType));
+          all[cs]++;
+          if ((o.state & ~0x200u) == 1) functional[cs]++;
+        }
+      };
+      std::map<int, int> theirsAll, theirsFn, oursAll, oursFn;
+      census(t, t.agentHierarchy(), theirsAll, theirsFn);
+      census(c, c.agentHierarchy(), oursAll, oursFn);
+      std::printf("   trip generators by category -1/R/C/I/Other: theirs");
+      for (int k = -1; k < 4; k++) std::printf(" %d", theirsAll[k]);
       std::printf(" (functional");
-      for (int k = -1; k < 4; k++) std::printf(" %d", specFunctional[k]);
+      for (int k = -1; k < 4; k++) std::printf(" %d", theirsFn[k]);
       std::printf(") | ours");
-      for (int k = -1; k < 4; k++) std::printf(" %d", mine[k]);
-      std::printf("; transit funding ours %d theirs %d, mass chance %d", c.traffic->transitFunding(), t.traffic->transitFunding(), t.traffic->massChance());
+      for (int k = -1; k < 4; k++) std::printf(" %d", oursAll[k]);
+      std::printf(" (functional");
+      for (int k = -1; k < 4; k++) std::printf(" %d", oursFn[k]);
+      std::printf("); transit funding ours %d theirs %d, mass chance %d", c.traffic->transitFunding(), t.traffic->transitFunding(), t.traffic->massChance());
       std::printf("; TrafficTripThresholdPercent %d; radii R/C/I/D %d/%d/%d/%d\n", t.traffic->params().tripThresholdPercent, t.traffic->radius(0), t.traffic->radius(1), t.traffic->radius(2), t.traffic->radius(3));
     }
     if (std::getenv("M3K_NETCENSUS")) {  // occupant types with a transport ancestor, and network piece ids, in their city
