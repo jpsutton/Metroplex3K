@@ -189,7 +189,10 @@ struct IndicatorData {
 struct BudgetView {
   MonthEndInput in;           // current month/year, zone totals, avg land value, ordinance/deal/fares of this month
   IndicatorData ind;
-  int approval = -1;          // tax approval rating 0..100, -1 = unknown (not shown)
+  // Tax-page "approval" (string 1D2): city-aura history chart (spec 09 §6.1 / 17 §8.5), not a tax %.
+  // Samples are cityAura+127 (0…254); fresh chart is all 127s. showAuraChart false → widget hidden.
+  Chart auraChart;
+  bool showAuraChart = false;
 };
 
 class BudgetWindow {

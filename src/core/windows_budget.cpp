@@ -448,9 +448,38 @@ WindowResult BudgetWindow::draw(Ui& ui, const WinEnv& E, Budget& b, const Budget
     labelValue(ui, x0, ry + 2 * lh, 380, E.win(0x283, "Funds"), E.money(b.funds));
     for (int k = 0; k < 3; k++)
       labelValue(ui, x0, ry + (4 + k) * lh, 380, E.win(kTaxLabel[k], kTaxFb[k]), std::to_string(b.tax[k].rate) + "%");
-    if (v.approval >= 0) {
+    // Approval (1D2) = city-aura history chart (spec 09 §6.1): monthly samples cityAura+127, not a tax %.
+    if (v.showAuraChart) {
       ui.text(x0, ry + 8 * lh, E.win(0x1D2, "Approval rating"));
-      bar(ui, {x0 + 170, ry + 8 * lh, 210, lh - 3}, float(v.approval) / 100.f, rgb(0, 160, 60));
+      Rect plot{x0 + 170, ry + 8 * lh, 210, lh * 3};
+      ui.fill(plot, rgb(255, 255, 255));
+      ui.frame(plot, false);
+      // Newest sample is index 0; draw oldest→newest left→right (same as GraphsWindow).
+      uint32_t lo = v.auraChart.monthly[0], hi = lo;
+      for (int i = 1; i < 12; i++) {
+        lo = std::min(lo, v.auraChart.monthly[i]);
+        hi = std::max(hi, v.auraChart.monthly[i]);
+      }
+      if (hi == lo) { lo = 0; hi = std::max(v.auraChart.max, 254u); }
+      auto plotLine = [&](int ax, int ay, int bx, int by, uint32_t col) {
+        int dx = std::abs(bx - ax), dy = -std::abs(by - ay), sx = ax < bx ? 1 : -1, sy = ay < by ? 1 : -1, err = dx + dy;
+        for (int guard = 0; guard < 4000; guard++) {
+          ui.fill({ax, ay, 2, 2}, col);
+          if (ax == bx && ay == by) break;
+          int e2 = 2 * err;
+          if (e2 >= dy) { err += dy; ax += sx; }
+          if (e2 <= dx) { err += dx; ay += sy; }
+        }
+      };
+      int px = 0, py = 0;
+      for (int k = 0; k < 12; k++) {
+        uint32_t s = v.auraChart.monthly[11 - k];
+        int x = plot.x + 4 + k * (plot.w - 8) / 11;
+        float t = float(s - lo) / float(hi - lo);
+        int y = plot.y + plot.h - 4 - int(t * float(plot.h - 8));
+        if (k) plotLine(px, py, x, y, rgb(0, 160, 60));
+        px = x; py = y;
+      }
     }
     return R;
   }

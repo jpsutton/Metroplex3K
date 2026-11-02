@@ -156,7 +156,16 @@ void Game::buildBudgetView(BudgetView& v) {
   }
   ind.nationalPop = uint32_t(std::min<uint64_t>(np, 0xFFFFFFFFu));
   ind.pollution = c.pollution.chart.monthly[0]; ind.pollutionMax = c.pollution.chart.max;
-  v.approval = -1;
+  // Tax-page 1D2 = aura history chart (spec 09 §6.1 Q-AP / 47dc8f9): copy from aura record; do not
+  // invent a tax→% mapping. Slider drags do not recompute — month-end aura push advances samples.
+  {
+    const us::Chart& u = c.aura.chart;
+    std::copy(u.monthly, u.monthly + 12, v.auraChart.monthly);
+    std::copy(u.yearly, u.yearly + 10, v.auraChart.yearly);
+    std::copy(u.decade, u.decade + 10, v.auraChart.decade);
+    v.auraChart.max = u.max;
+    v.showAuraChart = true;
+  }
 }
 
 void Game::buildPickerEntries(PickerCategory c) {

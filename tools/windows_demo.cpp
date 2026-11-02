@@ -36,7 +36,9 @@ int main(int argc, char** argv) {
   b.issueBond(10000, 4, 2000); b.issueBond(15000, 4, 2000);
   BudgetView bv; bv.in.month = 5; bv.in.year = 2000; bv.in.population = 80000; bv.in.avgLV = 120;
   bv.in.zoneTotals[0] = 4000; bv.in.zoneTotals[1] = 1500; bv.in.zoneTotals[2] = 800; bv.in.ordCost = 800; bv.in.ordIncome = 300;
-  bv.ind = {42, 123456789, 55, 30, 7, 20}; bv.approval = 62;
+  bv.ind = {42, 123456789, 55, 30, 7, 20};
+  for (int i = 0; i < 12; i++) bv.auraChart.monthly[i] = uint32_t(100 + i * 5);
+  bv.auraChart.max = 260; bv.showAuraChart = true;
   { BudgetWindow w; shot(dir, "budget_main", [&](Ui& ui, WinEnv& E) { w.draw(ui, E, b, bv); }); }
   { BudgetWindow w; w.openDept(dept::Police); shot(dir, "budget_dept", [&](Ui& ui, WinEnv& E) { w.draw(ui, E, b, bv); }); }
   { BudgetWindow w; w.openTax(1); shot(dir, "budget_tax", [&](Ui& ui, WinEnv& E) { w.draw(ui, E, b, bv); }); }

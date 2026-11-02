@@ -195,14 +195,17 @@ void testBudget() {
   h.click("indicators");
   CHECK(w.page == BudgetWindow::Page::Indicators);
   v.ind.citySize = 50; v.ind.nationalPop = 123456; v.ind.unemployment = 7;
-  v.approval = 66;
+  // Tax-page 1D2 = aura history chart (cityAura+127 samples), not a tax %.
+  for (int i = 0; i < 12; i++) v.auraChart.monthly[i] = uint32_t(100 + i);
+  v.auraChart.max = 260;
+  v.showAuraChart = true;
   h.frame();
   CHECK(h.inked() > 1000);
   h.click("back"); CHECK(w.page == BudgetWindow::Page::Main);
   // OK / close.
   r = h.click("ok"); CHECK(r.close && r.has(Act::Close));
   r = h.key(K_ESC); CHECK(r.close);
-  // Tax approval bar on tax page.
+  // Tax approval chart on tax page.
   w.openTax(0); h.frame(); CHECK(h.inked() > 1000);
 }
 
