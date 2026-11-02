@@ -978,12 +978,17 @@ void testEngineOptions() {
   h.frame(); CHECK(h.inked() > 1000);
   WindowResult r = h.click("showFps");
   CHECK(s.showFps && r.has(Act::PrefsChanged) && r.find(Act::PrefsChanged)->text == "showFps");
+  CHECK(s.vsync);   // default on
+  r = h.click("vsync");
+  CHECK(!s.vsync && r.has(Act::PrefsChanged) && r.find(Act::PrefsChanged)->text == "vsync");
   r = h.click("ok"); CHECK(r.close && r.has(Act::Done));
   CHECK(h.key(K_ESC).close);
   // Round trip through the preferences file.
   Preferences p; s.toPreferences(p);
   CHECK(p.get("engine.showFps") == "1" && EngineOptions::fromPreferences(p).showFps);
+  CHECK(p.get("vsync") == "0" && !EngineOptions::fromPreferences(p).vsync);
   CHECK(!EngineOptions::fromPreferences(Preferences()).showFps);
+  CHECK(EngineOptions::fromPreferences(Preferences()).vsync);
 }
 
 int main() {

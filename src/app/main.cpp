@@ -44,6 +44,26 @@ static void audioCallback(void* user, Uint8* stream, int len) {
   a->mixAudio(reinterpret_cast<int16_t*>(stream), size_t(len) / 4);
 }
 
+// Upload the game framebuffer into a streaming texture (Phase 1 present path). Prefer LockTexture so the
+// upload is a single pitch-aware memcpy into GPU-visible staging memory; fall back to UpdateTexture.
+static void uploadFrame(SDL_Texture* tex, const std::vector<uint32_t>& px, int w, int h) {
+  void* texPixels = nullptr;
+  int pitch = 0;
+  if (tex && SDL_LockTexture(tex, nullptr, &texPixels, &pitch) == 0) {
+    const auto* src = reinterpret_cast<const uint8_t*>(px.data());
+    auto* dst = static_cast<uint8_t*>(texPixels);
+    const int rowBytes = w * 4;
+    if (pitch == rowBytes) {
+      std::memcpy(dst, src, size_t(rowBytes) * size_t(h));
+    } else {
+      for (int y = 0; y < h; y++) std::memcpy(dst + size_t(y) * pitch, src + size_t(y) * rowBytes, size_t(rowBytes));
+    }
+    SDL_UnlockTexture(tex);
+  } else if (tex) {
+    SDL_UpdateTexture(tex, nullptr, px.data(), w * 4);
+  }
+}
+
 int main(int argc, char** argv) {
   std::string gameArg, cityArg, langArg;
   for (int i = 1; i < argc; i++) {
@@ -63,11 +83,6 @@ int main(int argc, char** argv) {
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { std::cerr << "SDL_Init: " << SDL_GetError() << "\n"; return 1; }
   SDL_Window* win = SDL_CreateWindow("Metroplex3K", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 800, SDL_WINDOW_RESIZABLE);
   if (!win) { std::cerr << "window: " << SDL_GetError() << "\n"; return 1; }
-  SDL_Renderer* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-  if (!ren) ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
-  if (!ren) { std::cerr << "renderer: " << SDL_GetError() << "\n"; return 1; }
-  SDL_RendererInfo rinfo;
-  const bool vsync = SDL_GetRendererInfo(ren, &rinfo) == 0 && (rinfo.flags & SDL_RENDERER_PRESENTVSYNC);
 
   std::srand(uint32_t(SDL_GetTicks()));
   Game game;
@@ -76,6 +91,14 @@ int main(int argc, char** argv) {
   std::string err;
   if (!game.init(root, err) && !err.empty()) std::cerr << err << "\n";
   if (!cityArg.empty()) game.requestFile(cityArg);
+
+  // Create the renderer after prefs load so the initial vsync flag matches Engine Options / OwnPrefs.
+  bool wantVsync = game.engineOptions().vsync;
+  Uint32 rflags = SDL_RENDERER_ACCELERATED | (wantVsync ? SDL_RENDERER_PRESENTVSYNC : 0);
+  SDL_Renderer* ren = SDL_CreateRenderer(win, -1, rflags);
+  if (!ren) ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
+  if (!ren) { std::cerr << "renderer: " << SDL_GetError() << "\n"; return 1; }
+  SDL_RenderSetVSync(ren, wantVsync ? 1 : 0);   // honour runtime toggles; no-op if already set at create
 
   // Audio: opened only when game data with AUDIO.INI is present (also after data is dropped in later);
   // otherwise the game stays silent.
@@ -158,11 +181,18 @@ int main(int argc, char** argv) {
     uint32_t now = SDL_GetTicks();
     openAudio();
     game.frame(in, w, h, now - last); last = now;
+
+    const bool vsyncNow = game.engineOptions().vsync;
+    if (vsyncNow != wantVsync) {
+      wantVsync = vsyncNow;
+      SDL_RenderSetVSync(ren, wantVsync ? 1 : 0);
+    }
+
     if (!tex || tw != w || th != h) {
       if (tex) SDL_DestroyTexture(tex);
       tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, w, h); tw = w; th = h;
     }
-    SDL_UpdateTexture(tex, nullptr, game.screen().data(), w * 4);
+    uploadFrame(tex, game.screen(), w, h);
     SDL_RenderClear(ren); SDL_RenderCopy(ren, tex, nullptr, nullptr); SDL_RenderPresent(ren);
     if (game.windowTitle() != curTitle) { curTitle = game.windowTitle(); SDL_SetWindowTitle(win, curTitle.c_str()); }
     if (game.cursorName() != curName) {
@@ -179,9 +209,10 @@ int main(int argc, char** argv) {
       }
       SDL_SetCursor(cursor ? cursor : SDL_GetDefaultCursor());
     }
-    if (!vsync) SDL_Delay(8);   // with vsync, SDL_RenderPresent already paces the loop
+    if (!wantVsync) SDL_Delay(8);   // with vsync, SDL_RenderPresent already paces the loop
   }
 done:
+  if (tex) SDL_DestroyTexture(tex);
   if (adev) SDL_CloseAudioDevice(adev);
   SDL_Quit();
   return 0;
