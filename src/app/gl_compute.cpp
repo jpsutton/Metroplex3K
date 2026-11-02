@@ -15,6 +15,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include "core/workpool.h"
 
 namespace m3k {
 #if M3K_HAS_GL_COMPUTE
@@ -32,7 +33,7 @@ static_assert(sizeof(GpuTerrainSpan) == 68, "GpuTerrainSpan std430 size");
 
 const char* kTerrainComp = R"GLSL(
 #version 430
-layout(local_size_x = 1) in;
+layout(local_size_x = 16, local_size_y = 16) in;
 
 struct Span {
   int y, xa, xe, ni, mode;
@@ -44,28 +45,31 @@ layout(std430, binding = 0) readonly buffer SpanBuf { Span spans[]; };
 layout(std430, binding = 1) readonly buffer NoiseL { int noiseL[]; };
 layout(std430, binding = 2) readonly buffer NoiseE { int noiseE[]; };
 layout(std430, binding = 3) buffer Fb { uint fb[]; };
+layout(std430, binding = 4) readonly buffer RowBuf { int rowStart[]; };
 
 uniform int uW;
-uniform int uSpanCount;
+uniform int uH;
 
 int clamp255(int v) { return clamp(v, 0, 255); }
 uint packRGB(int r, int g, int b) {
   return 0xFF000000u | (uint(b & 255) << 16) | (uint(g & 255) << 8) | uint(r & 255);
 }
 
-void fillSpan(Span s) {
-  int x0 = max(s.xa, 0), x1 = min(s.xe, uW);
-  for (int x = x0; x < x1; x++) {
+// Every span mode overwrites its pixel fully. Spans are grouped per row in emission order, so the
+// last span covering a pixel wins (CPU parity). Scan backward, stop at first hit: no races.
+void main() {
+  int x = int(gl_GlobalInvocationID.x), y = int(gl_GlobalInvocationID.y);
+  if (x >= uW || y >= uH) return;
+  for (int k = rowStart[y + 1] - 1; k >= rowStart[y]; k--) {
+    Span s = spans[k];
+    if (x < s.xa || x >= s.xe) continue;
     int i = x - s.xa;
     int r = (s.L0 + s.d0 * i) / 65536;
     int g = (s.L1 + s.d1 * i) / 65536;
     int b = (s.L2 + s.d2 * i) / 65536;
     if (s.mode == 3) {
       int P0 = r, P1 = g, P2 = b;
-      int d2 = 0;
-      d2 += (P0 - s.key0) * (P0 - s.key0);
-      d2 += (P1 - s.key1) * (P1 - s.key1);
-      d2 += (P2 - s.key2) * (P2 - s.key2);
+      int d2 = (P0 - s.key0) * (P0 - s.key0) + (P1 - s.key1) * (P1 - s.key1) + (P2 - s.key2) * (P2 - s.key2);
       int o0, o1, o2;
       if (d2 <= 256) {
         int nz = noiseE[(s.ni + 3 * i) & 1023];
@@ -78,7 +82,7 @@ void fillSpan(Span s) {
         o1 = v1 + noiseL[(s.ni + 3 * i + 1) & 1023];
         o2 = v2 + noiseL[(s.ni + 3 * i + 2) & 1023];
       }
-      fb[s.y * uW + x] = packRGB(o0, o1, o2);
+      fb[y * uW + x] = packRGB(o0, o1, o2);
     } else {
       if (s.mode == 0) {
         r += noiseL[(s.ni + 3 * i) & 1023];
@@ -90,21 +94,16 @@ void fillSpan(Span s) {
       } else {
         r = clamp255(r); g = clamp255(g); b = clamp255(b);
       }
-      fb[s.y * uW + x] = packRGB(r, g, b);
+      fb[y * uW + x] = packRGB(r, g, b);
     }
+    return;
   }
-}
-
-void main() {
-  // Spans must stay in triangle emission order (water overwrites land, later tiles win).
-  if (gl_GlobalInvocationID.x != 0u) return;
-  for (int i = 0; i < uSpanCount; i++) fillSpan(spans[i]);
 }
 )GLSL";
 
-void expandSpans(const GpuTerrainTri* tris, int triCount, int fbH, std::vector<GpuTerrainSpan>& out) {
+void expandSpans(const GpuTerrainTri* tris, int triBegin, int triEnd, int fbH, std::vector<GpuTerrainSpan>& out) {
   out.clear();
-  for (int ti = 0; ti < triCount; ti++) {
+  for (int ti = triBegin; ti < triEnd; ti++) {
     const GpuTerrainTri& t = tris[ti];
     struct P { float x, y; float a[3]; };
     P v[3] = {
@@ -184,6 +183,7 @@ GlComputeTerrain::~GlComputeTerrain() {
     if (ssboNoiseL_) glDeleteBuffers(1, &ssboNoiseL_);
     if (ssboNoiseE_) glDeleteBuffers(1, &ssboNoiseE_);
     if (ssboFb_) glDeleteBuffers(1, &ssboFb_);
+    if (ssboRows_) glDeleteBuffers(1, &ssboRows_);
     if (prog_) glDeleteProgram(prog_);
     SDL_GL_DeleteContext(static_cast<SDL_GLContext>(glctx_));
     glctx_ = nullptr;
@@ -231,6 +231,7 @@ bool GlComputeTerrain::init() {
   glGenBuffers(1, &ssboNoiseL_);
   glGenBuffers(1, &ssboNoiseE_);
   glGenBuffers(1, &ssboFb_);
+  glGenBuffers(1, &ssboRows_);
   ok_ = true;
   return true;
 }
@@ -242,9 +243,28 @@ bool GlComputeTerrain::fill(uint32_t* fb, int w, int h, int /*zoom*/,
   if (triCount < 0) return false;
   SDL_GL_MakeCurrent(static_cast<SDL_Window*>(window_), static_cast<SDL_GLContext>(glctx_));
 
-  std::vector<GpuTerrainSpan> spans;
-  expandSpans(tris, triCount, h, spans);
-  const int spanCount = int(spans.size());
+  // Span setup runs on the worker pool: chunks of triangles in order, merged in order (keeps emission order).
+  const int chunks = std::max(1, std::min(triCount / 256, WorkerPool::shared().threads() * 4));
+  std::vector<std::vector<GpuTerrainSpan>> parts;
+  parts.resize(size_t(chunks));
+  WorkerPool::shared().run(chunks, [&](int c) {
+    expandSpans(tris, int(int64_t(triCount) * c / chunks), int(int64_t(triCount) * (c + 1) / chunks), h, parts[size_t(c)]);
+  });
+  // Counting sort by row (stable: keeps emission order within a row).
+  std::vector<int> rowStart(size_t(h) + 2, 0);
+  size_t total = 0;
+  for (const auto& part : parts) {
+    total += part.size();
+    for (const auto& sp : part) rowStart[size_t(sp.y) + 1]++;
+  }
+  for (int y = 0; y <= h; y++) rowStart[size_t(y) + 1] += rowStart[size_t(y)];
+  std::vector<GpuTerrainSpan> spans(total);
+  {
+    std::vector<int> cur(rowStart.begin(), rowStart.begin() + h);
+    for (const auto& part : parts)
+      for (const auto& sp : part) spans[size_t(cur[size_t(sp.y)]++)] = sp;
+  }
+  const int spanCount = int(total);
 
   const int pix = w * h;
   if (pix > fbCap_) {
@@ -265,6 +285,9 @@ bool GlComputeTerrain::fill(uint32_t* fb, int w, int h, int /*zoom*/,
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboNoiseE_);
   glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof nE, nE, GL_DYNAMIC_DRAW);
 
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboRows_);
+  glBufferData(GL_SHADER_STORAGE_BUFFER, size_t(h + 1) * sizeof(int), rowStart.data(), GL_DYNAMIC_DRAW);
+
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboFb_);
   glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, size_t(pix) * sizeof(uint32_t), fb);
   if (spanCount > 0) {
@@ -274,13 +297,14 @@ bool GlComputeTerrain::fill(uint32_t* fb, int w, int h, int /*zoom*/,
 
   glUseProgram(prog_);
   glUniform1i(glGetUniformLocation(prog_, "uW"), w);
-  glUniform1i(glGetUniformLocation(prog_, "uSpanCount"), spanCount);
+  glUniform1i(glGetUniformLocation(prog_, "uH"), h);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboTris_);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboNoiseL_);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssboNoiseE_);
   glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssboFb_);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, ssboRows_);
 
-  glDispatchCompute(1, 1, 1);
+  glDispatchCompute(GLuint((w + 15) / 16), GLuint((h + 15) / 16), 1);
   glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboFb_);

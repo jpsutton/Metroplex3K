@@ -26,7 +26,7 @@ class GlComputeTerrain {
   void* window_ = nullptr;   // SDL_Window*
   void* glctx_ = nullptr;    // SDL_GLContext
   unsigned prog_ = 0;
-  unsigned ssboTris_ = 0, ssboNoiseL_ = 0, ssboNoiseE_ = 0, ssboFb_ = 0;
+  unsigned ssboTris_ = 0, ssboNoiseL_ = 0, ssboNoiseE_ = 0, ssboFb_ = 0, ssboRows_ = 0;
   int fbCap_ = 0, triCap_ = 0;
 };
 
