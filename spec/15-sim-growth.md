@@ -167,7 +167,9 @@ Update (once per month, see **Schedule** above):
      `V := V − step`.
 6. Publish the normalised reading `N := V × 1000 / Max` if `V ≥ 0`, else `N := −(V × 1000) / Min`
    (so −1000 ≤ N ≤ 1000, negative = oversupply). The UI demand indicator and the advisors read
-   `N` per valve ID after every update. [STATIC]
+   `N` per valve ID after every update. The RCI indicator converts with **demand unit**
+   *u* = *N* / 1000 and draws *u* × 16 px (`09-ui-screens.md` §4.5); |*u*| = 1 is a full slot.
+   [STATIC]
 
 **Smoothing** [STATIC; DATA]. The `smooth` flag is set when **any** valve is created and nothing
 clears it; it is not saved. Every valve therefore uses step 5's gradual rule. `step` is computed in

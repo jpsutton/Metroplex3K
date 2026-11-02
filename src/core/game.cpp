@@ -763,9 +763,7 @@ void Game::drawHud() {
   const Valve* v[3] = {&sim_.valveR, &sim_.valveC, &sim_.valveI};
   uint32_t cols[3] = {rgb(0, 192, 0), rgb(0, 0, 192), rgb(192, 192, 0)};
   const char* nm[3] = {"R", "C", "I"};
-  // Spec 09 §4.5 / 15 §3.2: indicator demand-unit = N/1000 with N = V×1000/Max (≡ V/Max for ±2000 valves).
-  // Berlin load [DATA]: V 1140/880/−1680 → units 0.57/0.44/−0.84 ≈ operator's ~50%/~40%/~−80% bars.
-  // The old ×3 scale filled the 16 px slot at |V|≥667 and clipped all three Berlin bars to full.
+  // Spec 09 §4.5 / 15 §3.2 [STATIC Q-BQ]: demand unit u = N/1000 (= V/Max for ±2000 R/C/I valves).
   bool skinRci = haveData_ && skin_.loaded() &&
                  skin_.drawRciIndicator(ui_, rx, ry, v[0]->value / 2000.0, v[1]->value / 2000.0, v[2]->value / 2000.0);
   if (skinRci && ui_.hover({rx, ry, RciGeometry::imgW, RciGeometry::imgH})) uiHit_ = true;

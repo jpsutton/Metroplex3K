@@ -23,7 +23,8 @@ int cell8For(bool enabled, bool pressed, bool checked, bool hover) {
 
 Rect RciGeometry::bar(int i, double v) {
   if (i < 0 || i > 2) return {};
-  int h = int(std::lround(std::fabs(v) * unitPx));
+  // Spec 09 §4.5 [STATIC Q-BQ]: pixels = trunc(|u| × 16.0).
+  int h = int(std::trunc(std::fabs(v) * unitPx));
   Rect r{barX[i], 0, barW, 0};
   if (v > 0) {
     int top = std::max(slotTop, zeroY - h);
