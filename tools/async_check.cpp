@@ -93,7 +93,7 @@ static int stress(const std::string& game, const std::string& city, double secon
   auto rnd = [&](int n) { return int(rng() % uint32_t(n)); };
   Input in;
   in.mx = W / 2; in.my = H / 2;
-  std::vector<double> frameMs, waitMs, endMs, simMs, rasterMs, gameMs;
+  std::vector<double> frameMs, waitMs, endMs, simMs, rasterMs, gameMs, stSetup, stBands, stBg, stTerrain, stItems, stTail;
   uint64_t days = 0, joins = 0;
   int heldFor = 0, pendingRelease = 0, escIn = 0, screensStep = 0, screensWait = 0;
   const double period = 13.33;
@@ -133,7 +133,12 @@ static int stress(const std::string& game, const std::string& city, double secon
     waitMs.push_back(p.simWaitMs);
     endMs.push_back(p.asyncEndMs);
     simMs.push_back(p.simMs);
-    if (p.rastered) rasterMs.push_back(p.rasterMs);
+    if (p.rastered) {
+      rasterMs.push_back(p.rasterMs);
+      const Renderer::StageTimes& st = gm.renderer().lastStageTimes();
+      stSetup.push_back(st.setupMs); stBands.push_back(st.bandsWallMs); stBg.push_back(st.bgCpuMs);
+      stTerrain.push_back(st.terrainCpuMs); stItems.push_back(st.itemsCpuMs); stTail.push_back(st.tailMs);
+    }
     if (p.simWaitMs > 1.0) joins++;
     if (p.simDay) days++;
     next += std::chrono::microseconds(int(period * 1000));
@@ -148,6 +153,10 @@ static int stress(const std::string& game, const std::string& city, double secon
   std::printf("sim_ms       p50 %.2f p95 %.2f p99 %.2f max %.2f\n", pct(simMs, .5), pct(simMs, .95), pct(simMs, .99), mx(simMs));
   std::printf("async_end_ms p50 %.2f p95 %.2f p99 %.2f max %.2f\n", pct(endMs, .5), pct(endMs, .95), pct(endMs, .99), mx(endMs));
   std::printf("raster_ms    p50 %.2f p95 %.2f p99 %.2f max %.2f  (%zu rastered frames)\n", pct(rasterMs, .5), pct(rasterMs, .95), pct(rasterMs, .99), mx(rasterMs), rasterMs.size());
+  std::printf("stages p50: setup(serial) %.2f  bands(wall) %.2f  | band cpu-time: bg %.2f terrain %.2f items(sprites) %.2f  | tail(serial) %.2f ms\n",
+              pct(stSetup, .5), pct(stBands, .5), pct(stBg, .5), pct(stTerrain, .5), pct(stItems, .5), pct(stTail, .5));
+  std::printf("stages p95: setup(serial) %.2f  bands(wall) %.2f  | band cpu-time: bg %.2f terrain %.2f items(sprites) %.2f  | tail(serial) %.2f ms\n",
+              pct(stSetup, .95), pct(stBands, .95), pct(stBg, .95), pct(stTerrain, .95), pct(stItems, .95), pct(stTail, .95));
   std::printf("sim-related frame share (sim+street+raster+wait+end) p50 %.2f p95 %.2f p99 %.2f max %.2f\n", pct(frameMs, .5),
               pct(frameMs, .95), pct(frameMs, .99), mx(frameMs));
   return 0;

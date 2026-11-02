@@ -232,6 +232,15 @@ class Renderer : public ICityRasterizer {
   void invalidateShade() override { shadeValid_ = false; }
   // Number of horizontal bands render() rasterises in parallel; 0 = automatic (by height and pool size).
   void setBandCount(int n) override { bands_ = n; }
+  // Where the last render() spent its time. setup/bandsWall/tail are wall-clock; the *Cpu values are summed over
+  // all bands (thread time), so they exceed bandsWall when the bands ran in parallel.
+  struct StageTimes {
+    double setupMs = 0;      // serial: background load, prepareTerrain, buildItems
+    double bandsWallMs = 0;  // wall time of the parallel band pass
+    double bgCpuMs = 0, terrainCpuMs = 0, itemsCpuMs = 0;   // background, terrain (+grid/edges), sprites
+    double tailMs = 0;       // serial: fallback boxes, previews, cost label
+  };
+  const StageTimes& lastStageTimes() const { return stages_; }
 
   // ---- configuration / injection ----
   void setPalettes(const TerrainPalettes& p) { pal_ = p; palOverride_ = true; }
@@ -331,6 +340,7 @@ class Renderer : public ICityRasterizer {
   int labelX_ = 0, labelY_ = 0;
 
   int bands_ = 0;
+  StageTimes stages_;
   std::vector<Item> items_;
   std::vector<int> occ_;  // view tile -> index into items_ (last drawn), -1 none
   bool itemsValid_ = false;

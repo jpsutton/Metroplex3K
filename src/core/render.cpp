@@ -1,6 +1,8 @@
 #include "core/render.h"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include "core/workpool.h"
@@ -1435,10 +1437,15 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
   if (!world_) { std::fill(fb_.begin(), fb_.end(), 0xFF302820u); return; }
   const int zoom = std::max(0, std::min(4, cam.zoom));
   computeOrigin(cam);
+  using StageClock = std::chrono::steady_clock;
+  auto stageMs = [](StageClock::time_point a, StageClock::time_point b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+  const auto st0 = StageClock::now();
   // Serial setup: caches, shared terrain state and the sorted draw list.
   if (opt.background) loadBackground(zoom);
   if (opt.terrain) prepareTerrain(opt);
   buildItems(cam, opt, scene);
+  stages_ = StageTimes();
+  stages_.setupMs = stageMs(st0, StageClock::now());
 
   // Phase 2: optional GPU terrain fill (CPU builds triangle list; host compute writes pixels).
   bool gpuTerrain = false;
@@ -1455,12 +1462,17 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
   // order, clipped to its rows, so the image is identical to a single-threaded render.
   WorkerPool& pool = WorkerPool::shared();
   const int bands = bands_ > 0 ? std::min(bands_, fbH_) : fbH_ < 128 ? 1 : std::min(fbH_ / 32, pool.threads() * 2);
+  std::atomic<int64_t> bgNs{0}, terrainNs{0}, itemsNs{0};
+  auto nsSince = [](StageClock::time_point a) { return std::chrono::duration_cast<std::chrono::nanoseconds>(StageClock::now() - a).count(); };
+  const auto sb0 = StageClock::now();
   pool.run(bands, [&](int b) {
     const int y0 = fbH_ * b / bands, y1 = fbH_ * (b + 1) / bands;
+    auto t = StageClock::now();
     if (!gpuTerrain) {
       std::fill(fb_.begin() + ptrdiff_t(y0) * fbW_, fb_.begin() + ptrdiff_t(y1) * fbW_, 0xFF302820u);
       if (opt.background) drawBackground(zoom, y0, y1);
     }
+    bgNs += nsSince(t); t = StageClock::now();
     if (opt.terrain) {
       if (gpuTerrain) {
         if (opt.grid) drawTerrainGrid(cam, opt, y0, y1);
@@ -1470,8 +1482,15 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
         if (opt.edgeFaces) drawEdgeFaces(cam, y0, y1);
       }
     }
+    terrainNs += nsSince(t); t = StageClock::now();
     drawItems(opt, y0, y1);
+    itemsNs += nsSince(t);
   });
+  stages_.bandsWallMs = stageMs(sb0, StageClock::now());
+  stages_.bgCpuMs = double(bgNs.load()) / 1e6;
+  stages_.terrainCpuMs = double(terrainNs.load()) / 1e6;
+  stages_.itemsCpuMs = double(itemsNs.load()) / 1e6;
+  const auto stail = StageClock::now();
   if (opt.objects && !(data_ || spriteFn_)) drawFallbackBoxes(cam);
   label_ = CostLabel();
   if (scene) {
@@ -1487,6 +1506,7 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
         costFont_->draw(fb_, fbW_, fbH_, labelX_, labelY_, text, scene->cost.affordable ? rgba(255, 255, 255) : rgba(255, 80, 80));
     }
   }
+  stages_.tailMs = stageMs(stail, StageClock::now());
 }
 
 // ======================================================================================
