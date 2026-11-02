@@ -277,18 +277,18 @@ subsystem processes only part of its map on each run (§6.4).
 5. Scenario (#29): daily goal and condition check (`23-scenarios.md`).
 6. Zone manager (#5): one zone-development step (`15-sim-growth.md` §4).
 7. Active disaster instances (#6): day tick (spreading fires, riots and so on, `21-disasters.md`).
-8. Pollution (#11): daily slice.
-9. Crime (#12): daily slice.
-10. Flammability (#25): daily slice.
+8. Aura (#10): daily sweep slice (`17-sim-services.md` §8.3).
+9. Pollution (#11): daily slice.
+10. Crime (#12): daily slice.
+11. Flammability (#25): daily slice.
 
-Items 8–10 [STATIC, high confidence]: each of these three layers has its own daily entry in the
-schedule. Pollution and crime also have a monthly step (monthly items 14–15). `17-sim-services.md`
-§1 still lists the trigger of these runs as [OPEN] and recommends one run per day, which agrees
-with this schedule. The aura layer's trigger is [OPEN] in both documents.
+Items 8–11 [STATIC]: each of these four layers is a daily scheduler agent and runs one slice (or
+aura sweep step) per simulated day. Pollution and crime also have a monthly step (monthly items
+14–15). Aura also samples its mayor-rating chart on the monthly cascade (see monthly note below).
 
-Items 1–5 always run in this order. Items 6–10 always run after items 1–5. Their order among
-themselves is subsystem order [INFERRED, medium confidence]. Item 7 runs only when disasters are
-present (`21-disasters.md`).
+Items 1–5 always run in this order. Items 6–11 always run after items 1–5. Their order among
+themselves is subsystem order [INFERRED, medium confidence] (aura before pollution and crime;
+flammability later). Item 7 runs only when disasters are present (`21-disasters.md`).
 
 **Weekly** (Mondays, after the daily work of the same day):
 
@@ -315,10 +315,13 @@ paused for the whole monthly work, §6.3 rule 4):
 13. Unidentified subsystem #27.
 14. Pollution (#11): monthly step.
 15. Crime (#12): monthly step.
+16. Aura (#10): mayor-rating chart sample (monthly; yearly and decade samples on 1 January, same
+    pattern as the demographic charts in rule 7) [STATIC].
 
-Items 1–3 always run before items 4–15. Their order among themselves is subsystem order
-[INFERRED, medium confidence]. Items 4–13 run in exactly this order, and items 14–15 come after
-them [STATIC].
+Items 1–3 always run before items 4–16. Their order among themselves is subsystem order
+[INFERRED, medium confidence]. Items 4–13 run in exactly this order, and items 14–16 come after
+them [STATIC]. Aura's chart sample is grouped with the pollution/crime monthly steps; its order
+among 14–16 follows subsystem order [INFERRED].
 
 **Yearly:** no subsystem has yearly work. Yearly effects are performed by the monthly work of
 1 January (rule 7).
@@ -329,8 +332,7 @@ then the scenario's per-minute work (§6.3 rule 5).
 **Not periodic.** These subsystems have no periodic work of their own: terrain, occupant manager,
 network manager, flora layer, spacing grid, #28, the advisors and the petitioner manager. They act
 on user commands and on requests from other subsystems [STATIC]. Advisors and petitioners have
-their own timing (`22-advisors-news-petitioners.md`). The aura layer (#10) has no entry in this
-schedule; what advances its sweep is [OPEN]. Recommended: run it daily after flammability.
+their own timing (`22-advisors-news-petitioners.md`).
 
 **Per-building work (weekly).** Besides the layer-wide steps above, every building that has a
 lot is itself enrolled in the schedule when it is added to the city, and withdrawn when it is
@@ -355,7 +357,7 @@ lock [STATIC].
 | Police, fire | daily slices |
 | Crime, pollution | daily slices plus a monthly step |
 | Flammability | daily slice |
-| Aura | [OPEN] (§6.1) |
+| Aura | daily sweep slice; mayor-rating chart sample monthly (§6.1) |
 | Neighbours, deals | monthly |
 | World layer | monthly |
 | Ordinances | monthly |
@@ -524,8 +526,7 @@ are converted as follows [STATIC]:
 * Graph histories owned by subsystems other than the budget and demographics (crime, pollution,
   traffic graphs and so on): when they are sampled.
 * What subsystem #27 does in its monthly step, and what #28 is.
-* What advances the aura layer's sweep (§6.1).
-* The relative order of daily items 6–10 and monthly items 1–3 (§6.1), recorded as subsystem order.
+* The relative order of daily items 6–11 and monthly items 1–3 (§6.1), recorded as subsystem order.
 * The interval of the timer callback that drives the clock (§2.2).
 * Which specific dialogs and operations raise the city pause count versus the pending/modal count
   (§2.3 / §6.3 rule 6); see also `09-ui-screens.md`.
