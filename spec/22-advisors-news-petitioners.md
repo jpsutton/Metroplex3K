@@ -1323,7 +1323,9 @@ mood is expressed through the city *aura* (`17-sim-services.md`), which the advi
 petitioner manager read as an input (e.g. `MAX_GAMBLING_AURA`, `PRO_READING_AURA`,
 `CITY_AURA_LOW/HIGH`, `LOW/HIGH_DREARY_RATING`). Approval-like feedback appears only as advisor
 topics, petitions (e.g. informational "city aura low" or "holiday for the mayor" petitions) and
-ticker lines. The only "lose" condition here is the budget advisor's debt rule (section 3.7).
+ticker lines. The budget tax pages' "approval rating" label (`029541F4:1D2`) is the same aura
+history chart, not a second metric (`09-ui-screens.md` §6.1). The only "lose" condition here is
+the budget advisor's debt rule (section 3.7).
 
 ## 8. INI grammar (complete)
 

@@ -595,15 +595,31 @@ advisor window (§6.5) on the budget advisor.
 funding level (expense rows) or tax rate (tax rows); year-to-date (`8C` expense / `A7` income)
 and year-end estimate (`8D`) read-outs which update live as the slider moves; a "meet advisor"
 portrait (`8E`) for the responsible advisor; links to the Ordinances (`8F`), Neighbour deals (`90`)
-and Business deals (`A2`) windows. Tax pages additionally show the approval rating (`1D2`) and
-the tax rate labels `A3`–`A5`; funds (`283`). [STATIC] Adjustment ranges [STATIC]: the
-tax rate is an integer percent, step 1, range 0–22 (the budget model clamps any value above 22;
-`19-sim-economy.md` §4). Funding is an integer percent stored in one byte, step 1; the budget
-model applies no upper clamp of its own (shipped saves contain 101–108 %, default 100 %), so the
-upper limit is whatever the page's adjust control allows [OPEN: maximum of the funding control].
-The adjust control is not the framework slider; it is drawn with the custom control art of
-`08-ui-framework.md` §2.3a (group `42DEC7D2`; each row's details button is image `0x09`). Read-outs are recomputed with the
-`19-sim-economy.md` charge formula as the value changes.
+and Business deals (`A2`) windows. Tax pages additionally show an **approval** chart labelled
+`1D2` and the tax rate labels `A3`–`A5`; funds (`283`). [STATIC]
+
+**Tax-page approval (`1D2`)** [STATIC]. This is **not** a tax-specific approval percentage and is
+**not** computed from R/C/I tax rates, demand, or budget INI keys. It is the city-aura history
+chart from the aura layer (`17-sim-services.md` §8.5; save group `C259C02D`), shown under the
+window-string label `029541F4:1D2`. The widget is the same chart type used elsewhere for aura
+(creation id `0x104`): 12 monthly + 10 yearly + 10 per-decade samples. Each monthly sample is
+**cityAura + 127** (unsigned; cityAura is the signed city aura −127…127). A fresh chart is all
+127s (neutral). There is no separate mayor-approval metric in the advisor subsystem
+(`22-advisors-news-petitioners.md` §7) — the tax page reuses aura under that label. Tax-slider
+drags do **not** recompute it; the series advances when the aura layer pushes a month-end sample
+(§8.5), and opening the budget binds/loads the chart from the aura record. Aura itself is driven
+by `SC3Aura.ini` (`[AgentIDModifiers]`, `[TuningParameters]` `UpdatePeriod`, etc.);
+`SC3BudgetLayer.ini` has no approval key. Correction: earlier text only said “approval rating
+(`1D2`)” without identifying it as the aura chart.
+
+Adjustment ranges [STATIC]: the tax rate is an integer percent, step 1, range 0–22 (the budget
+model clamps any value above 22; `19-sim-economy.md` §4). Funding is an integer percent stored in
+one byte, step 1; the budget model applies no upper clamp of its own (shipped saves contain
+101–108 %, default 100 %), so the upper limit is whatever the page's adjust control allows
+[OPEN: maximum of the funding control]. The adjust control is not the framework slider; it is
+drawn with the custom control art of `08-ui-framework.md` §2.3a (group `42DEC7D2`; each row's
+details button is image `0x09`). Read-outs are recomputed with the `19-sim-economy.md` charge
+formula as the value changes.
 
 **Loans page** (row Loans `236`): a table with columns maturity month/year (`1B3`), total
 (`1B4`), amount owed (`1B5`), amount paid (`1B6`); fields borrowed (`1B7`), borrowing limit
