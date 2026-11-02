@@ -107,6 +107,9 @@ struct RenderOptions {
   bool flora = true;
   bool pipes = true, subways = true;                    // pieces drawn by the underground view
   bool automata = true;                                 // scene sprites (vehicles, pedestrians)
+  // Host bumps this whenever showNet / showOccupant change meaning (std::function cannot be hashed); part of the
+  // item list cache key.
+  uint32_t filterEpoch = 0;
 };
 
 // The nine terrain palette slots (spec 04 section 7.1), stored as top-down tables.
@@ -257,7 +260,7 @@ class Renderer : public ICityRasterizer {
   // Replace sprite lookup (tests / non-GameData sources). Null functions restore GameData lookup.
   using SpriteFn = std::function<const SpriteImage*(uint32_t, uint32_t)>;
   using PlaneFn = std::function<const Plane*(uint32_t, uint32_t)>;
-  void setSpriteLookup(SpriteFn s, PlaneFn p) { spriteFn_ = std::move(s); planeFn_ = std::move(p); }
+  void setSpriteLookup(SpriteFn s, PlaneFn p) { spriteFn_ = std::move(s); planeFn_ = std::move(p); ++itemsGen_; itemCacheValid_ = false; }
   // Generic substitute sprite by footprint size (spec 25 section 7 per-zoom substitution).
   void setSubstituteSprite(int footprint, uint32_t category, uint32_t spriteId);
   // palBasic tint row for a world tile (0 = none, 1..52); spec 6.4 tints.
@@ -293,6 +296,10 @@ class Renderer : public ICityRasterizer {
     uint32_t pickKey = 0;
     uint32_t cat = 0, id = 0;
   };
+  uint64_t itemListKey(const Camera& cam, const RenderOptions& opt) const;
+  bool itemCacheOn_ = false, itemCacheValid_ = false;
+  uint64_t itemCacheKey_ = 0, itemsGen_ = 0;
+  std::vector<Item> cachedFlat_, cachedStatics_;
   void loadPalettes();
   void makeFallbackPalettes();
   void ensureShade();
@@ -350,6 +357,13 @@ class Renderer : public ICityRasterizer {
   int bands_ = 0;
   StageTimes stages_;
   uint64_t terrainLayerKey(const Camera& cam, const RenderOptions& opt) const;
+  // Item list cache (off by default): the world-derived part of the draw list (surface pieces, buildings, flora)
+  // is kept while camera, flags, animation tick and the hashed world content are unchanged; scene sprites (moving
+  // vehicles, previews) are merged in every frame.
+public:
+  void setItemListCache(bool on) { itemCacheOn_ = on; itemCacheValid_ = false; }
+  bool itemListCache() const { return itemCacheOn_; }
+private:
   bool terrainCacheOn_ = false, terrainLayerValid_ = false;
   uint64_t terrainLayerKey_ = 0;
   std::vector<uint32_t> terrainLayer_;   // fb_-sized snapshot taken after the terrain pass, before sprites

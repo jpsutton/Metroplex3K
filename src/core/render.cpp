@@ -171,6 +171,7 @@ void Renderer::setNoiseSeed(uint32_t seed) {
 
 void Renderer::setSubstituteSprite(int footprint, uint32_t category, uint32_t spriteId) {
   if (footprint < 0 || footprint > 16) return;
+  ++itemsGen_; itemCacheValid_ = false;
   if (int(subst_.size()) <= footprint) subst_.resize(footprint + 1, Subst{0xFFFFFFFFu, 0});
   subst_[footprint] = {category, spriteId};
 }
@@ -182,7 +183,7 @@ void Renderer::setTileTint(int x, int z, uint8_t row) {
 }
 
 void Renderer::setWorld(const World* w, GameData* data) {
-  world_ = w; data_ = data; shadeValid_ = false; itemsValid_ = false; terrainLayerValid_ = false;
+  world_ = w; data_ = data; shadeValid_ = false; itemsValid_ = false; terrainLayerValid_ = false; itemCacheValid_ = false; ++itemsGen_;
   tint_.clear(); siteCache_.clear(); bldIniTried_ = false; bldIniOk_ = false;
   for (int i = 0; i < 5; i++) { back_[i] = Image(); backTried_[i] = false; }
   pal_ = TerrainPalettes(); palOverride_ = false;
@@ -1070,7 +1071,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
 
   // `flat` holds ground-level network pieces (spec 25 5.1: surface, drawn before every object); `statics` the
   // depth-sorted objects that moving sprites are merged into.
-  std::vector<Item> statics, movers, flat;
+  std::vector<Item> statics, movers, flat, sceneStatics;
   auto cullOut = [&](int ax, int ay, int pw, int ph, int L, int T) {
     int x0 = ax - L, y0 = ay - T;
     return x0 > fbW_ || x0 + pw < 0 || y0 > fbH_ || y0 + ph < 0;
@@ -1176,33 +1177,45 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     addStatic(oa->appearance, ownFlag(), std::max(sizeX, sizeZ), x, zz, y, rot, sizeX, sizeZ, ground);
   };
 
-  const bool net = true;
-  auto addNets = [&](const std::vector<NetPiece>& v, bool filter) {
-    for (const auto& np : v)
-      if (!filter || !opt.showNet || opt.showNet(np)) addOccupant(np.pieceId, net, false, np.x, np.z, np.y, np.rot, 1, 1, true);
-  };
-  if (opt.underground) {
-    if (opt.pipes) addNets(w.pipes, false);
-    if (opt.subways) addNets(w.subway, false);
+  // World-derived items: cached while nothing they depend on changed.
+  bool itemHit = false;
+  uint64_t itemKey = 0;
+  if (itemCacheOn_) { itemKey = itemListKey(cam, opt); itemHit = itemCacheValid_ && itemKey == itemCacheKey_; }
+  if (itemHit) {
+    flat = cachedFlat_;
+    statics = cachedStatics_;
   } else {
-    addNets(w.surface, true);
-    for (const auto& o : w.occupants) {
-      if (opt.showOccupant && !opt.showOccupant(o)) continue;
-      bool port = o.keyType == T_OCC_ATTR_PORT;
-      uint32_t id = o.occId;
-      if (opt.constructionSites && o.state != 1 && o.state != 2 && data_) {
-        ResKey rk;
-        if (siteOccupant(o.state, std::max(o.sizeX, o.sizeZ), o.agentType, rk)) { id = rk.instance; port = rk.type == T_OCC_ATTR_PORT; }
+    const bool net = true;
+    auto addNets = [&](const std::vector<NetPiece>& v, bool filter) {
+      for (const auto& np : v)
+        if (!filter || !opt.showNet || opt.showNet(np)) addOccupant(np.pieceId, net, false, np.x, np.z, np.y, np.rot, 1, 1, true);
+    };
+    if (opt.underground) {
+      if (opt.pipes) addNets(w.pipes, false);
+      if (opt.subways) addNets(w.subway, false);
+    } else {
+      addNets(w.surface, true);
+      for (const auto& o : w.occupants) {
+        if (opt.showOccupant && !opt.showOccupant(o)) continue;
+        bool port = o.keyType == T_OCC_ATTR_PORT;
+        uint32_t id = o.occId;
+        if (opt.constructionSites && o.state != 1 && o.state != 2 && data_) {
+          ResKey rk;
+          if (siteOccupant(o.state, std::max(o.sizeX, o.sizeZ), o.agentType, rk)) { id = rk.instance; port = rk.type == T_OCC_ATTR_PORT; }
+        }
+        addOccupant(id, false, port, o.x, o.z, o.y, o.rot, o.sizeX, o.sizeZ, false);
       }
-      addOccupant(id, false, port, o.x, o.z, o.y, o.rot, o.sizeX, o.sizeZ, false);
+      for (int x = 0; x < w.W && opt.flora; x++)
+        for (int zz = 0; zz < w.H; zz++) {
+          uint8_t c = w.flora[w.tIdx(x, zz)];
+          if (!c) continue;
+          uint32_t inst = floraInstance(c, uint32_t(x * 73856093u ^ zz * 19349663u) >> 7);
+          if (inst) addOccupant(inst, false, false, x, zz, w.altAt(x, zz), 0, 1, 1, false);
+        }
     }
-    for (int x = 0; x < w.W && opt.flora; x++)
-      for (int zz = 0; zz < w.H; zz++) {
-        uint8_t c = w.flora[w.tIdx(x, zz)];
-        if (!c) continue;
-        uint32_t inst = floraInstance(c, uint32_t(x * 73856093u ^ zz * 19349663u) >> 7);
-        if (inst) addOccupant(inst, false, false, x, zz, w.altAt(x, zz), 0, 1, 1, false);
-      }
+    std::stable_sort(flat.begin(), flat.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
+    std::stable_sort(statics.begin(), statics.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
+    if (itemCacheOn_) { cachedFlat_ = flat; cachedStatics_ = statics; itemCacheKey_ = itemKey; itemCacheValid_ = true; }
   }
 
   // Extra sprites from other modules.
@@ -1250,19 +1263,24 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
         it.u0 = p - s + 1; it.u1 = p + 1; it.v0 = q; it.v1 = q + s;
         it.tileX = tx; it.tileZ = tz; it.subX = ss.x; it.subZ = ss.z; it.height = ss.height;
         it.pickKey = 0x40000000u - 0x4000u * uint32_t(p + q) - 0x40u * uint32_t(std::max(0, ss.height / 256));
-        statics.push_back(it);
+        sceneStatics.push_back(it);
       }
     }
   }
 
-  std::stable_sort(flat.begin(), flat.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
-  std::stable_sort(statics.begin(), statics.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
+  // Scene statics were gathered after the world's, so a stable merge equals the stable sort of the concatenation.
+  if (!sceneStatics.empty()) {
+    std::stable_sort(sceneStatics.begin(), sceneStatics.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
+    const size_t n0 = statics.size();
+    statics.insert(statics.end(), sceneStatics.begin(), sceneStatics.end());
+    std::inplace_merge(statics.begin(), statics.begin() + ptrdiff_t(n0), statics.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
+  }
   std::stable_sort(movers.begin(), movers.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
 
   // Merge moving objects (spec 5.2): after statics wholly behind, before statics wholly in front,
   // otherwise by key; ties draw static first (spec 29 item 3.3).
   std::vector<size_t> pos(movers.size());
-  for (size_t m = 0; m < movers.size(); m++) {
+  auto movePos = [&](size_t m) {
     const Item& mv = movers[m];
     size_t lo = 0, hi = statics.size(), kpos = statics.size();
     bool haveKpos = false, haveHi = false;
@@ -1273,6 +1291,16 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
       if (!haveHi && s.boxA0 >= mv.posA && s.boxB0 >= mv.posB) { hi = i; haveHi = true; }
     }
     pos[m] = lo <= hi ? std::max(lo, std::min(kpos, hi)) : kpos;
+  };
+  // Each mover's position is independent of the others (read-only statics), so split them over the pool.
+  if (movers.size() * statics.size() >= 200000) {
+    WorkerPool& mp = WorkerPool::shared();
+    const int chunks = int(std::min<size_t>(movers.size(), size_t(mp.threads()) * 2));
+    mp.run(chunks, [&](int c) {
+      for (size_t m = movers.size() * size_t(c) / size_t(chunks); m < movers.size() * size_t(c + 1) / size_t(chunks); m++) movePos(m);
+    });
+  } else {
+    for (size_t m = 0; m < movers.size(); m++) movePos(m);
   }
   items_.reserve(flat.size() + statics.size() + movers.size());
   items_.insert(items_.end(), flat.begin(), flat.end());
@@ -1471,6 +1499,34 @@ uint64_t Renderer::terrainLayerKey(const Camera& cam, const RenderOptions& opt) 
   if (opt.zonePaint && !opt.underground && !netSprites)
     for (const auto& np : w.surface) { mix(uint64_t(uint32_t(np.x)) << 32 | uint32_t(np.z)); }
   if (opt.overlay) { mix(uint64_t(opt.overlay->slot) + 1); h = hashVec(h, opt.overlay->row); } else mix(0);
+  return h;
+}
+
+uint64_t Renderer::itemListKey(const Camera& cam, const RenderOptions& opt) const {
+  const World& w = *world_;
+  uint64_t h = 1469598103934665603ull;
+  auto mix = [&](uint64_t v) { h = (h ^ v) * 0x9E3779B97F4A7C15ull; h ^= h >> 31; };
+  uint32_t u, v;
+  std::memcpy(&u, &cam.u, 4); std::memcpy(&v, &cam.v, 4);
+  mix(u); mix(v); mix(uint64_t(cam.zoom)); mix(uint64_t(cam.rot));
+  mix(uint64_t(fbW_)); mix(uint64_t(fbH_)); mix(uint64_t(w.W)); mix(uint64_t(w.H)); mix(itemsGen_);
+  mix(uint64_t(opt.underground) | uint64_t(opt.constructionSites) << 1 | uint64_t(opt.flora) << 2 | uint64_t(opt.pipes) << 3 |
+      uint64_t(opt.subways) << 4 | uint64_t(bool(opt.showNet)) << 5 | uint64_t(bool(opt.showOccupant)) << 6);
+  mix(opt.ownImageFlags); mix(uint64_t(uint32_t(opt.animTick))); mix(opt.filterEpoch);
+  if (opt.underground) {
+    if (opt.pipes) h = hashVec(h, w.pipes);
+    if (opt.subways) h = hashVec(h, w.subway);
+  } else {
+    h = hashVec(h, w.surface);
+    for (const Occupant& o : w.occupants) {   // only the fields buildItems reads
+      mix(uint64_t(uint32_t(o.x)) << 32 | uint32_t(o.z));
+      mix(uint64_t(uint32_t(o.y)) << 32 | uint32_t(o.rot));
+      mix(uint64_t(uint32_t(o.sizeX)) << 32 | uint32_t(o.sizeZ));
+      mix(uint64_t(o.occId) << 32 | o.keyType);
+      mix(uint64_t(o.state) << 32 | o.agentType);
+    }
+    if (opt.flora) { h = hashVec(h, w.flora); h = hashVec(h, w.alt); }
+  }
   return h;
 }
 

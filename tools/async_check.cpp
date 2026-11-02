@@ -99,6 +99,42 @@ static int terrainCacheParity(const std::string& game, const std::string& city) 
   return mismatches ? 1 : 0;
 }
 
+// Two games run in lockstep on identical input: one with the render caches off, one with them on. Every frame must
+// match pixel for pixel. The scripted input pans, zooms, clicks, arms the zone tool and paints, and opens windows.
+static int cacheParityGame(const std::string& game, const std::string& city, int frames, int W, int H) {
+  Game a, b;
+  if (!loadCity(a, game, city, W, H) || !loadCity(b, game, city, W, H)) return 1;
+  b.renderer().setTerrainLayerCache(true);
+  b.renderer().setItemListCache(true);
+  a.setPaused(false); b.setPaused(false);
+  std::mt19937 rng(777);
+  auto rnd = [&](int n) { return int(rng() % uint32_t(n)); };
+  Input in; in.mx = W / 2; in.my = H / 2;
+  int heldFor = 0, mismatches = 0, pendingRelease = 0, escIn = 0;
+  uint64_t terrainHits = 0;
+  for (int f = 0; f < frames; f++) {
+    in.pressed = in.released = in.rightPressed = false; in.wheel = 0; in.keyDowns.clear(); in.text.clear();
+    for (bool& k : in.key) k = false;
+    in.mx = std::clamp(in.mx + rnd(9) - 4, 0, W - 1); in.my = std::clamp(in.my + rnd(9) - 4, 0, H - 1);
+    if (heldFor > 0) heldFor--; else { for (bool& k : in.held) k = false; if (rnd(60) == 0) { in.held[rnd(4)] = true; heldFor = 10 + rnd(30); } }
+    if (rnd(80) == 0) in.wheel = rnd(2) ? 1 : -1;
+    if (pendingRelease > 0 && --pendingRelease == 0) { in.released = true; in.down = false; }
+    else if (rnd(90) == 0) { in.pressed = true; in.down = true; pendingRelease = 2 + rnd(3); in.mx = W / 4 + rnd(W / 2); in.my = H / 4 + rnd(H / 2); }
+    if (rnd(150) == 0) in.keyDowns.push_back({'A', 0});       // zone tool: following drags paint zones
+    if (rnd(200) == 0) in.rightPressed = true;                  // cancel tool
+    if (rnd(500) == 0) in.keyDowns.push_back({191, 0});         // pause / run
+    if (escIn > 0 && --escIn == 0) in.key[K_ESC] = true;
+    else if (rnd(400) == 0) { in.keyDowns.push_back({'B', 2}); escIn = 15; }
+    a.frame(in, W, H, 13); b.frame(in, W, H, 13);
+    terrainHits += b.renderer().lastStageTimes().terrainLayerHit ? 1 : 0;
+    if (a.screen() != b.screen()) {
+      if (++mismatches <= 5) std::printf("MISMATCH at frame %d\n", f);
+    }
+  }
+  std::printf("game cache parity: %d frames, terrain layer served %llu, %d mismatches\n", frames, (unsigned long long)terrainHits, mismatches);
+  return mismatches ? 1 : 0;
+}
+
 static int determinism(const std::string& game, const std::string& city, int days) {
   const int W = 1280, H = 800;
   const uint32_t dt = uint32_t(86400000ull / SpeedControl::kFactor[4]) + 2;   // one sim day per frame at speed 4
@@ -137,6 +173,7 @@ static int stress(const std::string& game, const std::string& city, double secon
   if (!loadCity(gm, game, city, W, H)) return 1;
   gm.setAsyncSim(async);
   gm.renderer().setTerrainLayerCache(terrainCache);
+  gm.renderer().setItemListCache(terrainCache);
   gm.setPaused(false);
   std::mt19937 rng(12345);
   uint64_t layerHits = 0;
@@ -220,6 +257,7 @@ int main(int argc, char** argv) {
   std::string game, city;
   int days = 0, W = 1280, H = 800;
   bool cacheParity = false, terrainCache = false;
+  int gameParityFrames = 0;
   double seconds = 0;
   bool async = true, calm = false, disasters = false, screens = false;
   int dtMs = 13;
@@ -231,6 +269,7 @@ int main(int argc, char** argv) {
     else if (a == "--stress" && i + 1 < argc) seconds = std::atof(argv[++i]);
     else if (a == "--terrain-cache-parity") cacheParity = true;
     else if (a == "--terrain-cache") terrainCache = true;
+    else if (a == "--cache-parity-game" && i + 1 < argc) gameParityFrames = std::atoi(argv[++i]);
     else if (a == "--calm") calm = true;
     else if (a == "--disasters") disasters = true;
     else if (a == "--screens") screens = true;
@@ -239,8 +278,9 @@ int main(int argc, char** argv) {
     else if (a == "--size" && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &W, &H);
   }
   if (!game.empty() && !city.empty() && cacheParity) return terrainCacheParity(game, city);
+  if (!game.empty() && !city.empty() && gameParityFrames > 0) return cacheParityGame(game, city, gameParityFrames, W, H);
   if (game.empty() || city.empty() || (days <= 0 && seconds <= 0)) {
-    std::fprintf(stderr, "usage: async_check --game DIR --city FILE (--terrain-cache-parity | --determinism DAYS | --stress SECONDS [--async 0|1] [--size WxH])\n");
+    std::fprintf(stderr, "usage: async_check --game DIR --city FILE (--terrain-cache-parity | --cache-parity-game FRAMES | --determinism DAYS | --stress SECONDS [--async 0|1] [--size WxH])\n");
     return 2;
   }
   return days > 0 ? determinism(game, city, days) : stress(game, city, seconds, async, calm, disasters, screens, terrainCache, dtMs, W, H);

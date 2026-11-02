@@ -309,6 +309,7 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
 
 void Game::applyLayers() {
   const CityLayers& L = layers_;
+  ++ropt_.filterEpoch;   // showNet / showOccupant below may change meaning (item list cache key)
   const bool above = L.mode == CityLayers::AboveGround, view = L.mode == CityLayers::LayerView;
   const size_t li = size_t(std::max(0, std::min(int(cityLayerViews().size()) - 1, L.layer)));
   ropt_.underground = L.mode == CityLayers::Underground;
