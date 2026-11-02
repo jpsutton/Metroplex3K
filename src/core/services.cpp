@@ -457,9 +457,9 @@ CrimeEntry CrimeLayer::lookup(uint32_t type) {
   if (it != table.end()) return it->second;
   CrimeEntry best; int bestD = 1 << 30;
   if (hier_)
-    for (const auto& kv : table) {
+    for (const auto& kv : table) {  // nearest ancestor by parent-step distance (Q-BO); ascending id wins ties
       int d = hier_->distance(type, kv.first);
-      if (d >= 0 && d < bestD) { bestD = d; best = kv.second; }   // ascending id: first wins ties
+      if (d >= 0 && d < bestD) { bestD = d; best = kv.second; }
     }
   table[type] = best;   // cached (and saved), even when (0,0)
   return best;
@@ -632,7 +632,7 @@ PollutionEntry PollutionLayer::lookup(uint32_t type) {
   if (it != table.end()) return it->second;
   PollutionEntry best; int bestD = 1 << 30;
   if (hier_)
-    for (const auto& kv : table) {   // nearest ancestor (distance, then lowest id)
+    for (const auto& kv : table) {  // nearest ancestor by parent-step distance (Q-BO); ascending id wins ties
       int d = hier_->distance(type, kv.first);
       if (d >= 0 && d < bestD) { bestD = d; best = kv.second; }
     }

@@ -35,6 +35,7 @@ void AgentHierarchy::loadIni(const IniFile& f) {
 }
 
 int AgentHierarchy::distance(uint32_t type, uint32_t anc) const {
+  // Spec 13 §4.1 / Q-BO [STATIC]: each child→parent hop increments distance by 1.
   uint32_t cur = type;
   for (int d = 0; d < 64; d++) {
     if (cur == anc) return d;

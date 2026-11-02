@@ -22,7 +22,7 @@ namespace m3k {
 class AgentHierarchy {
  public:
   void setParent(uint32_t child, uint32_t parent) { parent_[child] = parent; }
-  // Hierarchy distance from t up to ancestor a (0 = same), or -1 when a is not an ancestor.
+  // Spec 13 §4.1 / Q-BO [STATIC]: parent-step count from t up to ancestor a (0 = same), or -1.
   int distance(uint32_t t, uint32_t a) const;
   bool isA(uint32_t t, uint32_t a) const { return distance(t, a) >= 0; }
  private:

@@ -245,6 +245,18 @@ static AgentHierarchy hier() {
   return h;
 }
 
+static void testAgentTypeDistance() {
+  // Spec 13 §4.1 / Q-BO [STATIC]: distance = child→parent hop count.
+  AgentHierarchy h = hier();
+  CHECK(h.distance(3500, 3500) == 0);
+  CHECK(h.distance(3500, 3000) == 1);
+  CHECK(h.distance(3300, 3100) == 1);
+  CHECK(h.distance(3300, 3000) == 2);
+  CHECK(h.distance(3300, 50) == 3);
+  CHECK(h.distance(3300, 9999) == -1);   // not an ancestor
+  CHECK(h.distance(3000, 3300) == -1);   // descendant, not ancestor
+}
+
 static void testCrime() {
   CrimeParams p = CrimeParams::fromIni(IniFile::fromText(kCrimeIni));
   CHECK(p.updatePeriod == 4 && p.policeFactor == 2 && p.youthCurfew == -8);
@@ -824,6 +836,7 @@ int main() {
   testPoliceTick();
   testStrikeEffectOnCoverage();
   testFlammability();
+  testAgentTypeDistance();
   testCrime();
   testCrimeRecord();
   testPollutionStamp();

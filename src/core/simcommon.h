@@ -62,7 +62,8 @@ class AgentHierarchy {
  public:
   void set(uint32_t child, uint32_t parent) { parent_[child] = parent; }
   void loadIni(const IniFile& citySim);
-  // Number of child->parent steps from `type` to `anc` (0 if equal); -1 if anc is not an ancestor.
+  // Spec 13 §4.1 / Q-BO [STATIC]: parent-step count from `type` to ancestor `anc` (0 if equal);
+  // -1 if `anc` is not an ancestor.
   int distance(uint32_t type, uint32_t anc) const;
   bool isAncestorOrSelf(uint32_t type, uint32_t anc) const { return distance(type, anc) >= 0; }
   bool parentOf(uint32_t type, uint32_t& parent) const { auto it = parent_.find(type); if (it == parent_.end()) return false; parent = it->second; return true; }
