@@ -96,9 +96,10 @@ Listeners within one list are notified in registration order. The six periods ar
 day, week, month and year. A date alarm is accepted only if its date is strictly later than the
 current date [STATIC].
 
-[OPEN] The interval of the timer callback is not known. Recommended: call it at least every 50 ms
-(for example every 10–20 ms). Then the 50 ms minute floor of §2.1 is honoured, and a callback rarely
-has to process several day ticks at once [INFERRED].
+The timer callback runs every **1000 ms** (one second) of real time [STATIC]. A single callback may
+therefore process several minute or day ticks when the simulated period is shorter than 1 s (high
+speeds, or catch-up after a stall). The 50 ms floor of §2.1 still applies when computing the
+periods; it does not change the callback interval.
 
 ### 2.3 Pause
 
@@ -527,6 +528,5 @@ are converted as follows [STATIC]:
   traffic graphs and so on): when they are sampled.
 * What subsystem #27 does in its monthly step, and what #28 is.
 * The relative order of daily items 6–11 and monthly items 1–3 (§6.1), recorded as subsystem order.
-* The interval of the timer callback that drives the clock (§2.2).
 * Which specific dialogs and operations raise the city pause count versus the pending/modal count
   (§2.3 / §6.3 rule 6); see also `09-ui-screens.md`.
