@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <thread>
 
 namespace m3k {
@@ -101,6 +102,21 @@ double SimRng::nextReal() {
   if (t_ == 0) t_ = 0x12345678u;
   t_ = t_ * 0x278DDE6Du;
   return double(t_) / 4294967296.0;
+}
+
+double SimRng::nextNormal() {
+  if (hasSpareNormal_) {
+    hasSpareNormal_ = false;
+    return spareNormal_;
+  }
+  // Box–Muller: two independent standard normals from two U(0,1) draws.
+  double u1 = nextReal(), u2 = nextReal();
+  if (u1 < 1e-12) u1 = 1e-12;
+  double r = std::sqrt(-2.0 * std::log(u1));
+  double th = 2.0 * 3.14159265358979323846 * u2;
+  spareNormal_ = r * std::sin(th);
+  hasSpareNormal_ = true;
+  return r * std::cos(th);
 }
 
 // ---------------------------------------------------------------- Clock

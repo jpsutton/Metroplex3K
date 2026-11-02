@@ -43,11 +43,15 @@ class SimRng {
   int32_t randInt(int32_t a, int32_t b) { return a + int32_t(rand(uint32_t(b - a))); }
   double nextReal();                  // u in [0,1) from the float generator
   double randRange(double a, double b) { return a + (b - a) * nextReal(); }
+  // Standard normal via Box–Muller over the float generator (spec 14 §8 / weather sampler).
+  double nextNormal();
   uint32_t intState() const { return s_; }
   uint32_t realState() const { return t_; }
  private:
-  void seed_(uint32_t x) { s_ = x; t_ = x; }
+  void seed_(uint32_t x) { s_ = x; t_ = x; hasSpareNormal_ = false; }
   uint32_t s_ = 0, t_ = 0;
+  bool hasSpareNormal_ = false;
+  double spareNormal_ = 0;
 };
 
 // Microsoft C runtime rand() (shared process-wide in the original).
