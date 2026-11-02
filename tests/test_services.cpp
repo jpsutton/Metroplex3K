@@ -195,20 +195,27 @@ static void testFlammability() {
 
   FlammabilityLayer fl;
   fl.init(16, 16, p);
+  // Q-BM: floor(256/30)=8 tiles, row-major x-fastest from (0,0).
   fl.run([](int x, int z) { return x * 10 + z; }, nullptr, n);
-  CHECK(fl.cursor == 8);                       // floor(256/30) tiles per run
-  CHECK(fl.grid[0] == 0 && fl.grid[1] == 1 && fl.grid[7] == 7 && fl.grid[8] == 0);
+  CHECK(fl.cursorX == 8 && fl.cursorZ == 0);
+  CHECK(fl.grid[0 * 16 + 0] == 0 && fl.grid[1 * 16 + 0] == 10 && fl.grid[7 * 16 + 0] == 70);
+  CHECK(fl.grid[8 * 16 + 0] == 0);             // not yet visited
   fl.run([](int x, int z) { return x * 10 + z; }, nullptr, n);
-  CHECK(fl.grid[8] == 8 && fl.grid[15] == 15);
+  CHECK(fl.cursorX == 0 && fl.cursorZ == 1);   // wrapped x, advanced z
+  CHECK(fl.grid[8 * 16 + 0] == 80 && fl.grid[15 * 16 + 0] == 150);
+  // Full map: 256 tiles / 8 per day = 32 days; wrap finalises ⌊sum/count⌋.
+  FlammabilityLayer pass; pass.init(16, 16, p);
+  for (int r = 0; r < 32; r++) pass.run([](int, int) { return 40; }, nullptr, n);
+  CHECK(pass.cursorX == 0 && pass.cursorZ == 0 && pass.avg == 40 && pass.sweepCount == 0);
   for (size_t i = 0; i < fl.grid.size(); i++) fl.grid[i] = uint8_t(i);
-  fl.trailer[1] = 77; fl.tailByte = 3;
+  fl.cursorZ = 77; fl.tailByte = 3;
   Bytes b = fl.serialize();
   CHECK(b.size() == 25 + 256);
   CHECK(b[8] == fl.grid[15 * 16 + 0]);        // rows stored last first
   CHECK(b[8 + 255] == fl.grid[15]);
   FlammabilityLayer g; g.init(16, 16, p);
   g.parse(b.data(), b.size());
-  CHECK(g.grid == fl.grid && g.trailer[1] == 77 && g.tailByte == 3 && g.serialize() == b);
+  CHECK(g.grid == fl.grid && g.cursorZ == 77 && g.tailByte == 3 && g.serialize() == b);
   bool threw = false;
   try { g.parse(b.data(), b.size() - 1); } catch (const FormatError&) { threw = true; }
   CHECK(threw);

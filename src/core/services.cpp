@@ -362,20 +362,27 @@ int flammabilityBand(int v) {
 void FlammabilityLayer::run(const std::function<int(int, int)>& baseAt,
                             const std::function<bool(int, int)>& noWaterAt, const OrdinanceSet& ord) {
   size_t total = size_t(W_) * H_;
-  if (!total) return;
+  if (!total || W_ <= 0 || H_ <= 0) return;
   size_t n = total / 30;
   for (size_t i = 0; i < n; i++) {
-    size_t t = cursor % total;
-    int x = int(t / H_), z = int(t % H_);
-    grid[t] = uint8_t(flammabilityValue(baseAt ? baseAt(x, z) : 0, params_, ord, noWaterAt ? noWaterAt(x, z) : false));
-    cursor = (t + 1) % total;
+    int x = int(cursorX), z = int(cursorZ);
+    uint8_t v = uint8_t(flammabilityValue(baseAt ? baseAt(x, z) : 0, params_, ord,
+                                          noWaterAt ? noWaterAt(x, z) : false));
+    grid[size_t(x) * H_ + size_t(z)] = v;
+    sweepSum += v;
+    sweepCount++;
+    cursorX++;
+    if (int(cursorX) >= W_) {
+      cursorX = 0;
+      cursorZ++;
+      if (int(cursorZ) >= H_) {
+        cursorZ = 0;
+        avg = uint8_t(sweepCount ? sweepSum / sweepCount : 0);
+        sweepSum = 0;
+        sweepCount = 0;
+      }
+    }
   }
-}
-
-double FlammabilityLayer::averageFlammability() const {
-  int64_t s = 0, n = 0;
-  for (auto v : grid) if (v) { s += v; n++; }
-  return n ? double(s) / double(n) : 0.0;
 }
 
 Bytes FlammabilityLayer::serialize() const {
@@ -383,7 +390,8 @@ Bytes FlammabilityLayer::serialize() const {
   writeRecHeader(b, 1);
   Bytes g = flipRows(grid, W_, H_);
   b.insert(b.end(), g.begin(), g.end());
-  for (auto t : trailer) put32(b, t);
+  // Trailer: cursor + running sweep stats (spec 17 §4 / Q-BM) then an OPEN tail byte.
+  put32(b, cursorX); put32(b, cursorZ); put32(b, sweepSum); put32(b, sweepCount);
   b.push_back(tailByte);
   return b;
 }
@@ -396,7 +404,7 @@ void FlammabilityLayer::parse(const uint8_t* p, size_t n) {
   if (r.remaining() != cells + 17) throw FormatError("flammability size");
   Bytes g = r.bytes(cells);
   grid = flipRows(g, W_, H_);
-  for (auto& t : trailer) t = r.u32();
+  cursorX = r.u32(); cursorZ = r.u32(); sweepSum = r.u32(); sweepCount = r.u32();
   tailByte = r.u8();
 }
 

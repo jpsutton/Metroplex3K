@@ -149,15 +149,21 @@ int flammabilityBand(int byteValue);  // 0:0 1:1-46 2:47-83 3:84-121 4:122-150 5
 
 class FlammabilityLayer {
  public:
-  void init(int W, int H, const FlammabilityParams& p) { W_ = W; H_ = H; params_ = p; grid.assign(size_t(W) * H, 0); cursor = 0; }
-  // One daily run: recomputes floor(W*H/30) tiles in index order, continuing from the cursor.
+  void init(int W, int H, const FlammabilityParams& p) {
+    W_ = W; H_ = H; params_ = p;
+    grid.assign(size_t(W) * H, 0);
+    cursorX = cursorZ = sweepSum = sweepCount = 0;
+    avg = 0;
+  }
+  // Spec 17 §4 / Q-BM [STATIC]: floor(W·H/30) tiles/day, row-major x-fastest from continuing cursor.
   void run(const std::function<int(int, int)>& baseAt, const std::function<bool(int, int)>& noWaterAt,
            const OrdinanceSet& ord);
-  double averageFlammability() const;   // mean of non-zero tiles (fire strike metric) [OPEN]
+  double averageFlammability() const { return double(avg); }  // last completed-pass ⌊sum/count⌋
   std::vector<uint8_t> grid;             // x*H+z
-  size_t cursor = 0;
-  uint32_t trailer[4] = {0, 0, 0, 0};    // [OPEN] preserved
-  uint8_t tailByte = 0;
+  uint32_t cursorX = 0, cursorZ = 0;
+  uint32_t sweepSum = 0, sweepCount = 0;
+  uint8_t avg = 0;
+  uint8_t tailByte = 0;                  // record trailer byte after the four u32s [OPEN]
   Bytes serialize() const;               // 25 + W*H bytes, header version 1
   void parse(const uint8_t* p, size_t n);
  private:
