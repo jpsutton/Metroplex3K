@@ -252,7 +252,7 @@ checked against `10-save-format.md` §5.2, whose payload order is the same [STAT
 | 24 | Water | `206C6E7C:02BF0033:0` |
 | 25 | Flammability | `206C6E7C:61448030:0` |
 | 26 | Spacing/reservation grid | `206C6E7C:01FD7A8C:0` |
-| 27 | Unidentified subsystem with monthly work (§6.1) | none |
+| 27 | Weather (§6.1 monthly item 13) | none |
 | 28 | Unidentified geometry helper | none |
 | 29 | Scenario | `206C6E7C:C3DE4D66:0` (scenario cities only) |
 | 30–36 | Advisor manager and the six advisors | `022E288E:422E28E8:0`, the `013DEE82:*:B` topic lists, `206C6E7C:C28D0B6E:0` |
@@ -313,7 +313,7 @@ paused for the whole monthly work, §6.3 rule 4):
     (`19-sim-economy.md` §7).
 11. Power (#23).
 12. Water (#24).
-13. Unidentified subsystem #27.
+13. Weather (#27): season and temperature update (below).
 14. Pollution (#11): monthly step.
 15. Crime (#12): monthly step.
 16. Aura (#10): mayor-rating chart sample (monthly; yearly and decade samples on 1 January, same
@@ -323,6 +323,24 @@ Items 1–3 always run before items 4–16. Their order among themselves is subs
 [INFERRED, medium confidence]. Items 4–13 run in exactly this order, and items 14–16 come after
 them [STATIC]. Aura's chart sample is grouped with the pollution/crime monthly steps; its order
 among 14–16 follows subsystem order [INFERRED].
+
+**Weather (#27), monthly.** The weather subsystem has no save records of its own; its state is
+derived from the city's geographic location and the simulation calendar [STATIC]. On each monthly
+run it:
+
+1. Reads the current simulation date and the city's map location (longitude/latitude; default
+   location if unset is longitude 130°, latitude 37°).
+2. Chooses a season as a quarter of the year from the calendar month: months 1–3, 4–6, 7–9 and
+   10–12. Southern-hemisphere locations (negative latitude) shift the month by six before that
+   choice, so their seasons are inverted relative to the northern calendar [STATIC].
+3. When the season has changed since the previous monthly run, regenerates low, mid and high
+   temperature readings from season tables (with small random jitter) and mild smoothing so the
+   three stay ordered, and notifies listeners that the season changed. When the season is
+   unchanged, temperatures are left as they are [STATIC].
+
+Temperatures are held in Celsius internally and may be reported in Fahrenheit on request
+(°F = °C·1.8 + 32) [STATIC]. The view/sprite side reacts to season changes (holiday and seasonal
+sprite swaps in `25-rendering.md` §8 are related consumers) [INFERRED, medium confidence].
 
 **Yearly:** no subsystem has yearly work. Yearly effects are performed by the monthly work of
 1 January (rule 7).
@@ -423,7 +441,7 @@ lock [STATIC].
    is a multiple of 10.
    Order on 1 January is therefore: daily work → monthly items 1–5 → demographics, ageing and
    demographic graphs → commercial, industrial → transport → budget month-end, year-end and funds
-   chart → power, water, #27 → pollution and crime monthly steps → month handler → yearly handler
+   chart → power, water, weather → pollution and crime monthly steps → month handler → yearly handler
    and anniversaries.
 8. **RNG and cheats.** Generator state is **not** saved; every generator is reseeded from the clock
    when the city is loaded (§8) [STATIC]. Cheat effects: see `27-platform.md` §5. Only the cheat log
@@ -526,7 +544,7 @@ are converted as follows [STATIC]:
 
 * Graph histories owned by subsystems other than the budget and demographics (crime, pollution,
   traffic graphs and so on): when they are sampled.
-* What subsystem #27 does in its monthly step, and what #28 is.
+* What subsystem #28 (geometry helper) does; it has no periodic work of its own (§6.1).
 * The relative order of daily items 6–11 and monthly items 1–3 (§6.1), recorded as subsystem order.
 * Which specific dialogs and operations raise the city pause count versus the pending/modal count
   (§2.3 / §6.3 rule 6); see also `09-ui-screens.md`.
