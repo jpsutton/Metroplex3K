@@ -821,26 +821,15 @@ void Game::tickSim(uint32_t dtMs) {
       applyDisasterOutput(out);
     }
   }
-  // Spec 14 §2.2 [STATIC]: clock timer callback every 1000 ms real time (Q-AS / 484d0cd).
-  // Frame dt accumulates; each callback credits simulated time. Day/minute work is drained below
-  // with a per-frame cap so high speeds (several days per callback) do not hitch once a second.
-  clockCbAccMs_ += dtMs;
-  int cbGuard = 0;
-  while (clockCbAccMs_ >= Clock::kTimerIntervalMs && cbGuard++ < 64) {
-    clockCbAccMs_ -= Clock::kTimerIntervalMs;
-    const bool minuteMode = disasters_.anyActiveNonParade();
-    if (minuteMode) {
-      if (!minuteModeOn_) { minuteModeOn_ = true; minutesDone_ = int(simAccum_ * 1440.0); simAccum_ = 0; minuteAccMs_ = 0; }
-      minuteAccMs_ += Clock::kTimerIntervalMs;
-    } else {
-      if (minuteModeOn_) { minuteModeOn_ = false; simAccum_ = minutesDone_ / 1440.0; minutesDone_ = 0; }
-      // Game days per real second from the clock compression factor of the speed (spec 14 4).
-      simAccum_ += double(factor) / 86400.0;
-    }
-  }
-  // Drain at most one simulated day of work per rendered frame.
-  if (disasters_.anyActiveNonParade()) {
+  // Spec 14 §2.2: the original credits time from a 1000 ms timer callback, which at high speed dumps
+  // several days onto consecutive frames (a once-per-second hitch cluster). We keep the same long-term
+  // rate (factor / 86400 days per real second) but credit proportionally every frame and drain at most
+  // one day (or a few minutes) per frame so the work is spread evenly.
+  clockCbAccMs_ += dtMs;   // retained for diagnostics / catch-up accounting
+  const bool minuteMode = disasters_.anyActiveNonParade();
+  if (minuteMode) {
     if (!minuteModeOn_) { minuteModeOn_ = true; minutesDone_ = int(simAccum_ * 1440.0); simAccum_ = 0; minuteAccMs_ = 0; }
+    minuteAccMs_ += dtMs;
     const uint32_t msPerDay = uint32_t(86400000ull / std::max<uint32_t>(1, factor));
     const uint32_t msPerMinute = std::max<uint32_t>(std::max<uint32_t>(msPerDay / 24, 50) / 60, 50);
     int guard = 0;
@@ -857,6 +846,7 @@ void Game::tickSim(uint32_t dtMs) {
     }
   } else {
     if (minuteModeOn_) { minuteModeOn_ = false; simAccum_ = minutesDone_ / 1440.0; minutesDone_ = 0; }
+    simAccum_ += double(dtMs) / 1000.0 * double(factor) / 86400.0;
     if (simAccum_ >= 1.0) { simAccum_ -= 1.0; dayStep(); }
   }
   if (shake_ > 0) shake_--;

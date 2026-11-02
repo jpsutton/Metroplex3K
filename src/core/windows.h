@@ -340,7 +340,7 @@ class PreferencesDialog {
 // ---- Engine options (Metroplex3K only, no counterpart in the original) ------------------------------------------------
 // Opened from the HUD button right of the help "?" button. Drawn with the original dialog art when the skin has it.
 struct EngineOptions {
-  bool showFps = false;   // frame counter in the upper-left corner
+  bool showFps = false;   // frame counter + frame-time sparkline in the upper-left corner
   static EngineOptions fromPreferences(const Preferences& p);
   void toPreferences(Preferences& p) const;
 };

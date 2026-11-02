@@ -90,9 +90,10 @@ class Skin {
   int screenH() const { return h_; }
 
   // Named image or nullptr. Names: "rootpanel", "bottombar", "bottombar.cap", "rci", "speed.0".."speed.5",
-  // "help", "root.N.hover"/"root.N.press" (N=1..9), "sub.N" (sub-menu panel), "tool.XXXX" (hex id, 4 digits,
-  // 4-cell strip), "button" (SYS GZBtn), "check", "radio", "combo", "gonzo.NN" (hex instance),
-  // "menu.bg", "menu.btn.K" (K=0..8), "sys.XXXXXXXX", "main.XXXXXXXX", "dlg.XXXXXXXX".
+  // "help", "engine" (Metroplex3K options: help chrome with a cog), "root.N.hover"/"root.N.press" (N=1..9),
+  // "sub.N" (sub-menu panel), "tool.XXXX" (hex id, 4 digits, 4-cell strip), "button" (SYS GZBtn), "check",
+  // "radio", "combo", "gonzo.NN" (hex instance), "menu.bg", "menu.btn.K" (K=0..8), "sys.XXXXXXXX",
+  // "main.XXXXXXXX", "dlg.XXXXXXXX".
   const Image* get(const std::string& name) const;
   // Direct (group, instance) lookup; decodes lazily and caches. nullptr if missing or undecodable.
   const Image* image(uint32_t group, uint32_t inst) const { return fetch(group, inst); }
@@ -159,6 +160,7 @@ class Skin {
 
  private:
   void bind(const std::string& name, uint32_t group, uint32_t inst);
+  void buildEngineButton();   // synthesise "engine" from the help strip (cog instead of "?")
   bool havePanel() const { return get("rootpanel") != nullptr; }
   ResourceDb* db_ = nullptr;
   bool loaded_ = false;
@@ -168,6 +170,7 @@ class Skin {
   std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> names_;
   mutable std::unordered_map<uint64_t, Image> cache_;
   mutable std::unordered_map<uint64_t, bool> missing_;
+  std::unordered_map<std::string, Image> extras_;   // synthesised art (not from the resource DB)
   const Image* fetch(uint32_t group, uint32_t inst) const;
 };
 

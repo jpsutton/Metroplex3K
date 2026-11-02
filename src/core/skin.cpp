@@ -177,14 +177,95 @@ void Skin::bind(const std::string& name, uint32_t group, uint32_t inst) {
 }
 
 const Image* Skin::get(const std::string& name) const {
+  auto ex = extras_.find(name);
+  if (ex != extras_.end()) return &ex->second;
   auto it = names_.find(name);
   return it == names_.end() ? nullptr : fetch(it->second.first, it->second.second);
+}
+
+// Build a 4-cell "engine" (options) strip from the help "?" button: keep the chrome, replace the glyph with a cog.
+void Skin::buildEngineButton() {
+  const Image* help = get("help");
+  if (!help || help->w < 4 || help->h < 8) return;
+  Image im = *help;
+  const int cells = 4, cw = im.w / cells, ch = im.h;
+  auto at = [&](int x, int y) -> uint32_t& { return im.px[size_t(y) * im.w + x]; };
+  auto putDisk = [&](int cx, int cy, float r, uint32_t col, int x0, int x1) {
+    const int rr = int(std::ceil(r));
+    const int r2 = int(r * r + 0.5f);
+    for (int y = cy - rr; y <= cy + rr; y++)
+      for (int x = cx - rr; x <= cx + rr; x++)
+        if (x >= x0 && x < x1 && y >= 0 && y < ch && (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2) at(x, y) = col;
+  };
+  for (int cell = 0; cell < cells; cell++) {
+    const int x0 = cell * cw, x1 = x0 + cw;
+    const int cx = x0 + cw / 2 - 1, cy = ch / 2 - 1;
+    // Sample the button face on a ring around the glyph so we can paint out the "?".
+    std::vector<uint32_t> samples;
+    for (int a = 0; a < 360; a += 10)
+      for (int rad : {12, 13, 14}) {
+        const int x = int(std::lround(cx + rad * std::cos(a * 0.017453292519943295)));
+        const int y = int(std::lround(cy + rad * std::sin(a * 0.017453292519943295)));
+        if (x < x0 || x >= x1 || y < 0 || y >= ch) continue;
+        uint32_t p = at(x, y);
+        int r = int(p & 255), g = int((p >> 8) & 255), b = int((p >> 16) & 255), al = int(p >> 24);
+        if (al < 200) continue;
+        if (r > 180 && g > 140 && b < 120) continue;   // skip yellow glyph samples
+        samples.push_back(p);
+      }
+    if (samples.empty()) continue;
+    std::sort(samples.begin(), samples.end());
+    const uint32_t face = samples[samples.size() / 2];
+    const int fr = int(face & 255), fg = int((face >> 8) & 255), fb = int((face >> 16) & 255);
+    for (int y = cy - 13; y <= cy + 13; y++)
+      for (int x = cx - 13; x <= cx + 13; x++) {
+        if (x < x0 || x >= x1 || y < 0 || y >= ch) continue;
+        if ((x - cx) * (x - cx) + (y - cy) * (y - cy) > 12 * 12) continue;
+        uint32_t p = at(x, y);
+        int r = int(p & 255), g = int((p >> 8) & 255), b = int((p >> 16) & 255), al = int(p >> 24);
+        if (al < 128) continue;
+        const bool yellow = r > 160 && g > 120 && b < 130 && r + g > b * 3;
+        const bool dark = r + g + b < 140;
+        const int dist = std::abs(r - fr) + std::abs(g - fg) + std::abs(b - fb);
+        if (yellow || dark || dist > 55) at(x, y) = (p & 0xFF000000u) | (face & 0x00FFFFFFu);
+      }
+    // Cog: yellow fill + black outline on active cells; dark embossed on the disabled cell.
+    const bool yellow = cell != CELL_DISABLED;
+    const bool pressed = cell == CELL_PRESSED;
+    const int gx = cx + (pressed ? 1 : 0), gy = cy + (pressed ? 1 : 0);
+    const uint32_t outline = yellow ? rgba(12, 12, 16) : rgba(18, 18, 24);
+    const uint32_t fill = yellow ? rgba(255, 224, 48) : rgba(52, 52, 60);
+    constexpr int kTeeth = 8;
+    auto plot = [&](int x, int y, uint32_t col) {
+      if (x >= x0 && x < x1 && y >= 0 && y < ch) at(x, y) = col;
+    };
+    for (int t = 0; t < kTeeth; t++) {
+      const double a = (t * 360.0 / kTeeth - 90.0) * 0.017453292519943295;
+      for (int rad = 5; rad <= 10; rad++)
+        for (double da : {-0.18, -0.09, 0.0, 0.09, 0.18})
+          plot(int(std::lround(gx + rad * std::cos(a + da))), int(std::lround(gy + rad * std::sin(a + da))), outline);
+    }
+    putDisk(gx, gy, 7.2f, outline, x0, x1);
+    putDisk(gx, gy, 6.0f, fill, x0, x1);
+    for (int t = 0; t < kTeeth; t++) {
+      const double a = (t * 360.0 / kTeeth - 90.0) * 0.017453292519943295;
+      for (int rad = 5; rad <= 9; rad++)
+        for (double da : {-0.12, -0.04, 0.04, 0.12})
+          plot(int(std::lround(gx + rad * std::cos(a + da))), int(std::lround(gy + rad * std::sin(a + da))), fill);
+      for (double da : {-0.14, 0.0, 0.14})
+        plot(int(std::lround(gx + 10 * std::cos(a + da))), int(std::lround(gy + 10 * std::sin(a + da))), outline);
+    }
+    putDisk(gx, gy, 3.6f, outline, x0, x1);
+    putDisk(gx, gy, 2.6f, fill, x0, x1);
+    putDisk(gx, gy, 1.4f, outline, x0, x1);
+  }
+  extras_["engine"] = std::move(im);
 }
 
 bool Skin::load(ResourceDb& db, int screenH, int screenW) {
   db_ = &db; h_ = screenH;
   w_ = screenW > 0 ? screenW : screenH <= 480 ? 640 : screenH <= 600 ? 800 : 1024;
-  cache_.clear(); missing_.clear(); names_.clear();
+  cache_.clear(); missing_.clear(); names_.clear(); extras_.clear();
   layout_ = toolMenuLayout(screenH);
   bar_ = bottomBarLayout(w_);
 
@@ -206,6 +287,7 @@ bool Skin::load(ResourceDb& db, int screenH, int screenW) {
   bind("rci", UiBig, 0x42FB77F6);
   for (uint32_t k = 0; k < 6; k++) bind("speed." + std::to_string(k), UiBig, 0x52FB06E4 + k);
   bind("help", UiBig, 0x52FB06EA);
+  buildEngineButton();   // Metroplex3K options: same chrome as "help", cog instead of "?"
   // Navigator panel pieces (bottom-right): top-left, top-right, bottom (160 wide), layers strip, 4 zoom/rotate strips.
   bind("nav.tl", UiBig, 0x22F96E32); bind("nav.tr", UiBig, 0x22F96E33); bind("nav.bot", UiBig, 0x22F96E34);
   bind("nav.layers", UiBig, 0x22F96E35);   // 22F96E31 is the lattice (grid) strip

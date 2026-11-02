@@ -62,6 +62,8 @@ int main() {
   CHECK(s.get("tool.A006") != nullptr && s.get("root.9.hover") && s.get("root.9.press") && s.get("sub.1"));
   CHECK(s.get("nonexistent") == nullptr && s.get("tool.7777") == nullptr);
   CHECK(s.get("speed.0") && s.get("speed.5") && s.get("help") && s.get("button") && s.get("check") && s.get("radio"));
+  // Engine options strip is synthesised from help (same size, cog instead of "?").
+  CHECK(s.get("engine") && s.get("engine")->w == s.get("help")->w && s.get("engine")->h == s.get("help")->h);
   CHECK(s.get("menu.bg") && s.get("menu.bg")->w == 800 && s.get("menu.btn.8"));
   CHECK(s.image(UiBig, 0xFFFF) == s.get("rootpanel"));
   CHECK(s.image(UiBig, 0x1234) == nullptr);

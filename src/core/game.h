@@ -293,6 +293,9 @@ class Game {
   uint32_t fpsAccMs_ = 0;
   int fpsFrames_ = 0, fps_ = 0, fpsScale_ = 0;
   Font fpsFont_;
+  static constexpr int kFpsHist = 64;
+  uint16_t fpsHist_[kFpsHist] = {};   // recent frame times (ms), ring buffer
+  int fpsHistPos_ = 0, fpsHistCount_ = 0;
   fs::path prefsPath_;
 
   // in-city
@@ -317,7 +320,7 @@ class Game {
   int minutesDone_ = 0;
   int vortexMs_ = 0;            // remaining life of an active whirlpool vortex
   uint32_t minuteAccMs_ = 0;
-  // Spec 14 §2.2: clock timer callback is 1000 ms real time; frame dt accumulates here.
+  // Wall-clock ms accumulated while the sim is running (diagnostics / catch-up).
   uint32_t clockCbAccMs_ = 0;
   MenuTree menu_;
   bool menuLoaded_ = false;

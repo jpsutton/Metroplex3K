@@ -572,12 +572,49 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
 void Game::drawFpsCounter(uint32_t dtMs) {
   fpsAccMs_ += dtMs; fpsFrames_++;
   if (fpsAccMs_ >= 500) { fps_ = int((uint32_t(fpsFrames_) * 1000 + fpsAccMs_ / 2) / fpsAccMs_); fpsAccMs_ = 0; fpsFrames_ = 0; }
+  // Always sample so the sparkline is populated the moment the overlay is turned on.
+  fpsHist_[fpsHistPos_] = uint16_t(std::min<uint32_t>(dtMs, 255));
+  fpsHistPos_ = (fpsHistPos_ + 1) % kFpsHist;
+  if (fpsHistCount_ < kFpsHist) fpsHistCount_++;
   if (!engineOpts_.showFps) return;
   const int s = std::max(1, H_ / 300);   // 6x9 cell per scale step: 9 px at 480, 18 px at 600-899, 27 px at 900-1199, ...
   if (s != fpsScale_) { fpsFont_.makeBuiltin(s); fpsScale_ = s; }
   const std::string t = std::to_string(fps_) + " FPS";
-  fpsFont_.draw(screen_, W_, H_, 5 * s, 5 * s, t, rgb(0, 0, 0));   // drop shadow keeps it readable over light terrain
-  fpsFont_.draw(screen_, W_, H_, 4 * s, 4 * s, t, rgb(0, 255, 0));
+  const int pad = 3 * s, gap = 2 * s;
+  const int textW = fpsFont_.measure(t), textH = fpsFont_.height();
+  // 1 px columns with a 1 px gap (2 px stride) — stays crisp at every scale.
+  const int stride = 2, graphH = 24 * s, graphW = kFpsHist * stride - 1;
+  const int innerW = std::max(textW, graphW), innerH = textH + gap + graphH;
+  const int boxX = 2 * s, boxY = 2 * s;
+  const Rect box{boxX, boxY, innerW + 2 * pad, innerH + 2 * pad};
+  const uint32_t green = rgb(0, 255, 0), dim = rgb(0, 96, 0), bg = rgb(24, 24, 24);
+  ui_.fillAlpha(box, bg, 0.72f);
+  ui_.fill({box.x, box.y, box.w, 1}, green);
+  ui_.fill({box.x, box.y + box.h - 1, box.w, 1}, green);
+  ui_.fill({box.x, box.y, 1, box.h}, green);
+  ui_.fill({box.x + box.w - 1, box.y, 1, box.h}, green);
+  const int tx = box.x + pad, ty = box.y + pad;
+  fpsFont_.draw(screen_, W_, H_, tx, ty, t, green);
+  // Frame-time sparkline: one pixel column per recent frame (oldest left → newest right).
+  const int gx = box.x + pad + (innerW - graphW) / 2, gy = ty + textH + gap;
+  int peak = 33;   // at least a 30 FPS scale so short frames still read
+  for (int i = 0; i < fpsHistCount_; i++) peak = std::max(peak, int(fpsHist_[i]));
+  // 16.7 ms guide (60 FPS target), snapped to a pixel row.
+  const int guideY = gy + graphH - 1 - std::min(graphH - 1, (17 * graphH) / peak);
+  for (int x = gx; x < gx + graphW; x += stride)
+    if (x >= 0 && x < W_ && guideY >= 0 && guideY < H_) screen_[size_t(guideY) * W_ + x] = dim;
+  for (int i = 0; i < fpsHistCount_; i++) {
+    const int idx = (fpsHistPos_ - fpsHistCount_ + i + kFpsHist * 2) % kFpsHist;
+    const int ms = fpsHist_[idx];
+    const int h = std::max(1, std::min(graphH, (ms * graphH + peak / 2) / peak));
+    const int x = gx + i * stride;
+    if (x < 0 || x >= W_) continue;
+    const uint32_t col = ms >= 33 ? rgb(255, 64, 0) : ms >= 20 ? rgb(255, 200, 0) : green;
+    for (int dy = 0; dy < h; dy++) {
+      const int y = gy + graphH - 1 - dy;
+      if (y >= 0 && y < H_) screen_[size_t(y) * W_ + x] = col;
+    }
+  }
 }
 
 void Game::drawMessage() {
@@ -798,12 +835,17 @@ void Game::drawHud() {
     bool hc = false;
     skin_.imageButtonCells(ui_, skin_.get("help"), 4, {place.p3x, place.p3y, 40, 39}, tip(0x3C, "Query"), tool_ == ToolKind::Query, true, hc);
     if (hc) setTool(ToolKind::Query);
-    // Engine options (Metroplex3K only): skinned push button right of the "?"; above it when the RCI indicator
-    // leaves no room in the bar (640x480 art).
-    Rect eb{place.p3x + 44, place.p3y + (39 - 22) / 2, 36, 22};
-    if (eb.x + eb.w > navX - RciGeometry::imgW - 2) eb = {place.p3x + 2, place.p3y - 24, 36, 22};
-    if (ui_.hover(eb)) { uiHit_ = true; ui_.tooltip = "Metroplex3K options"; }
-    if (ui_.button(eb, "M3K", true, showEngine_)) openWindow("engine");
+    // Engine options (Metroplex3K only): same chrome as "?", with a cog. Prefer just right of help; when the RCI
+    // indicator leaves no room (typical at 1024-wide), tuck it above and a few pixels right of help.
+    Rect eb{place.p3x + 38, place.p3y, 40, 39};
+    if (eb.x + eb.w > navX - RciGeometry::imgW - 2) eb = {place.p3x + 18, place.p3y - 36, 40, 39};
+    bool ec = false;
+    if (skin_.imageButtonCells(ui_, skin_.get("engine"), 4, eb, "Metroplex3K options", showEngine_, true, ec)) {
+      if (ec) openWindow("engine");
+    } else {
+      if (ui_.hover(eb)) { uiHit_ = true; ui_.tooltip = "Metroplex3K options"; }
+      if (ui_.button({eb.x + 2, eb.y + 8, 36, 22}, "M3K", true, showEngine_)) openWindow("engine");
+    }
   } else {
     if (ui_.button({fbx, H_ - bh + 3, 44, 24}, paused_ ? "Run" : "Pause")) { setPaused(!paused_); sound(paused_ ? 24 : 23); }
     for (int i = 1; i <= 4; i++)
