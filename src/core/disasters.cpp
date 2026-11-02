@@ -306,7 +306,7 @@ void DisasterManager::checkAllOver(DisasterOutput& out) {
 }
 void DisasterManager::endEmergency(DisasterOutput& out) {
   emergencyActive_ = false;
-  emergencyMonths_ = 0;
+  emergencyDays_ = 0;
   out.event(DisasterEvent::EmergencyEnded, DisasterType::Fire);
 }
 void DisasterManager::declareEmergency(DisasterOutput& out) {
@@ -317,7 +317,7 @@ void DisasterManager::declareEmergency(DisasterOutput& out) {
   if (dis) falseAlarms_ = 0;
   if (falseAlarms_ < 3) {
     emergencyActive_ = true;
-    emergencyMonths_ = 0;
+    emergencyDays_ = 0;
     if (dis) emergencyEW_ = true;
   } else {
     out.event(DisasterEvent::EmergencyRefused, DisasterType::Fire);
@@ -1426,8 +1426,10 @@ void DisasterManager::stop(DisasterType t, DisasterOutput& out) {
 }
 
 void DisasterManager::monthlyTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out) {
+  // Spec 14 §6.1 monthly #1 / 21 §4.1 [STATIC]: per-type random-occurrence checks only.
+  // Gated by the city disasters-enabled flag (same register/unregister gate as 21 §4.3).
+  // Emergency elapsed ticks daily (dayTick); instance day/minute ticks are separate.
   today_ = in.jdn; year_ = in.year; lastIn_ = in;
-  if (emergencyActive_ && ++emergencyMonths_ > tune.maxEmergencyDuration) endEmergency(out);
   if (!enabled_ || !in.disastersEnabled) { checkAllOver(out); return; }
   // Fire
   if (fireInterval_ == 0) fireInterval_ = drawRange(rng_, tune.fireIntervalMin, tune.fireIntervalMax);
@@ -1520,7 +1522,10 @@ void DisasterManager::monthlyTick(DisasterWorld& w, const DisasterInputs& in, Di
 }
 
 void DisasterManager::dayTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out) {
+  // Spec 14 §6.1 daily #1 / 21 §10.1 [STATIC]: emergency elapsed increments once per simulated day
+  // (not gated by disasters-enabled). Ends when elapsed > MaxEmergencyDuration (days).
   today_ = in.jdn; year_ = in.year; lastIn_ = in;
+  if (emergencyActive_ && ++emergencyDays_ > tune.maxEmergencyDuration) endEmergency(out);
   burnTick(w, out);
   checkAllOver(out);
 }

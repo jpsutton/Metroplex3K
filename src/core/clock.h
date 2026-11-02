@@ -213,7 +213,7 @@ class CitySchedule {
   // Called with the news item id on anniversaries.
   std::function<void(uint32_t newsItem)> onAnniversary;
 
-  bool disastersEnabled = true;   // monthly disaster-manager step only then (spec 6.1 monthly 1)
+  bool disastersEnabled = true;   // monthly random-occurrence checks only then (14 §6.1 monthly 1 / Q-BD)
 
   // Per-building weekly work: runs before the weekly layer steps, in registration order;
   // buildings added during the step wait until it ends. Returns an id.

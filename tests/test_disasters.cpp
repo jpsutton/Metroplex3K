@@ -167,8 +167,11 @@ static void testEmergencyAndRelief() {
   m.declareEmergency(out);   // false alarm 1
   CHECK(m.emergencyActive());
   m.stop(DisasterType::Fire, out);
-  for (int i = 0; i < 20; ++i) m.monthlyTick(w, in, out);
-  CHECK(!m.emergencyActive());   // ends after > MaxEmergencyDuration months
+  // Spec 21 §10.1 / Q-BD: elapsed increments once per simulated day; ends when > MaxEmergencyDuration.
+  // Default MaxEmergencyDuration = 8 → ends on the 9th dayTick.
+  for (int i = 0; i < 8; ++i) { out.clear(); m.dayTick(w, in, out); CHECK(m.emergencyActive()); }
+  out.clear(); m.dayTick(w, in, out);
+  CHECK(!m.emergencyActive());   // ends after > MaxEmergencyDuration days
   DisasterManager m2; m2.seed(2);
   out.clear();
   for (int i = 0; i < 3; ++i) { m2.declareEmergency(out); }

@@ -34,7 +34,7 @@ enum : uint32_t { kOccNonFlammable = 0x400, kOccIndestructible = 0x800, kOccCrow
 // Shipped values are the defaults. Values marked [OPEN default] are not given in the spec.
 struct DisasterTunables {
   // [MiscDisasterTunables] [OPEN default]
-  int maxEmergencyDuration = 12;        // months
+  int maxEmergencyDuration = 8;         // days (spec 21 §2.2 / §10.1; shipped MaxEmergencyDuration=8)
   int minDisasterCostToGetRelief = 0;
   int reliefPctWithoutEW = 0;
   int reliefPctWithEW = 50;
@@ -293,9 +293,9 @@ class DisasterManager {
   void seed(uint32_t s) { rng_.seed(s); }
   GameRng& rng() { return rng_; }
 
-  // Schedulers (spec 21 section 4.1)
-  void monthlyTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out);  // random checks + emergency month
-  void dayTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out);      // burning + layer bookkeeping
+  // Schedulers (spec 21 §4.1 / 14 §6.1)
+  void monthlyTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out);  // random-occurrence checks (gated)
+  void dayTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out);      // emergency elapsed + burning
   void minuteTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out);   // every active instance
 
   // Starts. `warn` = warning flag. All return success.
@@ -410,7 +410,7 @@ class DisasterManager {
   ParadeRecord parade_;
   int32_t today_ = 2415021; int year_ = 1900;
   // emergency / layer
-  bool emergencyActive_ = false, emergencyEW_ = false; int emergencyMonths_ = 0, falseAlarms_ = 0;
+  bool emergencyActive_ = false, emergencyEW_ = false; int emergencyDays_ = 0, falseAlarms_ = 0;
   int64_t cost_ = 0;
   void checkAllOver(DisasterOutput& out);
   void endEmergency(DisasterOutput& out);
