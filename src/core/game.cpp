@@ -19,7 +19,8 @@ constexpr int kToolOnRamp = 7;
 void Game::setPaused(bool p) {
   if (p == paused_) return;
   paused_ = p;
-  // Spec 14 §2.3: city pause count (player/UI pause); separate from pending/modal.
+  // Spec 14 §2.3 / Q-AZ: city pause count = ordinary player pause (bottom-bar / hotkey).
+  // Resume and selecting a non-zero speed clear it. Modals use raisePending instead.
   if (!simReady_) return;
   if (p) sim_.city().raisePause();
   else sim_.city().resumePause();
@@ -456,6 +457,7 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
   } held{*this};
   held.lock();
   W_ = w; H_ = h; frameDt_ = dtMs;
+  syncScreenPending();
   if (audio_) { audio_->setAudioZoom(cam_.zoom + 1); audio_->update(dtMs); }
   if (screen_.size() != size_t(w) * h) screen_.assign(size_t(w) * h, 0xFF302820u);
   // Dialogs opened from a city (Load / Save As) keep the city view and HUD behind them, frozen.

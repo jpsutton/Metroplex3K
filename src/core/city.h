@@ -165,12 +165,13 @@ class City {
   CitySchedule sched;
   Weather weather;   // subsystem #27 (spec 14 §6.1 monthly item 13); no save records
   PlacementQuery placement;  // subsystem #28 (spec 14 §6.1); on-demand only, no save records
-  // Spec 14 §2.3 / §6.3 rule 6 [STATIC]: two nestable runtime city counts. Hold = either non-zero.
+  // Spec 14 §2.3 / §6.3 rule 6 / Q-AZ [STATIC]: two nestable runtime city counts. Hold = either non-zero.
   // Pure runtime — not saved, no INI. Busy (monthly / backlog) is separate and does not feed hold.
-  // Player/UI pause (0→1 pauses clock). `announce` posts "simulation paused" (skip on start-paused).
+  // raisePause: ordinary player pause (bottom-bar / hotkey); resume + non-zero speed clear it.
+  // raisePending: modal windows, save/load, scenario UI, terrain editor, other blocking paths.
   void raisePause(bool announce = true);
   void resumePause();
-  void raisePending();  // modal / blocking op (also pauses clock)
+  void raisePending();
   void clearPending();
   int cityPauseCount() const { return cityPauseCount_; }
   int cityPendingCount() const { return cityPendingCount_; }

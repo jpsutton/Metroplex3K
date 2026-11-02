@@ -191,6 +191,9 @@ class Game {
   void modalOpened();
   void modalClosed();
   bool anyBlockingWindow() const;
+  // Spec 14 §2.3 (Q-AZ): save/load, terrain editor, scenario UI, and other non-InCity screens
+  // while a city is loaded raise pending/modal (not the player pause count).
+  void syncScreenPending();
   void applyCheat(const CheatResult& r);
   void updateHover(int tx, int tz, bool onTile);
   void postNews(uint32_t table, uint32_t id);
@@ -370,6 +373,7 @@ class Game {
   std::string costText_; int costX_ = 0, costY_ = 0; bool costOk_ = true, costShow_ = false;
   bool cheatOpen_ = false;
   bool wasPausedBeforeModal_ = false; int modalDepth_ = 0;
+  bool screenPending_ = false;  // Game-side latch for syncScreenPending()
   std::vector<std::string> snapshotNames_;
   int snapSizeIdx_ = 1;
   bool panning_ = false; int panLastX_ = 0, panLastY_ = 0;

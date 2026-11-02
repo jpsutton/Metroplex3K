@@ -48,8 +48,8 @@ WinEnv Game::env() {
 void Game::modalOpened() {
   if (modalDepth_++ == 0) {
     wasPausedBeforeModal_ = paused_;
-    paused_ = true;
-    // Spec 14 §2.3: pending/modal count (separate from player pause); raises city hold.
+    paused_ = true;  // UI freeze only — does not raise city pause count
+    // Spec 14 §2.3 / Q-AZ: pending/modal count (not player pause); raises city hold.
     if (simReady_) sim_.city().raisePending();
   }
 }
@@ -61,9 +61,19 @@ void Game::modalClosed() {
   }
 }
 
+void Game::syncScreenPending() {
+  // Blocking screens while a city is loaded: save/load, new-city, terrain editor, scenario end, …
+  const bool want = simReady_ && scr_ != Screen::InCity;
+  if (want == screenPending_) return;
+  if (want) sim_.city().raisePending();
+  else sim_.city().clearPending();
+  screenPending_ = want;
+}
+
 bool Game::anyBlockingWindow() const {
+  // Spec 14 §2.3 / 09 §4.2 (Q-AZ): these raise pending/modal, not the player pause count.
   return showBudget_ || showOrd_ || showDeals_ || showAdv_ || showProps_ || showPicker_ || showTip_ || showPrefs_ ||
-         msgBox_.active || petView_ != nullptr;
+         showQuery_ || showGoals_ || showLayers_ || showBrm_ || showBle_ || msgBox_.active || petView_ != nullptr;
 }
 
 void Game::closeModelessWindows() {

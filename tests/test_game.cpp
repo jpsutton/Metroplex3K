@@ -50,6 +50,34 @@ int main() {
   game.setView(32, 32, 2);
   frame(2);
 
+  // Q-AZ: city pause count = player pause; pending/modal = blocking windows / screens.
+  {
+    City& c = game.city();
+    CHECK(c.cityPauseCount() >= 1);   // start-paused
+    const int pauseStart = c.cityPauseCount();
+    game.setPaused(false);
+    CHECK(c.cityPauseCount() == pauseStart - 1);
+    game.setPaused(true);
+    CHECK(c.cityPauseCount() == pauseStart);
+    const int pend0 = c.cityPendingCount();
+    game.openWindow("budget");
+    frame(3);
+    CHECK(c.cityPauseCount() == pauseStart);          // modal does not raise player pause
+    CHECK(c.cityPendingCount() == pend0 + 1);
+    CHECK(c.hold());
+    in.key[K_ESC] = true; frame(3);
+    CHECK(c.cityPendingCount() == pend0);
+    // Save/load-style screen while city loaded → pending (not pause).
+    game.gotoScreen(Screen::MainMenu);
+    frame(2);
+    CHECK(c.cityPauseCount() == pauseStart);
+    CHECK(c.cityPendingCount() == pend0 + 1);
+    game.gotoScreen(Screen::InCity);
+    frame(2);
+    CHECK(c.cityPendingCount() == pend0);
+    game.setPaused(false);   // continue the rest of the test unpaused
+  }
+
   int64_t funds0 = game.sim().funds;
   // Road (tool via command id, drag on the map).
   game.runCommand(0xC2B5DE77);
