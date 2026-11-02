@@ -1,6 +1,7 @@
-// Placement query (#28): on-demand occupancy / clearance helper (spec 14 §6.1 / Q-AV / Q-AW).
+// Placement query (#28): on-demand occupancy / clearance helper (spec 14 §6.1 / Q-AV / Q-AW / Q-BA).
 // No save records, no periodic work. Holds live refs to the layers it queries.
 #pragma once
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <utility>
@@ -26,18 +27,12 @@ inline bool clearanceUses4(int m) { return m == 0 || m == 2; }
 // Same value as OF_IGNORABLE (tiler.h / occupant attr 0x72).
 constexpr uint32_t kPlaceCapIgnorable = 0x400;
 
-// Occupant filter bits (exact caller predicates still [OPEN]).
-enum OccupantFilterBit : uint32_t {
-  kFiltAgentType = 1u << 0,
-  kFiltOccId = 1u << 1,
-  // bits == 0 → every occupant matches
-};
-
-struct OccupantFilter {
-  uint32_t bits = 0;
-  uint32_t agentType = 0;
-  uint32_t occId = 0;
-};
+// Occupancy-filter modes (spec 14 §6.1 Q-BA). Callers pass int f, not an arbitrary predicate.
+// f = 1 → removable query; any other value (callers use 0) → alternate clearable.
+constexpr int kOccFiltRemovable = 1;
+constexpr int kOccFiltAltClearable = 0;
+constexpr uint32_t kOccFillerLot = 0x100;       // attr 0xCA
+constexpr uint32_t kOccLotProtected = 0x200;    // lot state bit
 
 struct ClearanceResult {
   bool clear = false;
@@ -85,20 +80,22 @@ class PlacementQuery {
   }
 
   // Clearance over inclusive rect. Always walks terrain cells; mode selects scanners.
-  // filter applies only to 1-tile scanner hits that have capability 0x400.
+  // filterMode applies only to 1-tile scanner hits that have capability 0x400.
   // accumulateCost: each 1-tile passing hit adds hitCost.
   ClearanceResult clearance(int x0, int z0, int x1, int z1, int mode,
-                            const OccupantFilter& filter = {},
+                            int filterMode = kOccFiltAltClearable,
                             bool accumulateCost = false, int64_t hitCost = 0) const;
 
-  std::vector<std::pair<int, int>> collectFootprint(const OccupantFilter& filter) const;
-  NearestMatch nearest(int x, int z, const OccupantFilter& filter) const;
+  std::vector<std::pair<int, int>> collectFootprint(int filterMode = kOccFiltAltClearable) const;
+  NearestMatch nearest(int x, int z, int filterMode = kOccFiltAltClearable) const;
 
   static TileRect occupantBBox(const Occupant& o) {
     return {o.x, o.z, o.x + std::max(1, o.sizeX) - 1, o.z + std::max(1, o.sizeZ) - 1};
   }
 
-  bool matches(const Occupant& o, const OccupantFilter& f) const;
+  // Occupancy filter (spec 14 §6.1): f==1 → removable; else → altClearable; then
+  // fail if filler (0xCA 0x100) AND lot protected (state 0x200).
+  bool passesFilter(const Occupant& o, int filterMode) const;
 
  private:
   const World* world_ = nullptr;

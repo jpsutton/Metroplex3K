@@ -40,10 +40,12 @@ const std::vector<int>& OccupancyScanner::atTile(int x, int z) const {
   return cells_[size_t(bx) * size_t(cellsZ_) + size_t(bz)];
 }
 
-bool PlacementQuery::matches(const Occupant& o, const OccupantFilter& f) const {
-  if (f.bits == 0) return true;
-  if ((f.bits & kFiltAgentType) && o.agentType != f.agentType) return false;
-  if ((f.bits & kFiltOccId) && o.occId != f.occId) return false;
+bool PlacementQuery::passesFilter(const Occupant& o, int filterMode) const {
+  // f = 1 → removable; any other value → alternate clearable (callers use 0).
+  const bool base = (filterMode == kOccFiltRemovable) ? o.removable : o.altClearable;
+  if (!base) return false;
+  // Filler + lot-protected override: base true still fails.
+  if ((o.buildingFlags & kOccFillerLot) && (o.state & kOccLotProtected)) return false;
   return true;
 }
 
@@ -67,7 +69,7 @@ void PlacementQuery::rebuild(const World* world) {
 }
 
 ClearanceResult PlacementQuery::clearance(int x0, int z0, int x1, int z1, int mode,
-                                          const OccupantFilter& filter,
+                                          int filterMode,
                                           bool accumulateCost, int64_t hitCost) const {
   ClearanceResult r;
   if (!world_) return r;
@@ -99,8 +101,8 @@ ClearanceResult PlacementQuery::clearance(int x0, int z0, int x1, int z1, int mo
         for (int oi : scan1_.atTile(x, z)) {
           if (oi < 0 || oi >= int(world_->occupants.size())) continue;
           const Occupant& o = world_->occupants[size_t(oi)];
-          // Fail unless capability 0x400 and passes caller filter.
-          if ((o.caps & kPlaceCapIgnorable) == 0 || !matches(o, filter)) return r;
+          // Fail unless capability 0x400 and passes occupancy filter mode f.
+          if ((o.caps & kPlaceCapIgnorable) == 0 || !passesFilter(o, filterMode)) return r;
           if (accumulateCost) r.cost += hitCost;
         }
       }
@@ -110,11 +112,11 @@ ClearanceResult PlacementQuery::clearance(int x0, int z0, int x1, int z1, int mo
   return r;
 }
 
-std::vector<std::pair<int, int>> PlacementQuery::collectFootprint(const OccupantFilter& filter) const {
+std::vector<std::pair<int, int>> PlacementQuery::collectFootprint(int filterMode) const {
   std::vector<std::pair<int, int>> cells;
   if (!world_) return cells;
   for (const Occupant& o : world_->occupants) {
-    if (!matches(o, filter)) continue;
+    if (!passesFilter(o, filterMode)) continue;
     const int sx = std::max(1, o.sizeX), sz = std::max(1, o.sizeZ);
     for (int dx = 0; dx < sx; dx++)
       for (int dz = 0; dz < sz; dz++) {
@@ -127,13 +129,13 @@ std::vector<std::pair<int, int>> PlacementQuery::collectFootprint(const Occupant
   return cells;
 }
 
-NearestMatch PlacementQuery::nearest(int x, int z, const OccupantFilter& filter) const {
+NearestMatch PlacementQuery::nearest(int x, int z, int filterMode) const {
   NearestMatch m;
   if (!world_) return m;
   int bestDist = -1;
   for (size_t i = 0; i < world_->occupants.size(); i++) {
     const Occupant& o = world_->occupants[i];
-    if (!matches(o, filter)) continue;
+    if (!passesFilter(o, filterMode)) continue;
     const int sx = std::max(1, o.sizeX), sz = std::max(1, o.sizeZ);
     const int cx = std::clamp(x, o.x, o.x + sx - 1);
     const int cz = std::clamp(z, o.z, o.z + sz - 1);
