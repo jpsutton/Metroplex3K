@@ -227,8 +227,15 @@ Tile value [STATIC]. For a tile with an occupant whose flammability attribute is
    truncates toward zero; a negative *u* raises the value).
 
 Each run of the flammability layer recomputes ⌊W·H / 30⌋ tiles (the 30 is a built-in constant,
-not an INI key) [STATIC]; see §1 for the run frequency. [INFERRED, medium: tiles are visited in
-row-major order, continuing from the previous run]
+not an INI key) [STATIC]; see §1 for the run frequency.
+
+**Visit order** [STATIC]: tiles are visited in **row-major order with x fastest** (x ascending,
+then z ascending), continuing from a saved cursor `(cursorX, cursorZ)`. Each processed tile
+advances `cursorX` by 1; when `cursorX` reaches W it resets to 0 and `cursorZ` advances by 1;
+when `cursorZ` reaches H the cursor wraps to `(0, 0)` and the layer finalises its running
+average (`⌊sweepSum / sweepCount⌋`, or 0 if none) before the next tile. The same cursor and
+running sum/count persist across daily runs, so a full map pass takes 30 simulated days on a
+square map.
 
 The flammability query classifies a tile's byte as: 0, 1–46, 47–83, 84–121, 122–150, > 150 (six descriptive bands). [STATIC]
 
@@ -905,4 +912,5 @@ each jail (`10-save-format.md` §6.2.5).
 * The (now decoded) `garbageStore` block of the pollution record (§7.4). (Police record fields
   closed, see Persisted state.)
 * Whether the agent-type distance of §7.1.2 is the parent-step count.
-* Flammability visiting order within a run (§4).
+* Flammability record trailer fields beyond the visit-order cursor (closed: visit order is
+  row-major x-fastest with a continuing cursor, §4).
