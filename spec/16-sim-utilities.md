@@ -302,8 +302,9 @@ Towers need neither water adjacency nor anything but power. [STATIC]
 
 ### 3.4 Distribution (monthly)
 
-1. *k* = 1 − (`WaterConservationFactor`/100 if that ordinance is active) − (`WaterMeterFactor`/100 if
-   active). [STATIC]
+1. *k* = 1 − (`WaterConservationFactor`/100 if ordinance **`0x02BF1DFA`** (Water Conservation) is
+   active) − (`WaterMeterFactor`/100 if ordinance **`0xC2F90EB1`** (Water Meters) is active).
+   [STATIC] (IDs match `19-sim-economy.md` §9.5.)
 2. Facility outputs are computed (3.3).
 3. **Components.** Repeat: take the first facility in list order (the order in which facilities
    were added, i.e. occupant load order, then placement order) whose output is non-zero and which
@@ -589,6 +590,5 @@ absent, re-derive *Lmax* and *Ld* (§2.3) and start *W* at 0. [STATIC layout][IN
   Purchased water entering `supply` is INFERRED (§3.4 step 4); what the purchase accumulators
   hold when the deal component is not the last component is OPEN. The original clears them
   at the start of every component.
-* Which ordinance ID is Water Conservation vs Water Meters (§3.4); settle from
-  `19-sim-economy.md` §9.5.
+* Closed: Water Conservation = `0x02BF1DFA`, Water Meters = `0xC2F90EB1` (§3.4 / `19` §9.5).
 * Whether *m* in §3.3 step 5 is the constant `MaxWaterPolluteForUI` or a running maximum.
