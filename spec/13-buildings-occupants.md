@@ -135,9 +135,9 @@ value that depends on the occupant's **class**:
   (they connect to pipes), other utility classes 0x104. **Transit stations**: 0x4104.
 * **Other building classes** owned by simulation subsystems (services, garbage, deal buildings,
   disasters' objects, etc.): 0x104; a few landmark/deal classes 0x40000104.
-* **Generic (zoned and ordinary) buildings**: looked up by agent type (attribute 0x65) in a
-  run-time agent-type table when the occupant is created [STATIC for the lookup; the table's
-  values are not traced, INFERRED: 0x104 like the other building classes].
+* **Generic (zoned and ordinary) buildings**: **0x104** [STATIC]. The occupant flag getter for
+  these classes is a constant `0x104` (same word as the other non-network building classes
+  above). There is no per-agent-type variation of this word for generic buildings.
 * Automata (vehicles, pedestrians): 0x100A204.
 
 Consequences: bit **0x8000 = road piece** (including every crossing that contains road). So riot
