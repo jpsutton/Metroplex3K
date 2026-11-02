@@ -330,13 +330,47 @@ run it:
 
 1. Reads the current simulation date and the city's map location (longitude/latitude; default
    location if unset is longitude 130°, latitude 37°).
-2. Chooses a season as a quarter of the year from the calendar month: months 1–3, 4–6, 7–9 and
-   10–12. Southern-hemisphere locations (negative latitude) shift the month by six before that
-   choice, so their seasons are inverted relative to the northern calendar [STATIC].
-3. When the season has changed since the previous monthly run, regenerates low, mid and high
-   temperature readings from season tables (with small random jitter) and mild smoothing so the
-   three stay ordered, and notifies listeners that the season changed. When the season is
-   unchanged, temperatures are left as they are [STATIC].
+2. Chooses a season index 0..3 as a quarter of the year from the calendar month: months 1–3 → 0,
+   4–6 → 1, 7–9 → 2, 10–12 → 3 (i.e. `(month − 1) div 3`). Southern-hemisphere locations
+   (negative latitude) replace `month` by `(month + 6) mod 12` before that choice, so their
+   seasons are inverted relative to the northern calendar [STATIC].
+3. When the season is **unchanged**, temperatures are left as they are and no notification is
+   sent. When the season has **changed**, it regenerates the three temperature readings as below
+   and notifies listeners [STATIC].
+
+**Season coefficient tables** (°C) [STATIC]. Nine coefficients `(A,B,C, D,E,F, G,H,I)` per season.
+`H` is written by the table filler but is not used by the monthly sampler.
+
+| Season | Months (N) | A | B | C | D | E | F | G | H | I |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 1–3 | 7 | −10 | 10 | 13 | −6 | 10 | 16 | −6 | 15 |
+| 1 | 4–6 | 13 | −10 | 10 | 17 | −6 | 10 | 21 | −6 | 15 |
+| 2 | 7–9 | 15 | −11 | 14 | 20 | −6 | 11 | 28 | −6 | 17 |
+| 3 | 10–12 | 13 | −15 | 10 | 17 | −6 | 8 | 21 | −6 | 15 |
+
+**Post-table adjustment of A** [STATIC], using the weather subsystem's float generator
+(`RandRange`, §8):
+
+* if `A < −40`, replace `A` with `RandRange(−2, 2) − 40`;
+* if `A < 57`, replace `A` with `RandRange(−2, 2) + 55`.
+
+(For every shipped table row `A` is between 7 and 15, so the second branch always runs and `A`
+becomes approximately 55 ± 2.)
+
+Then `A`, `D` and `G` are converted to kelvin (`+ 273.15`), ordered with factor `1.007`
+(`D ← max(D, A·1.007)`, `G ← max(G, D·1.007)` in kelvin), and converted back to Celsius [STATIC].
+
+**Sampling the three readings** [STATIC]. Let `U` be a draw from the subsystem's normal
+generator (Box–Muller over the float generator of §8), then
+`t = clamp(U + 6, 0, 11.99) / 12` and `Lerp(lo, hi) = lo + t·(hi − lo)`:
+
+* low  `T0 = Lerp(A+B, A+C)`
+* mid  `T1 = Lerp(D+E, D+F)`
+* high `T2 = Lerp(B+G, G+I)`
+
+Then in kelvin, with factors `1.015` and `1.007`: if `T2 ≤ T0·1.015` set `T2 ← T0·1.015`; if
+`T1 ≤ T0·1.007` set `T1 ← T0·1.007`; if `T2 ≥ T1·1.007` set `T2 ← T1·1.007`. Convert back to
+Celsius. These are the stored low / mid / high readings [STATIC].
 
 Temperatures are held in Celsius internally and may be reported in Fahrenheit on request
 (°F = °C·1.8 + 32) [STATIC]. The view/sprite side reacts to season changes (holiday and seasonal
