@@ -402,6 +402,12 @@ class Game {
   std::vector<RenderScene> unusedScenes_;
   std::vector<Spot>* spotSink_ = nullptr;
   int streetAcc_ = 0;
+  bool streetSyncDue_ = false;
+  int streetSyncCooldown_ = 0;   // frames until the next full street-source rebuild is allowed
+  bool simDayThisFrame_ = false;   // set by tickSim; street sync skips that frame
+  int animTick_ = 0;
+  uint32_t animAccMs_ = 0;
+  static constexpr uint32_t kAnimPeriodMs = 67;   // ~15 Hz; matches automata::kAnimTickUs
   int shake_ = 0;
   int sweepMinute_ = 0;
   uint32_t newsClickX_ = 0;

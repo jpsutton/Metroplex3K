@@ -509,7 +509,13 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs) {
     } else { ropt_.overlay = nullptr; stopAmbience(); }
     costShow_ = false;
     renderer_.setCostTextHook([this](int sx, int sy, const std::string& text, bool ok) { costText_ = text; costX_ = sx; costY_ = sy; costOk_ = ok; costShow_ = true; });
-    ropt_.animTick = int(sim_.day);
+    // Building animations: wall-clock tick (~15 Hz, same period as automata), not sim day.
+    // Driving them from sim_.day froze them between day ticks and raced at high speed.
+    if (!paused_ && scr_ == Screen::InCity) {
+      animAccMs_ += dtMs;
+      while (animAccMs_ >= kAnimPeriodMs) { animAccMs_ -= kAnimPeriodMs; ++animTick_; }
+    }
+    ropt_.animTick = animTick_;
     renderer_.render(cam_, ropt_, &scene_);
     renderer_.swapPixels(screen_);
   } else if (scr_ != Screen::Intro) {

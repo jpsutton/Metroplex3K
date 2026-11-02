@@ -102,8 +102,22 @@ void Game::streetSimFrame(uint32_t dtMs) {
   if (!street_ || !world_.W) return;
   // Detail preferences: traffic/sims off disables the system (spec 08 preferences).
   if (prefsState_.traffic == 3 && prefsState_.sims == 2) return;
-  if (world_.occupants.size() != streetOccCount_ || world_.surface.size() != streetNetCount_ || (++streetAcc_ % 300) == 0)
+  // Full source rebuild is ~30+ ms on a large city (remove+re-add every spawner). Never run it in the
+  // same frame as a sim day tick, and at most every kStreetSyncMinFrames when the city changed.
+  constexpr int kStreetSyncMinFrames = 30;   // ~500 ms at 60 Hz
+  constexpr int kStreetSyncPeriodic = 300;
+  const bool changed = world_.occupants.size() != streetOccCount_ || world_.surface.size() != streetNetCount_;
+  if (changed) {
+    streetSyncDue_ = true;
+    if (streetSyncCooldown_ < 1) streetSyncCooldown_ = 1;   // at least the next frame (after any day tick)
+  }
+  if ((++streetAcc_ % kStreetSyncPeriodic) == 0) streetSyncDue_ = true;
+  if (streetSyncCooldown_ > 0) streetSyncCooldown_--;
+  if (streetSyncDue_ && streetSyncCooldown_ == 0 && !simDayThisFrame_) {
     syncStreetSources();
+    streetSyncDue_ = false;
+    streetSyncCooldown_ = kStreetSyncMinFrames;
+  }
   streetHost_->month = city().clock.date().month;
   streetHost_->day = city().clock.date().day;
   // Visible tile rectangle from the screen corners.
