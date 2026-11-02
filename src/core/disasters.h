@@ -295,7 +295,9 @@ class DisasterManager {
 
   // Schedulers (spec 21 §4.1 / 14 §6.1)
   void monthlyTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out);  // random-occurrence checks (gated)
-  void dayTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out);      // emergency elapsed + burning
+  void emergencyDayTick(const DisasterInputs& in, DisasterOutput& out);              // daily item 1 (Q-BI / Q-BD)
+  void instanceDayTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out); // daily item 7 (Q-BG)
+  void dayTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out);      // emergency + instance day
   void minuteTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out);   // every active instance
 
   // Starts. `warn` = warning flag. All return success.

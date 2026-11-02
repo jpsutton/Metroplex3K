@@ -174,6 +174,22 @@ void Game::initManagers() {
     disasters_.monthlyTick(dw, inputsFor(city(), disastersOn_, cheats_), out);
     applyDisasterOutput(out);
   });
+  // Spec 14 §6.1 / Q-BI [STATIC]: items 1–5 in creation order inside the shared daily pass.
+  city().sched.setHandler(Step::DailyDisasters, [this] {
+    DisasterOutput out;
+    disasters_.emergencyDayTick(inputsFor(city(), disastersOn_, cheats_), out);
+    applyDisasterOutput(out);
+  });
+  city().sched.setHandler(Step::DailyScenario, [this] {
+    if (scen_) scen_->dayTick();
+  });
+  // Spec 14 §6.1 / Q-BG [STATIC]: item 7 after shared pass (gated by disasterActive_).
+  city().sched.setHandler(Step::DailyDisasterInstances, [this] {
+    CityDisasterWorld dw(world_, city());
+    DisasterOutput out;
+    disasters_.instanceDayTick(dw, inputsFor(city(), disastersOn_, cheats_), out);
+    applyDisasterOutput(out);
+  });
   // Ticker text carries %CITYNAME%/%YOURCITY%/%MAYOR%... tags; expand when the item is created.
   auto textFn = [this](uint32_t t, uint32_t i) { return expandTokens(str(t, i), env().tc); };
   tickerDb_ = TickerDb();
@@ -777,11 +793,9 @@ void Game::tickSim(uint32_t dtMs) {
   const uint32_t factor = SpeedControl::kFactor[std::max(1, std::min(4, speed_))];
   // One simulated day: sim step, disaster day tick, month/anniversary hooks, scenario and weekly hooks.
   auto dayStep = [&] {
+    // Sync item-7 gate before the day cascade (Q-BG); emergency + scenario run as items 1 and 5 (Q-BI).
+    city().sched.setDisasterActive(disasters_.anyActiveNonParade());
     sim_.tickDay();
-    CityDisasterWorld dw(world_, city());
-    DisasterOutput out;
-    DisasterInputs in = inputsFor(city(), disastersOn_, cheats_);
-    disasters_.dayTick(dw, in, out);
     int month = city().clock.date().month;
     if (month != lastMonth_) {
       // Monthly DM already ran inside CitySchedule::runMonth (dedicated item 1, Q-BE) during tickDay.
@@ -792,8 +806,6 @@ void Game::tickSim(uint32_t dtMs) {
         if (k.valid()) postNews(k.table, k.id);
       }
     }
-    applyDisasterOutput(out);
-    if (scen_) scen_->dayTick();
     int wd = cal::weekday(city().clock.jdn());
     if (wd == 1 && lastWeekDay_ != int(city().clock.jdn())) { lastWeekDay_ = int(city().clock.jdn()); weeklyHook(); }
   };

@@ -1521,13 +1521,22 @@ void DisasterManager::monthlyTick(DisasterWorld& w, const DisasterInputs& in, Di
   checkAllOver(out);
 }
 
-void DisasterManager::dayTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out) {
-  // Spec 14 §6.1 daily #1 / 21 §10.1 [STATIC]: emergency elapsed increments once per simulated day
-  // (not gated by disasters-enabled). Ends when elapsed > MaxEmergencyDuration (days).
+void DisasterManager::emergencyDayTick(const DisasterInputs& in, DisasterOutput& out) {
+  // Spec 14 §6.1 daily #1 / 21 §10.1 [STATIC Q-BD / Q-BI]: emergency elapsed once per simulated day.
   today_ = in.jdn; year_ = in.year; lastIn_ = in;
   if (emergencyActive_ && ++emergencyDays_ > tune.maxEmergencyDuration) endEmergency(out);
+}
+
+void DisasterManager::instanceDayTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out) {
+  // Spec 14 §6.1 daily #7 / Q-BG [STATIC]: active disaster instance day ticks after shared pass.
+  today_ = in.jdn; year_ = in.year; lastIn_ = in;
   burnTick(w, out);
   checkAllOver(out);
+}
+
+void DisasterManager::dayTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out) {
+  emergencyDayTick(in, out);
+  instanceDayTick(w, in, out);
 }
 
 void DisasterManager::minuteTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out) {

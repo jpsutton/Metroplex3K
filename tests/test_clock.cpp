@@ -236,6 +236,12 @@ static void testSpeed() {
 static void testSchedule() {
   CHECK(Clock::kTimerIntervalMs == 1000);   // spec 14 §2.2 Q-AS
   CHECK(dailySteps().size() == 11);
+  // Spec 14 §6.1 / Q-BI [STATIC]: items 1–5 exact order (emergency → police → fire → LV → scenario).
+  CHECK(dailySharedSteps()[0] == Step::DailyDisasters);
+  CHECK(dailySharedSteps()[1] == Step::DailyPolice);
+  CHECK(dailySharedSteps()[2] == Step::DailyFire);
+  CHECK(dailySharedSteps()[3] == Step::DailyLandValue);
+  CHECK(dailySharedSteps()[4] == Step::DailyScenario);
   CHECK(dailySteps()[0] == Step::DailyDisasters && dailySteps()[4] == Step::DailyScenario);
   // Spec 14 §6.1 / Q-BG [STATIC]: shared pass then item 7 (DisasterInstances) last.
   CHECK(dailySharedSteps().size() == 10);
@@ -279,8 +285,12 @@ static void testSchedule() {
   CHECK(!clk.paused());
   CHECK(news == 0x1F4);   // age 10
   CHECK(sc.elapsedDays == 1);
-  // log order: shared daily (no DisasterInstances without disasters), then monthly
+  // log order: shared daily items 1–5 then 6/8–11 (no item 7 without disasters), then monthly
   CHECK(sc.cascadeLog(0) == int(Step::DailyDisasters));
+  CHECK(sc.cascadeLog(1) == int(Step::DailyPolice));
+  CHECK(sc.cascadeLog(2) == int(Step::DailyFire));
+  CHECK(sc.cascadeLog(3) == int(Step::DailyLandValue));
+  CHECK(sc.cascadeLog(4) == int(Step::DailyScenario));
   CHECK(sc.cascadeLog(6) == int(Step::DailyAura));
   CHECK(sc.cascadeLog(9) == int(Step::DailyFlammability));
   size_t daily = dailySharedSteps().size();   // item 7 skipped when inactive

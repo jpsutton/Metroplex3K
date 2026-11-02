@@ -300,7 +300,9 @@ const char* stepName(Step s) {
 }
 
 std::vector<Step> dailySharedSteps() {
-  // Spec 14 §6.1 items 1–6 and 8–11 [STATIC Q-BG shared pass]. Aura before pollution/crime/flam (Q-AR).
+  // Spec 14 §6.1 shared daily pass [STATIC Q-BG]. Items 1–5 exact creation order (Q-BI):
+  // emergency → police → fire → land value → scenario. Item 6 + 8–11 order [INFERRED] (aura before
+  // pollution/crime/flam per Q-AR).
   return {Step::DailyDisasters, Step::DailyPolice, Step::DailyFire, Step::DailyLandValue,
           Step::DailyScenario, Step::DailyZoneDev, Step::DailyAura, Step::DailyPollution,
           Step::DailyCrime, Step::DailyFlammability};
