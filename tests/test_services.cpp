@@ -734,6 +734,45 @@ static void testHealthEducation() {
   CHECK(strikeMultiplier(20) == 20.0 && near(strikeMultiplier(20, true), 0.2));   // unscaled defect
 }
 
+// Graph histories cadence + sample values (spec 14 §6.3 rule 7 / Q-BB) [STATIC].
+static void testGraphHistories() {
+  // Crime: sample = avgCrime.
+  {
+    CrimeParams cp = CrimeParams::fromIni(IniFile::fromText(kCrimeIni));
+    AgentHierarchy h = hier();
+    CrimeLayer c; c.init(16, 16, cp, &h);
+    c.avgCrime = 42;
+    c.monthEnd(6, 2001);
+    CHECK(c.chart.monthly[0] == 42 && c.chart.yearly[0] == 0);
+    c.monthEnd(1, 2001);
+    CHECK(c.chart.yearly[0] == 42 && c.chart.decade[0] == 0);
+    c.monthEnd(1, 2010);
+    CHECK(c.chart.yearly[0] == 42 && c.chart.decade[0] == 42);
+  }
+  // Pollution: UI combined air/water % = min(100, (⌊W×100/Mw⌋ + ⌊A×100/Ma⌋) / 2).
+  {
+    PollutionParams p = PollutionParams::fromIni(IniFile::fromText(kPolIni));
+    AgentHierarchy h;
+    PollutionLayer L; L.init(16, 16, p, &h);
+    // kPolIni: MaxAir=800, MaxWater=1200. avgAir=400 → 50; avgWater=600 → 50; combined 50.
+    L.avgAir = 400; L.avgWater = 600;
+    L.monthEnd(3, 2001);
+    CHECK(L.chart.monthly[0] == 50 && L.chart.yearly[0] == 0);
+    L.avgAir = 800; L.avgWater = 1200;  // 100+100 → min(100, 100) = 100
+    L.monthEnd(1, 2010);
+    CHECK(L.chart.monthly[0] == 100 && L.chart.yearly[0] == 100 && L.chart.decade[0] == 100);
+  }
+  // Aura: sample = cityAura + 127.
+  {
+    AuraParams ap = AuraParams::fromIni(IniFile::fromText(kAuraIni));
+    AgentHierarchy h;
+    AuraLayer a; a.init(64, 64, ap, &h);
+    a.cityAura = -7;
+    a.monthEnd(1, 2000);  // year multiple of 10
+    CHECK(a.chart.monthly[0] == 120 && a.chart.yearly[0] == 120 && a.chart.decade[0] == 120);
+  }
+}
+
 int main() {
   testFundingCurve();
   testCoverageStamp();
@@ -751,5 +790,6 @@ int main() {
   testAuraRun();
   testAuraRecord();
   testHealthEducation();
+  testGraphHistories();
   TEST_MAIN_END();
 }

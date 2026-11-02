@@ -976,6 +976,8 @@ MonthlyOutput TrafficSim::monthly(const MonthlyInput& in) {
   out.transitUpkeep = transitUpkeep(p_, in.stationUpkeep, in.railTiles, in.subwayTiles);
   decay(in);                                                           // 1
   computeStats(in.roadTiles, in.highwayTiles, in.railTiles, in.subwayTiles);
+  // Road-traffic graph history (spec 18 §10–§11 / 14 §6.3 rule 7) [STATIC]: monthly = avgRoad
+  // (pushed in computeStats); on 1 January also yearly; decade when year % 10 == 0.
   if (in.month == 1) { for (int i = 21; i > 12; i--) rec_.history[i] = rec_.history[i - 1]; rec_.history[12] = rec_.avgRoad;
     if (in.year % 10 == 0) { for (int i = 31; i > 22; i--) rec_.history[i] = rec_.history[i - 1]; rec_.history[22] = rec_.avgRoad; } }
   out.strikeEvent = strikeStep(out.transitUpkeep);                     // 2

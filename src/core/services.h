@@ -11,8 +11,10 @@
 
 namespace m3k { namespace us {
 
-// Month-end chart push shared by crime/pollution/aura: monthly sample every month; yearly in
-// January; decade sample in January of years divisible by 10 (spec 17 section 8.5).
+// Month-end chart push (spec 14 §6.3 rule 7 / Q-BB) [STATIC]: one monthly sample every monthly
+// run; on 1 January also yearly; when the new year is a multiple of 10, also decade.
+// Shared by crime (avgCrime), pollution (UI combined air/water %), aura (cityAura+127).
+// Traffic uses the same cadence on its own history block (18 §10–§11 / avgRoad).
 void chartMonthEnd(Chart& c, uint32_t sample, int month /*1..12*/, int year);
 
 // ======================= Funding curve (spec 17 section 2.2) =======================
@@ -186,6 +188,7 @@ class CrimeLayer {
   int crimeAt(int x, int z) const { return crime[size_t(x / 2) * nz_ + z / 2]; }
   int potentialAt(int cx, int cz) const { return potential[size_t(cx) * nz_ + cz]; }
   int cellValue(int cx, int cz, const std::function<int(int, int)>& policeAt, const OrdinanceSet& ord) const;
+  // Crime chart sample = avgCrime (spec 17 §7.1 / 14 §6.3 rule 7) [STATIC].
   void monthEnd(int month, int year) { chartMonthEnd(chart, avgCrime, month, year); }
 
   uint16_t recVersion = 1, streamVersion = 2;
@@ -387,6 +390,7 @@ class AuraLayer {
   void rebuild(const std::vector<SimOccupant>& occ);
   void run(const AuraEnv& env);                         // one daily run
   int aura(int x, int z) const { return grid[size_t(x / 4) * ch_ + z / 4]; }
+  // Aura chart sample = cityAura + 127 (spec 17 §8.5 / 14 §6.3 rule 7) [STATIC].
   void monthEnd(int month, int year) { chartMonthEnd(chart, uint32_t(int(cityAura) + 127), month, year); }
 
   std::vector<int8_t> grid;          // cells, x*ch+z

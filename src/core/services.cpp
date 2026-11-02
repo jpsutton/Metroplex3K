@@ -7,6 +7,7 @@
 namespace m3k { namespace us {
 
 void chartMonthEnd(Chart& c, uint32_t sample, int month, int year) {
+  // Spec 14 §6.3 rule 7 [STATIC]: monthly always; yearly on January; decade when year % 10 == 0.
   c.pushMonthly(sample);
   if (month == 1) {
     c.pushYearly(sample);
@@ -888,12 +889,13 @@ PollutionLayer::RecyclingCentre PollutionLayer::recyclingCentreValues(bool worki
 }
 
 void PollutionLayer::monthEnd(int month, int year, int64_t population, const std::vector<RecyclingCentre>* centres) {
-  // Graph sample (spec 17 s7.4) [STATIC]: min(100, (floor(avgWater 100 / MaxWaterPolluteForUI) + floor(avgAir 100 /
-  // MaxAirPolluteForUI)) >> 1), unsigned; reproduces the saved samples (Berlin 11, Madison 2, Madrid 19, London 4).
+  // UI combined air/water % (spec 17 §7.4 / 14 §6.3 rule 7) [STATIC]:
+  // min(100, (⌊avgWater×100÷MaxWaterPolluteForUI⌋ + ⌊avgAir×100÷MaxAirPolluteForUI⌋) ÷ 2), unsigned.
+  // Saved samples: Berlin 11, Madison 2, Madrid 19, London 4.
   {
     uint32_t w = params_.maxWater > 0 ? uint32_t(uint64_t(avgWater) * 100 / uint32_t(params_.maxWater)) : 0;
     uint32_t a = params_.maxAir > 0 ? uint32_t(uint64_t(avgAir) * 100 / uint32_t(params_.maxAir)) : 0;
-    chartMonthEnd(chart, std::min<uint32_t>(100, (w + a) >> 1), month, year);
+    chartMonthEnd(chart, std::min<uint32_t>(100, (w + a) / 2), month, year);
   }
   disp.monthEnd();
   disp.store.monthly();
