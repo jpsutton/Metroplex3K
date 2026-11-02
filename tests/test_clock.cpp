@@ -256,14 +256,19 @@ static void testSchedule() {
   CHECK(dailySteps().back() == Step::DailyCrime);
   CHECK(monthlySteps().size() == 16);
   CHECK(monthlySteps()[9] == Step::MonthlyBudget && monthlySteps()[5] == Step::MonthlyResidential);
-  CHECK(monthlySteps().back() == Step::MonthlyAura);
+  // Spec 14 §6.1 / Q-BK [STATIC]: items 14–16 = aura → pollution → crime.
+  CHECK(monthlySteps()[13] == Step::MonthlyAura);
+  CHECK(monthlySteps()[14] == Step::MonthlyPollution);
+  CHECK(monthlySteps().back() == Step::MonthlyCrime);
   // Spec 14 §6.1 / Q-BF [STATIC]: dedicated items 1–3 (DM, neighbours, world) before shared 4–16.
   CHECK(monthlyDedicatedSteps().size() == 3);
   CHECK(monthlyDedicatedSteps()[0] == Step::MonthlyDisasterManager);
   CHECK(monthlyDedicatedSteps()[1] == Step::MonthlyNeighbours);
   CHECK(monthlyDedicatedSteps()[2] == Step::MonthlyWorldLayer);
   CHECK(monthlySharedSteps()[0] == Step::MonthlyRci);
-  CHECK(monthlySharedSteps().back() == Step::MonthlyAura);
+  CHECK(monthlySharedSteps()[10] == Step::MonthlyAura);
+  CHECK(monthlySharedSteps()[11] == Step::MonthlyPollution);
+  CHECK(monthlySharedSteps().back() == Step::MonthlyCrime);
   CHECK(monthlySteps()[0] == Step::MonthlyDisasterManager && monthlySteps()[1] == Step::MonthlyNeighbours);
   CHECK(monthlySteps()[2] == Step::MonthlyWorldLayer && monthlySteps()[3] == Step::MonthlyRci);
   CHECK(anniversaryNewsItem(10) == 0x1F4 && anniversaryNewsItem(2000) == 0x1FB && anniversaryNewsItem(11) == 0);
@@ -306,7 +311,9 @@ static void testSchedule() {
   CHECK(sc.cascadeLog(daily + 1) == int(Step::MonthlyNeighbours));   // Q-BF: 1→2→3
   CHECK(sc.cascadeLog(daily + 2) == int(Step::MonthlyWorldLayer));
   CHECK(sc.cascadeLog(daily + 3) == int(Step::MonthlyRci));          // shared pass after dedicated
-  CHECK(sc.cascadeLog(daily + 16 - 1) == int(Step::MonthlyAura));
+  CHECK(sc.cascadeLog(daily + 13) == int(Step::MonthlyAura));       // Q-BK: 14 aura
+  CHECK(sc.cascadeLog(daily + 14) == int(Step::MonthlyPollution));  // 15 pollution
+  CHECK(sc.cascadeLog(daily + 16 - 1) == int(Step::MonthlyCrime));  // 16 crime
   CHECK(sc.cascadeLog(daily + 16) == -1);
 
   // disasters disabled skip the disaster manager monthly step; 2→3 still before shared

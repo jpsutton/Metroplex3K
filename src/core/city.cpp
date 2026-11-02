@@ -649,9 +649,10 @@ void City::wire() {
   sched.setHandler(Step::MonthlyPower, [this] { monthlyPower(); });
   sched.setHandler(Step::MonthlyWater, [this] { monthlyWater(); });
   sched.setHandler(Step::MonthlyWeather, [this] { monthlyWeather(); });
+  // Q-BK: monthly 14–16 run aura → pollution → crime (order from monthlySharedSteps).
+  sched.setHandler(Step::MonthlyAura, [this] { monthlyAura(); });
   sched.setHandler(Step::MonthlyPollution, [this] { monthlyPollution(); });
   sched.setHandler(Step::MonthlyCrime, [this] { monthlyCrime(); });
-  sched.setHandler(Step::MonthlyAura, [this] { monthlyAura(); });
   sched.onDay = [this] {
     cal::Date d = clock.date();
     world_->info.year = d.year;

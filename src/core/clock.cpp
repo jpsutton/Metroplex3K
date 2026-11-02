@@ -329,11 +329,12 @@ std::vector<Step> monthlyDedicatedSteps() {
   return {Step::MonthlyDisasterManager, Step::MonthlyNeighbours, Step::MonthlyWorldLayer};
 }
 std::vector<Step> monthlySharedSteps() {
-  // Spec 14 §6.1 items 4–16 [STATIC]: shared monthly pass (AreaAgent cascade).
+  // Spec 14 §6.1 items 4–16 [STATIC Q-BK]: shared monthly pass; 14–16 = aura → pollution → crime
+  // (n==4 handlers of daily self-scheduled agents 8/9/10, registration order).
   return {Step::MonthlyRci, Step::MonthlyOrdinances, Step::MonthlyResidential, Step::MonthlyCommercial,
           Step::MonthlyIndustrial, Step::MonthlyTraffic, Step::MonthlyBudget, Step::MonthlyPower,
-          Step::MonthlyWater, Step::MonthlyWeather, Step::MonthlyPollution, Step::MonthlyCrime,
-          Step::MonthlyAura};
+          Step::MonthlyWater, Step::MonthlyWeather, Step::MonthlyAura, Step::MonthlyPollution,
+          Step::MonthlyCrime};
 }
 std::vector<Step> monthlySteps() {
   std::vector<Step> v = monthlyDedicatedSteps();
