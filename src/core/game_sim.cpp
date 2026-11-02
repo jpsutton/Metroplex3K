@@ -641,6 +641,7 @@ void Game::applyCheat(const CheatResult& r) {
     for (auto& v : w.alt) v = uint8_t(shiftTerrainAltitude(v, delta));
     for (auto& v : w.water) v = uint8_t(shiftTerrainAltitude(v, delta));
     w.seaLevel = uint8_t(shiftTerrainAltitude(w.seaLevel, delta));
+    w.invalidateDeepWater();
     terrainChanged();
     dirty_ = true;
   }

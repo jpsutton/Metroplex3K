@@ -350,16 +350,9 @@ class GrowthAdapter : public growth::GrowthCity {
     for (int dx = 0; dx < 2; dx++) for (int dz = 0; dz < 2; dz++) if (w.waterAt(x + dx, z + dz) >= w.altAt(x + dx, z + dz) && w.waterAt(x + dx, z + dz) > 0) return true;
     return false;
   }
-  // Deep-water table (spec 15 s5.5) [STATIC per vertex: water >= 8, ground <= water - 8, water == sea level]; keyed by any
-  // corner of the tile [INFERRED, keying OPEN].
+  // Deep-water table (spec 15 §5.5 / Q-AX): W×W u16 keyed z·W+x; pass iff entry != 0xFFFF.
   bool deepWater(int x, int z) const override {
-    if (!c_.inMap(x, z)) return false;
-    const World& w = *c_.world_;
-    for (int dx = 0; dx < 2; dx++) for (int dz = 0; dz < 2; dz++) {
-      int wa = w.waterAt(x + dx, z + dz), g = w.altAt(x + dx, z + dz);
-      if (wa >= 8 && g <= wa - 8 && wa == w.seaLevel) return true;
-    }
-    return false;
+    return c_.world_ && c_.world_->deepWaterAt(x, z);
   }
   bool tileOccupied(int x, int z) const override {
     return c_.inMap(x, z) && (c_.occupantAt(x, z) >= 0 || c_.isRoadTile(x, z) || c_.isPowerLine(x, z));

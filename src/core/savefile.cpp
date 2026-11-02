@@ -16,6 +16,27 @@ void World::init(int w, int h) {
   zone.assign(size_t(W) * H, 0);
   occupants.clear(); surface.clear(); pipes.clear(); subway.clear();
   seaVertex.clear();
+  invalidateDeepWater();
+}
+
+void World::ensureDeepWater() const {
+  if (!deepWater_.empty() || W <= 0) return;
+  // Spec 15 §5.5 [STATIC]: W×W u16, empty sentinel 0xFFFF; tiles whose low-corner vertex passes
+  // (water ≥ 8, ground ≤ water−8, water == sea level) are written as 1.
+  deepWater_.assign(size_t(W) * size_t(W), uint16_t(0xFFFF));
+  for (int x = 0; x < W; x++) {
+    for (int z = 0; z < W; z++) {
+      if (z >= H) continue;  // rectangular maps: only in-bounds tiles
+      const int wa = waterAt(x, z), g = altAt(x, z);
+      if (wa >= 8 && g <= wa - 8 && wa == int(seaLevel)) deepWater_[size_t(z) * size_t(W) + size_t(x)] = 1;
+    }
+  }
+}
+
+bool World::deepWaterAt(int x, int z) const {
+  if (x < 0 || z < 0 || x >= W || z >= W) return false;
+  ensureDeepWater();
+  return deepWater_[size_t(z) * size_t(W) + size_t(x)] != uint16_t(0xFFFF);
 }
 
 void InnerDb::parse(Bytes data) {

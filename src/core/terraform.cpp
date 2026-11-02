@@ -304,6 +304,7 @@ TerraCommit Terraformer::commit(const TerraPlan& p) {
   if (!p.legal) return c;
   for (const VertexChange& v : p.altChanges) w_.alt[w_.vIdx(v.x, v.z)] = v.value;
   for (const VertexChange& v : p.waterChanges) w_.water[w_.vIdx(v.x, v.z)] = v.value;
+  if (!p.altChanges.empty() || !p.waterChanges.empty()) w_.invalidateDeepWater();
   c.derivedVerts = p.derivedVerts;
   c.notifyTiles = p.notifyTiles;
   return c;

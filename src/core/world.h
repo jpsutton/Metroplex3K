@@ -80,6 +80,17 @@ struct World {
   uint8_t altAt(int x, int z) const { return alt[vIdx(x, z)]; }
   uint8_t waterAt(int x, int z) const { return water[vIdx(x, z)]; }
   bool inTiles(int x, int z) const { return x >= 0 && z >= 0 && x < W && z < H; }
+
+  // Deep-water table for seaport pier (spec 15 §5.5 / Q-AX): W×W u16, index z·W+x.
+  // Built on first use from per-vertex classification; not saved. Call invalidateDeepWater() after
+  // terrain/water/sea-level edits.
+  void invalidateDeepWater() const { deepWater_.clear(); }
+  bool deepWaterAt(int x, int z) const;  // true when table[z·W+x] != 0xFFFF
+  const std::vector<uint16_t>& deepWaterTable() const { ensureDeepWater(); return deepWater_; }
+
+ private:
+  void ensureDeepWater() const;
+  mutable std::vector<uint16_t> deepWater_;  // W*W; empty = not built yet
 };
 
 // Load a .sc3 / .st3 / .sct / .SNR file. Throws FormatError on failure. `warnings` receives
