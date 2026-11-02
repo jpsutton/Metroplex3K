@@ -109,6 +109,7 @@ int StrikeMachine::step(SimRng& rng, uint32_t chance, bool endNow, uint32_t maxD
 
 uint32_t departmentStrikeChance(bool striking, bool haveStations, int funding, int minFunding,
                                 int avgMetric, int maxAcceptable) {
+  // Spec 17 §3.4 / Q-BN [STATIC]: fire uses this same form with MaxAcceptableFlam + flam average.
   if (striking) return 10000;
   if (!haveStations || funding >= minFunding || avgMetric <= maxAcceptable) return 0;
   int d = minFunding - funding;

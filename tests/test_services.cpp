@@ -151,9 +151,16 @@ static void testPoliceTick() {
 
 static void testStrikeEffectOnCoverage() {
   IniFile tune = IniFile::fromText(kTune);
+  CoverageParams fireCp = CoverageParams::fire(IniFile::fromText(
+      "[TuningParameters]\nUpdatePeriod=1\nMinAcceptableFunding=100\nMaxAcceptableFlam=10\n"
+      "StrikeEfficiency=50\nMaxStrikeDuration=5\n"));
+  // Q-BN: fire loads MaxAcceptableFlam and shares police chance/start/end/efficiency form.
+  CHECK(fireCp.maxAcceptable == 10 && fireCp.strikeEfficiency == 50 && fireCp.maxStrikeDuration == 5);
+  CHECK(departmentStrikeChance(false, true, 60, 100, 200, fireCp.maxAcceptable) == 1600);
+  CHECK(departmentStrikeChance(false, true, 60, 100, 10, fireCp.maxAcceptable) == 0);  // flam ≤ max
+  CHECK(departmentStrikeChance(true, true, 60, 100, 0, fireCp.maxAcceptable) == 10000);
   CoverageLayer f;
-  f.init(false, 64, 64, StationParams::fire(tune),
-         CoverageParams::fire(IniFile::fromText("[TuningParameters]\nUpdatePeriod=1\nMinAcceptableFunding=100\nMaxAcceptableFlam=10\nStrikeEfficiency=50\nMaxStrikeDuration=5\n")));
+  f.init(false, 64, 64, StationParams::fire(tune), fireCp);
   f.addStation(32, 32, 32, 32);
   f.setFunding(0);   // R=0: nothing stamped
   f.setFunding(60);
@@ -162,6 +169,7 @@ static void testStrikeEffectOnCoverage() {
   CoverageTickEnv env; env.averageMetric = 200;
   SimRng rng(1);
   f.tick(env, rng);   // funding 60 < 100, flam 200 > 10 -> chance (40)^2 = 1600/10000: may or may not start
+  CHECK(f.lastStrikeChance == 1600);
   // Force a strike deterministically.
   f.strike.striking = true; f.strike.counter = 0;
   f.tick(env, rng);
@@ -169,6 +177,11 @@ static void testStrikeEffectOnCoverage() {
   f.tick(env, rng);   // sweeps cell containing (32,32) at some point; run full sweep
   for (int i = 0; i < 260 && f.strike.striking; i++) f.tick(env, rng);
   CHECK(!f.strike.striking);   // counter exceeded MaxStrikeDuration
+  // End when funding ≥ 100 % (same as police).
+  f.strike.striking = true; f.strike.counter = 0;
+  f.setFunding(100);
+  f.tick(env, rng);
+  CHECK(!f.strike.striking);
 }
 
 static void testFlammability() {

@@ -77,7 +77,8 @@ struct StrikeMachine {
   // Returns +1 if a strike started, -1 if it ended, 0 otherwise. `chance` is out of 10000.
   int step(SimRng& rng, uint32_t chance, bool endNow, uint32_t maxDuration);
 };
-// Spec 3.4 chance per tick out of 10000 (police; fire analogous with flammability).
+// Spec 17 §3.4 / Q-BN [STATIC]: same chance for police and fire (avg crime vs MaxAcceptableCrime,
+// or avg flammability vs MaxAcceptableFlam). Out of 10000.
 uint32_t departmentStrikeChance(bool striking, bool haveStations, int funding, int minFunding,
                                 int avgMetric, int maxAcceptable);
 
