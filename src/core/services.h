@@ -442,7 +442,8 @@ struct SchoolParams {   // [School] / [College]
 struct SchoolFunding { int upkeep = 0; double x = 0; int staff = 0; double effect = 0; };
 SchoolFunding schoolFunding(const SchoolParams& p, int fundingPct);
 
-struct LibraryParams {  // [Library] / [Museum]: fixed, funding independent
+struct LibraryParams {  // [Library] / [Museum]: fixed effect/capacity; upkeep on education dept
+  // Spec 17 §6.2 / Q-BP [STATIC]: both kinds share funding-pass list 2 (with schools=0, colleges=1).
   uint32_t popServed = 0; int minAge = 0, maxAge = 0; double eqEffect = 0.001; int upkeep = 0;
   static LibraryParams library(const IniFile& tune);
   static LibraryParams museum(const IniFile& tune);

@@ -48,6 +48,14 @@ struct PopulationConfig {
 
 enum class EduKind { School = 0, College = 1, Library = 2, Museum = 3 };
 
+// Spec 17 §6.2 / Q-BP [STATIC]: education funding pass keeps three lists by kind —
+// 0 = school, 1 = college, anything else (library 2 / museum 3) = third shared list.
+// EQ distribution still uses four separate kind groups (spec 20 §4.2).
+inline int educationFundingList(EduKind k) {
+  const int i = int(k);
+  return i <= 1 ? i : 2;
+}
+
 struct EduFacility {
   EduKind kind = EduKind::School;
   float capacity = 0;     // OptimalDeskCount (school/college) or PopServed (library/museum)

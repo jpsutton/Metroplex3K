@@ -160,6 +160,7 @@ PopulationResult Population::monthly(const PopulationInput& in) {
   const bool haveHospital = !in.hospitals.empty();
 
   // 3. education distribution (uses shares from before this month's changes)
+  // Spec 20 §4.2 [STATIC]: four EQ groups by EduKind (0..3). Funding pass lists differ (Q-BP / §6.2).
   float gain[4][kAges] = {}, seats[4][kAges] = {};
   for (auto& f : in.education) {
     int g = int(f.kind);

@@ -449,6 +449,15 @@ static void testRecords() {
   CHECK(ns[0x18C] == 0 && rd32(ns.data() + 0x198) == 0 && ns[0x1BF] == 0);
 }
 
+static void testEducationFundingList() {
+  // Spec 17 §6.2 / Q-BP [STATIC]: funding pass lists 0/1/2; libraries+museums share the third.
+  CHECK(educationFundingList(EduKind::School) == 0);
+  CHECK(educationFundingList(EduKind::College) == 1);
+  CHECK(educationFundingList(EduKind::Library) == 2);
+  CHECK(educationFundingList(EduKind::Museum) == 2);
+  CHECK(int(EduKind::Library) == 2 && int(EduKind::Museum) == 3);  // EQ still four groups
+}
+
 int main() {
   testInitial();
   testConfigIni();
@@ -456,6 +465,7 @@ int main() {
   testAgeing();
   testMortality();
   testEducation();
+  testEducationFundingList();
   testHealth();
   testStrikes();
   testWorkforce();
