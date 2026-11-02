@@ -1044,8 +1044,10 @@ four corner vertices has a water surface ≥ its ground altitude (the same test 
 `16-sim-utilities.md` §3.3). In addition, the 5th tile must be found in the terrain's
 **deep-water table** [STATIC lookup]. The terrain builds that table on first use from a per-vertex
 classification: water surface ≥ 8, ground ≤ water − 8, and water surface equal to the map's sea
-level [STATIC]. A tile passes when its key is in the table [INFERRED: deep sea water at sea level,
-water that ships can reach; the exact keying is OPEN]. The
+level [STATIC]. The table is a `W×W` array of 16-bit entries (`W` = city width in tiles), indexed
+by tile coordinates as `z·W + x`. Every entry starts as the empty sentinel `0xFFFF`; tiles that
+pass the vertex classification are written as `1`. A tile passes the deep-water test when its
+entry is not `0xFFFF` [STATIC]. The
 rule keeps the longest run of consecutive qualifying tiles over all four sides. Only a strictly
 longer run replaces the best one, so on ties the earlier side and the earlier run win. If the
 best run is shorter than 5 tiles, nothing is built. If it is longer than 12, it is cut to its
