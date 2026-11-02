@@ -849,7 +849,10 @@ shipped `.sc3`/`.SNR`/`.st3`/`.sct` files, including `TUTORIAL.SC3`; sizes 1174 
 | C+106 | 40 | u32[10] | decade | Chart samples |
 | C+146 | 4 | u32 | chartParam | 0x104 in all files (value given to the chart at creation) |
 
-Order of series entries within each array: [OPEN] (newest first, judging by the data). Untouched
+**Order of series entries within each array: index 0 is the newest sample** [STATIC]. Each
+array is a fixed-length FIFO: a new sample is inserted at index 0 and the oldest drops off the
+far end (`10-save-format.md` §6.12). The same rule applies to every history chart that uses this
+layout (aura, crime, pollution, traffic, demographics, budget funds, power, water, …). Untouched
 maps (terrains, fresh starter towns) store an all-zero grid, phase 0, cursor (4, 8), zero
 statistics and all-127 charts. [DATA]
 
@@ -896,7 +899,7 @@ each jail (`10-save-format.md` §6.2.5).
 ## Open questions
 
 * Aura: which non-building occupant classes use kinds other than 1 (so they are skipped by
-  §8.4), and the order of the chart series.
+  §8.4). (Chart series order closed: index 0 = newest, §8.6.)
 * Which list holds libraries/museums in the education funding pass (§6.2).
 * Fire strike machine assumed identical to police.
 * The (now decoded) `garbageStore` block of the pollution record (§7.4). (Police record fields

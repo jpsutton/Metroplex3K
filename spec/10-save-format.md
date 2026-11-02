@@ -1118,7 +1118,7 @@ C = (W/4)·(H/4), size = C + 150 (1174 / 2454 / 4246 bytes for 128 / 192 / 256 m
 
 **History chart (132 bytes)**, the same format as in §6.12 and §6.13: u32[12] monthly samples,
 u32[10] yearly samples, u32[10] decade samples, then u32 scale. Index 0 is the newest sample in each
-series [INFERRED from data]. Scale is the value given when the chart is created: 260 for the aura in
+series [STATIC]. Scale is the value given when the chart is created: 260 for the aura in
 all files. A freshly created aura chart holds 127 in every sample. [DATA]
 
 Untouched maps (terrains, fresh starter towns) store an all-zero grid, phase 0, cursor (4, 8), zero
@@ -1356,8 +1356,8 @@ shown in the Graphs window, such as the aura and treasury histories).
 
 Rules [STATIC]:
 
-* Samples are unsigned. Each array is a fixed-length FIFO: a new sample enters and the oldest
-  leaves. Index 0 is the newest sample [INFERRED from data, see §6.9].
+* Samples are unsigned. Each array is a fixed-length FIFO: a new sample enters at index 0 and the
+  oldest leaves the far end. Index 0 is the newest sample [STATIC].
 * A chart is either **fixed-scale** or **auto-scale** (a property set by the owning subsystem when
   the chart is created; it is not stored). Fixed-scale: `max` is the scale given at creation, and
   on load and on each new sample any sample greater than `max` is clamped to `max`.
