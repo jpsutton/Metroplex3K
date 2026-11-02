@@ -190,6 +190,12 @@ static void testPowerAgeing() {
   ev = f.L.monthlyUpdate(env, f.rng);
   CHECK(ev.size() == 1 && ev[0].kind == PlantEvent::Retired);
   CHECK(f.L.plants()[0].expired);
+  CHECK(f.L.plants()[0].agentType == 12111);   // Q-BW: same agent type
+  CHECK(f.L.plants()[0].output == 0);          // O = 0 while expired
+  // Further months: still expired, still zero, no second retirement event.
+  env.nowAbsMonth = 700;
+  ev = f.L.monthlyUpdate(env, f.rng);
+  CHECK(ev.empty() && f.L.plants()[0].expired && f.L.plants()[0].output == 0);
 }
 
 static void testPowerExplosion() {
@@ -336,6 +342,10 @@ static void testWaterAgeing() {
   f.L.monthlyUpdate(env);
   CHECK(f.L.facilities()[0].output == 500 && f.L.stats.ageingCount == 1);
   env.nowAbsMonth = 120;  // age >= Lmax (greater OR equal) -> retired
+  f.L.monthlyUpdate(env);
+  CHECK(f.L.facilities()[0].output == 0 && f.L.facilities()[0].expired);
+  // Q-BW: later months stay expired at O = 0 (city sets lot state 8).
+  env.nowAbsMonth = 200;
   f.L.monthlyUpdate(env);
   CHECK(f.L.facilities()[0].output == 0 && f.L.facilities()[0].expired);
 }

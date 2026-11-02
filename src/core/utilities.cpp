@@ -230,10 +230,11 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
   std::fill(powered_.begin(), powered_.end(), 0);
   for (auto c : cons_) if (c) stats_.consumerTiles++;
 
-  // Per-plant step.
+  // Per-plant step (spec 16 §2.6 step 4 / Q-BW [STATIC]).
   std::vector<int> explode;
   for (auto& p : plants_) {
     int age = env.nowAbsMonth - p.buildAbsMonth;
+    // Expired: same agent type kept; only recompute O (age ≥ Lmax → 0). City sets lot state 8.
     if (p.expired) { p.output = int(plantOutput(uint32_t(p.capacity), age, p.lmax, p.ld)); continue; }
     uint32_t r = rng.randInt(uint32_t(params_.minOverwork), uint32_t(params_.maxOverwork));
     if (int64_t(r) < int64_t(p.overwork)) {
@@ -241,6 +242,7 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
       events.push_back({PlantEvent::Explosion, p.id, p.agentType, p.x, p.z});
       continue;
     }
+    // age > Lmax: retire in place — flag expired, keep Lmax/Ld/agentType; city sets lot state 8.
     if (age > p.lmax) {
       p.expired = true;
       events.push_back({PlantEvent::Retired, p.id, p.agentType, p.x, p.z});
@@ -417,6 +419,7 @@ void WaterLayer::monthlyUpdate(const WaterEnv& env) {
   for (auto& f : fac_) {
     f.output = 0; f.status = WaterFacility::Off;
     int age = env.nowAbsMonth - f.buildAbsMonth;
+    // Spec 16 §3.3 / Q-BW [STATIC]: age ≥ Lmax retires like power (same type, state 8, expired, O = 0).
     if (!f.functional || f.expired) continue;
     if (age >= f.lmax) { f.expired = true; continue; }
     if (env.power && !env.power->powered(f.x, f.z)) continue;

@@ -1668,8 +1668,9 @@ void City::syncFacilities() {
   std::set<std::pair<int, int>> plants, wf, st;
   for (const auto& o : world_->occupants) {
     std::pair<int, int> key{o.x, o.z};
-    if ((o.state & ~0x200u) != 1) continue;
-    if (us::powerCategory(o.agentType) >= 0) {
+    const uint32_t lot = o.state & ~0x200u;
+    // Spec 16 §2.6 / Q-BW [STATIC]: expired plants stay on the map at lot state 8; keep them in the layer.
+    if (us::powerCategory(o.agentType) >= 0 && (lot == 1 || lot == 8)) {
       plants.insert(key);
       if (!plantAt_.count(key)) {
         // A loaded plant keeps its build date (date pair) and its saved per-plant properties (spec 10 s6.2.5, 16
@@ -1690,11 +1691,15 @@ void City::syncFacilities() {
                 default: break;
               }
             }
+            if (lot == 8) p.expired = true;   // Q-BW: destroyed lot ⇒ expired
             p.output = int(us::plantOutput(uint32_t(p.capacity), std::max(0, now - built), p.lmax, p.ld));
           }
         }
       }
-    } else if (o.agentType == kAgentPump || o.agentType == kAgentTower || o.agentType == kAgentDesal) {
+      continue;
+    }
+    if (lot != 1) continue;
+    if (o.agentType == kAgentPump || o.agentType == kAgentTower || o.agentType == kAgentDesal) {
       wf.insert(key);
       if (!waterFacAt_.count(key)) {
         us::WaterKind kind = o.agentType == kAgentPump ? us::WaterKind::Pump : o.agentType == kAgentTower ? us::WaterKind::Tower : us::WaterKind::Desalination;
@@ -1716,6 +1721,21 @@ void City::syncFacilities() {
         else if (usHier_.isAncestorOrSelf(o.agentType, kAgentPolice)) stationAt_[key] = {0, police.addStation(o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1)};
         else stationAt_[key] = {1, fire.addStation(o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1)};
       }
+    }
+  }
+  // Water facilities can also be expired at lot state 8 (Q-BW); keep them tracked like plants.
+  for (const auto& o : world_->occupants) {
+    if ((o.state & ~0x200u) != 8) continue;
+    if (o.agentType != kAgentPump && o.agentType != kAgentTower && o.agentType != kAgentDesal) continue;
+    std::pair<int, int> key{o.x, o.z};
+    wf.insert(key);
+    if (!waterFacAt_.count(key)) {
+      us::WaterKind kind = o.agentType == kAgentPump ? us::WaterKind::Pump : o.agentType == kAgentTower ? us::WaterKind::Tower : us::WaterKind::Desalination;
+      int built = now;
+      if (o.hasDate && o.dateYear > 0) built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
+      int id = water.addFacility(kind, o.x, o.z, std::min(built, now));
+      waterFacAt_[key] = id;
+      for (auto& f : water.facilities()) if (f.id == id) f.expired = true;
     }
   }
   for (auto it = plantAt_.begin(); it != plantAt_.end();) {
@@ -2239,11 +2259,26 @@ void City::monthlyPower() {
   // The draw (slot - left) goes to the production table's deal column. The deal's saved units are NOT overwritten:
   // Moscow keeps units 12,600 in every save of a 480-day run of the original (spec 28 s5.1) [OBSERVED].
   for (const auto& e : events) {
-    if (e.kind != us::PlantEvent::Explosion) continue;
     int oi = occupantAt(e.x, e.z);
-    if (oi >= 0) damageOccupant(oi, 8);
-    plantAt_.erase({e.x, e.z});
-    if (onMessage) onMessage("A power plant exploded from overwork!");
+    if (e.kind == us::PlantEvent::Explosion) {
+      if (oi >= 0) damageOccupant(oi, 8);
+      plantAt_.erase({e.x, e.z});
+      if (onMessage) onMessage("A power plant exploded from overwork!");
+      continue;
+    }
+    // Spec 16 §2.6 step 4 / Q-BW [STATIC]: retire in place — same agent type, lot state 8, expired flag.
+    // Lmax/Ld stay on the plant; do not remove plantAt_ (expired plants keep producing O = 0).
+    if (e.kind == us::PlantEvent::Retired && oi >= 0) {
+      Occupant& o = world_->occupants[size_t(oi)];
+      damageOccupant(oi, 8);
+      bool found = false;
+      for (auto& kv : o.intProps)
+        if (kv.first == 0x2351FAFB) { kv.second = 1; found = true; break; }
+      if (!found) {
+        o.intProps.push_back({0x2351FAFB, 1});
+        std::sort(o.intProps.begin(), o.intProps.end());
+      }
+    }
   }
 }
 
@@ -2289,6 +2324,14 @@ void City::monthlyWater() {
     if (connectionTile(2, d.neighbourIndex, wd.tx, wd.tz)) env.deals.push_back(wd);
   }
   water.monthlyUpdate(env);
+  // Spec 16 §3.3 / Q-BW [STATIC]: newly retired water facilities → lot state 8, same agent type.
+  for (const auto& f : water.facilities()) {
+    if (!f.expired) continue;
+    int oi = occupantAt(f.x, f.z);
+    if (oi < 0) continue;
+    if ((world_->occupants[size_t(oi)].state & ~0x200u) == 8) continue;
+    damageOccupant(oi, 8);
+  }
 }
 
 void City::monthlyPollution() {
