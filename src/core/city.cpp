@@ -655,6 +655,7 @@ void City::wire() {
   sched.setHandler(Step::MonthlyWater, [this] { monthlyWater(); });
   sched.setHandler(Step::MonthlyPollution, [this] { monthlyPollution(); });
   sched.setHandler(Step::MonthlyCrime, [this] { monthlyCrime(); });
+  sched.setHandler(Step::MonthlyAura, [this] { monthlyAura(); });
   sched.onDay = [this] {
     cal::Date d = clock.date();
     world_->info.year = d.year;
@@ -2289,6 +2290,10 @@ void City::updateTreatmentCaps() {
 void City::monthlyCrime() {
   cal::Date d = clock.date();
   crime.monthEnd(d.month, d.year);
+}
+void City::monthlyAura() {
+  // Spec 14 §6.1 monthly item 16 / 17 §8.5 [STATIC]: mayor-rating chart sample (cityAura+127).
+  cal::Date d = clock.date();
   aura.monthEnd(d.month, d.year);
 }
 

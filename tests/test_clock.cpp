@@ -229,10 +229,12 @@ static void testSpeed() {
 }
 
 static void testSchedule() {
-  CHECK(dailySteps(false).size() == 10 && dailySteps(true).size() == 11);
+  CHECK(dailySteps().size() == 11);
   CHECK(dailySteps()[0] == Step::DailyDisasters && dailySteps()[4] == Step::DailyScenario);
-  CHECK(monthlySteps().size() == 15);
+  CHECK(dailySteps()[7] == Step::DailyAura);   // before pollution/crime/flam (spec 14 §6.1 item 8)
+  CHECK(monthlySteps().size() == 16);
   CHECK(monthlySteps()[9] == Step::MonthlyBudget && monthlySteps()[5] == Step::MonthlyResidential);
+  CHECK(monthlySteps().back() == Step::MonthlyAura);
   CHECK(anniversaryNewsItem(10) == 0x1F4 && anniversaryNewsItem(2000) == 0x1FB && anniversaryNewsItem(11) == 0);
 
   Clock clk;
@@ -261,8 +263,8 @@ static void testSchedule() {
   CHECK(sc.cascadeLog(0) == int(Step::DailyDisasters));
   size_t daily = dailySteps().size() - 1;   // disaster instances skipped
   CHECK(sc.cascadeLog(daily) == int(Step::MonthlyDisasterManager));
-  CHECK(sc.cascadeLog(daily + 15 - 1) == int(Step::MonthlyCrime));
-  CHECK(sc.cascadeLog(daily + 15) == -1);
+  CHECK(sc.cascadeLog(daily + 16 - 1) == int(Step::MonthlyAura));
+  CHECK(sc.cascadeLog(daily + 16) == -1);
 
   // disasters disabled skip the disaster manager monthly step
   sc.clearLog();

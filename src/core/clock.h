@@ -176,15 +176,16 @@ enum class Step : int {
   // monthly (in order)
   MonthlyDisasterManager, MonthlyNeighbours, MonthlyWorldLayer, MonthlyRci, MonthlyOrdinances,
   MonthlyResidential, MonthlyCommercial, MonthlyIndustrial, MonthlyTraffic, MonthlyBudget,
-  MonthlyPower, MonthlyWater, MonthlyUnknown27, MonthlyPollution, MonthlyCrime,
+  MonthlyPower, MonthlyWater, MonthlyUnknown27, MonthlyPollution, MonthlyCrime, MonthlyAura,
   // per minute (only while a disaster instance is active)
   MinuteDisasterInstances, MinuteScenario,
   kCount
 };
 
 const char* stepName(Step s);
-// Run order of each cascade. Daily omits DailyAura unless auraDaily (recommended default, spec 29 2.11).
-std::vector<Step> dailySteps(bool auraDaily = true);
+// Run order of each cascade (spec 14 §6.1): aura daily sweep before pollution/crime/flam;
+// aura mayor-rating chart sample is monthly item 16 (Q-AR / de09d09).
+std::vector<Step> dailySteps();
 std::vector<Step> weeklySteps();
 std::vector<Step> monthlySteps();
 std::vector<Step> minuteSteps();
@@ -201,7 +202,6 @@ class CitySchedule {
   // Called with the news item id on anniversaries.
   std::function<void(uint32_t newsItem)> onAnniversary;
 
-  bool auraDaily = true;
   bool disastersEnabled = true;   // monthly disaster-manager step only then (spec 6.1 monthly 1)
 
   // Per-building weekly work: runs before the weekly layer steps, in registration order;

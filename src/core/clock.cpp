@@ -273,25 +273,24 @@ const char* stepName(Step s) {
       "WeeklyStreetSim",
       "MonthlyDisasterManager", "MonthlyNeighbours", "MonthlyWorldLayer", "MonthlyRci", "MonthlyOrdinances",
       "MonthlyResidential", "MonthlyCommercial", "MonthlyIndustrial", "MonthlyTraffic", "MonthlyBudget",
-      "MonthlyPower", "MonthlyWater", "MonthlyUnknown27", "MonthlyPollution", "MonthlyCrime",
+      "MonthlyPower", "MonthlyWater", "MonthlyUnknown27", "MonthlyPollution", "MonthlyCrime", "MonthlyAura",
       "MinuteDisasterInstances", "MinuteScenario"};
   int i = int(s);
   return (i >= 0 && i < int(Step::kCount)) ? n[i] : "?";
 }
 
-std::vector<Step> dailySteps(bool auraDaily) {
-  std::vector<Step> v = {Step::DailyDisasters, Step::DailyPolice, Step::DailyFire, Step::DailyLandValue,
-                         Step::DailyScenario, Step::DailyZoneDev, Step::DailyDisasterInstances,
-                         Step::DailyPollution, Step::DailyCrime, Step::DailyFlammability};
-  if (auraDaily) v.push_back(Step::DailyAura);
-  return v;
+std::vector<Step> dailySteps() {
+  // Spec 14 §6.1 items 8–11 [STATIC]: aura before pollution, crime, flammability (Q-AR).
+  return {Step::DailyDisasters, Step::DailyPolice, Step::DailyFire, Step::DailyLandValue,
+          Step::DailyScenario, Step::DailyZoneDev, Step::DailyDisasterInstances,
+          Step::DailyAura, Step::DailyPollution, Step::DailyCrime, Step::DailyFlammability};
 }
 std::vector<Step> weeklySteps() { return {Step::WeeklyStreetSim}; }
 std::vector<Step> monthlySteps() {
   return {Step::MonthlyDisasterManager, Step::MonthlyNeighbours, Step::MonthlyWorldLayer, Step::MonthlyRci,
           Step::MonthlyOrdinances, Step::MonthlyResidential, Step::MonthlyCommercial, Step::MonthlyIndustrial,
           Step::MonthlyTraffic, Step::MonthlyBudget, Step::MonthlyPower, Step::MonthlyWater,
-          Step::MonthlyUnknown27, Step::MonthlyPollution, Step::MonthlyCrime};
+          Step::MonthlyUnknown27, Step::MonthlyPollution, Step::MonthlyCrime, Step::MonthlyAura};
 }
 std::vector<Step> minuteSteps() { return {Step::MinuteDisasterInstances, Step::MinuteScenario}; }
 
@@ -360,7 +359,7 @@ void CitySchedule::run(Step s) {
 
 void CitySchedule::runDay() {
   cascadePaused_ = false;
-  for (Step s : dailySteps(auraDaily)) {
+  for (Step s : dailySteps()) {
     // Disaster-instance tick runs only when disasters are present.
     if (s == Step::DailyDisasterInstances && !disasterActive_) continue;
     run(s);

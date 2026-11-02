@@ -55,7 +55,7 @@ These items are now settled `[OBSERVED]`:
 | 2.8 | Source of each building's power consumption | 12 §9.1, 13, 16 | **Closed** `[STATIC][DATA]`: attribute 0xC9 of the building's own record (by record key, not agent type), written at the anchor; city totals match the saved monthly consumption within 3–10 % (16 §2.6). **Calibration target** `[OBSERVED]`: in 480 days of Moscow the original abandons no zoned lot for lack of power (no code 4 in any pass, 28 §5.1). |
 | 2.9 | Identity of several advisor metrics, and the ordinance → acknowledgement topic table | 22 §3.8–§3.13 | Use the documented thresholds against the nearest documented statistic. |
 | 2.10 | Department → budget line mapping | 19 §6.1, 09 §6.1 | **Closed** `[OBSERVED]`: sliders set to distinct values and read back from a save. Education `0x02922A5D`, Public Health `0x42922A6C`, Fire `0x62963928`, Roads `0x8290F605`, Police `0xA2963983`, Mass Transit `0xC290F609`. The earlier inference (police/fire/health/education) was wrong; see 19 §6.1. Slider maximum above 100 is still open. |
-| 2.11 | Aura layer run trigger | 14 §6, 17 §8 | Run daily, like the police and fire layers. |
+| 2.11 | Aura layer run trigger | 14 §6, 17 §8 | **Closed** `[STATIC]` (Q-AR): daily cascade item 8 (sweep slice before pollution/crime/flam); monthly item 16 samples the mayor-rating chart (17 §8.5). |
 
 ## 3. Presentation (S3)
 

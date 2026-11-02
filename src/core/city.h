@@ -266,7 +266,7 @@ class City {
   void dailyCrime(); void dailyFlammability(); void dailyAura(); void weeklyTraffic();
   void monthlyNeighbours(); void monthlyValves(); void monthlyOrdinances(); void monthlyPopulation();
   void monthlyTraffic(); void monthlyBudget(); void monthlyPower(); void monthlyWater();
-  void monthlyPollution(); void monthlyCrime();
+  void monthlyPollution(); void monthlyCrime(); void monthlyAura();
   void updateTreatmentCaps();
  public:
   // Spacing grid 01FD7A8C (spec 10 s6.3): one byte per 4 x 4 block; bits 2-5 = overlap counter. add(): if any block of
