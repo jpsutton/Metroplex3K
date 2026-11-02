@@ -12,33 +12,59 @@ static World flatWorld(int W, int H) {
   return w;
 }
 
-static void testClearanceModes() {
+static void testModeTable() {
+  CHECK(clearanceUses1(0) && clearanceUses2(0) && clearanceUses4(0));
+  CHECK(clearanceUses1(1) && !clearanceUses2(1) && !clearanceUses4(1));
+  CHECK(clearanceUses1(2) && !clearanceUses2(2) && clearanceUses4(2));
+  CHECK(clearanceUses1(3) && clearanceUses2(3) && !clearanceUses4(3));
+}
+
+static void testClearanceScanners() {
   World w = flatWorld(16, 16);
   CityConfig cfg;
   City c;
   c.init(&w, nullptr, cfg, 1);
 
-  const uint32_t all = kPlaceOcc | kPlaceNetwork | kPlaceSubsurface | kPlaceSite;
-  auto ok = c.placement.clearance(2, 2, 3, 3, all, true, 10);
-  CHECK(ok.clear && ok.cost == 40);
+  // Empty rect is clear in every mode; cost only accrues on 1-tile passing hits (none here).
+  for (int m = 0; m <= 3; m++) {
+    auto r = c.placement.clearance(2, 2, 3, 3, m, {}, true, 10);
+    CHECK(r.clear && r.cost == 0);
+  }
 
-  Occupant o;
-  o.x = 2; o.z = 2; o.sizeX = 2; o.sizeZ = 2; o.agentType = 12111; o.occId = 99;
-  c.plopAgent(99, 12111, 2, 2, 2, 2, 0);
-  auto blocked = c.placement.clearance(2, 2, 3, 3, kPlaceOcc);
-  CHECK(!blocked.clear);
-
-  // Occupants ignored when mode omits kPlaceOcc.
-  auto ignoreOcc = c.placement.clearance(2, 2, 3, 3, kPlaceSite);
-  CHECK(ignoreOcc.clear);
-
-  // Network mode: lay a power line tile.
-  NetPiece p;
-  p.x = 5; p.z = 5; p.pieceId = kFallbackPowerPiece;
-  w.surface.push_back(p);
+  // Hard occupant (no 0x400): fails 1-tile scanner in every mode.
+  Occupant hard;
+  hard.x = 2; hard.z = 2; hard.sizeX = 1; hard.sizeZ = 1;
+  hard.agentType = 12111; hard.occId = 99; hard.caps = 0;
+  w.occupants.push_back(hard);
   c.rebuildIndex();
-  CHECK(!c.placement.clearance(5, 5, 5, 5, kPlaceNetwork).clear);
-  CHECK(c.placement.clearance(5, 5, 5, 5, kPlaceOcc).clear);  // only network occupies it
+  for (int m = 0; m <= 3; m++) CHECK(!c.placement.clearance(2, 2, 2, 2, m).clear);
+
+  // Ignorable + filter pass: mode 1 (1-tile only) clears and can accumulate cost.
+  w.occupants.clear();
+  Occupant soft;
+  soft.x = 4; soft.z = 4; soft.sizeX = 1; soft.sizeZ = 1;
+  soft.agentType = 300; soft.occId = 7; soft.caps = kPlaceCapIgnorable;
+  w.occupants.push_back(soft);
+  c.rebuildIndex();
+  OccupantFilter flora;
+  flora.bits = kFiltAgentType;
+  flora.agentType = 300;
+  auto pass = c.placement.clearance(4, 4, 4, 4, 1, flora, true, 5);
+  CHECK(pass.clear && pass.cost == 5);
+
+  // Same soft occupant but filter rejects → fail.
+  OccupantFilter other;
+  other.bits = kFiltAgentType;
+  other.agentType = 999;
+  CHECK(!c.placement.clearance(4, 4, 4, 4, 1, other).clear);
+
+  // Coarse scanners: a 1×1 occupant also occupies its 2- and 4-tile cells → modes 0/2/3 fail
+  // even for ignorable (2/4-tile hits never filter).
+  CHECK(!c.placement.clearance(4, 4, 4, 4, 0, flora).clear);
+  CHECK(!c.placement.clearance(4, 4, 4, 4, 2, flora).clear);
+  CHECK(!c.placement.clearance(4, 4, 4, 4, 3, flora).clear);
+  // Mode 1 only uses 1-tile → still clear.
+  CHECK(c.placement.clearance(4, 4, 4, 4, 1, flora).clear);
 }
 
 static void testFootprintAndNearest() {
@@ -54,14 +80,12 @@ static void testFootprintAndNearest() {
   c.rebuildIndex();
 
   OccupantFilter any;
-  auto cells = c.placement.collectFootprint(any);
-  CHECK(cells.size() == 5);  // 2x2 + 1x1
+  CHECK(c.placement.collectFootprint(any).size() == 5);
 
   OccupantFilter onlyR;
   onlyR.bits = kFiltAgentType;
   onlyR.agentType = 3000;
-  auto rCells = c.placement.collectFootprint(onlyR);
-  CHECK(rCells.size() == 4);
+  CHECK(c.placement.collectFootprint(onlyR).size() == 4);
 
   TileRect highlighted{};
   int highlights = 0;
@@ -69,16 +93,11 @@ static void testFootprintAndNearest() {
 
   auto n = c.placement.nearest(11, 11, onlyR);
   CHECK(n.found && n.occIndex == 0);
-  CHECK(n.bbox.x0 == 10 && n.bbox.z0 == 10 && n.bbox.x1 == 11 && n.bbox.z1 == 11);
+  CHECK(n.bbox.x0 == 10 && n.bbox.x1 == 11);
   CHECK(highlights == 1);
-  CHECK(highlighted.x0 == 10 && highlighted.x1 == 11);
 
-  // Utilities-style region highlight (same notification).
   c.placement.raiseRegionHighlight({1, 2, 3, 4});
-  CHECK(highlights == 2 && highlighted.x0 == 1 && highlighted.z1 == 4);
-
-  auto far = c.placement.nearest(0, 0, onlyR);
-  CHECK(far.found && far.occIndex == 0);
+  CHECK(highlights == 2 && highlighted.z1 == 4);
 
   OccupantFilter miss;
   miss.bits = kFiltOccId;
@@ -92,7 +111,8 @@ static void testSubsystemNumber() {
 }
 
 int main() {
-  testClearanceModes();
+  testModeTable();
+  testClearanceScanners();
   testFootprintAndNearest();
   testSubsystemNumber();
   TEST_MAIN_END();

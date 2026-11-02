@@ -1,4 +1,4 @@
-// Placement query (#28): on-demand occupancy / clearance helper (spec 14 §6.1 / Q-AV).
+// Placement query (#28): on-demand occupancy / clearance helper (spec 14 §6.1 / Q-AV / Q-AW).
 // No save records, no periodic work. Holds live refs to the layers it queries.
 #pragma once
 #include <cstdint>
@@ -16,18 +16,20 @@ struct TileRect {
   int height() const { return z1 - z0 + 1; }
 };
 
-// Four mode flags for clearance (exact caller combinations still [OPEN] in the spec).
-enum PlacementMode : uint32_t {
-  kPlaceOcc = 1u << 0,       // occupant layer
-  kPlaceNetwork = 1u << 1,   // surface transport + power lines
-  kPlaceSubsurface = 1u << 2,  // pipes (related underground network)
-  kPlaceSite = 1u << 3,      // related site: water / non-flat terrain
-};
+// Clearance mode m ∈ {0,1,2,3}: which occupancy scanners participate (spec 14 §6.1).
+// Mode 0: 1+2+4; 1: 1 only; 2: 1+4; 3: 1+2.
+inline bool clearanceUses1(int m) { return m >= 0 && m <= 3; }
+inline bool clearanceUses2(int m) { return m == 0 || m == 3; }
+inline bool clearanceUses4(int m) { return m == 0 || m == 2; }
 
-// Occupant filter bits (exact caller bits still [OPEN]).
+// Capability bit that lets a 1-tile scanner hit pass (with filter) instead of failing.
+// Same value as OF_IGNORABLE (tiler.h / occupant attr 0x72).
+constexpr uint32_t kPlaceCapIgnorable = 0x400;
+
+// Occupant filter bits (exact caller predicates still [OPEN]).
 enum OccupantFilterBit : uint32_t {
-  kFiltAgentType = 1u << 0,  // match agentType
-  kFiltOccId = 1u << 1,      // match occId
+  kFiltAgentType = 1u << 0,
+  kFiltOccId = 1u << 1,
   // bits == 0 → every occupant matches
 };
 
@@ -39,7 +41,7 @@ struct OccupantFilter {
 
 struct ClearanceResult {
   bool clear = false;
-  int64_t cost = 0;  // sum of per-tile costs when accumulateCost was requested
+  int64_t cost = 0;  // optional: sum of costs for 1-tile passing hits
 };
 
 struct NearestMatch {
@@ -48,19 +50,32 @@ struct NearestMatch {
   TileRect bbox;
 };
 
-// Layer views PlacementQuery reads. City rebinds these after rebuildIndex.
-struct PlacementLayers {
-  const World* world = nullptr;
-  const int32_t* occ = nullptr;          // W*H, -1 empty
-  const uint8_t* transport = nullptr;    // W*H
-  const uint8_t* powerLine = nullptr;    // W*H
-  const uint8_t* pipe = nullptr;         // W*H
+// Occupancy scanner: indexes occupants into stride×stride cells (created with the city; not saved).
+class OccupancyScanner {
+ public:
+  void reset(int mapW, int mapH, int stride);
+  void clear();
+  void add(const Occupant& o, int occIndex);
+  // Occupant indices covering the stride-cell that contains tile (x,z).
+  const std::vector<int>& atTile(int x, int z) const;
+  int stride() const { return stride_; }
+  bool ready() const { return stride_ > 0 && !cells_.empty(); }
+
+ private:
+  int stride_ = 0, cellsX_ = 0, cellsZ_ = 0, mapW_ = 0, mapH_ = 0;
+  std::vector<std::vector<int>> cells_;
+  static const std::vector<int> kEmpty_;
 };
 
 class PlacementQuery {
  public:
-  void bind(const PlacementLayers& layers) { layers_ = layers; }
-  const PlacementLayers& layers() const { return layers_; }
+  // Bind world + rebuild the three scanners (strides 1 / 2 / 4). Call after occupant index changes.
+  void rebuild(const World* world);
+
+  const World* world() const { return world_; }
+  const OccupancyScanner& scanner1() const { return scan1_; }
+  const OccupancyScanner& scanner2() const { return scan2_; }
+  const OccupancyScanner& scanner4() const { return scan4_; }
 
   // Map-region highlight notification (same style utilities raise for their regions).
   std::function<void(TileRect)> onRegionHighlight;
@@ -69,26 +84,25 @@ class PlacementQuery {
     if (onRegionHighlight) onRegionHighlight(r);
   }
 
-  // Clearance over [x0..x1]×[z0..z1]. modes selects participating layers.
-  // When accumulateCost, each clear in-bounds tile adds tileCost to the result.
-  ClearanceResult clearance(int x0, int z0, int x1, int z1, uint32_t modes,
-                            bool accumulateCost = false, int64_t tileCost = 0) const;
+  // Clearance over inclusive rect. Always walks terrain cells; mode selects scanners.
+  // filter applies only to 1-tile scanner hits that have capability 0x400.
+  // accumulateCost: each 1-tile passing hit adds hitCost.
+  ClearanceResult clearance(int x0, int z0, int x1, int z1, int mode,
+                            const OccupantFilter& filter = {},
+                            bool accumulateCost = false, int64_t hitCost = 0) const;
 
-  // All cells covered by occupants matching `filter` (unique tiles, row-major).
   std::vector<std::pair<int, int>> collectFootprint(const OccupantFilter& filter) const;
-
-  // Nearest matching occupant to (x,z) by Chebyshev distance (ties: lower index).
-  // On success raises a map-region highlight for the occupant's tile bbox.
   NearestMatch nearest(int x, int z, const OccupantFilter& filter) const;
 
   static TileRect occupantBBox(const Occupant& o) {
     return {o.x, o.z, o.x + std::max(1, o.sizeX) - 1, o.z + std::max(1, o.sizeZ) - 1};
   }
 
- private:
   bool matches(const Occupant& o, const OccupantFilter& f) const;
-  bool siteOk(int x, int z) const;
-  PlacementLayers layers_;
+
+ private:
+  const World* world_ = nullptr;
+  OccupancyScanner scan1_, scan2_, scan4_;
 };
 
 }  // namespace m3k

@@ -711,14 +711,14 @@ void City::rebuildIndex() {
   }
   classifyNetwork();
   occDirty_ = netDirty_ = true;
-  // #28 Placement query: live refs to occupant / network indexes (no owned state).
-  PlacementLayers pl;
-  pl.world = world_;
-  pl.occ = occ_.empty() ? nullptr : occ_.data();
-  pl.transport = transport_.empty() ? nullptr : transport_.data();
-  pl.powerLine = powerLine_.empty() ? nullptr : powerLine_.data();
-  pl.pipe = pipe_.empty() ? nullptr : pipe_.data();
-  placement.bind(pl);
+  // #28 Placement query: refresh capability flags and rebuild occupancy scanners (strides 1/2/4).
+  if (game_) {
+    for (auto& o : world_->occupants) {
+      if (const OccAttr* a = game_->occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT))
+        o.caps = a->flags;
+    }
+  }
+  placement.rebuild(world_);
 }
 
 void City::applyRoadCondition(int percent) {
@@ -934,11 +934,17 @@ bool City::tileBuildable(int x, int z) const {
 int City::addOccupant(const Occupant& o) {
   world_->occupants.push_back(o);
   int i = int(world_->occupants.size()) - 1;
-  if (!world_->occupants[size_t(i)].uid) world_->occupants[size_t(i)].uid = nextUid_++;
+  Occupant& placed = world_->occupants[size_t(i)];
+  if (!placed.uid) placed.uid = nextUid_++;
+  if (game_ && !placed.caps) {
+    if (const OccAttr* a = game_->occupant(placed.occId, false, placed.keyType == T_OCC_ATTR_PORT))
+      placed.caps = a->flags;
+  }
   for (int dx = 0; dx < o.sizeX; dx++)
     for (int dz = 0; dz < o.sizeZ; dz++)
       if (inMap(o.x + dx, o.z + dz)) occ_[idx(o.x + dx, o.z + dz)] = i;
   occDirty_ = true;
+  placement.rebuild(world_);
   if (onBuildingAdded) {
     int n = 0;
     for (const auto& oc : world_->occupants) n += oc.agentType == o.agentType;

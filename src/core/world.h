@@ -21,6 +21,7 @@ struct Occupant {
   uint32_t keyType = 0;     // 0x207EDC0E or 0x220055E1
   uint32_t agentType = 0;
   uint32_t state = 1;       // 1 occupied, 2 abandoned, 4 construction, 8 rubble, 16 fire
+  uint32_t caps = 0;        // runtime only: occupant capability flags (attr 0x72); 0x400 = ignorable for #28
   std::string name;
   // Per-class data of a saved entry (spec 10 6.2.5), kept so loaded buildings round-trip.
   bool hasDate = false; int32_t dateYear = 0, dateDay = 0;
