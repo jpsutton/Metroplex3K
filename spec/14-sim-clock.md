@@ -331,13 +331,12 @@ paused for the whole monthly work, §6.3 rule 4):
 16. Aura (#10): mayor-rating chart sample (monthly; yearly and decade samples on 1 January, same
     pattern as the demographic charts in rule 7) [STATIC].
 
-Items 1–2 always run before items 4–16 [STATIC]. They are dedicated monthly-tier schedule
-entries (disaster manager, then neighbours, in subsystem creation order) and are processed in
-the monthly cascade before the shared monthly pass that drives items 4–16 [STATIC]. Item 3
-(world layer) also runs before items 4–16 [INFERRED, medium confidence]; its order relative to
-items 1–2 is [INFERRED]. Items 4–13 run in exactly this order, and items 14–16 come after them
-[STATIC]. Aura's chart sample is grouped with the pollution/crime monthly steps; its order among
-14–16 follows subsystem order [INFERRED].
+Items 1–3 always run before items 4–16 [STATIC]. They are dedicated monthly-tier schedule
+entries, registered in subsystem creation order — disaster manager (#1), then neighbours (#2),
+then world layer (#3) — and are processed in the monthly cascade before the shared monthly pass
+that drives items 4–16 [STATIC]. Items 4–13 run in exactly this order, and items 14–16 come after
+them [STATIC]. Aura's chart sample is grouped with the pollution/crime monthly steps; its order
+among 14–16 follows subsystem order [INFERRED].
 
 **Weather (#27), monthly.** The weather subsystem has no save records of its own; its state is
 derived from the city's geographic location and the simulation calendar [STATIC]. On each monthly
