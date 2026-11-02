@@ -471,7 +471,7 @@ which is stored per **tile**. [STATIC]
 
 | Grid | Resolution | Element | Meaning |
 |---|---|---|---|
-| state | cell | u32 | Bits 0–14: **water pollution** (0–32767). Bits 15–29: **air pollution** (0–32767). Bit 30: **sea-water (salt) flag** of the cell. It is set by the terrain when a sea-water surface is written at a vertex of any tile in the cell, and cleared only by a whole-terrain reset (`11-world-terrain.md` §5) [STATIC]. The pollution update never changes it. It is read by the water renderer, by the new-city neighbour test (`19-sim-economy.md` §10.6) and by the Neighbors-window region image (`11-world-terrain.md` §9). It is set in 19 shipped files [DATA]. Bit 31: flag (clear in all shipped files) [OPEN]. |
+| state | cell | u32 | Bits 0–14: **water pollution** (0–32767). Bits 15–29: **air pollution** (0–32767). Bit 30: **sea-water (salt) flag** of the cell. It is set by the terrain when a sea-water surface is written at a vertex of any tile in the cell, and cleared only by a whole-terrain reset (`11-world-terrain.md` §5) [STATIC]. The pollution update never changes it. It is read by the water renderer, by the new-city neighbour test (`19-sim-economy.md` §10.6) and by the Neighbors-window region image (`11-world-terrain.md` §9). It is set in 19 shipped files [DATA]. **Bit 31** is a second cell flag with a getter/setter pair parallel to bit 30. Terrain water tools set only bit 30 (sea water); they never write bit 31. The only writer found is a pollution-layer sync/load path that sets bit 31 when a source tile property (key 2) equals 5. The bit is **clear in every shipped city** [DATA]. A map-overlay query path can tint a tile when the bit is set, and a change posts a redraw message, but nothing in normal play sets it. Implementations may leave it clear and ignore it on load. [STATIC] |
 | air source | cell | s32 | Sum of occupant air stamps (7.2.3) |
 | water source | cell | s32 | Sum of occupant water stamps |
 | garbage source | cell | s16 | Sum of occupant garbage stamps, never negative |
@@ -923,6 +923,7 @@ each jail (`10-save-format.md` §6.2.5).
   closed, see Persisted state.)
 * Fire strike closed: identical machine to police, avg flammability vs `MaxAcceptableFlam` (§3.4).
 * `GarbageScalingFactor` closed: query-UI scale factor *s* only (§7.2.2 / `16` §4.1); not disposal.
+* Pollution cell bit 31 closed: unused in normal play; clear in all shipped cities (§7.2.1).
 * Flammability record trailer fields beyond the visit-order cursor (closed: visit order is
   row-major x-fastest with a continuing cursor, §4).
 * Agent-type distance closed: parent-step count (`13` §4.1 / §7.1.2).
