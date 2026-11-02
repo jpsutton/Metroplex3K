@@ -298,9 +298,11 @@ Items 8–11 [STATIC]: each of these four layers is a daily scheduler agent and 
 aura sweep step) per simulated day. Pollution and crime also have a monthly step (monthly items
 14–15). Aura also samples its mayor-rating chart on the monthly cascade (see monthly note below).
 
-Items 1–5 always run in this order. Items 6–11 always run after items 1–5. Their order among
-themselves is subsystem order [INFERRED, medium confidence] (aura before pollution and crime;
-flammability later). Item 7 runs only when disasters are present (`21-disasters.md`).
+The shared daily pass covers items 1–6 and 8–11. **Active disaster instance day ticks (item 7)
+always run after that shared pass** [STATIC] — they are a separate daily-tier entry registered
+after the shared daily driver, not interleaved between zone manager and aura. Item 7 runs only
+when disaster instances are present (`21-disasters.md`). Relative order among items 1–6 and 8–11
+is still [INFERRED, medium confidence].
 
 **Weekly** (Mondays, after the daily work of the same day):
 
@@ -643,7 +645,7 @@ are converted as follows [STATIC]:
 
 ## Open questions
 
-* The relative order of daily items 6–11 and monthly items 1–3 (§6.1), recorded as subsystem order.
+* The relative order among daily items 1–6 and 8–11 (§6.1) within the shared daily pass.
 * Full per-tool table of which placement-query (#28) callers pass occupancy-filter mode `0` vs `1`
   (§6.1); the two-mode rule and filler/protected override are closed.
 * Full per-dialog inventory of pending/modal raisers (§2.3); the pause-vs-pending rule is closed.
