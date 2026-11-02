@@ -253,11 +253,11 @@ const char* SpeedControl::name(int s) {
 bool SpeedControl::setSpeed(int s) {
   if (s == current_ && s == selected_) return true;
   if (simPaused()) {
-    if (s < 0) return false;  // [OPEN] negative: rejected (spec 29 recommendation)
+    // Spec 14 §2.2 / Q-AY: while paused, negative s is kept (only upper clamp to 4).
     current_ = 0;
     if (s != 0) selected_ = std::min(s, 4);
   } else {
-    if (s < 1 || s > 4) return false;
+    if (s < 1 || s > 4) return false;  // s ≤ 0 rejected when not paused
     current_ = selected_ = s;
   }
   if (onSpeedChanged) onSpeedChanged(selected_);
@@ -277,7 +277,11 @@ bool SpeedControl::pause() {
 bool SpeedControl::resume() {
   if (pauseCount_ == 0) return false;
   pauseCount_--;
-  if (pauseCount_ == 0) { current_ = selected_; return true; }
+  if (pauseCount_ == 0) {
+    // Selected may be negative from a paused setSpeed (Q-AY); running current must be 1–4.
+    current_ = (selected_ >= 1 && selected_ <= 4) ? selected_ : 1;
+    return true;
+  }
   return false;
 }
 

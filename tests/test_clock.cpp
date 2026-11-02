@@ -219,9 +219,14 @@ static void testSpeed() {
   CHECK(s.current() == 0 && s.factor() == 120);
   CHECK(s.setSpeed(3) && s.current() == 0 && s.selected() == 3);
   CHECK(s.setSpeed(9) && s.selected() == 4);
-  CHECK(!s.setSpeed(-1));
+  // Q-AY: while paused, negative s is accepted; only upper clamp to 4.
+  announced = -99;
+  CHECK(s.setSpeed(-2) && s.current() == 0 && s.selected() == -2 && announced == -2);
+  CHECK(s.setSpeed(9) && s.selected() == 4);  // restore for resume
   CHECK(!s.resume() && s.resume());
   CHECK(s.current() == 4);
+  // Not paused: s ≤ 0 rejected.
+  CHECK(!s.setSpeed(-1) && !s.setSpeed(0) && s.current() == 4);
   Clock c;
   s.applyTo(c);
   CHECK(c.compression() == 525600);

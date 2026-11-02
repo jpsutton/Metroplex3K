@@ -148,7 +148,10 @@ class SpeedControl {
   int selected() const { return selected_; }
   bool simPaused() const { return pauseCount_ > 0; }
   int pauseCount() const { return pauseCount_; }
-  uint32_t factor() const { return kFactor[current_]; }
+  uint32_t factor() const {
+    const int i = (current_ >= 0 && current_ <= 4) ? current_ : 0;
+    return kFactor[i];
+  }
 
   // Set-speed operation. Returns false when rejected. `changed` receives the announced speed.
   bool setSpeed(int s);
