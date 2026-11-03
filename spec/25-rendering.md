@@ -711,6 +711,41 @@ Quantisation [INFERRED]: row = 31 − ⌊value × 32 / 256⌋, i.e. low values o
 high values on the top row of the ramp, consistent with all eight screenshots. The exact band
 edges are [OPEN].
 
+**Pollution value for the overlay** [OPEN]:
+* The pollution layer stores 15-bit air and water amounts per 2 × 2-tile cell
+  (`17-sim-services.md` §7.2.1). None of its interfaces scales them to a byte for the view. The
+  only UI scaling in the pollution code divides by `MaxAirPolluteForUI` / `MaxWaterPolluteForUI`
+  (shipped 11000 each). It is used for the history chart (value × 100 ÷ max) and for the query
+  bands.
+* Recommended: overlay byte = min(255, ⌊v × 256 / MaxPolluteForUI⌋), with v the cell's air (or
+  water) amount. It is consistent with the chart's scale, and a cell at the UI maximum lands on
+  the top row.
+* The clean side's guess v / 128 saturates at 32 640, which is about 3 × the UI maximum, so most
+  real cities would sit in the bottom third of the ramp.
+
+**Navigator minimap colours** [STATIC + OBSERVED]:
+* The navigator's minimap has no data layer by default. It draws land and water from the same
+  ramp image as the Neighbors window: `62B9DA24:000005E5:00000021` (32 × 32), pixel (column k,
+  row 3).
+* Measured on screen, the minimap colours are exactly these pixels:
+
+  | Column k | Colour | Column k | Colour |
+  |---|---|---|---|
+  | 0 (water) | #6A699C | 6 | #83715A |
+  | 1 | #7B916A | 7 | #7B655A |
+  | 2 | #8B9D6A | 8 | #73655A |
+  | 3 | #9CA173 | 9 | #6A6162 |
+  | 4 | #9C9573 | 10 | #736D73 |
+  | 5 | #948562 | 11 | #7B797B |
+
+* Use k from the tile's height above water by the rule of `11-world-terrain.md` §9: v < 1 → 0;
+  v < 10 → v/2 + 1; else v × 10/256 + 5, capped at 11. [INFERRED: same rule as the Neighbors
+  image]
+* There is no single base land colour: land shades run green → khaki → brown → grey with height.
+  The clean side's guess of RGB 90,130,70 is close to columns 1–2 only.
+* Map-edge pixels outside the diamond are the navigator panel's own background.
+* A data layer selected through the navigator's layers button draws its colours over this base.
+
 **Zones layer** [OBSERVED; palBasic row assignment partly INFERRED]:
 * With the **Zones** box ticked in View City Layers and Zoned Buildings / Other Buildings
   unticked, every lot is drawn as a flat palBasic colour with relief shading. This is overlay
