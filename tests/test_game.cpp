@@ -153,8 +153,25 @@ int main() {
     game.typeCheat("I am weak"); CHECK(cc.budget.freePlacement);
     game.typeCheat("I am weak"); CHECK(!cc.budget.freePlacement);
     game.typeCheat("so sue me"); CHECK(cc.budget.debtFloor);
-    game.typeCheat("Salt off"); CHECK(cc.saltOff);
-    game.typeCheat("Salt on"); CHECK(!cc.saltOff);
+    // Salt on / off (spec 11 4.8): a 64-tile map with the x = 0 edge under water. Off clears every flag; on marks a quarter of the
+    // side inward from that sea edge and nothing elsewhere. Altitudes and water are untouched.
+    {
+      World& mw = game.mutableWorld();
+      const std::vector<uint8_t> altBefore = mw.alt, watBefore = mw.water;
+      for (int z = 0; z <= mw.H; z++) { mw.alt[mw.vIdx(0, z)] = 40; mw.water[mw.vIdx(0, z)] = 60; }   // wet x = 0 edge
+      for (int z = 0; z <= mw.H; z++) for (int x = 1; x <= 30; x++) { mw.alt[mw.vIdx(x, z)] = 40; mw.water[mw.vIdx(x, z)] = 60; }   // water inland
+      const std::vector<uint8_t> altWet = mw.alt, watWet = mw.water;
+      game.typeCheat("Salt off");
+      CHECK(!cc.pollution.seaFlagAt(0, 10) && !cc.pollution.seaFlagAt(5, 10));
+      game.typeCheat("Salt on");
+      CHECK(cc.pollution.seaFlagAt(0, 10) && cc.pollution.seaFlagAt(10, 10));        // within a quarter of the side (16) of the sea edge
+      CHECK(!cc.pollution.seaFlagAt(40, 10));                                         // beyond the walk
+      CHECK(!cc.pollution.seaFlagAt(60, 60));                                         // far from every sea edge
+      CHECK(mw.alt == altWet && mw.water == watWet);
+      game.typeCheat("Salt off");
+      CHECK(!cc.pollution.seaFlagAt(0, 10));
+      mw.alt = altBefore; mw.water = watBefore;
+    }
     int sea = game.world().seaLevel, a0 = game.world().alt[0];
     game.typeCheat("Terrain ten up");
     CHECK(game.world().seaLevel == sea + 10 && game.world().alt[0] == std::min(253, std::max(2, a0 + 10)));

@@ -189,7 +189,9 @@ class City {
   Population pop;
   growth::ValveLayer valves;
   growth::LandValueLayer landValue;
-  bool saltOff = false;   // cheat `Salt off`: every water body counts as fresh
+  // Cheats `Salt on` / `Salt off` (spec 11 4.8 [STATIC]): off clears the sea-water flag of every tile; on recomputes the flags from
+  // the terrain (sea edges = more than 60% wet, a walk inward of a quarter of the side). Altitudes and water never change.
+  void applySaltCheat(bool on);
   // Cheat `nerdz rool` (spec 27 s5.3): new industry is always clean/high-tech after the agriculture check.
   void setCleanIndustryOnly(bool on) { cfg_.growth.cleanIndustryOnly = on; }
   growth::ZoneManager zones;

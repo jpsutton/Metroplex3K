@@ -683,6 +683,32 @@ uint32_t City::kindOf(const NetPiece& p) const {
   return 1u;
 }
 
+void City::applySaltCheat(bool on) {
+  pollution.clearSeaFlags();
+  if (!on || !world_) return;
+  const World& w = *world_;
+  const int R = w.W + 1, C = w.H + 1;   // vertex grid (x = row, z = column)
+  struct E { int r, c, ar, ac, ir, ic, len; };
+  const E edges[4] = {{0, 0, 1, 0, 0, 1, R}, {R - 1, 0, 0, 1, -1, 0, C}, {0, C - 1, 1, 0, 0, -1, R}, {0, 0, 0, 1, 1, 0, C}};   // z=0, x=W, z=H, x=0
+  for (const E& e : edges) {
+    int wet = 0;
+    for (int i = 0; i < e.len; i++) { const int x = e.r + e.ar * i, z = e.c + e.ac * i; wet += w.altAt(x, z) < w.waterAt(x, z); }
+    if (wet * 100 <= e.len * 60) continue;   // not a sea edge
+    for (int i = 0; i < e.len; i++) {
+      int n = e.len / 4, land = 5;
+      int x = e.r + e.ar * i, z = e.c + e.ac * i;
+      while (x >= 0 && z >= 0 && x < R && z < C) {
+        if (n == 0) break;
+        if (w.waterAt(x, z) < w.altAt(x, z) - 1) land--;
+        n--;
+        pollution.markSeaVertex(x, z);
+        if (land == 0) break;
+        x += e.ir; z += e.ic;
+      }
+    }
+  }
+}
+
 bool City::pieceInKind(uint32_t pieceId, NetworkKind k) const {
   if (!cfg_.haveTiling) return k == NetworkKind::Rail ? pieceId >= 1000 : k == NetworkKind::Power ? pieceId == kFallbackPowerPiece : true;
   const int nk = k == NetworkKind::Rail ? NK_RAIL : k == NetworkKind::Power ? NK_POWER : k == NetworkKind::Highway ? NK_HIGHWAY : NK_ROAD;
@@ -2309,7 +2335,7 @@ void City::monthlyWater() {
       for (int dx = 0; dx <= 1 && !wet; dx++)
         for (int dz = 0; dz <= 1; dz++)
           if (world_->waterAt(x + dx, z + dz) >= world_->altAt(x + dx, z + dz)) { wet = true; break; }
-      if (wet) kind[idx(x, z)] = (!saltOff && pollution.seaFlagAt(x, z)) ? 2 : 1;
+      if (wet) kind[idx(x, z)] = pollution.seaFlagAt(x, z) ? 2 : 1;
     }
   // Buildings with a needs-water mark: in practice lot states 1 and 4 (spec 16 s3.4 "Needs-water marks").
   auto consumers = simOccupants(false);

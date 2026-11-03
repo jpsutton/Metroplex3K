@@ -326,6 +326,7 @@ class PollutionLayer {
       if (tx >= 0 && tz >= 0 && tx < W_ && tz < H_) state[size_t(tx / 2) * nz_ + tz / 2] |= 0x40000000u;
     }
   }
+  void clearSeaFlags() { for (auto& v : state) v &= ~0x40000000u; }   // Salt off / first step of Salt on (spec 11 4.8)
   bool landfillRegistered(int x, int z) const { return (standing[size_t(x) * H_ + z] & 0x8000) != 0; }
   void registerLandfill(int x, int z);
 

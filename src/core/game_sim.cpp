@@ -680,8 +680,7 @@ void Game::applyCheat(const CheatResult& r) {
   }
   else if (phrase == "call cousin vinnie") { if (!vinnieDone_) { petitioners_.request(0xD7, 0, 6); presentPetitions(); } }
   else if (phrase == "zyxwvu") { if (vinnieRefused_) advisors_.rewards.markAvailable(19999); }
-  else if (phrase == "salt off") cy.saltOff = true;
-  else if (phrase == "salt on") cy.saltOff = false;
+  else if (phrase == "salt off" || phrase == "salt on") { cy.applySaltCheat(phrase == "salt on"); dirty_ = true; }
   else if (int delta = terrainCheatDelta(&c)) {
     World& w = world_;
     for (auto& v : w.alt) v = uint8_t(shiftTerrainAltitude(v, delta));
