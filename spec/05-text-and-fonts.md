@@ -297,7 +297,7 @@ petitioner and scenario text) knows: [STATIC]
 | `%CITYNAME%`, `%YOURCITY%` | the current city's name |
 | `%POPULATION%` | current city population, formatted with digit grouping |
 | `%YEAR%` | current simulation year |
-| `%ANYNEIGHBOR%` | the name of one of the city's neighbour cities |
+| `%ANYNEIGHBOR%` | the name of a neighbour chosen **uniformly at random** among the four slots (0–3), drawn anew for each expansion with a time-seeded generator [STATIC] |
 | `%PARADENAME%` | a parade name chosen by **country** (see below) |
 
 `%PARADENAME%` mapping (country ID → string `0x041F2625:<instance>` in `SEStringsUI.IXF`): [STATIC]
@@ -319,7 +319,7 @@ Further tokens are substituted by the subsystem that owns the message (each defi
 
 | Token | Used in | Meaning |
 |-------|---------|---------|
-| `%NEIGHBOR%` | advisor messages | the neighbour concerned by the message |
+| `%NEIGHBOR%` | advisor messages | the neighbour concerned by the message: for a neighbour-deal offer, the deal's neighbour; for the four per-neighbour advisor topics (types 0x14–0x17), neighbour slot 0–3 respectively [STATIC] |
 | `%X%`, `%Y%`, `%Z%`, `%W%` | advisor/petitioner messages | message-specific numeric or text arguments (counts, amounts, names) |
 | `%LANDMARK%` | ticker | name of a landmark |
 | `%YEAROFDEAL%` | petitioner/neighbour deal text | year a deal was made |
@@ -446,8 +446,6 @@ languages). [DATA][STATIC]
 * §3.1 number formatting [OPEN]: the digit-grouping character, decimal rule and currency-symbol
   placement encoded by the 0x03/0x04 strings are not specified. Until resolved, group digits in
   threes with the separator of the language's Windows locale.
-* §3.3 `%ANYNEIGHBOR%` [OPEN]: how the neighbour is chosen (random or first) and with which random
-  generator.
 * §4.3 anti-alias blend [OPEN]: gamma and rounding of the linear blend.
 
 * Storage location of the "Default Locale"/"Language" fallback preference (§2.3 step 4).

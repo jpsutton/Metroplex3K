@@ -357,7 +357,7 @@ steps are in `20-sim-population.md` §4.2–§4.3.
 * Ages up to 26 have a floor of 85·age/26.
 * EQ is capped at 150.
 * EQ decays only at the yearly shift: ×`EQDecay` for ages 27 and over.
-* The school rating uses the EQ gained by ages 7–18 (÷13) against `OptimalYearlySchoolEQ`/12. The
+* The school rating uses the EQ gained by ages 6–18 (13 ages, ÷13) against `OptimalYearlySchoolEQ`/12. The
   college rating uses ages 19–24 (÷6) against `OptimalYearlyCollegeEQ`/12. Both use the same
   round(4·g/… − 0.4) form, clamped to 0–4.
 * Schools and colleges strike independently. Each needs its own rating <
