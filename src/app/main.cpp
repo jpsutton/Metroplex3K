@@ -82,6 +82,7 @@ int main(int argc, char** argv) {
       return 0;
     }
   }
+  SDL_SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");   // closing the window is a request, not a quit
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { std::cerr << "SDL_Init: " << SDL_GetError() << "\n"; return 1; }
   // GL present: the window itself owns a GL context. Falls back to the SDL renderer when unavailable.
   std::unique_ptr<GlPresenter> glPresent;
@@ -201,7 +202,10 @@ int main(int argc, char** argv) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       switch (e.type) {
-        case SDL_QUIT: goto done;
+        case SDL_QUIT: goto done;   // OS-level termination (SIGTERM, session end): leave at once
+        case SDL_WINDOWEVENT:
+          if (e.window.event == SDL_WINDOWEVENT_CLOSE) game.requestQuit();   // the close button: the original's Exit prompts
+          break;
         case SDL_DROPFILE: game.dropPath(e.drop.file); SDL_free(e.drop.file); break;
         case SDL_MOUSEMOTION: in.mx = e.motion.x; in.my = e.motion.y; break;
         case SDL_MOUSEWHEEL: in.wheel += e.wheel.y; break;

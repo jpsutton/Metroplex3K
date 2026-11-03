@@ -247,6 +247,13 @@ void Game::requestLeave(int action) {
   askSaveBeforeLeave(action);
 }
 
+void Game::requestQuit() {
+  if (quit_) return;
+  if (msgBox_.active) return;   // a prompt is already up: the player answers it
+  if (scr_ == Screen::Intro || scr_ == Screen::NeedData) { quit_ = true; return; }
+  requestLeave(kLeaveQuit);
+}
+
 void Game::askSaveBeforeLeave(int action) {
   if (!(dirty_ && world_.W && simReady_)) { doLeave(action); return; }
   auto cap = [&](uint32_t t, uint32_t i, const char* d) { std::string s = str(t, i); return s.empty() ? std::string(d) : s; };

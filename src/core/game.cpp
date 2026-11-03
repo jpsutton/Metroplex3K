@@ -182,7 +182,7 @@ void Game::hotkeyCommand(int cmd, int, int arg2) {
   switch (cmd) {
     case 19: openWindow("advisors"); break;
     case 21: openWindow("ordinances"); break;
-    case 33: case 91: case 102: quit_ = true; break;
+    case 33: case 91: case 102: requestQuit(); break;   // F10 / Ctrl+Q / Alt+F4: same prompts as the Exit menu item
     case 35: setPaused(!paused_); sound(paused_ ? 24 : 23); break;
     case 36: speed_ = std::max(1, speed_ - 1); break;
     case 37: speed_ = std::min(4, speed_ + 1); break;

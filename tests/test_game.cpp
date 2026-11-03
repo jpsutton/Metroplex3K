@@ -184,6 +184,14 @@ int main() {
   game.gotoScreen(Screen::InCity); game.setDirty(false); frame(2);
   game.runCommand(0x610438A4); frame(2);
   CHECK(game.currentScreen() == Screen::LoadList);  // unmodified: no prompt
+  // The window's close button and the quit hotkeys go through the same prompts as the Exit menu item.
+  game.gotoScreen(Screen::InCity); game.setDirty(true); frame(2);
+  game.requestQuit(); frame(2);
+  CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);   // "Now leaving" is up, nothing quit yet
+  game.requestQuit(); frame(1);                     // a second close request while the prompt is up changes nothing
+  CHECK(!game.wantQuit());
+  key(K_ESC);                                       // Cancel
+  CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);
   game.gotoScreen(Screen::InCity); game.setDirty(true); frame(2);
   game.runCommand(0xA10438E9); frame(2);
   key(K_ENTER);                                     // OK on "Now leaving"

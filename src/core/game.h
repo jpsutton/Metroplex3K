@@ -77,6 +77,10 @@ class Game {
   }
   const std::vector<uint32_t>& screen() const { return screen_; }
   bool wantQuit() const { return quit_; }
+  // The window's close button / quit hotkeys: runs the original's Exit flow ("Now leaving" OK/Cancel, then "Do you
+  // want to save the game?" for a modified city). Quits at once when there is nothing to ask (intro, no data, or the
+  // flow is already running).
+  void requestQuit();
   void dropPath(const std::string& path);
   void requestFile(const std::string& path);  // open a city file directly (skips the intro)
   std::string windowTitle() const;
