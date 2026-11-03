@@ -1315,7 +1315,9 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     // bridges) lies on the surface: nothing moving can be behind it, so it must never paint over a vehicle that
     // overhangs from the tile behind. The anchor is the diamond centre: flat images reach about one tile height
     // above it, tall pieces several.
-    const bool surface = ground && sp->T <= 3 * Hh;
+    // A plain road piece reaches about Hh above its anchor, steep slopes a couple of altitude steps more; a tree-lined
+    // avenue (trees baked into the piece, T about 2.5 Hh) is taller than that and must order against movers by depth.
+    const bool surface = ground && sp->T * 4 <= 9 * Hh;
     (surface ? flat : statics).push_back(it);
   };
 
@@ -1462,7 +1464,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
       // Depth keys have whole-tile granularity, and the median trees sit on the road tile itself, so a car on the far
       // lane shares its key with the tree it should be behind. Break key ties by the actual sub-tile depth: a static
       // whose centre is nearer the viewer than the mover is drawn after it.
-      if (!haveKpos && (s.key < mv.key || (s.key == mv.key && (int64_t(s.boxA0) + s.boxA1 + s.boxB0 + s.boxB1) / 2 > int64_t(mv.posA) + mv.posB))) { kpos = i; haveKpos = true; }
+      if (!haveKpos && (s.key < mv.key || (s.key - (s.groundLevel ? 1u : 0u) == mv.key && (int64_t(s.boxA0) + s.boxA1 + s.boxB0 + s.boxB1) / 2 > int64_t(mv.posA) + mv.posB))) { kpos = i; haveKpos = true; }
       // A mover inside the tile of a tall ground-level piece (a tree-lined road, say) is ordered against it by sub-tile
       // depth: the piece's depth key is biased so that it always drew first, which put far-lane cars over the trees.
       if (s.groundLevel && mv.posA >= s.boxA0 && mv.posA < s.boxA1 && mv.posB >= s.boxB0 && mv.posB < s.boxB1) {
