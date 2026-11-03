@@ -288,11 +288,46 @@ h as height. A "Box" offset in TRBLKATT (multiples of 256) handles multi-tile pi
 
 ### 5.1 Buildings as sources
 
-**Buildings as sources.** Each occupant (building) attribute record (`13-buildings-occupants.md`)
-can carry attribute **0x6B**, a key to a PPLPROD table (the pedestrians that building emits), and
-attribute **0x6C**, a key to a VCLPROD table (the vehicles it emits). In `OccupantAttribs.IXF`, 101
-distinct PPLPROD and 48 distinct VCLPROD references are used. The production Rate scales how often
-the building spawns automata. [DATA]/[INFERRED]
+**Buildings as sources.** Each occupant attribute record (`13-buildings-occupants.md`) can carry
+two attributes. In `OccupantAttribs*.IXF` they appear as follows: [DATA]
+* **0x6B** = key of a PPLPROD table (pedestrians): 390 records, 112 agent types.
+* **0x6C** = key of a VCLPROD table (vehicles): 358 records, 99 agent types.
+* Both: zone buildings, landmarks, city hall / mayor's house, bus station 12210, airport 12310,
+  seaport 12330, marina 14430 and many civic buildings.
+* 0x6B only: rail station 12230, subway station 12360, spaceport 12350, casinos 19001–19004.
+* 0x6C only: water pump 12810.
+* Neither: the subway/rail connector 12361.
+
+How each source is used [STATIC]:
+* **Pedestrians.** Pedestrians spawn only on **road tiles**, i.e. tiles whose occupant has the
+  road-piece flag 0x8000 of the run-time flag word (`13` §3.1a). Buildings are never spawn tiles.
+  * A building with attribute 0x6B whose anchor lies in the active view rectangle gets its own
+    pedestrian manager, using its PPLPROD table and centred on its anchor. That manager spawns
+    pedestrians on road tiles within anchor ± the mode's radius (8), as described in §5.8.
+  * A global default manager uses PPLPROD `21FD6EEF:21FD8E4C:1`.
+* **Vehicles.** Attribute 0x6C does **not** make the building a spawn point. Its VCLPROD table is
+  merged into the vehicle-mix table of the 32 × 32-tile cell that holds the building's anchor, so it
+  only weights which models are chosen for road traffic in that cell (§5.5).
+* **Trains** spawn from **rail end caps** (agent type 17002), each with its own spawner using
+  TRNPROD instance 1. **Subway trains** spawn from subway end caps (17420, TRNPROD2). Stations are
+  not train sources.
+* **Ships** come from seaports (§5.4). **Leisure boats** come from marinas (14430, §5.3).
+  **Aircraft** come from a per-airport manager [INFERRED for the airport identification].
+
+**Keeping sources in step with the city** [STATIC]: this is event-driven; there is **no periodic
+city scan**.
+* The occupant-added and occupant-removed notifications create and tear down:
+  * train spawners;
+  * airport and seaport managers;
+  * marina boat sources;
+  * per-building pedestrian managers (only when the building is inside the active rectangle);
+  * the VCLPROD cell contributions (always).
+* On activation and on every view-rectangle change (§5.6), the newly visible strips are scanned
+  and pedestrian managers are created for buildings anchored there. Managers in strips that left
+  the view are removed.
+* The only periodic work is:
+  * each spawner's own timer;
+  * a daily date check that re-picks the PPLPROD mode (§5.8).
 
 ### 5.2 Weighted model choice
 
@@ -305,7 +340,9 @@ pedestrians. [STATIC]
 **Boats.** Leisure boats spawn at water tiles within `MaxMarinaToBoatDistance` tiles of a marina.
 The test is squared Euclidean distance ≤ value², with the value taken from
 `[MiscStrtSimTunables]` in `SC3StrtSimLayer.ini` (shipped value: 30). One of VCLPROD 0x400 or
-0x401 is used, depending on a per-location condition [OPEN which condition]. [STATIC]
+0x401 is used, depending on a per-location condition [OPEN which condition]. 0x400 holds models
+73/74/99 (weights 300/300/400); 0x401 holds model 55. Each marina keeps its own live-boat
+count. [STATIC]/[DATA]
 
 ### 5.4 Ships at seaports
 
@@ -423,12 +460,66 @@ gridlock style event, e.g. a disaster or riot) is [OPEN].
   emergency dispatch type: fire pumper, ambulance and police car (shipped VATTRIB instances 43, 41
   and 28). These are spawned when the player dispatches emergency services (`21-disasters.md`) and
   drive to the target. [STATIC]/[INFERRED]
-* **Parade/holiday automata.** These are VATTRIB records 100–110 (holiday file) and 84, using script
-  0x30, plus holiday pedestrians from `PplProd_Holidays.IXF`. They are available only with holiday
-  content enabled. [DATA]
+* **Parade/holiday automata.** These are VATTRIB records 84 and 100–109 (VATTRIB 110 is an
+  aircraft), using script 0x30, plus holiday pedestrians from `PplProd_Holidays.IXF`. They are
+  available only with holiday content enabled. [DATA]
+* **Parades** are a city **event** owned by the disaster/event layer, not the street sim, which
+  only moves the vehicles. [STATIC]
+
+  *Settings* — all in `SC3DisasterLayer.ini`:
+  * `[ParadeEventTunables]`: `RoadTilesRequired` 6, `MaxParadeDuration` 4500, `ParadeCost` 100,
+    `MinPopulation` 10000, `MinCommercial` 30, `MinAura` 30, `SpectatorDensity` 3,
+    `PetitionerTiming` 3, `MinMonthsBetweenEvents` 120, `EventProbability` 100.
+  * `[ParadeEventParadeBlocks]`: `n=VATTRIB,spacing`. Blocks 1–9 are VATTRIB 100–107 and 109,
+    with spacing 450 (500 for the band entries).
+  * `[ParadeEventParadeConfigs]`: one line per country,
+    `M/D:nameString:min,max:leadBlocks:middleBlocks:tailBlocks`; for example
+    `us=11/25:247:8,10:1:2,3,4,5,6,7,8:9`.
+
+  *Trigger* — checked on the event layer's tick.
+  1. After a parade, nothing happens until `MinMonthsBetweenEvents − PetitionerTiming` months
+     have passed.
+  2. Then all of the following must hold:
+     * the active-event count is below its cap, and a config exists for the country;
+     * rand(100) ≤ `EventProbability`;
+     * the config date's month is within `PetitionerTiming` months ahead
+       ((configMonth − month) mod 12 ≤ `PetitionerTiming`);
+     * day of month < 7;
+     * funds > `ParadeCost`;
+     * population > `MinPopulation`;
+     * the commercial valve (5000) ≥ `MinCommercial`;
+     * city aura ≥ `MinAura`;
+     * a route exists (below).
+  3. If all hold, a petitioner offers the parade (petition `0x12D`). Declined or ignored offers
+     return to step 2 after a few ticks.
+  4. If accepted, the parade starts when today is within 7 days of the config date. The
+     "last parade" month is then recorded.
+
+  *Start.*
+  * The config whose date is nearest (on a 366-day circular calendar) is used.
+  * `ParadeCost` is deducted.
+  * **Route:** a spiral search from a start point (staying 2 tiles inside the map). It looks for a
+    straight road run of at least `RoadTilesRequired` tiles:
+    * every tile has the road flag 0x8000 and aura ≥ `MinAura`;
+    * there are at least 3 tiles of zone class 6 [INFERRED: commercial] in its 3 × 3 neighbourhood;
+    * the axis and the direction are chosen at random when the piece allows both.
+
+  *Vehicles.*
+  * One lead vehicle is drawn from the lead blocks.
+  * Then uniform[min, max] − 1 followers are drawn from the middle blocks, except the last, which
+    is from the tail blocks. That is about 8–10 vehicles.
+  * Each is placed behind the previous one at its block's spacing, at the route start, facing
+    along the route.
+  * Spectators are spawned at `SpectatorDensity` per route tile.
+  * A parade sound plays while parade vehicles are in view.
+
+  *Not traced:* what opcode 200 does inside the vehicle (speed comes from VATTRIB: 110 000, or
+  200 for record 107), and how the parade ends. `MaxParadeDuration` is read but never used.
+  [OPEN]
 * **Trains and subway trains.** These are driven by `Res/TRNPROD.IXF` (Type 22CEFD99, Group
-  62CEFDDB, a text record). Each spawner is a timer bound to a source object on the map, believed to
-  be a rail or subway station [INFERRED], and to one TRNPROD record. [STATIC]
+  62CEFDDB, a text record). Each spawner is a timer bound to a source object on the map and to one
+  TRNPROD record. The source objects are the **rail end caps** (agent type 17002, TRNPROD
+  instance 1) and **subway end caps** (17420, TRNPROD instance 2), not stations. [STATIC]
   * **TRNPROD text format** (CR LF lines): `MinSeconds MaxSeconds` (two integers on one line;
     each is multiplied by 1,000,000 on load to give time units, §7); `NumConsists`; then for each
     consist: a blank line; `Locomotive` (VATTRIB instance); then four lists, each written as a count
@@ -469,9 +560,10 @@ gridlock style event, e.g. a disaster or riot) is [OPEN].
        (instance 1). It flies towards the airport [INFERRED].
   * **Helicopters.** A single global spawner (created when the layer starts) uses AIRTRMGR
     instance 2. Every 1,000,000–3,000,000 time units (uniform, redrawn each time), if fewer than
-    MaxActive of its aircraft exist, it spawns one helicopter. Buildings of occupant group 0x385e are
-    registered with it as sources or destinations. [STATIC; that group 0x385e is the helipad/airport
-    building group is INFERRED]
+    MaxActive of its aircraft exist, it spawns one helicopter. [STATIC] Correction: occupant group
+    0x385E is the **marina** group (agent type 14430). Its buildings are registered with the
+    leisure-boat source list (§5.3), not with the helicopter spawner. The helicopter's source and
+    destination buildings are [OPEN].
   * Aircraft have no behaviour script (VATTRIB Script = none). Their flight path is computed
     procedurally [OPEN: curve and altitude profile].
 * **Ships at seaports.** These are the port/sea traffic described in §5: VCLPROD 0x3FC–0x3FF chosen

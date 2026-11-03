@@ -618,6 +618,7 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
         const bool zonesOn = layers_.mode == CityLayers::AboveGround && layers_.zones && !ropt_.overlay;
         if (zonesOn && !layers_.zonedBuildings && !layers_.otherBuildings) { buildZoneOverlay(); ropt_.overlay = &zoneOverlay_; }
         updateZoneTint(zonesOn && !ropt_.overlay);
+        if (cityVisualSerial_ != pollutedWaterSerial_) { pollutedWaterSerial_ = cityVisualSerial_; updatePollutedWater(); }
       }
     } else { ropt_.overlay = nullptr; stopAmbience(); }
     // Building animations: wall-clock tick (~15 Hz, same period as automata), not sim day.
@@ -1340,6 +1341,19 @@ void Game::buildZoneOverlay() {
       }
       zoneOverlay_.row[ti] = uint8_t(r);
     }
+}
+
+// Water tiles whose water-pollution amount reaches WaterPollutedThreshold are drawn with the palBasic row 51 tint (spec 25 6.4).
+void Game::updatePollutedWater() {
+  const World& w = world_;
+  const City& c = sim_.city();
+  std::vector<uint8_t> t(size_t(w.W) * w.H, 0);
+  bool any = false;
+  for (int x = 0; x < w.W; x++)
+    for (int z = 0; z < w.H; z++)
+      if (w.waterAt(x, z) > w.altAt(x, z) && c.pollution.waterPolluted(x, z)) { t[w.tIdx(x, z)] = 1; any = true; }
+  if (!any) t.clear();
+  renderer_.setPollutedWater(t);
 }
 
 void Game::updateZoneTint(bool on) {

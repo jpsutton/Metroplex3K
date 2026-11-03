@@ -80,7 +80,7 @@ void Game::setupStreetSim() {
   street_.reset();
   streetHost_.reset();
   streetSources_.clear();
-  streetOccCount_ = streetNetCount_ = 0;
+  streetSig_ = 0; streetSigSerial_ = ~0ull;   // the first frame builds the sources
   if (!haveData_) return;   // without game data there are no vehicle/people sprites to draw
   if (!automataLoaded_) {
     automata_ = AutomataData();
@@ -119,8 +119,6 @@ void Game::syncStreetSources() {
     if (a->agentType == 12360 || a->agentType == 12361) { street_->addStation(o.x, o.z, true); continue; }
     if (a->pedProdKey.instance || a->vehProdKey.instance) streetSources_.push_back(street_->addBuilding(o.x, o.z, a->pedProdKey, a->vehProdKey));
   }
-  streetOccCount_ = world_.occupants.size();
-  streetNetCount_ = world_.surface.size();
 }
 
 void Game::streetSimFrame(uint32_t dtMs) {
@@ -131,14 +129,22 @@ void Game::streetSimFrame(uint32_t dtMs) {
   // Full source rebuild is ~30+ ms on a large city (remove+re-add every spawner). Never run it in the
   // same frame as a sim day tick, and at most every kStreetSyncMinFrames when the city changed.
   constexpr int kStreetSyncMinFrames = 30;   // ~500 ms at 60 Hz
-  constexpr int kStreetSyncPeriodic = 300;
   const World& vw = viewWorld();
-  const bool changed = vw.occupants.size() != streetOccCount_ || vw.surface.size() != streetNetCount_;
-  if (changed) {
-    streetSyncDue_ = true;
-    if (streetSyncCooldown_ < 1) streetSyncCooldown_ = 1;   // at least the next frame (after any day tick)
+  // Sources follow the city by events in the original (occupant add / remove notifications; spec 26 5.1), with no periodic scan.
+  // Here the equivalent is a signature of every occupant (anchor, id, state) and network piece, recomputed only when the city
+  // changed visibly (an edit or a sim day) and compared with the one the sources were built from.
+  if (cityVisualSerial_ != streetSigSerial_) {
+    streetSigSerial_ = cityVisualSerial_;
+    uint64_t sig = 1469598103934665603ull;
+    auto mix = [&](uint64_t v) { sig ^= v; sig *= 1099511628211ull; };
+    for (const Occupant& o : vw.occupants) mix(uint64_t(uint32_t(o.x)) << 40 ^ uint64_t(uint32_t(o.z)) << 20 ^ o.occId ^ uint64_t(o.state & ~0x200u) << 56);
+    for (const NetPiece& p : vw.surface) mix(uint64_t(uint32_t(p.x)) << 32 ^ uint32_t(p.z) ^ uint64_t(p.pieceId) << 12 ^ uint64_t(p.rot) << 60);
+    if (sig != streetSig_) {
+      streetSig_ = sig;
+      streetSyncDue_ = true;
+      if (streetSyncCooldown_ < 1) streetSyncCooldown_ = 1;   // at least the next frame (after any day tick)
+    }
   }
-  if ((++streetAcc_ % kStreetSyncPeriodic) == 0) streetSyncDue_ = true;
   if (streetSyncCooldown_ > 0) streetSyncCooldown_--;
   if (streetSyncDue_ && streetSyncCooldown_ == 0 && !simDayThisFrame_ && !simBusy()) {
     syncStreetSources();

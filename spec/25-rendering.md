@@ -382,8 +382,11 @@ the key, with a narrow blended fringe. The grid-line delta applies as for land.
 **Tints.** A terrain tile may carry a palBasic tint index (0 = none). When it is non-zero, every
 vertex colour of the tile is averaged 50/50 per channel with palBasic[index] (column 31):
 c = (c + tint) / 2, truncated. On water tiles with no tint, the vertex colour is also averaged
-with palBasic row 51 when a per-tile flag queried from the city (the tile adjacent to the corner)
-is set. The meaning of that flag is [OPEN] (likely a zone or selection marker). [STATIC]
+with palBasic row 51 when the corner's tile has **polluted water**. That is the pollution layer's
+"water polluted" test: the water-pollution amount (low 15 bits of the pollution cell) ≥
+`WaterPollutedThreshold` (`SC3Pollution.ini [TuningParameters]`; the built-in default is 16000).
+Polluted water therefore looks brownish-grey (row 51 = #6E5200 averaged in). It is not the salt
+flag. [STATIC]
 
 **Water animation.** The terrain renderer has no time-dependent term: the noise seed depends only
 on tile position. Water is therefore static in the terrain layer. Any visible water motion (waves,
@@ -419,8 +422,21 @@ interpolated per pixel, then looked up in a 512-entry table):
 **Light and dark faces.** Both parts use palEdgeL or palEdgeD. The two front borders alternate:
 for one border the table is palEdgeL when the rotation r is even and palEdgeD when it is odd. For
 the other border it is the reverse. Light therefore comes from a fixed world direction, and the
-faces swap shade as the view rotates. [STATIC] Which world border gets palEdgeL at r = 0 is
-[OPEN]. Test against the original.
+faces swap shade as the view rotates. [STATIC] At r = 0, the **x = W−1** border (the faces along
+constant x) uses **palEdgeL**, and the **z = H−1** border uses palEdgeD. In general the table index
+is (r & 1) for constant-x faces and (¬r & 1) for constant-z faces, with index 0 = palEdgeL and
+1 = palEdgeD. [STATIC]
+
+**Flush ("no water") segments** [STATIC]:
+* Each edge segment carries a flag, bit 0x40 of its edge-tile byte. The flag is supplied by the
+  caller that creates the segment; which segments get it is [OPEN].
+* When the flag is set:
+  * the surface height ignores water (surface = alt);
+  * the water part is skipped;
+  * the base is at altitude 0 instead of −4;
+  * the earth part's top index is 260 instead of 256.
+* A flush segment is therefore a plain earth slab without the extra 4-unit skirt or a water
+  face.
 
 ### 6.6 Vertex shade (slope lighting)
 
@@ -455,14 +471,21 @@ Use single-precision floats and truncation as stated. Column differences of one 
 
 ## 7. Zoom-dependent detail and building animation
 
-* **Per-zoom substitution.** Each placed object carries a 16-bit flag word. The bit with mask
-  {0x10, 0x20, 0x40, 0x80, 0x100} for z = 0..4 says that the object's own image is drawn at that
-  zoom. If the bit is clear, a generic substitute sprite chosen by footprint size is drawn instead.
-  [STATIC] Where the flag word comes from is [OPEN]. Question for testing: is it the
-  sprite-instance `LayerFlags` field (§4.2)? Shipped `LayerFlags` values include 0x40, 0x80, 0xC0 and
-  0x1C0, which fit this mask, but all 816 records in the BAT sprite archive have 0, which under this
-  reading would draw a substitute at every zoom. Recommended default: draw the object's own image at
-  every zoom for which it has images. [DATA for the values]
+* **Per-zoom substitution.** The view keeps a per-tile cell grid. Each cell has a run-time 16-bit
+  flag word; it is **neither** the sprite-instance `LayerFlags` field **nor** an occupant flag.
+  [STATIC]
+  * The bit with mask {0x10, 0x20, 0x40, 0x80, 0x100} for z = 0..4 means "the cell's object image
+    is built and valid at zoom z".
+  * The bit is set when the object rebuilds its image for that zoom and rotation. Rebuilding is
+    done lazily for cells that are present (bit 0x4000) and not yet valid. The bit is cleared
+    through the view's deferred update queue when the object changes, and set again after the
+    rebuild.
+  * While the bit is clear, the generic substitute sprite chosen by footprint size is drawn.
+    Visually, a building briefly shows the footprint placeholder until its image is ready.
+  * Other bits: 0x4000 = cell present/rebuildable. 0x1 is tested together with 0x4000 [OPEN
+    meaning].
+  * A clone with all images ready simply draws the object's own image at every zoom.
+  * The `LayerFlags` record field (§4.2) is unrelated to this mask. [STATIC]
 * Automata appear only at zooms for which their sprite-instance record has images (§4.2): vehicles
   at the 3 closest zooms and people at the 2 closest zooms. [INFERRED]
 * **Animated buildings.** These have sprite-instance records with AnimFrames > 1 (SprInstCLSID
@@ -877,8 +900,7 @@ world or view coordinates is [INFERRED: world tile coordinates].
 
 ## Open questions
 
-* Terrain: which world border gets palEdgeL at rotation 0. The meaning of the city per-tile flag
-  that tints water and shore with palBasic row 51. The quad-split (shape) table for land tiles
+* Terrain: which edge segments are created with the flush flag (§6.5). The quad-split (shape) table for land tiles
   (the edge-face classifier is known).
 * Data-map overlays: the mapping from each data layer, and its 0..255 value, to a ramp (slot 1–3)
   and row 0..31. This is decided in the view module, not traced.

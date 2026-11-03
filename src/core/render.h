@@ -291,6 +291,8 @@ class Renderer : public ICityRasterizer {
   // palBasic tint row for a world tile (0 = none, 1..52); spec 6.4 tints.
   void setTileTint(int x, int z, uint8_t basicRow);
   void clearTileTints() { tint_.clear(); }
+  // Tiles whose water counts as polluted (water-pollution amount >= WaterPollutedThreshold): their water gets palBasic row 51 (spec 25 6.4).
+  void setPollutedWater(const std::vector<uint8_t>& tiles) { if (tiles != pollutedWater_) { pollutedWater_ = tiles; terrainLayerValid_ = false; ++itemsGen_; } }
   void setTileTints(const std::vector<uint8_t>& rows) { if (world_ && rows.size() == size_t(world_->W) * world_->H) tint_ = rows; }   // one palBasic row per tile (0 = none)
   // Cost text: called each render with the screen anchor, the text and affordability.
   void setCostTextHook(TextHook h) override { textHook_ = std::move(h); }
@@ -394,6 +396,7 @@ class Renderer : public ICityRasterizer {
   int maxAlt_ = 255;
   std::vector<uint8_t> roadMask_;
   std::vector<uint8_t> tint_;
+  std::vector<uint8_t> pollutedWater_;
   TerrainPalettes pal_;
   bool palOverride_ = false;
   Image back_[5];

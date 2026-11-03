@@ -513,6 +513,8 @@ class Game {
   void buildZoneOverlay();
   std::array<uint32_t, 12> mapRamp_{}; bool mapRampLoaded_ = false;   // map window base colours (ramp 000005E5:21 row 3)
   void updateZoneTint(bool on);
+  void updatePollutedWater();
+  uint64_t pollutedWaterSerial_ = ~0ull;
   std::vector<uint8_t> zoneTint_;
   DataOverlay zoneOverlay_;
   void drawSoftCursor(const std::string& name, int x, int y);   // cursor image blitted into the frame at a hotspot
@@ -524,7 +526,7 @@ class Game {
   std::string cursorForTool() const;
   std::vector<RenderScene> unusedScenes_;
   std::vector<Spot>* spotSink_ = nullptr;
-  int streetAcc_ = 0;
+  uint64_t streetSig_ = 0, streetSigSerial_ = ~0ull;   // signature of the city the street sources were built from
   bool streetSyncDue_ = false;
   int streetSyncCooldown_ = 0;   // frames until the next full street-source rebuild is allowed
   bool simDayThisFrame_ = false;   // set by tickSim; street sync skips that frame
@@ -575,7 +577,6 @@ class Game {
     void rebuild();
   };
   std::vector<int> streetSources_;
-  size_t streetOccCount_ = 0, streetNetCount_ = 0;
   void syncStreetSources();
   std::unique_ptr<StreetHost> streetHost_;
   std::unique_ptr<StreetSim> street_;

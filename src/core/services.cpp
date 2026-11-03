@@ -571,7 +571,7 @@ PollutionParams PollutionParams::fromIni(const IniFile& f, const IniFile* tune, 
   p.maxWater = int(r.num(S, "MaxWaterPolluteForUI", 11000));
   p.maxGarbage = int(r.num(S, "MaxGarbagePolluteForUI", 0));
   p.airThreshold = int(r.num(S, "AirPollutedThreshold", 0));
-  p.waterThreshold = int(r.num(S, "WaterPollutedThreshold", 0));
+  p.waterThreshold = int(r.num(S, "WaterPollutedThreshold", 16000));
   p.garbageThreshold = int(r.num(S, "GarbagePollutedThreshold", 0));
   auto b = [&](const char* k) { return int(uint8_t(r.num(S, k, 0))); };
   p.cleanAir = b("CleanAirOrdEffect"); p.trashPresort = b("TrashPresortOrdEffect");

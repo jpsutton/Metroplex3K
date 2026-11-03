@@ -184,7 +184,7 @@ void Renderer::setTileTint(int x, int z, uint8_t row) {
 
 void Renderer::setWorld(const World* w, GameData* data) {
   world_ = w; data_ = data; shadeValid_ = false; itemsValid_ = false; terrainLayerValid_ = false; itemCacheValid_ = false; ++itemsGen_;
-  tint_.clear(); siteCache_.clear(); bldIniTried_ = false; bldIniOk_ = false;
+  tint_.clear(); pollutedWater_.clear(); siteCache_.clear(); bldIniTried_ = false; bldIniOk_ = false;
   for (int i = 0; i < 5; i++) { back_[i] = Image(); backTried_[i] = false; }
   pal_ = TerrainPalettes(); palOverride_ = false;
   makeFallbackPalettes();
@@ -729,6 +729,10 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, 
               fetch(*wpal, std::max(0, wat[i] - alt[i]), 0, r, g, b);
               farZoomAdjust(z, r, g, b);
               if (tintRow) { r = (r + tintCol[0]) / 2; g = (g + tintCol[1]) / 2; b = (b + tintCol[2]) / 2; }
+              else if (pollutedWater_.size() == size_t(w.W) * w.H && pollutedWater_[tIdx]) {   // polluted water: palBasic row 51 averaged in (spec 25 6.4)
+                int pc[3]; basicTint(51, pc);
+                r = (r + pc[0]) / 2; g = (g + pc[1]) / 2; b = (b + pc[2]) / 2;
+              }
               W4[i][0] = qx[i]; W4[i][1] = qy[i] - float(wat[i]) * A;
               W4[i][2] = float(r); W4[i][3] = float(g); W4[i][4] = float(b);
             }
@@ -885,6 +889,10 @@ void Renderer::collectTerrainTris(const Camera& cam, const RenderOptions& opt, s
               fetch(*wpal, std::max(0, wat[i] - alt[i]), 0, r, g, b);
               farZoomAdjust(z, r, g, b);
               if (tintRow) { r = (r + tintCol[0]) / 2; g = (g + tintCol[1]) / 2; b = (b + tintCol[2]) / 2; }
+              else if (pollutedWater_.size() == size_t(w.W) * w.H && pollutedWater_[tIdx]) {   // polluted water: palBasic row 51 averaged in (spec 25 6.4)
+                int pc[3]; basicTint(51, pc);
+                r = (r + pc[0]) / 2; g = (g + pc[1]) / 2; b = (b + pc[2]) / 2;
+              }
               W4[i][0] = qx[i]; W4[i][1] = qy[i] - float(wat[i]) * A;
               W4[i][2] = float(r); W4[i][3] = float(g); W4[i][4] = float(b);
             }
@@ -1003,8 +1011,12 @@ void Renderer::drawEdgeFaces(const Camera& cam, const RenderOptions& opt, int y0
     }
   };
   // Border u = W (lower-left side) and v = H (lower-right side).
-  const Image& tA = even ? pal_.edgeL : pal_.edgeD;
-  const Image& tB = even ? pal_.edgeD : pal_.edgeL;
+  // Spec 25 6.5 [STATIC]: palette index (r & 1) for faces of constant world x, (~r & 1) for constant world z (0 = palEdgeL). The two
+  // borders in view are the u = W border (constant x at even rotations, constant z at odd) and the v = H border (the other one), so
+  // the lower-left face is palEdgeL and the lower-right face palEdgeD at every rotation.
+  (void)even;
+  const Image& tA = pal_.edgeL;
+  const Image& tB = pal_.edgeD;
   for (int v = 0; v < w.H; v++) seg(w.W, v, w.W, v + 1, tA);
   for (int u = 0; u < w.W; u++) seg(u, w.H, u + 1, w.H, tB);
 }
@@ -1730,7 +1742,7 @@ uint64_t Renderer::terrainLayerKey(const Camera& cam, const RenderOptions& opt) 
   const bool netSprites = opt.objects && (data_ || spriteFn_);
   mix(uint64_t(opt.terrain) | uint64_t(opt.underground) << 1 | uint64_t(opt.zonePaint) << 2 | uint64_t(opt.background) << 3 |
       uint64_t(opt.grid) << 4 | uint64_t(opt.edgeFaces) << 5 | uint64_t(netSprites) << 6);
-  h = hashVec(h, w.alt); h = hashVec(h, w.water); h = hashVec(h, w.zone); h = hashVec(h, tint_);
+  h = hashVec(h, w.alt); h = hashVec(h, w.water); h = hashVec(h, w.zone); h = hashVec(h, tint_); h = hashVec(h, pollutedWater_);
   // The road mask (grey network paint) is drawn from the surface pieces only in this mode.
   if (opt.zonePaint && !opt.underground && !netSprites)
     for (const auto& np : w.surface) { mix(uint64_t(uint32_t(np.x)) << 32 | uint32_t(np.z)); }
