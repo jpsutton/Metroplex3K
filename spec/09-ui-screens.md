@@ -1533,6 +1533,32 @@ at a fixed position (§6.0).
   Their labels are at x ≈ 205 in the small bold font: Education `1DD`, Health `1E0`, Population
   `1E1`, Electricity `1DE`, Garbage `1DF`.
 
+**Charts pages (observed, Berlin)**
+
+* Education, Health and Population are bar charts. They share the geometry above, the Workforce
+  band and the 15 green bars. Only the y axis, its caption and the two caption lines change.
+  * Health: y axis 0–90 in steps of 10. Axis caption "Health" is a single vertical line. Captions:
+    "Population Life Expectancy = 87 Years" and "Workforce Life Expectancy = 88 Years".
+  * Population: y axis 0, 5, 10 (people per age bucket in thousands [INFERRED]). Axis caption
+    "Population" is a single vertical line. Captions: "Total Population = 794,278" and
+    "Workforce = 65% of Population".
+  * Education: the axis caption "Education Quotient" is two vertical lines (text rotated 90°, read
+    bottom to top), not horizontal text.
+* Electricity and Garbage are **3-D pie charts**, with one caption line below the chart box.
+  * At the top left of the box is a heading: "Annually Averaged" (`28A`) for Electricity, or
+    "% Garbage Goes To:" (`1F3`) for Garbage.
+  * Below the heading is a list of 16 px colour bars, one per category present. Each bar is about
+    168 px wide, filled in the slice colour, with the label in bold.
+  * The pie is on the right, centred at about (318, 117), roughly 175 × 110 px, with a dark rim
+    below it. Percentages are drawn in black on the slices.
+  * Electricity colours: Coal Power (132, 66, 66), Wind Power (255, 130, 0), Solar Power
+    (0, 255, 0), Nuclear Power (255, 255, 0). Caption: "Total Electricity Usage Annually = 1,906,937
+    MW-h" (`289`).
+  * Garbage colours: Landfill (255, 65, 222), Recycling (66, 65, 255). Caption: "Total Garbage
+    Produced Annually = 937,319 Tons" (`1F8`).
+* Which stripe tile (`000005E5:31`/`33`/`35`) each page uses was not identified [OPEN]. All three
+  bar pages look the same.
+
 **Graphs mode**
 
 * Plot box: inset frame (44, 50)–(400, 238). Lines are drawn from x = 44 to 300, and labels go in
