@@ -1523,7 +1523,8 @@ at a fixed position (§6.0).
 * Bars (observed, Berlin): one bar per 5-year age bucket, 15 bars from age 0–4 to 70–74. Each bar
   is 7 px wide in green (0, 211, 140) with a 1 px outline (173, 178, 222) on each side. The first
   bar fill starts at x = 149 and the pitch is 13 px. Bars rise from the x axis at y = 205; their
-  height is value × 153 / 140 for the 0–140 Education Quotient axis.
+  height is about value × 142 / 140, since the 140 label sits at y ≈ 63. The axis scale is fixed at
+  0–140 [INFERRED from one city].
 * Captions: centred at x ≈ 225. The first line, y ≈ 249, is dark blue and bold (`1E2`). The second,
   y ≈ 265, is orange and bold (`1E3`).
 * Page radios: about 10 px, centred at x ≈ 197, at y = 314, 334, 354, 374 and 394 (20 px pitch).
