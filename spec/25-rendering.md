@@ -731,6 +731,11 @@ Observed behaviour `[OBSERVED]`:
   the route of `12-networks.md` §6.2, stair-step included.
 * **Zone drag preview:** the rectangle is tinted translucently in the zone's colour (light green for
   residential).
+* **Query hover:** with the Query tool armed, the whole sprite of the building under the cursor gets
+  a translucent light-blue highlight, not only its footprint tiles. The following were not traced
+  statically: the colour, the blend, whether it covers only opaque pixels, how it treats child
+  sprites, how it treats empty ground and networks, and whether Dispatch uses the same highlight.
+  [OPEN]
 * **Occupied target:** hovering a placement tool over an existing building tints that building's
   sprite red.
 * **Cost label:** a small box with a white background and a 1-pixel black border, showing `§` and the

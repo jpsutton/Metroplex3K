@@ -228,8 +228,23 @@ and description from the `.SNR` (`23-scenarios.md`). Fonts: `systemloadsave.fbf`
 (`05-text-and-fonts.md`).
 
 Save flow: if the target exists ask `015E410C:C` (overwrite?); read-only targets give `26`/`29`;
-invalid names `27`, too long `2A`, bad path `2D`, failure `2E`. Leaving a modified city (New, Load,
-Exit) asks `015E410C:12` / `029541F4:250` with Yes/No/Cancel (`209E6378:C0`, `C2`, `B6`).
+invalid names `27`, too long `2A`, bad path `2D`, failure `2E`.
+
+Leaving the current city: [STATIC]
+* **There is no "modified" or dirty flag.** Neither the Exit path nor the New/Load path tests
+  whether the city changed. Letting the simulation run, editing the city, and saving or loading do
+  not set or clear anything that controls the prompt.
+* **New / Load** (when a city is open): the command carries an "ask to save" argument, which
+  defaults to true. If it is true, the game asks `029541F4:250` ("Would you like to save this
+  city?") or `015E410C:12` ("Do you want to save your city?"), with a `015E410C:6` "Save" caption.
+  Answering Yes opens the save flow, No continues without saving, and Cancel aborts.
+* **Exit** takes two arguments: *confirm* and *ask to save*. If *confirm* is set, the game first
+  shows `209E6378:A3` "Now leaving Sim City 3000." (title `225872FE:55` "Exit") with OK/Cancel.
+  Cancel aborts. If *ask to save* is set and a city is open, it then asks `209E6378:127` "Do you
+  want to save the game?" with Yes/No/Cancel (`209E6378:C0`, `C2`, `B6`). Yes saves, No exits, and
+  Cancel aborts.
+* Which UI entry points pass *ask to save* = false was not traced. [OBSERVED] Closing the window
+  shows "Now leaving" and no save prompt, even after the city has been running.
 
 Scenario end screens (`23-scenarios.md`): status `041F2625:4`/`5`, greeting `3`, completion `7`,
 results `25`, buttons replay `8`, another scenario `9`, main menu `A`.
