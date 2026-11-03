@@ -19,6 +19,13 @@
 
 using namespace m3k;
 
+// Environment switch: unset or empty -> `def`; "0", "off", "false", "no" -> false; anything else -> true.
+static bool envFlag(const char* name, bool def) {
+  const char* v = std::getenv(name);
+  if (!v || !*v) return def;
+  return !(std::strcmp(v, "0") == 0 || std::strcmp(v, "off") == 0 || std::strcmp(v, "false") == 0 || std::strcmp(v, "no") == 0);
+}
+
 static fs::path exeDirOf(const char* argv0) {
   std::error_code ec;
   fs::path p = fs::absolute(argv0 ? argv0 : "", ec);
@@ -66,28 +73,32 @@ int main(int argc, char** argv) {
                    "or auto-detected GOG install locations. You can also drop the folder or the GOG installer\n"
                    "onto the window, or type the path on the first screen.\n"
                    "Render: $M3K_RENDER=cpu|gpu (default cpu). gpu uses OpenGL compute for terrain when available.\n"
-                   "Present (experimental, default SDL renderer): $M3K_PRESENT=gl presents through an OpenGL context and, with 4.3,\n"
-                   "composites the city sprites on the GPU (turns the render caches on); gl-basic only presents through GL.\n"
-                   "Render caches (experimental, default off): $M3K_TERRAIN_CACHE=1 keeps the background + terrain layer between frames,\n"
-                   "$M3K_ITEM_CACHE=1 keeps the world part of the sprite draw list.\n"
-                   "Sim thread: $M3K_SIM_THREAD=1 runs the sim day tick on a worker thread (experimental, default off).\n"
+                   "Present: $M3K_PRESENT=gl (default) presents through OpenGL and, with 4.3, composites the city sprites on the\n"
+                   "GPU; gl-basic only presents through GL; sdl uses the SDL renderer. Falls back to sdl if OpenGL is unavailable.\n"
+                   "Render caches (default on): $M3K_TERRAIN_CACHE=0 / $M3K_ITEM_CACHE=0 turn off the cached background + terrain\n"
+                   "layer / the cached sprite draw list. The GPU city needs the terrain cache and turns itself off without it.\n"
+                   "Sim thread (default on): $M3K_SIM_THREAD=0 runs the sim day tick on the frame thread instead of a worker thread.\n"
                    "Frame log: --frame-log FILE or $M3K_FRAMELOG=FILE writes a per-frame timing CSV and prints a summary on exit.\n";
       return 0;
     }
   }
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { std::cerr << "SDL_Init: " << SDL_GetError() << "\n"; return 1; }
-  // GL present (experimental): the window itself owns a GL context. Falls back to the SDL renderer when unavailable.
+  // GL present: the window itself owns a GL context. Falls back to the SDL renderer when unavailable.
   std::unique_ptr<GlPresenter> glPresent;
   bool gpuCityWanted = false;
   SDL_Window* win = nullptr;
 #if defined(M3K_HAS_GL_PRESENT) && M3K_HAS_GL_PRESENT
-  if (const char* pe = std::getenv("M3K_PRESENT"); pe && (std::strcmp(pe, "gl") == 0 || std::strcmp(pe, "gl-basic") == 0)) {
-    gpuCityWanted = std::strcmp(pe, "gl") == 0;
+  // Default: GL present with the GPU city. M3K_PRESENT=sdl forces the SDL renderer, gl-basic the GL present alone.
+  const char* presentEnv = std::getenv("M3K_PRESENT");
+  const std::string presentMode = (presentEnv && *presentEnv) ? presentEnv : "gl";
+  if (presentMode == "gl" || presentMode == "gl-basic") {
+    gpuCityWanted = presentMode == "gl";
     win = SDL_CreateWindow("Metroplex3K", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 800, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
     glPresent = std::make_unique<GlPresenter>();
     if (!win || !glPresent->init(win)) {
-      std::cerr << "metroplex3k: M3K_PRESENT=gl unavailable (OpenGL 3.3 context failed); using the SDL renderer.\n";
+      std::cerr << "metroplex3k: OpenGL present unavailable (context failed); using the SDL renderer.\n";
       glPresent.reset();
+      gpuCityWanted = false;
       if (win) { SDL_DestroyWindow(win); win = nullptr; }
     }
   }
@@ -108,18 +119,14 @@ int main(int argc, char** argv) {
   std::string err;
   if (!game.init(root, err) && !err.empty()) std::cerr << err << "\n";
   if (!cityArg.empty()) game.requestFile(cityArg);
-  const char* simThreadEnv = std::getenv("M3K_SIM_THREAD");
-  const bool simThread = simThreadEnv && simThreadEnv[0] && std::strcmp(simThreadEnv, "0") != 0;
+  const bool simThread = envFlag("M3K_SIM_THREAD", true);
   game.setAsyncSim(simThread);
-  const char* tcEnv = std::getenv("M3K_TERRAIN_CACHE");
-  bool terrainCache = tcEnv && tcEnv[0] && std::strcmp(tcEnv, "0") != 0;
+  bool terrainCache = envFlag("M3K_TERRAIN_CACHE", true);
   game.renderer().setTerrainLayerCache(terrainCache);
-  const char* icEnv = std::getenv("M3K_ITEM_CACHE");
-  bool itemCache = icEnv && icEnv[0] && std::strcmp(icEnv, "0") != 0;
+  bool itemCache = envFlag("M3K_ITEM_CACHE", true);
   // GPU city: the sprite pass needs the terrain layer cache; the item cache makes the draw list cheap.
-  const bool gpuCity = glPresent && gpuCityWanted && glPresent->hasGpuCity();
+  const bool gpuCity = glPresent && gpuCityWanted && glPresent->hasGpuCity() && terrainCache;   // the sprite pass needs the layer cache
   if (glPresent) glPresent->setGpuCityEnabled(gpuCity);
-  if (gpuCity) { itemCache = true; terrainCache = true; game.renderer().setTerrainLayerCache(true); }
   game.renderer().setItemListCache(itemCache);
 
   if (wantGpu && glTerrain.available()) {
