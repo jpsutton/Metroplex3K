@@ -377,6 +377,7 @@ struct Ctx {
   uint32_t* fb; int W, H, zoom;
   const int8_t* noiseL; const int8_t* noiseE;
   int Y0 = 0;
+  int XS = 0, XE = 1 << 30;   // columns [XS, XE) may be written (strip redraws for the scrolling terrain cache)
 };
 
 enum class NoiseMode { None, Mono, Rgb };
@@ -398,7 +399,7 @@ void gouraudTri(const Ctx& c, const float* p0, const float* p1, const float* p2,
     const int32_t d1 = int32_t((R[1] - L[1]) * inv * 65536.f);
     const int32_t d2 = int32_t((R[2] - L[2]) * inv * 65536.f);
     int ni = ((seed + 143 * (y - ytop)) % 1024 + 1024) % 1024;
-    int x0 = std::max(xa, 0), x1 = std::min(xe, c.W);
+    int x0 = std::max(xa, std::max(0, c.XS)), x1 = std::min(xe, std::min(c.XE, c.W));
     for (int x = x0; x < x1; x++) {
       int i = x - xa;
       int r = int((L0 + d0 * i) / 65536), g = int((L1 + d1 * i) / 65536), b = int((L2 + d2 * i) / 65536);
@@ -421,7 +422,7 @@ void shoreTri(const Ctx& c, const float* p0, const float* p1, const float* p2, i
     const int32_t d1 = int32_t((R[1] - L[1]) * inv * 65536.f);
     const int32_t d2 = int32_t((R[2] - L[2]) * inv * 65536.f);
     int ni = ((seed + 143 * (y - ytop)) % 1024 + 1024) % 1024;
-    int x0 = std::max(xa, 0), x1 = std::min(xe, c.W);
+    int x0 = std::max(xa, std::max(0, c.XS)), x1 = std::min(xe, std::min(c.XE, c.W));
     for (int x = x0; x < x1; x++) {
       int i = x - xa;
       int P[3] = {int((L0 + d0 * i) / 65536), int((L1 + d1 * i) / 65536), int((L2 + d2 * i) / 65536)};
@@ -450,7 +451,7 @@ void indexTri(const Ctx& c, const Image& tbl, const float* p0, const float* p1, 
     int n = xe - xa;
     float step = (R[0] - L[0]) / float(n + 1);
     int ni = ((seed + 143 * (y - ytop)) % 1024 + 1024) % 1024;
-    int x0 = std::max(xa, 0), x1 = std::min(xe, c.W);
+    int x0 = std::max(xa, std::max(0, c.XS)), x1 = std::min(xe, std::min(c.XE, c.W));
     for (int x = x0; x < x1; x++) {
       int i = x - xa;
       int idx = std::max(0, std::min(511, int(L[0] + step * i)));
@@ -468,7 +469,7 @@ void blendTri(const Ctx& c, const float* p0, const float* p1, const float* p2, i
   float z3[3] = {0, 0, 0};
   rasterTri(c.Y0, c.H, p0[0], p0[1], z3, p1[0], p1[1], z3, p2[0], p2[1], z3,
             [&](int y, int xa, int xe, const float*, const float*) {
-    int x0 = std::max(xa, 0), x1 = std::min(xe, c.W);
+    int x0 = std::max(xa, std::max(0, c.XS)), x1 = std::min(xe, std::min(c.XE, c.W));
     for (int x = x0; x < x1; x++) {
       uint32_t& d = c.fb[size_t(y) * c.W + x];
       int dr = d & 255, dg = (d >> 8) & 255, db = (d >> 16) & 255;
@@ -478,7 +479,7 @@ void blendTri(const Ctx& c, const float* p0, const float* p1, const float* p2, i
 }
 
 void darken(const Ctx& c, int x, int y, int delta) {
-  if (x < 0 || y < c.Y0 || x >= c.W || y >= c.H) return;
+  if (x < std::max(0, c.XS) || y < c.Y0 || x >= std::min(c.XE, c.W) || y >= c.H) return;
   uint32_t& p = c.fb[size_t(y) * c.W + x];
   p = pack(clamp255(int(p & 255) + delta), clamp255(int((p >> 8) & 255) + delta), clamp255(int((p >> 16) & 255) + delta));
 }
@@ -566,15 +567,16 @@ void Renderer::loadBackground(int zoom) {
   }
 }
 
-void Renderer::drawBackground(int zoom, int y0, int y1) {
+void Renderer::drawBackground(int zoom, int y0, int y1, int xs, int xe) {
   const Image& im = back_[zoom];
   if (im.empty()) return;
+  const int xa = std::max(0, xs), xb = std::min(fbW_, xe);
   for (int y = y0; y < y1; y++) {
     int ty = ((y - originY_) % im.h + im.h) % im.h;
     const uint32_t* row = &im.px[size_t(ty) * im.w];
     uint32_t* dst = &fb_[size_t(y) * fbW_];
-    int tx = ((0 - originX_) % im.w + im.w) % im.w;
-    for (int x = 0; x < fbW_; x++) {
+    int tx = ((xa - originX_) % im.w + im.w) % im.w;
+    for (int x = xa; x < xb; x++) {
       dst[x] = row[tx] | 0xFF000000u;
       if (++tx == im.w) tx = 0;
     }
@@ -593,11 +595,12 @@ void Renderer::prepareTerrain(const RenderOptions& opt) {
     for (const auto& np : w.surface) if (w.inTiles(np.x, np.z)) roadMask_[w.tIdx(np.x, np.z)] = 1;
 }
 
-void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, int y1) {
+void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs, int xe) {
   const World& w = *world_;
   const int z = cam.zoom;
   const float A = float(1 << z);
   Ctx ctx{fb_.data(), fbW_, y1, z, noiseLand_, noiseEdge_, y0};
+  ctx.XS = xs; ctx.XE = xe;
 
   float u0, v0, u1, v1, u2, v2, u3, v3;
   screenToView(cam, 0, 0, u0, v0); screenToView(cam, fbW_, 0, u1, v1);
@@ -632,7 +635,7 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, 
         minY = std::min(minY, top); maxY = std::max(maxY, gy[i]);
         minX = std::min(minX, qx[i]); maxX = std::max(maxX, qx[i]);
       }
-      if (maxY < float(y0) || minY > float(y1) || maxX < 0 || minX > fbW_) continue;
+      if (maxY < float(y0) || minY > float(y1) || maxX < float(xs) || minX > float(std::min(xe, fbW_))) continue;
       int tx0 = std::min(std::min(wx[0], wx[1]), std::min(wx[2], wx[3])), tz0 = std::min(std::min(wz[0], wz[1]), std::min(wz[2], wz[3]));
       if (!w.inTiles(tx0, tz0)) continue;
       const int tIdx = w.tIdx(tx0, tz0);
@@ -894,12 +897,13 @@ void Renderer::collectTerrainTris(const Camera& cam, const RenderOptions& opt, s
   }
 }
 
-void Renderer::drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int y0, int y1) {
+void Renderer::drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs, int xe) {
   if (!opt.grid || !world_) return;
   const World& w = *world_;
   const int z = cam.zoom;
   const float A = float(1 << z);
   Ctx ctx{fb_.data(), fbW_, y1, z, noiseLand_, noiseEdge_, y0};
+  ctx.XS = xs; ctx.XE = xe;
   float u0, v0, u1, v1, u2, v2, u3, v3;
   screenToView(cam, 0, 0, u0, v0); screenToView(cam, fbW_, 0, u1, v1);
   screenToView(cam, 0, fbH_, u2, v2); screenToView(cam, fbW_, fbH_, u3, v3);
@@ -925,7 +929,7 @@ void Renderer::drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int 
         minY = std::min(minY, top); maxY = std::max(maxY, gy[i]);
         minX = std::min(minX, qx[i]); maxX = std::max(maxX, qx[i]);
       }
-      if (maxY < float(y0) || minY > float(y1) || maxX < 0 || minX > fbW_) continue;
+      if (maxY < float(y0) || minY > float(y1) || maxX < float(xs) || minX > float(std::min(xe, fbW_))) continue;
       int tx0 = std::min(std::min(wx[0], wx[1]), std::min(wx[2], wx[3])), tz0 = std::min(std::min(wz[0], wz[1]), std::min(wz[2], wz[3]));
       if (!w.inTiles(tx0, tz0)) continue;
       bool dry[4], anyDry = false, allDry = true;
@@ -946,11 +950,12 @@ void Renderer::drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int 
 // Map-edge faces (spec 6.5)
 // ======================================================================================
 
-void Renderer::drawEdgeFaces(const Camera& cam, int y0, int y1) {
+void Renderer::drawEdgeFaces(const Camera& cam, int y0, int y1, int xs, int xe) {
   const World& w = *world_;
   const int z = cam.zoom;
   const float Wt = 8.f * float(1 << z), Ht = Wt / 2, A = float(1 << z);
   Ctx ctx{fb_.data(), fbW_, y1, z, noiseLand_, noiseEdge_, y0};
+  ctx.XS = xs; ctx.XE = xe;
   const bool even = (cam.rot & 1) == 0;
   auto seg = [&](int ua, int va, int ub, int vb, const Image& tbl) {
     int wx[2], wz[2];
@@ -1085,8 +1090,8 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     int umin = *std::min_element(us, us + 4), umax = *std::max_element(us, us + 4);
     int vmin = *std::min_element(vs, vs + 4), vmax = *std::max_element(vs, vs + 4);
     it.u0 = umin; it.u1 = umax; it.v0 = vmin; it.v1 = vmax;
-    it.ax = originX_ + (vmin - umax) * Wh;
-    it.ay = originY_ + (umax + vmin) * Hh - y * A;
+    it.ax = (vmin - umax) * Wh;                 // relative to the screen origin; render adds it after culling
+    it.ay = (umax + vmin) * Hh - y * A;
     int p = umax - 1, q = vmin, su = umax - umin, sv = vmax - vmin;
     it.boxA0 = (p - su + 1) * 256; it.boxA1 = (p + 1) * 256; it.boxB0 = q * 256; it.boxB1 = (q + sv) * 256;
     it.key = 0x3FFFC000u - 0x4000u * uint32_t(p + q) - 0x100u * uint32_t(y / 4);
@@ -1122,7 +1127,11 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     Item it;
     setGeometry(it, x, zz, y, sizeX, sizeZ);
     int sc = dbl ? 2 : 1;
-    if (cullOut(it.ax, it.ay, sp->img.w * sc, sp->img.h * sc, sp->L * sc, sp->T * sc)) return;
+    // Cull box is stored, not tested here: the list is cached across camera moves and culled per frame (overlay
+    // items copy it, so they are visible exactly when their base item is).
+    it.cAx = it.ax; it.cAy = it.ay; it.cL = sp->L * sc; it.cT = sp->T * sc; it.cW = sp->img.w * sc; it.cH = sp->img.h * sc;
+    // Uncached builds cull right away (cheap rejection of the ~90% off-screen items); the cached list keeps them.
+    if (!itemCacheOn_ && cullOut(originX_ + it.ax, originY_ + it.ay, sp->img.w * sc, sp->img.h * sc, sp->L * sc, sp->T * sc)) return;
     it.spr = sp; it.dbl = dbl; it.groundLevel = ground;
     if (ground) { it.key += 1; it.pickKey -= 1; }
     it.cat = fr ? fr->category : 0; it.id = fr ? fr->spriteId : 0;
@@ -1216,6 +1225,25 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     std::stable_sort(flat.begin(), flat.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
     std::stable_sort(statics.begin(), statics.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
     if (itemCacheOn_) { cachedFlat_ = flat; cachedStatics_ = statics; itemCacheKey_ = itemKey; itemCacheValid_ = true; }
+  }
+  // Cull against this frame's screen and move to screen coordinates (cached lists are origin-relative).
+  {
+    auto visibleAt = [&](const Item& it) {
+      const int x0 = originX_ + it.cAx - it.cL, y0 = originY_ + it.cAy - it.cT;
+      return !(x0 > fbW_ || x0 + it.cW < 0 || y0 > fbH_ || y0 + it.cH < 0);
+    };
+    auto cullShift = [&](std::vector<Item>& v) {
+      size_t o = 0;
+      for (size_t i = 0; i < v.size(); i++) {
+        if (!visibleAt(v[i])) continue;
+        if (o != i) v[o] = v[i];
+        v[o].ax += originX_; v[o].ay += originY_;
+        o++;
+      }
+      v.resize(o);
+    };
+    cullShift(flat);
+    cullShift(statics);
   }
 
   // Extra sprites from other modules.
@@ -1487,9 +1515,8 @@ uint64_t Renderer::terrainLayerKey(const Camera& cam, const RenderOptions& opt) 
   const World& w = *world_;
   uint64_t h = 1469598103934665603ull;
   auto mix = [&](uint64_t v) { h = (h ^ v) * 0x9E3779B97F4A7C15ull; h ^= h >> 31; };
-  uint32_t u, v;
-  std::memcpy(&u, &cam.u, 4); std::memcpy(&v, &cam.v, 4);
-  mix(u); mix(v); mix(uint64_t(cam.zoom)); mix(uint64_t(cam.rot));
+  // No camera position: the integer screen origin carries it (compared by the caller, see render()).
+  mix(uint64_t(cam.zoom)); mix(uint64_t(cam.rot));
   mix(uint64_t(fbW_)); mix(uint64_t(fbH_)); mix(uint64_t(w.W)); mix(uint64_t(w.H));
   const bool netSprites = opt.objects && (data_ || spriteFn_);
   mix(uint64_t(opt.terrain) | uint64_t(opt.underground) << 1 | uint64_t(opt.zonePaint) << 2 | uint64_t(opt.background) << 3 |
@@ -1506,10 +1533,9 @@ uint64_t Renderer::itemListKey(const Camera& cam, const RenderOptions& opt) cons
   const World& w = *world_;
   uint64_t h = 1469598103934665603ull;
   auto mix = [&](uint64_t v) { h = (h ^ v) * 0x9E3779B97F4A7C15ull; h ^= h >> 31; };
-  uint32_t u, v;
-  std::memcpy(&u, &cam.u, 4); std::memcpy(&v, &cam.v, 4);
-  mix(u); mix(v); mix(uint64_t(cam.zoom)); mix(uint64_t(cam.rot));
-  mix(uint64_t(fbW_)); mix(uint64_t(fbH_)); mix(uint64_t(w.W)); mix(uint64_t(w.H)); mix(itemsGen_);
+  // No camera position or window size: the list is origin-relative and culled per frame.
+  mix(uint64_t(cam.zoom)); mix(uint64_t(cam.rot));
+  mix(uint64_t(w.W)); mix(uint64_t(w.H)); mix(itemsGen_);
   mix(uint64_t(opt.underground) | uint64_t(opt.constructionSites) << 1 | uint64_t(opt.flora) << 2 | uint64_t(opt.pipes) << 3 |
       uint64_t(opt.subways) << 4 | uint64_t(bool(opt.showNet)) << 5 | uint64_t(bool(opt.showOccupant)) << 6);
   mix(opt.ownImageFlags); mix(uint64_t(uint32_t(opt.animTick))); mix(opt.filterEpoch);
@@ -1542,19 +1568,32 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
   if (opt.background) loadBackground(zoom);
   // Terrain layer cache: decide hit/miss before prepareTerrain, which only feeds the terrain pass.
   const bool gpuTerrainWillRun = opt.terrain && gpuTerrainWanted_ && gpuTerrainFn_;
-  bool layerHit = false, layerStore = false;
+  bool layerHit = false, layerStore = false, layerShift = false;
+  int sdx = 0, sdy = 0;
   double keyMs = 0, itemsBuildMs = 0;
   if (terrainCacheOn_ && opt.terrain && !gpuTerrainWillRun) {
     const auto k0 = StageClock::now();
     const uint64_t key = terrainLayerKey(cam, opt);
     keyMs = stageMs(k0, StageClock::now());
-    if (terrainLayerValid_ && key == terrainLayerKey_ && terrainLayer_.size() == fb_.size()) layerHit = true;
-    else {
+    if (terrainLayerValid_ && key == terrainLayerKey_ && terrainLayer_.size() == fb_.size()) {
+      // Same content, zoom, rotation and size. The terrain pass is exactly translation-invariant (screen geometry is
+      // an integer lattice around the integer origin), so a pan is the cached pixels moved by the origin delta plus
+      // freshly drawn strips where new ground came into view.
+      sdx = originX_ - terrainLayerOX_; sdy = originY_ - terrainLayerOY_;
+      if (sdx == 0 && sdy == 0) layerHit = true;
+      else {
+        const double keptX = std::max(0.0, 1.0 - double(std::abs(sdx)) / double(fbW_));
+        const double keptY = std::max(0.0, 1.0 - double(std::abs(sdy)) / double(fbH_));
+        if (keptX * keptY >= 0.4) layerShift = true;   // below that a full redraw is as cheap as copy + strips
+      }
+    }
+    if (!layerHit && !layerShift) {
       layerStore = true;
       terrainLayerKey_ = key;
       terrainLayerValid_ = false;
       if (terrainLayer_.size() != fb_.size()) terrainLayer_.assign(fb_.size(), 0);
     }
+    if (layerShift && terrainLayerNew_.size() != fb_.size()) terrainLayerNew_.assign(fb_.size(), 0);
   }
   if (opt.terrain) { if (layerHit) ensureShade(); else prepareTerrain(opt); }
   const auto bi0 = StageClock::now();
@@ -1563,6 +1602,7 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
   stages_ = StageTimes();
   stages_.layerKeyMs = keyMs; stages_.buildItemsMs = itemsBuildMs;
   stages_.terrainLayerHit = layerHit;
+  stages_.terrainLayerShift = layerShift;
   stages_.setupMs = stageMs(st0, StageClock::now());
 
   // Phase 2: optional GPU terrain fill (CPU builds triangle list; host compute writes pixels).
@@ -1591,6 +1631,34 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
       // Cached background + terrain + grid + edge faces for these rows.
       std::memcpy(fb_.data() + rowOff, terrainLayer_.data() + rowOff, rowN * sizeof(uint32_t));
       terrainNs += nsSince(t); t = StageClock::now();
+    } else if (layerShift) {
+      // Panned: B(x, y) = A(x - sdx, y - sdy). Copy what stays visible, redraw the exposed rows and columns.
+      const int xa = std::max(0, sdx), xb = std::min(fbW_, fbW_ + sdx);
+      for (int y = y0; y < y1; y++) {
+        const int sy = y - sdy;
+        if (sy < 0 || sy >= fbH_) continue;
+        std::memcpy(fb_.data() + size_t(y) * fbW_ + xa, terrainLayer_.data() + size_t(sy) * fbW_ + (xa - sdx), size_t(xb - xa) * sizeof(uint32_t));
+      }
+      auto region = [&](int ya, int yb, int xs, int xe) {
+        if (ya >= yb || xs >= xe) return;
+        for (int y = ya; y < yb; y++)
+          std::fill(fb_.begin() + ptrdiff_t(y) * fbW_ + std::max(0, xs), fb_.begin() + ptrdiff_t(y) * fbW_ + std::min(fbW_, xe), 0xFF302820u);
+        if (opt.background) drawBackground(zoom, ya, yb, xs, xe);
+        drawTerrain(cam, opt, ya, yb, xs, xe);
+        if (opt.edgeFaces) drawEdgeFaces(cam, ya, yb, xs, xe);
+      };
+      // Exposed rows span the full width; the exposed columns cover the remaining rows.
+      const int ry0 = sdy > 0 ? 0 : fbH_ + sdy, ry1 = sdy > 0 ? sdy : fbH_;
+      const int ra = std::max(y0, ry0), rb = std::min(y1, ry1);
+      if (sdy != 0) region(ra, rb, 0, fbW_);
+      if (sdx != 0) {
+        const int cxs = sdx > 0 ? 0 : fbW_ + sdx, cxe = sdx > 0 ? sdx : fbW_;
+        if (sdy == 0) region(y0, y1, cxs, cxe);
+        else if (sdy > 0) region(std::max(y0, sdy), y1, cxs, cxe);
+        else region(y0, std::min(y1, fbH_ + sdy), cxs, cxe);
+      }
+      std::memcpy(terrainLayerNew_.data() + rowOff, fb_.data() + rowOff, rowN * sizeof(uint32_t));
+      terrainNs += nsSince(t); t = StageClock::now();
     } else {
       if (!gpuTerrain) {
         std::fill(fb_.begin() + ptrdiff_t(y0) * fbW_, fb_.begin() + ptrdiff_t(y1) * fbW_, 0xFF302820u);
@@ -1613,7 +1681,8 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
     itemsNs += nsSince(t);
   });
   stages_.bandsWallMs = stageMs(sb0, StageClock::now());
-  if (layerStore) terrainLayerValid_ = true;
+  if (layerStore) { terrainLayerValid_ = true; terrainLayerOX_ = originX_; terrainLayerOY_ = originY_; }
+  if (layerShift) { terrainLayer_.swap(terrainLayerNew_); terrainLayerOX_ = originX_; terrainLayerOY_ = originY_; }
   stages_.bgCpuMs = double(bgNs.load()) / 1e6;
   stages_.terrainCpuMs = double(terrainNs.load()) / 1e6;
   stages_.itemsCpuMs = double(itemsNs.load()) / 1e6;

@@ -243,7 +243,8 @@ class Renderer : public ICityRasterizer {
     double bgCpuMs = 0, terrainCpuMs = 0, itemsCpuMs = 0;   // background, terrain (+grid/edges), sprites
     double tailMs = 0;       // serial: fallback boxes, previews, cost label
     double layerKeyMs = 0, buildItemsMs = 0;   // part of setupMs: cache key hash, sprite draw-list build
-    bool terrainLayerHit = false;   // terrain layer cache served this frame (bg + terrain + grid + edges not redrawn)
+    bool terrainLayerHit = false;     // layer served unchanged
+    bool terrainLayerShift = false;   // layer shifted by whole pixels (camera pan) and only the exposed strips redrawn   // terrain layer cache served this frame (bg + terrain + grid + edges not redrawn)
   };
   const StageTimes& lastStageTimes() const { return stages_; }
   // Terrain layer cache (off by default): remember the background + terrain + grid + edge-face pixels and, while
@@ -295,6 +296,8 @@ class Renderer : public ICityRasterizer {
     int u0 = 0, v0 = 0, u1 = 0, v1 = 0;  // footprint view tile range [u0,u1) x [v0,v1)
     uint32_t pickKey = 0;
     uint32_t cat = 0, id = 0;
+    // World-derived items are built origin-relative and culled per frame (item list cache): cull box of the base sprite.
+    int cAx = 0, cAy = 0, cL = 0, cT = 0, cW = 0, cH = 0;
   };
   uint64_t itemListKey(const Camera& cam, const RenderOptions& opt) const;
   bool itemCacheOn_ = false, itemCacheValid_ = false;
@@ -307,12 +310,13 @@ class Renderer : public ICityRasterizer {
   // Band functions draw only rows [y0, y1); render() runs them concurrently, one band per task, so they
   // must not write shared state (prepareTerrain / loadBackground / buildItems do that beforehand).
   void loadBackground(int zoom);
-  void drawBackground(int zoom, int y0, int y1);
+  // Band functions: rows [y0, y1), columns [xs, xe) (defaults: all columns).
+  void drawBackground(int zoom, int y0, int y1, int xs = 0, int xe = 1 << 30);
   void prepareTerrain(const RenderOptions& opt);
-  void drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, int y1);
+  void drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs = 0, int xe = 1 << 30);
   void collectTerrainTris(const Camera& cam, const RenderOptions& opt, std::vector<GpuTerrainTri>& out);
-  void drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int y0, int y1);
-  void drawEdgeFaces(const Camera& cam, int y0, int y1);
+  void drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs = 0, int xe = 1 << 30);
+  void drawEdgeFaces(const Camera& cam, int y0, int y1, int xs = 0, int xe = 1 << 30);
   void drawPreviews(const Camera& cam, const RenderScene& scene);
   void drawFallbackBoxes(const Camera& cam);   // data-less demo: coloured boxes instead of sprites
   void buildItems(const Camera& cam, const RenderOptions& opt, const RenderScene* scene);
@@ -366,7 +370,8 @@ public:
 private:
   bool terrainCacheOn_ = false, terrainLayerValid_ = false;
   uint64_t terrainLayerKey_ = 0;
-  std::vector<uint32_t> terrainLayer_;   // fb_-sized snapshot taken after the terrain pass, before sprites
+  std::vector<uint32_t> terrainLayer_, terrainLayerNew_;
+  int terrainLayerOX_ = 0, terrainLayerOY_ = 0;   // originX_/originY_ the layer was drawn with   // fb_-sized snapshot taken after the terrain pass, before sprites
   std::vector<Item> items_;
   std::vector<int> occ_;  // view tile -> index into items_ (last drawn), -1 none
   bool itemsValid_ = false;
