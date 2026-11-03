@@ -77,6 +77,13 @@ bool Game::anyBlockingWindow() const {
          showQuery_ || showGoals_ || showLayers_ || showBrm_ || showBle_ || msgBox_.active || petView_ != nullptr;
 }
 
+void Game::closeAllWindows() {
+  closeModelessWindows();
+  showBudget_ = showOrd_ = showDeals_ = showAdv_ = showProps_ = showPicker_ = showTip_ = showPrefs_ = showEngine_ = false;
+  showBrm_ = showBle_ = false;
+  msgBox_.active = false;
+}
+
 void Game::closeModelessWindows() {
   showMap_ = showGraphs_ = showCharts_ = showGoals_ = showNeigh_ = showQuery_ = showLayers_ = false;
 }

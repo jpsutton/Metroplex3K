@@ -1,0 +1,335 @@
+// One pass/fail harness for the checks that need a real SimCity 3000 Unlimited install (issues #70, #52, #57, #64, #65, #66).
+// It runs on the machine that owns the install (the dirty-side host); the clean side only builds it.
+//
+//   probe_verify GAME_DIR [--ref REFDIR] [--only GROUP[,GROUP...]] [--report out.tsv] [--shots OUTDIR]
+//
+// Groups: l0 (runs the sibling `conformance --strict`), l1 (save round trips), l2 (network re-tiling vs stored pieces),
+// audio (every .xa decodes and is not silent, every .FSC parses), scn (every .SNR scenario loads and runs, the goals window and
+// the end screen open), l3 (480-day runs vs the observed saves in REFDIR, files named W5_<City>_sNN.sc3), shots.
+// Prints one PASS / FAIL / INFO row per check (name, found, expected) and exits 1 when any check FAILs. `--report` also writes the
+// rows as tab-separated text. `--shots OUTDIR` renders the fixed scene list of spec 28 6 at 800x600, 1024x768 and 1280x800 to PNG
+// files plus manifest.tsv (no pass/fail: compare them with screenshots of the original).
+// Thresholds named "baseline" are regression floors taken from earlier measurements on the shipped data, not original values.
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <functional>
+#include <map>
+#include <set>
+#include <sstream>
+#include "core/audio.h"
+#include "core/tiler.h"
+#include "core/world_network_map.h"
+#include "core/xa_codec.h"
+#include "probe_common.h"
+#include "../png.h"
+#ifdef _WIN32
+#define popen _popen
+#define pclose _pclose
+#endif
+using namespace probe;
+
+namespace {
+
+struct Row { std::string group, name, found, expected, status; };
+std::vector<Row> g_rows;
+std::string g_group;
+
+void row(const std::string& name, const std::string& found, const std::string& expected, bool pass) {
+  g_rows.push_back({g_group, name, found, expected, pass ? "PASS" : "FAIL"});
+  std::printf("%-5s %-8s %-62s found %-28s expected %s\n", pass ? "PASS" : "FAIL", g_group.c_str(), name.c_str(), found.c_str(), expected.c_str());
+  std::fflush(stdout);
+}
+void info(const std::string& name, const std::string& found) {
+  g_rows.push_back({g_group, name, found, "-", "INFO"});
+  std::printf("INFO  %-8s %-62s %s\n", g_group.c_str(), name.c_str(), found.c_str());
+}
+std::string str(long v) { return std::to_string(v); }
+std::string pct(double v) { char b[32]; std::snprintf(b, sizeof b, "%.1f%%", v); return b; }
+
+bool readFileBytes(const fs::path& p, Bytes& out) {
+  FILE* f = std::fopen(p.string().c_str(), "rb");
+  if (!f) return false;
+  std::fseek(f, 0, SEEK_END); long n = std::ftell(f); std::fseek(f, 0, SEEK_SET);
+  out.resize(size_t(std::max(0L, n)));
+  size_t got = n > 0 ? std::fread(out.data(), 1, size_t(n), f) : 0;
+  std::fclose(f);
+  return got == out.size();
+}
+
+std::vector<fs::path> filesWithExt(const fs::path& root, std::initializer_list<const char*> exts) {
+  std::vector<fs::path> v;
+  std::error_code ec;
+  for (auto it = fs::recursive_directory_iterator(root, fs::directory_options::skip_permission_denied, ec); it != fs::recursive_directory_iterator(); it.increment(ec)) {
+    if (ec) break;
+    if (!it->is_regular_file()) continue;
+    const std::string e = lower(it->path().extension().string());
+    for (const char* x : exts) if (e == x) { v.push_back(it->path()); break; }
+  }
+  std::sort(v.begin(), v.end());
+  return v;
+}
+
+// ---------------------------------------------------------------- l0
+void groupL0(const fs::path& root, const char* argv0) {
+  fs::path exe = fs::path(argv0).parent_path() / "conformance";
+  if (!fs::exists(exe)) { row("conformance tool next to probe_verify", "missing", "present", false); return; }
+  const std::string cmd = "\"" + exe.string() + "\" --strict \"" + root.string() + "\" 2>&1";
+  FILE* p = popen(cmd.c_str(), "r");
+  if (!p) { row("run conformance", "popen failed", "ok", false); return; }
+  std::string out; char buf[4096];
+  while (size_t n = std::fread(buf, 1, sizeof buf, p)) out.append(buf, n);
+  const int rc = pclose(p);
+  std::istringstream is(out);
+  std::string line; int ok = 0, bad = 0;
+  while (std::getline(is, line)) {
+    size_t e = line.find_last_not_of(" \r\n");
+    if (e == std::string::npos) continue;
+    size_t s = line.find_last_of(' ', e);
+    const std::string last = line.substr(s == std::string::npos ? 0 : s + 1, e - (s == std::string::npos ? 0 : s));
+    if (last == "ok") ok++;
+    else if (last == "DIFFERS") { bad++; row(line.substr(0, std::min<size_t>(line.size(), 100)), "DIFFERS", "ok", false); }
+  }
+  row("conformance rows ok (spec 28 s2 counts, L1 .bld/BAT.DAT/SNR/cfg round trips)", str(ok) + " ok / " + str(bad) + " differ", "0 differ", bad == 0);
+  row("conformance --strict exit status", str(rc), "0", rc == 0);
+}
+
+// ---------------------------------------------------------------- l1
+// A save loads, re-saves, re-loads and re-saves again: the world survives (same grids, occupants, networks) and the second save
+// equals the first. Byte equality with the shipped file is reported as info (compression bytes may differ, spec 28 s3).
+void groupL1(const fs::path& root) {
+  int total = 0, stable = 0, sameWorld = 0, identical = 0;
+  for (const fs::path& p : filesWithExt(root, {".sc3", ".st3", ".sct"})) {
+    Bytes file;
+    if (!readFileBytes(p, file)) continue;
+    total++;
+    try {
+      World a = loadCity(file);
+      Bytes s1 = saveCity(a);
+      World b = loadCity(s1);
+      Bytes s2 = saveCity(b);
+      const bool same = a.W == b.W && a.H == b.H && a.alt == b.alt && a.water == b.water && a.zone == b.zone && a.flora == b.flora &&
+                        a.occupants.size() == b.occupants.size() && a.surface.size() == b.surface.size() && a.pipes.size() == b.pipes.size() &&
+                        a.subway.size() == b.subway.size();
+      sameWorld += same;
+      stable += s1 == s2;
+      identical += s1 == file;
+      if (!same || s1 != s2) row("round trip " + p.filename().string(), same ? "second save differs" : "world differs", "stable", false);
+    } catch (const std::exception& e) {
+      row("round trip " + p.filename().string(), std::string("throws: ") + e.what(), "loads", false);
+    }
+  }
+  row("saves whose world survives load - save - load", str(sameWorld) + " of " + str(total), "all", total > 0 && sameWorld == total);
+  row("saves whose second save equals the first", str(stable) + " of " + str(total), "all", total > 0 && stable == total);
+  info("saves byte-identical to the shipped file", str(identical) + " of " + str(total) + " (the rest should differ in compression bytes only; spec 28 s3)");
+}
+
+// ---------------------------------------------------------------- l2
+void groupL2(const fs::path& root) {
+  Session s;
+  if (!s.open(root)) { row("open install", "failed", "ok", false); return; }
+  const char* kindName[] = {"", "road", "rail", "power"};
+  const double floorPct[] = {0, 98.5, 98.5, 75.0};   // baseline: measured on the shipped cities (road 99.1-99.7, rail 99.2-99.9, power 78-86)
+  std::vector<std::pair<long, long>> agg(4);
+  int cities = 0;
+  for (const fs::path& path : findCities(root, {})) {
+    if (!s.load(path)) { row("load " + path.filename().string(), "failed", "loads", false); continue; }
+    cities++;
+    const TilingRuleSet& rules = s.game.city().config().tiling;
+    const World& w = s.game.world();
+    auto flags = flagsFromRuleSets(rules);
+    for (int kind = 1; kind <= 3; kind++) {
+      World copy = w;
+      WorldNetworkMap map(copy, flags);
+      std::vector<PathTile> drawn;
+      std::map<std::pair<int, int>, NetPiece> stored;
+      for (const auto& p : w.surface) {
+        if (!rules.inSet(netKindToTable(kind), p.pieceId)) continue;
+        PathTile t; t.x = p.x; t.z = p.z; drawn.push_back(t); stored[{p.x, p.z}] = p;
+      }
+      if (stored.empty()) continue;
+      Tiler(rules, map).run(kind, drawn);
+      std::map<std::pair<int, int>, NetPiece> now;
+      for (const auto& p : copy.surface) now[{p.x, p.z}] = p;
+      long same = 0;
+      for (const auto& kv : stored) {
+        auto it = now.find(kv.first);
+        if (it != now.end() && it->second.pieceId == kv.second.pieceId && it->second.rot == kv.second.rot) same++;
+      }
+      agg[size_t(kind)].first += same; agg[size_t(kind)].second += long(stored.size());
+      info(std::string("re-tile ") + kindName[kind] + " " + path.filename().string(), str(same) + " of " + str(long(stored.size())));
+    }
+  }
+  for (int kind = 1; kind <= 3; kind++) {
+    const double v = agg[size_t(kind)].second ? 100.0 * double(agg[size_t(kind)].first) / double(agg[size_t(kind)].second) : 0.0;
+    row(std::string("re-tile ") + kindName[kind] + " pieces identical to the stored ones, all cities (baseline floor)", pct(v), ">= " + pct(floorPct[kind]),
+        cities > 0 && v >= floorPct[kind]);
+  }
+}
+
+// ---------------------------------------------------------------- audio
+void groupAudio(const fs::path& root) {
+  int xa = 0, xaBad = 0, silent = 0;
+  for (const fs::path& p : filesWithExt(root, {".xa"})) {
+    Bytes data; PcmBuffer pcm;
+    xa++;
+    if (!readFileBytes(p, data) || !decodeXa(data, pcm, true)) { xaBad++; row("decode " + p.filename().string(), "fails", "decodes", false); continue; }
+    int peak = 0;
+    for (int16_t v : pcm.samples) peak = std::max(peak, std::abs(int(v)));
+    if (peak < 100) { silent++; row("decode " + p.filename().string(), "silent (peak " + str(peak) + ")", "audible", false); }
+  }
+  row(".xa files found (spec 28 s2)", str(xa), "814", xa == 814);
+  row(".xa files that decode and are not silent", str(xa - xaBad - silent) + " of " + str(xa), "all", xa > 0 && xaBad == 0 && silent == 0);
+  int fsc = 0, fscOk = 0;
+  for (const fs::path& p : filesWithExt(root, {".fsc"})) {
+    Bytes data; FscSchedule sch;
+    fsc++;
+    const bool ok = readFileBytes(p, data) && FscSchedule::parse(std::string(data.begin(), data.end()), sch) && sch.rows > 0 && sch.cols > 0 &&
+                    sch.cells.size() == size_t(sch.rows) * size_t(sch.cols);
+    fscOk += ok;
+    if (!ok) row("parse " + p.filename().string(), "fails", "parses", false);
+  }
+  row(".FSC schedules that parse", str(fscOk) + " of " + str(fsc), "all (25 shipped)", fsc > 0 && fscOk == fsc);
+}
+
+// ---------------------------------------------------------------- scn
+void groupScenarios(const fs::path& root) {
+  Session s;
+  if (!s.open(root)) { row("open install", "failed", "ok", false); return; }
+  int total = 0, loaded = 0, active = 0, ran = 0, goals = 0, endScreen = 0;
+  for (const fs::path& p : filesWithExt(root, {".snr"})) {
+    total++;
+    const std::string n = p.filename().string();
+    if (!s.game.loadScenarioFile(p)) { row("load scenario " + n, "fails", "loads", false); continue; }
+    loaded++;
+    s.frames(3);
+    if (s.game.scenarioActive()) active++; else row("scenario " + n + " active", "no", "yes", false);
+    s.game.setPaused(false);
+    s.frames(80, 200);
+    if (s.game.currentScreen() == Screen::InCity || s.game.currentScreen() == Screen::ScenarioEnd) ran++;
+    else row("scenario " + n + " runs 80 frames", "screen " + str(int(s.game.currentScreen())), "in city", false);
+    s.game.openWindow("goals"); s.frames(4);
+    if (s.game.windowOpen("goals")) goals++; else row("scenario " + n + " goals window", "does not open", "opens", false);
+    s.game.gotoScreen(Screen::ScenarioEnd); s.frames(4);
+    if (s.game.currentScreen() == Screen::ScenarioEnd) endScreen++;
+    s.game.gotoScreen(Screen::InCity); s.frames(2);
+  }
+  row("scenario files (spec 28 s2)", str(total), "13", total == 13);
+  row("scenarios that load through Game::loadScenarioFile", str(loaded) + " of " + str(total), "all", total > 0 && loaded == total);
+  row("scenarios reported active", str(active) + " of " + str(total), "all", total > 0 && active == total);
+  row("scenarios that run 80 frames of simulation", str(ran) + " of " + str(total), "all", total > 0 && ran == total);
+  row("goals window opens", str(goals) + " of " + str(total), "all", total > 0 && goals == total);
+  row("end screen draws", str(endScreen) + " of " + str(total), "all", total > 0 && endScreen == total);
+}
+
+// ---------------------------------------------------------------- l3
+int absDay(const m3k::cal::Date& d) { return d.year * 400 + d.month * 32 + d.day; }
+
+// Run each shipped city to the date of the last observed save of the same city and compare the population with the original's
+// (spec 28 s5.3: a deviation over 10 % calls for investigation). One run per city; the observed saves are named W5_<City>_sNN.sc3.
+void groupL3(const fs::path& root, const fs::path& ref) {
+  if (ref.empty() || !fs::is_directory(ref)) { info("observed saves", "no --ref directory given: l3 skipped"); return; }
+  std::map<std::string, fs::path> last;
+  for (const auto& e : fs::directory_iterator(ref)) {
+    const std::string n = e.path().filename().string();
+    if (n.compare(0, 3, "W5_") != 0 || lower(e.path().extension().string()) != ".sc3") continue;
+    const size_t us = n.rfind("_s");
+    if (us == std::string::npos || us < 3) continue;
+    const std::string city = n.substr(3, us - 3);
+    if (!last.count(city) || last[city].filename().string() < n) last[city] = e.path();
+  }
+  if (last.empty()) { info("observed saves", "none named W5_<City>_sNN.sc3 in " + ref.string()); return; }
+  for (const auto& kv : last) {
+    auto shipped = findCities(root, {kv.first});
+    if (shipped.empty()) { row("shipped city " + kv.first, "missing", "present", false); continue; }
+    Session theirs, ours;
+    if (!theirs.open(root) || !theirs.load(kv.second)) { row("load observed " + kv.second.filename().string(), "fails", "loads", false); continue; }
+    if (!ours.open(root) || !ours.load(shipped[0])) { row("load shipped " + kv.first, "fails", "loads", false); continue; }
+    const int target = absDay(theirs.game.city().clock.date());
+    const int observedPop = theirs.game.sim().population();
+    int days = 0;
+    while (absDay(ours.game.city().clock.date()) < target && days < 800) { ours.game.sim().tickDay(); days++; }
+    const int ourPop = ours.game.sim().population();
+    const double dev = observedPop > 0 ? 100.0 * std::fabs(double(ourPop) - observedPop) / observedPop : 100.0;
+    row("population after " + str(days) + " days, " + kv.first + " (ours " + str(ourPop) + ", original " + str(observedPop) + ")", pct(dev) + " off", "<= 10.0%", dev <= 10.0);
+  }
+}
+
+// ---------------------------------------------------------------- shots
+void groupShots(const fs::path& root, const fs::path& outDir) {
+  std::error_code ec;
+  fs::create_directories(outDir, ec);
+  std::string manifest = "file\tsize\tscene\n";
+  const std::pair<int, int> sizes[] = {{800, 600}, {1024, 768}, {1280, 800}};
+  auto cities = findCities(root, {"Berlin"});
+  int written = 0;
+  for (auto sz : sizes) {
+    const int W = sz.first, H = sz.second;
+    Game g; g.setPersistence(false); g.setIntroEnabled(false);
+    std::string err;
+    if (!g.init(root, err)) { row("render shots " + str(W) + "x" + str(H), "init failed: " + err, "ok", false); continue; }
+    Input in; in.mx = W / 2; in.my = H / 3;
+    auto frame = [&](int n) { for (int i = 0; i < n; i++) { g.frame(in, W, H, 16); in.pressed = in.released = in.rightPressed = false; in.text.clear(); for (auto& k : in.key) k = false; } };
+    auto shot = [&](const std::string& scene) {
+      std::string f = scene + "_" + str(W) + "x" + str(H) + ".png";
+      writePng((outDir / f).string(), W, H, g.screen());
+      manifest += f + "\t" + str(W) + "x" + str(H) + "\t" + scene + "\n";
+      written++;
+    };
+    frame(3);
+    shot("main_menu");
+    if (!cities.empty()) { g.requestFile(cities[0].string()); frame(10); }
+    shot("in_city");
+    const char* wins[] = {"budget", "ordinances", "neighbours", "deals", "advisors", "map", "graphs", "charts", "prefs", "layers", "engine", "goals"};
+    for (const char* w : wins) {
+      g.openWindow(w); frame(4);
+      shot(std::string("window_") + w);
+      in.key[K_ESC] = true; frame(3);
+      g.closeAllWindows();
+    }
+  }
+  std::FILE* f = std::fopen((outDir / "manifest.tsv").string().c_str(), "wb");
+  if (f) { std::fwrite(manifest.data(), 1, manifest.size(), f); std::fclose(f); }
+  info("screenshots written", str(written) + " PNG files + manifest.tsv in " + outDir.string());
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+  fs::path root, ref, shotsDir, report;
+  std::set<std::string> only;
+  int used = gameDirFromArgs(argc, argv, root);
+  for (int i = 1 + used; i < argc; i++) {
+    const std::string a = argv[i];
+    auto next = [&]() { return i + 1 < argc ? std::string(argv[++i]) : std::string(); };
+    if (a == "--ref") ref = next();
+    else if (a == "--report") report = next();
+    else if (a == "--shots") shotsDir = next();
+    else if (a == "--only") { std::istringstream is(next()); std::string g; while (std::getline(is, g, ',')) only.insert(g); }
+    else { std::fprintf(stderr, "unknown argument %s\n", a.c_str()); return 2; }
+  }
+  if (needInstall(root, "probe_verify GAME_DIR [--ref REFDIR] [--only l0,l1,l2,audio,scn,l3] [--report out.tsv] [--shots OUTDIR]")) return 2;
+  auto want = [&](const char* g) { return only.empty() || only.count(g); };
+  struct G { const char* name; std::function<void()> run; };
+  const G groups[] = {
+      {"l0", [&] { groupL0(root, argv[0]); }},
+      {"l1", [&] { groupL1(root); }},
+      {"l2", [&] { groupL2(root); }},
+      {"audio", [&] { groupAudio(root); }},
+      {"scn", [&] { groupScenarios(root); }},
+      {"l3", [&] { groupL3(root, ref); }},
+  };
+  for (const G& g : groups)
+    if (want(g.name)) { g_group = g.name; std::printf("== %s\n", g.name); g.run(); }
+  if (!shotsDir.empty() && want("shots")) { g_group = "shots"; std::printf("== shots\n"); groupShots(root, shotsDir); }
+  int pass = 0, fail = 0;
+  for (const Row& r : g_rows) { pass += r.status == "PASS"; fail += r.status == "FAIL"; }
+  std::printf("\n%d PASS, %d FAIL\n", pass, fail);
+  if (!report.empty()) {
+    std::string t = "group\tstatus\tcheck\tfound\texpected\n";
+    for (const Row& r : g_rows) t += r.group + "\t" + r.status + "\t" + r.name + "\t" + r.found + "\t" + r.expected + "\n";
+    if (std::FILE* f = std::fopen(report.string().c_str(), "wb")) { std::fwrite(t.data(), 1, t.size(), f); std::fclose(f); }
+  }
+  return fail ? 1 : 0;
+}

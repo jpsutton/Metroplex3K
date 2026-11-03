@@ -168,6 +168,7 @@ class Game {
   World& mutableWorld() { return world_; }
   void terrainChanged() { invalidateCityView(); }  // after editing world_.alt/water directly (tests/tools)
   bool windowOpen(const std::string& name) const;
+  void closeAllWindows();   // every window and prompt (tools: scripted screenshots, probes)
   const EngineOptions& engineOptions() const { return engineOpts_; }
   EngineOptions& mutableEngineOptions() { return engineOpts_; }
   // Timings of the most recent frame() call (microsecond resolution), for the host's frame log.
