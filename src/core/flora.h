@@ -45,7 +45,7 @@ struct TreeTool {
   static TreeTool fromIni(const IniFile& budgetLayer);
 };
 
-enum class TreeReason { Ok, OutOfMap, Water, Occupied, SameFlora, BadCell };
+enum class TreeReason { Ok, OutOfMap, Water, Occupied, SameFlora /* unused: kept for ABI of tests */, BadCell };
 
 struct TreePlan {
   bool legal = false;
@@ -60,7 +60,7 @@ using TileOccupiedFn = std::function<bool(int x, int z)>;
 // Rules (the original's are undecoded, spec 11 section 6 [OPEN]; these are a sensible choice):
 // tile in map; cell valid, non-zero, kind 1-4; all four corners above water surface (kind 1
 // coastal wetlands exempt); no occupant on the tile (callback, default: World::occupants footprint);
-// replacing a different flora cell is allowed, the same cell is refused. Cost = tool cost.
+// replacing flora (a different cell or the same one) is allowed and charged (spec 11 4.1). Cost = tool cost.
 TreePlan planTree(const World& w, int tx, int tz, uint8_t cell, const TreeTool& tool, const TileOccupiedFn& occupied = nullptr);
 // Writes the cell; returns false (no change) if the plan is illegal.
 bool commitTree(World& w, const TreePlan& p);

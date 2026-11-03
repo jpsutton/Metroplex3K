@@ -403,6 +403,8 @@ class Game {
   float ambLastU_ = 0, ambLastV_ = 0;
   Sim sim_;
   std::unique_ptr<Terraformer> terra_;
+  TreeTool treeTool_;   // [BuildingPlacementCosts] 300 (the flora price)
+  bool treeTileBlocked(int x, int z) const;   // networks, buildings and park pieces refuse the tree tool and block terraforming
   Lcg floraLcg_{99};
   bool simReady_ = false;
   bool paused_ = true;

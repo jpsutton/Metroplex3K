@@ -88,7 +88,7 @@ TreePlan planTree(const World& w, int tx, int tz, uint8_t cell, const TreeTool& 
     for (const Occupant& o : w.occupants)
       if (tx >= o.x && tx < o.x + std::max(o.sizeX, 1) && tz >= o.z && tz < o.z + std::max(o.sizeZ, 1)) { occ = true; break; }
   if (occ) { p.reason = TreeReason::Occupied; return p; }
-  if (w.flora[w.tIdx(tx, tz)] == cell) { p.reason = TreeReason::SameFlora; return p; }
+  // A tile that already holds flora is allowed: the tool adds or replaces trees and charges the same price (spec 11 4.1 [OBSERVED]).
   p.legal = true;
   p.cost = tool.cost;
   return p;

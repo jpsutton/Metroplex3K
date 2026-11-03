@@ -1112,8 +1112,11 @@ City::Quote Game::quoteTool(int x0, int z0, int x1, int z1) {
       if (!terra_) return q;
       TerraPlan p = toolArg_ == 1 ? terra_->planRaise(x1, z1) : toolArg_ == 2 ? terra_->planLower(x1, z1) : toolArg_ == 32 ? terra_->planWater(x1, z1)
                     : toolArg_ == 4 ? terra_->planLevel(x0, z0, x1, z1) : TerraPlan();
-      if (toolArg_ == 100) return q;
-      q.valid = p.legal; q.cost = terra_->totalCost(p);
+      if (toolArg_ == 100) {   // tree tool: cyan unless a network, building or park piece is there; water shows cyan but plants nothing
+        q.valid = !treeTileBlocked(x1, z1); q.cost = treeTool_.cost;
+        return q;
+      }
+      q.valid = p.legal; bool clearOk = true; q.cost = terra_->totalCost(p, &clearOk); if (!clearOk) q.valid = false;
       return q;
     }
     default: return City::Quote();
@@ -1161,7 +1164,7 @@ void Game::buildScene() {
       pv.x0 = x0; pv.z0 = z0; pv.x1 = x1; pv.z1 = z1;
       if (toolArg_ != 4 || !dragging_) { pv.x0 = pv.x1 = x1; pv.z0 = pv.z1 = z1; }
       q = quoteTool(x0, z0, x1, z1);
-      showCost = scr_ == Screen::InCity && toolArg_ != 100;
+      showCost = scr_ == Screen::InCity;
       scene_.previews.push_back(pv);
       break;
     case ToolKind::Query: {
@@ -1266,6 +1269,17 @@ void Game::executeTool(int x0, int z0, int x1, int z1) {
     }
     default: break;
   }
+}
+
+bool Game::treeTileBlocked(int x, int z) const {
+  if (!world_.inTiles(x, z)) return true;
+  if (!simReady_) {
+    for (const Occupant& o : world_.occupants)
+      if (x >= o.x && x < o.x + std::max(o.sizeX, 1) && z >= o.z && z < o.z + std::max(o.sizeZ, 1)) return true;
+    return false;
+  }
+  const City& c = sim_.city();
+  return c.occupantAt(x, z) >= 0 || c.isRoadTile(x, z) || c.isPowerLine(x, z);
 }
 
 void Game::updateHover(int tx, int tz, bool onTile) {
@@ -1463,15 +1477,16 @@ void Game::handleMap() {
     else if (tool_ != ToolKind::Unavailable) { dragging_ = true; ax_ = tx; az_ = tz; }
   }
   // Terrain tools: press-and-hold repeats raise/lower/water/trees; level applies on release.
-  if (onTile && dragging_ && in.down && tool_ == ToolKind::Terrain && toolArg_ != 4 && terra_) {
+  if (onTile && dragging_ && in.down && tool_ == ToolKind::Terrain && toolArg_ != 4 && (terra_ || toolArg_ == 100)) {
     static uint32_t tick = 0;
     if ((++tick & 3) == 0 || in.pressed) {
       if (toolArg_ == 100) {
         FloraRng rng = floraRngFromLcg(floraLcg_);
         uint8_t cell = randomTreeCell(3, rng);
-        TreeTool tt; TreePlan p = planTree(world_, tx, tz, cell, tt);
-        if (p.legal && fundsRef() >= p.cost) { commitTree(world_, p); fundsRef() -= p.cost; }
-      } else {
+        TreePlan p = planTree(world_, tx, tz, cell, treeTool_, [this](int x, int z) { return treeTileBlocked(x, z); });
+        if (p.legal && fundsRef() >= p.cost) { commitTree(world_, p); fundsRef() -= p.cost; invalidateCityView(); dirty_ = true; sound(17); }
+        else if (in.pressed) sound(p.legal ? 32 : 30);
+      } else if (terra_) {
         TerraPlan p = toolArg_ == 1 ? terra_->planRaise(tx, tz) : toolArg_ == 2 ? terra_->planLower(tx, tz) : terra_->planWater(tx, tz);
         auto r = terra_->apply(p, fundsRef());
         if (r.status != ApplyStatus::Applied && in.pressed) sound(r.status == ApplyStatus::NoMoney ? 32 : 30);

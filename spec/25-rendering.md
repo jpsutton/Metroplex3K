@@ -422,10 +422,23 @@ interpolated per pixel, then looked up in a 512-entry table):
 **Light and dark faces.** Both parts use palEdgeL or palEdgeD. The two front borders alternate:
 for one border the table is palEdgeL when the rotation r is even and palEdgeD when it is odd. For
 the other border it is the reverse. Light therefore comes from a fixed world direction, and the
-faces swap shade as the view rotates. [STATIC] At r = 0, the **x = W−1** border (the faces along
-constant x) uses **palEdgeL**, and the **z = H−1** border uses palEdgeD. In general the table index
-is (r & 1) for constant-x faces and (¬r & 1) for constant-z faces, with index 0 = palEdgeL and
-1 = palEdgeD. [STATIC]
+faces swap shade as the view rotates. [STATIC]
+
+**Observed rule (authoritative)** [OBSERVED]: measured on the original at all four rotations (zoom 0,
+Berlin, mean earth-face colour just above the slab's bottom edge):
+
+| Rotation | Lower-left face | Lower-right face | Light face (palEdgeL) |
+|---|---|---|---|
+| 0 | (113,103,95) | (95,90,85) | lower-left |
+| 1 | (95,91,86) | (112,102,94) | lower-right |
+| 2 | (112,102,95) | (96,91,85) | lower-left |
+| 3 | (92,86,84) | (112,102,94) | lower-right |
+
+So the **lower-left** face uses palEdgeL at even rotations and palEdgeD at odd rotations, and the
+lower-right face the opposite: the shading alternates with rotation parity on screen.
+Correction: an earlier revision gave a per-world-border formula ((r & 1) for constant-x faces,
+(¬r & 1) for constant-z faces). With the view transform that formula gives a view-fixed result,
+which contradicts this measurement; use the table.
 
 **Flush ("no water") segments** [STATIC]:
 * Each edge segment carries a flag, bit 0x40 of its edge-tile byte. The flag is supplied by the

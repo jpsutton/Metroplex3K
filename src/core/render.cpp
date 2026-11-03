@@ -1011,12 +1011,10 @@ void Renderer::drawEdgeFaces(const Camera& cam, const RenderOptions& opt, int y0
     }
   };
   // Border u = W (lower-left side) and v = H (lower-right side).
-  // Spec 25 6.5 [STATIC]: palette index (r & 1) for faces of constant world x, (~r & 1) for constant world z (0 = palEdgeL). The two
-  // borders in view are the u = W border (constant x at even rotations, constant z at odd) and the v = H border (the other one), so
-  // the lower-left face is palEdgeL and the lower-right face palEdgeD at every rotation.
-  (void)even;
-  const Image& tA = pal_.edgeL;
-  const Image& tB = pal_.edgeD;
+  // Observed at all four rotations (spec 25 6.5): the shading alternates with rotation parity on screen: the lower-left face is
+  // palEdgeL at even rotations and palEdgeD at odd ones, the lower-right face the opposite.
+  const Image& tA = even ? pal_.edgeL : pal_.edgeD;
+  const Image& tB = even ? pal_.edgeD : pal_.edgeL;
   for (int v = 0; v < w.H; v++) seg(w.W, v, w.W, v + 1, tA);
   for (int u = 0; u < w.W; u++) seg(u, w.H, u + 1, w.H, tB);
 }

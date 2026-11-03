@@ -83,7 +83,7 @@ int main() {
     TreePlan p = planTree(f, 2, 2, 0x32, tt);
     CHECK(p.legal && p.cost == 7);
     CHECK(commitTree(f, p) && f.flora[f.tIdx(2, 2)] == 0x32);
-    CHECK(!planTree(f, 2, 2, 0x32, tt).legal && planTree(f, 2, 2, 0x32, tt).reason == TreeReason::SameFlora);
+    CHECK(planTree(f, 2, 2, 0x32, tt).legal && planTree(f, 2, 2, 0x32, tt).cost == 7);   // flora tile: allowed and charged (spec 11 4.1)
     CHECK(planTree(f, 2, 2, 0x41, tt).legal);  // replace
     CHECK(planTree(f, 8, 2, 0x32, tt).reason == TreeReason::OutOfMap);
     CHECK(planTree(f, 3, 3, 0x00, tt).reason == TreeReason::BadCell);

@@ -112,7 +112,25 @@ void Game::attachWorld() {
   bindRenderWorld();
   terra_ = std::make_unique<Terraformer>(world_);
   IniFile bl;
-  if (haveData_ && data_.ini().load("SC3BudgetLayer.ini", bl)) terra_->setCosts(TerraformCosts::fromIni(bl));
+  treeTool_ = TreeTool();
+  if (haveData_ && data_.ini().load("SC3BudgetLayer.ini", bl)) { terra_->setCosts(TerraformCosts::fromIni(bl)); treeTool_ = TreeTool::fromIni(bl); }
+  // Clearing under raise / lower / level / water (spec 11 4.1 [OBSERVED]): only flora is cleared, at the Demolish price per tile
+  // [INFERRED unit price]; roads, other networks, park pieces and buildings make the operation illegal (nothing is bulldozed).
+  terra_->setClearing(
+      [this](const IRect& r) {
+        ClearQuote q;
+        for (int x = r.x0; x <= r.x1; x++)
+          for (int z = r.z0; z <= r.z1; z++) {
+            if (!world_.inTiles(x, z)) continue;
+            if (treeTileBlocked(x, z)) q.possible = false;
+            if (world_.flora[world_.tIdx(x, z)]) q.cost += simReady_ ? sim_.city().budget.specialCost(7) : 0;
+          }
+        return q;
+      },
+      [this](const IRect& r) {
+        for (int x = r.x0; x <= r.x1; x++)
+          for (int z = r.z0; z <= r.z1; z++) if (world_.inTiles(x, z)) world_.flora[world_.tIdx(x, z)] = 0;
+      });
   cam_.zoom = world_.view.valid ? std::max(0, std::min(4, world_.view.zoom)) : 2;
   cam_.rot = world_.view.valid ? (world_.view.rotation & 3) : 0;
   renderer_.centreOnWorld(cam_, world_.view.valid ? world_.view.centreX : world_.W / 2.f, world_.view.valid ? world_.view.centreZ : world_.H / 2.f);
