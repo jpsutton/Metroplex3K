@@ -189,6 +189,34 @@ void Skin::buildEngineButton() {
   const Image* help = get("help");
   if (!help || help->w < 4 || help->h < 8) return;
   Image im = *help;
+  // Recolour the green chrome to blue so the options button does not read as a twin of the help "?" next to it.
+  // Hue rotation on the green pixels only (shadows, highlights and the transparent corners keep their values).
+  for (uint32_t& px : im.px) {
+    const int al = int(px >> 24);
+    if (!al) continue;
+    const float r = float(px & 255) / 255.f, g = float((px >> 8) & 255) / 255.f, b = float((px >> 16) & 255) / 255.f;
+    const float mx = std::max(r, std::max(g, b)), mn = std::min(r, std::min(g, b)), d = mx - mn;
+    if (d < 0.12f || mx < 0.12f) continue;   // grey or nearly black
+    float h;
+    if (mx == r) h = std::fmod((g - b) / d, 6.f); else if (mx == g) h = (b - r) / d + 2.f; else h = (r - g) / d + 4.f;
+    h *= 60.f;
+    if (h < 0) h += 360.f;
+    if (h < 70.f || h > 170.f) continue;     // only the green range
+    h += 105.f;                               // green (~120) -> blue (~225)
+    if (h >= 360.f) h -= 360.f;
+    const float sat = d / mx, hh = h / 60.f, c = mx * sat, x = c * (1.f - std::fabs(std::fmod(hh, 2.f) - 1.f)), m = mx - c;
+    float nr, ng, nb;
+    switch (int(hh)) {
+      case 0: nr = c; ng = x; nb = 0; break;
+      case 1: nr = x; ng = c; nb = 0; break;
+      case 2: nr = 0; ng = c; nb = x; break;
+      case 3: nr = 0; ng = x; nb = c; break;
+      case 4: nr = x; ng = 0; nb = c; break;
+      default: nr = c; ng = 0; nb = x; break;
+    }
+    auto q = [&](float v) { return uint32_t(std::lround(std::clamp(v + m, 0.f, 1.f) * 255.f)); };
+    px = (px & 0xFF000000u) | q(nb) << 16 | q(ng) << 8 | q(nr);
+  }
   const int cells = 4, cw = im.w / cells, ch = im.h;
   auto at = [&](int x, int y) -> uint32_t& { return im.px[size_t(y) * im.w + x]; };
   for (int cell = 0; cell < cells; cell++) {
@@ -209,7 +237,14 @@ void Skin::buildEngineButton() {
       }
     if (samples.empty()) continue;
     std::sort(samples.begin(), samples.end());
-    const uint32_t face = samples[samples.size() / 2];
+    // Face colour: fixed blues (the sampled median picks up the grey rim highlights after the recolour).
+    uint32_t face = samples[samples.size() / 2];
+    switch (cell) {
+      case CELL_PRESSED: face = (face & 0xFF000000u) | uint32_t(rgba(30, 68, 150) & 0x00FFFFFFu); break;
+      case CELL_HOVER: face = (face & 0xFF000000u) | uint32_t(rgba(78, 128, 220) & 0x00FFFFFFu); break;
+      case CELL_DISABLED: break;
+      default: face = (face & 0xFF000000u) | uint32_t(rgba(44, 92, 196) & 0x00FFFFFFu); break;
+    }
     const int fr = int(face & 255), fg = int((face >> 8) & 255), fb = int((face >> 16) & 255);
     for (int y = cy - 13; y <= cy + 13; y++)
       for (int x = cx - 13; x <= cx + 13; x++) {
@@ -230,7 +265,7 @@ void Skin::buildEngineButton() {
     const bool pressed = cell == CELL_PRESSED;
     const double gx = cx + (pressed ? 1 : 0) + 0.5, gy = cy + (pressed ? 1 : 0) + 0.5;
     constexpr int kTeeth = 8, kSS = 4;
-    constexpr double kTip = 10.4, kRoot = 7.7, kHub = 2.7, kPi = 3.14159265358979323846;
+    constexpr double kTip = 8.8, kRoot = 6.5, kHub = 2.2, kPi = 3.14159265358979323846;
     // Gear radius at angle phi: flat tip over 34% of the tooth pitch, flanks over the next 20%, flat root between teeth.
     auto gearR = [&](double phi) {
       double u = std::fmod(phi / (2 * kPi) * kTeeth, 1.0);
