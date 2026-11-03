@@ -307,8 +307,30 @@ terrain operation and charges the matching `[SpecialCosts]` price [STATIC].
 | Level terrain | `0x825AD954` | – (none) | `LevelTerrain` |
 | Place water | `0x02E763C1` | 20 | `DecorativeWater` |
 
-Tree planting is a separate tool (menu item `0x4253EC3F`, sound 17); see section 6. Its rules were
-not decoded in this pass (`[OPEN]`).
+Tree planting is a separate tool (menu item `0x4253EC3F`, sound 17); see section 6.
+
+**Tree tool** [OBSERVED; cost STATIC]:
+* One click plants flora on one tile. The price is the Flora entry of
+  `SC3BudgetLayer.ini [BuildingPlacementCosts]` (`300=3`, §3 per tile); the hover label shows §3.
+* Legality, from the hover tint (cyan = allowed, red = refused):
+  * bare land and tiles that already hold flora are allowed. On a flora tile it adds or replaces
+    trees and charges §3;
+  * tiles occupied by networks, buildings or park pieces show red and are refused: nothing is
+    placed and nothing is charged;
+  * open water shows the cyan footprint, but a click plants nothing and charges nothing.
+* Which flora kind and density the tool plants is [OPEN]. Use the city's flora set (§6).
+
+**Clearing under terrain tools** (§4.2 step 3) [OBSERVED]:
+* The clearing service removes **flora only**. When raise, lower or level would move vertices
+  under trees, the trees on the affected tiles are removed and charged as part of the total. For
+  example, a raise on a shore tile with several trees was previewed at §40–55 and charged §70, with
+  the propagated neighbours' trees removed too. The per-tile clearing price was not separated from
+  the propagation cost; use `[SpecialCosts] Demolish` (5) per cleared flora tile [INFERRED].
+* Tiles holding **roads, other networks, park pieces or buildings** make the operation
+  **illegal**: red preview (the hover label still shows a price), and a click does nothing and
+  charges nothing. They are not bulldozed automatically.
+* Power lines and pipes were not tested separately [OPEN]. They are networks and are expected to
+  block the operation like roads.
 
 The terrain reads the four prices by index from the budget's `[SpecialCosts]` table. The table
 is indexed in this fixed order [STATIC]: 0 `LowDensityZone`, 1 `MedDensityZone`, 2
