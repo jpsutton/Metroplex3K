@@ -735,7 +735,9 @@ appear: `HOMELESS_SHELTER_PERCENT`, `EARTHQUAKE_PREP_BUILDINGS`, `TOURIST_PROMOT
   blue; the band text is not the large title font. Ordinance names use the small **regular**
   font. Costs are right-aligned.
 * **Cost column.** A row that is not enacted shows the cost it would have if enacted, in grey. At
-  population 0 that is −§1, not §0.
+  population 0 that is −§1, not §0. An enacted row shows its cost in **red** (bold) when it is
+  negative. The "Monthly Total" value is also red when it is negative, and black at §0. The check
+  boxes are square boxes with a dark border, in the system style, with the tick inside the box.
 * **Title bar.** About 30 px tall, with the title in the large title font.
 * **Header row.** "Ordinance" on the left and "Current Monthly Cost" on the right.
 * **List box.** From about (4, 62) to (372, 285) relative to the frame, with a vertical scroll bar
