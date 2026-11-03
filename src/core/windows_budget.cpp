@@ -562,8 +562,8 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
       const Rect hit{list.x + 4, y, bodyW - 8, h};
       E.spot("ord." + std::to_string(it.id), hit);
       ui.fill(cb, rgb(255, 255, 255));
-      ui.fill({cb.x, cb.y, cb.w, 1}, rgb(0x7B, 0x8A, 0xFF)); ui.fill({cb.x, cb.y, 1, cb.h}, rgb(0x7B, 0x8A, 0xFF));
-      ui.fill({cb.x, cb.y + cb.h - 1, cb.w, 1}, rgb(0xFF, 0xF3, 0xFF)); ui.fill({cb.x + cb.w - 1, cb.y, 1, cb.h}, rgb(0xFF, 0xF3, 0xFF));
+      ui.fill({cb.x, cb.y, cb.w, 1}, ink); ui.fill({cb.x, cb.y, 1, cb.h}, ink);   // bordered square
+      ui.fill({cb.x, cb.y + cb.h - 1, cb.w, 1}, ink); ui.fill({cb.x + cb.w - 1, cb.y, 1, cb.h}, ink);
       if (en) {
         for (int k = 0; k < 3; k++) ui.fill({cb.x + 2 + k, cb.y + 5 + k, 1, 2}, ink);
         for (int k = 0; k < 5; k++) ui.fill({cb.x + 4 + k, cb.y + 7 - k, 1, 2}, ink);
@@ -575,7 +575,9 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
       const int th = ui.fonts->get("system9").height();
       ui.text(list.x + 28, y + (h - th) / 2, it.name, "system9", ink);
       const int64_t val = en ? o.monthlyValue(it.id, money) : o.ifEnactedValue(it.id, money);   // not enacted: the cost it would have, in grey
-      rightText(ui, list.x + bodyW - 8, y + (h - th) / 2, E.money(val), "system9", en ? ink : grey);
+      // An enacted cost is red and bold (black at zero); a row not enacted shows its would-be cost in grey, small regular.
+      if (en) rightText(ui, list.x + bodyW - 8, y + (h - ui.fonts->get("main10").height()) / 2, E.money(val), "main10", val < 0 ? rgb(0xC0, 0, 0) : 0);
+      else rightText(ui, list.x + bodyW - 8, y + (h - th) / 2, E.money(val), "system9", grey);
     }
     y += h;
   }
@@ -584,7 +586,7 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   { // Footer: "Monthly Total" in the small bold font, right-aligned next to the cost column, value in black.
     const std::string lab = E.win(0x1C4, "Monthly Total"), val = E.money(net);
     const int fh = ui.fonts->get("main10").height();
-    rightText(ui, list.x + bodyW - 8, r.y + 296 + (22 - fh) / 2, val, "main10", 0);
+    rightText(ui, list.x + bodyW - 8, r.y + 296 + (22 - fh) / 2, val, "main10", net < 0 ? rgb(0xC0, 0, 0) : 0);   // negative total: red bold
     ui.text(list.x + bodyW - 8 - ui.textWidth(val, "main10") - 12 - ui.textWidth(lab, "main10"), r.y + 296 + (22 - fh) / 2, lab, "main10", ink);
   }
   const Rect done{r.x + r.w - 56, r.y + r.h - 40, 44, 34};
@@ -824,35 +826,7 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
     ui.text(int(cx) - ui.textWidth(cityName, "main9") / 2, int(cy) - 11, cityName, "main9", white);
     ui.text(int(cx) - ui.textWidth(pop, "main9") / 2, int(cy) + 10, pop, "main9", white);
   }
-  // Compass: disc and star image 000005E5:0D at (20, 50), letters N W E S drawn over it (measured on the original's
-  // Berlin screenshot, view rotation 0). With the view turned, the letters move round the disc with the map.
-  {
-    const int kx = r.x + 50, ky = r.y + 80;   // disc centre
-    const uint32_t lt = rgb(0xDE, 0xDF, 0xFF);
-    if (const Image* im = E.img(0x5E5, 0x0D)) ui.blit(*im, kx - 30, ky - 30);
-    else {
-      for (int y = ky - 30; y < ky + 30; y++)
-        for (int x = kx - 30; x < kx + 30; x++)
-          if ((x + 0.5 - kx) * (x + 0.5 - kx) + (y + 0.5 - ky) * (y + 0.5 - ky) <= 29.5 * 29.5) ui.fill({x, y, 1, 1}, rgb(0x7B, 0x92, 0xFF));
-      const uint32_t dk = rgb(0x18, 0x20, 0x6B);
-      for (int k = 0; k <= 12; k++) {
-        int w = std::max(0, 3 - k / 4);
-        ui.fill({kx - w, ky - k, w, 1}, dk); ui.fill({kx, ky - k, w, 1}, lt);
-        ui.fill({kx - k, ky - w, 1, w}, dk); ui.fill({kx - k, ky, 1, w}, lt);
-        ui.fill({kx + k, ky - w, 1, w}, lt); ui.fill({kx + k, ky, 1, w}, dk);
-        ui.fill({kx - w, ky + k, w, 1}, lt); ui.fill({kx, ky + k, w, 1}, dk);
-      }
-    }
-    // Letter centres relative to the disc centre at rotation 0 (twice the offset, to keep the half pixels).
-    struct L { uint32_t id; const char* fb; int dx2, dy2; };
-    const L letters[4] = {{0x11D, "N", 0, -37}, {0x11E, "W", -39, 1}, {0x11F, "E", 40, 0}, {0x120, "S", -2, 39}};
-    for (const L& l : letters) {
-      int dx2 = l.dx2, dy2 = l.dy2;
-      for (int k = 0; k < rot; k++) { int t = dx2; dx2 = dy2; dy2 = -t; }
-      std::string t = E.win(l.id, l.fb);
-      ui.text(kx + (dx2 - ui.textWidth(t, "title9")) / 2, ky + (dy2 - 19) / 2, t, "title9", lt);
-    }
-  }
+  wui::compassRose(ui, E, r.x + 50, r.y + 80, rot);
   ui.text(r.x + 242, r.y + 52, E.win(0x165, "Nat'l Pop"), "main9", lav);
   ui.text(r.x + 242, r.y + 66, groupDigits(int64_t(nationalPop)), "main9", lav);
   // Selected neighbour's name.

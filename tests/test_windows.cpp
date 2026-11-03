@@ -360,6 +360,8 @@ void testAdvisors() {
   CHECK(AdvisorWindow::portraitInstance(2, 3) == 0x203);
   CHECK(!AdvisorWindow::advisorName(h.E, kAdvSafety).empty());
   WindowResult r = h.click("petition.85");
+  CHECK(!r.has(Act::OpenPetitioner));   // a single click only selects the row
+  r = h.click("petition.85");           // the second click within half a second opens the page
   CHECK(r.has(Act::OpenPetitioner) && r.find(Act::OpenPetitioner)->id == 0x55);
   r = h.click("advisor.2");
   CHECK(r.has(Act::SelectAdvisor) && r.find(Act::SelectAdvisor)->id == kAdvBudget);

@@ -454,6 +454,9 @@ void Game::drawWindows(uint32_t dtMs) {
     } else if (viewData_.mode == int(ViewDataWindow::ModeCharts)) {
       cd = chartsFromPopulation(city.pop, uint32_t(std::max(0, city.population())));
     }
+    viewData_.map.viewRotation = cam_.rot;
+    viewData_.graphs.year = city.clock.date().year;
+    if (series.size() >= 16) series[3].live = std::max(0, city.population());   // City Size prints the live city size
     finish(viewData_.draw(ui_, E, src, series, cd), showMap_);
   }
   if (showLayers_) finish(layersDlg_.draw(ui_, E, ropt_.grid), showLayers_);

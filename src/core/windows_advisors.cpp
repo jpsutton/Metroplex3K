@@ -105,21 +105,28 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
       if (ui.clicked(pr)) { selected = id; tab = 0; topicSel = -1; scroll = 0; comboOpen = false; R.add(Act::SelectAdvisor, id); }
     }
     ui.text(r.x + 21, r.y + 146, E.win(0x63, "Petitioner Issues:"), "main9", kInk);
-    Rect lr{r.x + 19, r.y + 164, 359, 184};
+    // Petitioner Issues list (spec 09 6.5 [OBSERVED]): inset box (19,164)-(377,347), 14 px rows from text top y = 167, a drawn 4 px triangle at
+    // x ~ 23 and the title in the small bold font from x ~ 34. One click selects (blue bar from x ~ 28, white text); a double click opens the page.
+    frameNo++;
+    Rect lr{r.x + 19, r.y + 164, 358, 183};
     ui.fill(lr, kLav); sunkenLines(ui, lr);
     auto has = [&](uint32_t t, uint32_t i) { return E.has(t, i); };
     int k = 0;
     for (const PendingPetition* p : pm.presentable()) {
-      if (k >= lr.h / 14) break;
+      if (k >= (lr.h - 3) / 14) break;
       uint32_t tbl = pm.config.tableFor(PetitionText::Heading, p->id, has);
       std::string h = tbl ? E.text(tbl, p->id, hexName("Petition ", p->id)) : hexName("Petition ", p->id);
-      Rect row{lr.x + 1, lr.y + 14 * k, lr.w - 2, 14};
+      const int ty = lr.y + 3 + 14 * k;
+      Rect row{lr.x + 1, ty - 1, lr.w - 2, 14};
       E.spot("petition." + std::to_string(p->id), row);
-      bool hot = ui.hover(row);
-      if (hot) ui.fill(row, rgb(0x7B, 0x92, 0xFF));
-      bullet(ui, lr.x + 4, row.y + 3);
-      ui.text(lr.x + 15, row.y, ellipsize(ui, h, lr.w - 20), "main9", hot ? kWhite : kInk);
-      if (ui.clicked(row)) R.add(Act::OpenPetitioner, p->id);
+      const bool sel = petSel == int(p->id);
+      if (sel) ui.fill({r.x + 28, ty, lr.x + lr.w - 1 - (r.x + 28), 13}, rgb(0, 0, 255));
+      for (int c = 0; c < 4; c++) ui.fill({r.x + 23 + c, ty + 6 - (3 - c), 1, 2 * (3 - c) + 1}, sel ? kWhite : kInk);
+      ui.text(r.x + 34, ty, ellipsize(ui, h, lr.x + lr.w - (r.x + 34) - 6), "main10", sel ? kWhite : kInk);
+      if (ui.clicked(row)) {
+        if (sel && frameNo - petClickFrame <= 30) R.add(Act::OpenPetitioner, p->id);
+        petSel = int(p->id); petClickFrame = frameNo;
+      }
       k++;
     }
     if (ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }

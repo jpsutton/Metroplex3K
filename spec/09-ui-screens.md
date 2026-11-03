@@ -735,7 +735,9 @@ appear: `HOMELESS_SHELTER_PERCENT`, `EARTHQUAKE_PREP_BUILDINGS`, `TOURIST_PROMOT
   blue; the band text is not the large title font. Ordinance names use the small **regular**
   font. Costs are right-aligned.
 * **Cost column.** A row that is not enacted shows the cost it would have if enacted, in grey. At
-  population 0 that is −§1, not §0.
+  population 0 that is −§1, not §0. An enacted row shows its cost in **red** (bold) when it is
+  negative. The "Monthly Total" value is also red when it is negative, and black at §0. The check
+  boxes are square boxes with a dark border, in the system style, with the tick inside the box.
 * **Title bar.** About 30 px tall, with the title in the large title font.
 * **Header row.** "Ordinance" on the left and "Current Monthly Cost" on the right.
 * **List box.** From about (4, 62) to (372, 285) relative to the frame, with a vertical scroll bar
@@ -782,6 +784,18 @@ the building through the reward picker (§6.11); cancelling a deal removes its i
 building (`13-buildings-occupants.md`).
 
 ### 6.5 Advisor window ("Meet") [STATIC]
+
+`[OBSERVED]` Petitioner Issues list (window at (8, 8); coordinates relative to the window):
+
+* The list is an inset box (19, 164)–(377, 347).
+* There is one row per pending petition, at a 14 px pitch; the first row's text top is at y = 167.
+* Each row has a small solid right-pointing triangle, drawn about 4 px wide at x ≈ 23 and not a
+  font glyph, followed by the petition title in the small bold font (dark navy) from x ≈ 34.
+* A single click selects the row: a (0, 0, 255) bar 13 px tall from x ≈ 28 to the right edge, with
+  white text.
+* A double click opens that petitioner's page inside the same window frame. The page shows the
+  petition title as the window title, a back button (◄) next to the close box, the petitioner's
+  portrait and group, the text, and a "Dismiss Petitioner" toggle.
 
 Opened by the Meet button (message `724A82D0`) or a portrait in another window. Left: advisor
 portraits (`52DB60A0`, instance `0x0AMM` — advisor A 1–7, mood M 1–5 from
@@ -1405,6 +1419,161 @@ the control panel's Adjust & Review ▸ View Data button, or by Ctrl+M. It is 42
 
 The View City Layers dialog of §7.2, with its check boxes, is a different, smaller window. The
 neighbours map is not part of the View Data window.
+
+#### 7.1.1 View Data window geometry `[OBSERVED]`
+
+All coordinates are relative to the window's top-left and were measured at 800 × 600; the window is
+at a fixed position (§6.0).
+
+**Frame**
+
+* Title bar: (5, 5)–(…, 33), 29 px tall, in the large window-title font; the title text starts at x ≈ 8.
+* Close box: image `82B9B75B:8468F777` (96 × 25, four 24 × 25 cells), drawn at (392, 7).
+* Mode strip: a solid band (123, 146, 255) from x = 5 to 36 and y = 30 to 434. It joins the title bar
+  in an L shape.
+
+**Mode buttons**
+
+* Each button is 26 × 26 at x = 8. Data-map buttons are at y = 38 + 28·k for k = 0–9. The two
+  buttons after a two-slot gap are at y = 374 (Charts) and y = 402 (Graphs).
+* Each image is a 104 × 26 strip of four 26 × 26 cells, in the order disabled, normal,
+  pressed/on, highlighted (`08-ui-framework.md`). The active mode shows cell 2 and the others show
+  cell 1.
+* No tooltip text was captured for the icons; the title string names the mode.
+
+| Button | Image | Title string |
+|---|---|---|
+| Aura | `000005E5:01` | `111` |
+| Crime | `000005E5:04` | `112` |
+| Density | `000005E5:10` | `115` |
+| Power | `000005E5:11` | `113` |
+| Flammability | `000005E5:07` | `114` |
+| Land Value | `000005E5:0C` | `116` |
+| Pollution | `000005E5:0F` | `118` |
+| Traffic and Transportation | `000005E5:15` | `11A` |
+| Water Supply | `000005E5:17` | `11B` |
+| Zones | `000005E5:19` | `11C` |
+| Charts | `000005E5:03` | `183` |
+| Graphs | `000005E5:0B` | `184` |
+
+**Data-map mode**
+
+* Diamond: the whole city drawn as a square rotated 45°, with corners top (230, 47), left (42, 234),
+  right (417, 234) and bottom (230, 424). That is a 376 × 377 bounding box. It has a thin light
+  outline on its lower-right edges.
+* Compass: `000005E5:0D` (60 × 60) at (63, 60). It is shown on every map **except Pollution**.
+* "Use As Map" (`2D4`):
+  * a blue (123, 146, 255) L-shaped panel from (59, 341) to (154, 404), with the upper part 29 px
+    wide up to y = 370;
+  * a round toggle button, `42DEC7D2:02` (four 26 × 25 cells), at (62, 345);
+  * the label in the small bold font, dark blue, at about (71, 383).
+* Legend box: an inset frame from (287, 358) to (415, 433), with an 18 px diagonal cut at its
+  top-left corner. The left and top lines are (123, 138, 255); the right and bottom are highlight
+  (255, 243, 255).
+  * Gradient maps: a 32 × 66 gradient image at (292, 362). Aura matches `000005E5:09`
+    (blue → red), Density and Land Value approximately match `000005E5:0A` (blue → white). The
+    white → red gradient of Crime, Flammability, Pollution and Traffic was not found among the
+    decoded images [OPEN].
+  * Gradient labels: small bold font, grey-blue (about (123, 125, 181)), left edge x ≈ 331. The top
+    label's top is at y ≈ 361 and the bottom label's at y ≈ 419.
+
+  | Map | Top label | Bottom label |
+  |---|---|---|
+  | Aura | Good `127` | Bad `129` |
+  | Crime | Low `23E` | High `241`* |
+  | Density | High `124` | Low `133`* |
+  | Flammability | Low | High |
+  | Land Value | High | Low |
+  | Pollution | Clean `246` | Polluted `247` |
+  | Traffic | Light `248` | Heavy `249` |
+
+  (* The ids of the Low/High pairs `23E`–`245` were not mapped per map; they are listed in that
+  order in `SC3StringsWindow`.)
+* Two-state maps: two 32 × 33 colour swatches stacked at (292, 363)–(323, 429), the upper one with
+  the diagonal cut. The labels sit at the top (y ≈ 361) and the bottom (y ≈ 419):
+  * Power: Powered `12A`, yellow (214, 186, 49); Unpowered `23F`, dark navy (33, 32, 66).
+  * Water Supply: Watered `136`, blue (8, 0, 198); Unwatered `24A`, light grey (198, 199, 198).
+* Zones: two legend boxes, each with 17 px swatches (32 wide at x = 292) and labels at x ≈ 332.
+  * Top box (287, 54)–(416, 114): Residential `139` (57, 117, 33), Commercial `13A` (90, 93, 173),
+    Industrial `13B` (198, 158, 33).
+  * Bottom box, the standard legend box: Government `13C` (239, 93, 0), Seaports `2D5` (99, 162, 132),
+    Airports `2D6` (107, 166, 181), Landfill `2D7` (132, 105, 82).
+* Crime and Flammability: an extra inset box (287, 48)–(415, 90) at the top right. It holds a round
+  toggle (a radio-style ⊙ about 20 px across, centred at (308, 69)) and the two-line label
+  "Police Station Coverage" (`2A1`) or "Fire Station Coverage" (`2A5`), in the small bold font,
+  grey-blue, at x ≈ 323 with lines at y ≈ 58 and 72. While the toggle is on, coverage circles are
+  drawn in cyan on the map.
+* Pollution: there is no compass. In its place, at the top right, is "Show:" (`2D8`) at (288, 48),
+  followed by three radio buttons:
+  * the radios are about 10 px, centred at x = 293 and y = 66, 81 and 95;
+  * their labels are at x ≈ 301: Air Pollution `2A2`, Water Pollution `2A3`, Garbage Pollution
+    `2A4`;
+  * Air Pollution is the default.
+
+**Charts mode**
+
+* Chart box: inset frame (52, 50)–(408, 238).
+* Plot area: x = 144 to 408 and y = 52 to 205, which is 153 px tall, the height of the stripe tiles
+  `000005E5:31`/`33`/`35`. The y axis line is at x = 144 and the x axis at y = 205.
+* Y labels: right-aligned at x ≈ 138, in steps of 20 (0 to 140), with about 20.5 px between them.
+* X labels: 10 to 90 at y ≈ 215, with about 26 px per 10 years (10 at x ≈ 164).
+* Axis captions: "Resident Age" (`1E6`) centred at x ≈ 276, y ≈ 226. "Education Quotient"
+  (`1E4`) is written vertically (rotated 90°, two lines) at x ≈ 68–92, centred at y ≈ 170.
+* Workforce band (Education page): pink stripes over about age 22–67, i.e. x ≈ 197–315. "Workforce"
+  (`1E5`) is drawn in orange at the top of the band.
+* The plot background is horizontal stripes in alternating pinks. The band colour is about (231, 199, 198).
+* Bars (observed, Berlin): one bar per 5-year age bucket, 15 bars from age 0–4 to 70–74. Each bar
+  is 7 px wide in green (0, 211, 140) with a 1 px outline (173, 178, 222) on each side. The first
+  bar fill starts at x = 149 and the pitch is 13 px. Bars rise from the x axis at y = 205; their
+  height is about value × 142 / 140, since the 140 label sits at y ≈ 63. The axis scale is fixed at
+  0–140 [INFERRED from one city].
+* Captions: centred at x ≈ 225. The first line, y ≈ 249, is dark blue and bold (`1E2`). The second,
+  y ≈ 265, is orange and bold (`1E3`).
+* Page radios: about 10 px, centred at x ≈ 197, at y = 314, 334, 354, 374 and 394 (20 px pitch).
+  Their labels are at x ≈ 205 in the small bold font: Education `1DD`, Health `1E0`, Population
+  `1E1`, Electricity `1DE`, Garbage `1DF`.
+
+**Graphs mode**
+
+* Plot box: inset frame (44, 50)–(400, 238). Lines are drawn from x = 44 to 300, and labels go in
+  x = 300–400.
+* The background is horizontal stripes, alternating light lavender bands about 16 px tall. Tick
+  marks run along y ≈ 220. The current year is in grey, right-aligned at x ≈ 298, y ≈ 228.
+* Lines are 2 px wide. Each line ends at x = 300 and is joined by a short slanted connector to its
+  label. Labels are stacked at a 10 px pitch, sorted by the y of the line end and pushed apart so
+  that they do not overlap. They use the small regular font in the series colour.
+* Label text uses the templates `1D3` "Ind %s", `1D4` "Res %s", `1D5` "Unemployment %s", `1D6` "City
+  Size %s", `1D7` "Traffic", `1D8` "Crime %s", `1D9` "Pollution %s", `1DA` "Com %s", `1DB` "Value
+  %s", `1DC` "Power %s%%", `28C` "Nat'l Population %s", `28D` "Approval Rating %s%%", `28E`
+  "Health %s", `28F` "Education %s", and `283` "Funds".
+  * Observed on Berlin, 1-year range: values were shown for Health, Res, City Size, Education, Com,
+    Ind, Crime, Pollution and Unemployment.
+  * Nat'l Population, Approval Rating, Water %, Power %, Land Value, Funds and Traffic were shown
+    with **no** value.
+* Series colours (RGB, as seen on a 16-bit display):
+
+  | Series | Colour | Series | Colour |
+  |---|---|---|---|
+  | City Size | (49, 97, 33) | Residents | (0, 146, 0) |
+  | Commerce | (24, 65, 255) | Industry | (231, 162, 66) |
+  | Nat'l Pop | (165, 97, 165) | Traffic | (140, 113, 140) |
+  | Pollution | (99, 81, 49) | Unemployment | (0, 97, 165) |
+  | Crime | (198, 0, 66) | Power % | (255, 105, 0) |
+  | Water % | (123, 146, 222) | Health | (33, 195, 99) |
+  | Education | (173, 97, 82) | Land Value | (198, 146, 49) |
+  | Approval Rating | (222, 97, 165) | Funds | (115, 97, 165) |
+
+* Check boxes: about 12 px, in the system style, with the label in the small regular font 14 px to
+  the right. There are three columns with box left edges at x = 58, 178 and 298. Row tops are at
+  y = 253 + 24·r.
+  * Column 1: Approval Rating `1D2`, Residents, Land Value, City Size, Unemployment.
+  * Column 2: Pollution, Education, Traffic, Commerce, Nat'l Pop, Water %.
+  * Column 3: Crime, Health, Funds `283`, Industry, Power %.
+* Range radios: about 10 px, centred at x ≈ 322, at y = 387, 405 and 423, labelled 1 Year `170`,
+  10 Years `171` and 100 Years `172`.
+* Scale: the Berlin plot does not fit the per-series min..max rule exactly. Flat series sit at
+  different heights. Treat the scaling as [OPEN]; recommended: 0..max of each series over the
+  shown range.
 
 Opened by Review ▸ Map view (command `411164F1`, toggle) and by the bottom-bar "layer views"
 button (`225872FE:A7`). Title `029541F4:269` ("view city layers"). It shows a mini-map of the whole

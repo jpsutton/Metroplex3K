@@ -143,7 +143,8 @@ bool frame(Ui& ui, const WinEnv& E, Rect r, const std::string& title);
 bool button(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool enabled = true, bool toggled = false);
 bool check(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool& v);
 // Coloured-caption button (message box).
-bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool selected);   // radio button with caption; true when clicked
+void compassRose(Ui& ui, const WinEnv& E, int cx, int cy, int rotation);   // disc centre; letters follow the view rotation
+bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool selected, const char* font = "system9");   // radio button with caption; true when clicked
 bool colourButton(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, uint32_t col);
 std::vector<std::string> wrap(const Ui& ui, const std::string& s, int width, const char* font = "main10");
 // Draws wrapped text, returns the height used. Stops drawing past maxH (<=0: unlimited).
@@ -293,6 +294,8 @@ class AdvisorWindow {
   void open(uint32_t advisorId = 0) { selected = advisorId; tab = 0; topicSel = -1; scroll = 0; comboOpen = false; }
   WindowResult draw(Ui& ui, const WinEnv& E, AdvisorManager& am, const PetitionerManager& pm);
   bool comboOpen = false;     // "Discuss:" drop-down open
+  int petSel = -1;            // selected row of the Petitioner Issues list (petition id); a double click opens it
+  int frameNo = 0, petClickFrame = -1000;
   static std::string advisorName(const WinEnv& E, uint32_t advisorId);   // title, e.g. "City Planner"
   static std::string personName(const WinEnv& E, uint32_t advisorId);    // e.g. "Constance Lee"
   static int advisorIndex(uint32_t advisorId);                  // 1..7 (Utilities, Budget, Planner, Environment, Safety, Transport, Demographics)
@@ -549,7 +552,8 @@ class MapWindow {
   // Overlay for the main view: valid when a data map is selected and "show in city view" is on.
   const DataOverlay* activeOverlay() const { return overlayActive_ ? &overlay_ : nullptr; }
   // Body of the View Data window's data-map mode inside `area` (events: CenterView, DataMapOptionChanged).
-  WindowResult drawBody(Ui& ui, const WinEnv& E, Rect area, const MapSource& src);
+  int viewRotation = 0;                 // city view rotation: turns the compass letters
+  WindowResult drawBody(Ui& ui, const WinEnv& E, Rect win, const MapSource& src);
   void select(int index, const MapSource& src);
   static uint32_t legendColour(DataLayer l, int category, float t);   // ramp used by mini-map + legend
  private:
@@ -590,7 +594,10 @@ class CityLayersDialog {
 };
 
 // ---- 7.3 Graphs window -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-struct GraphSeries { uint32_t labelId = 0; std::string fallback; const Chart* chart = nullptr; int format = 0; };   // format 0 number, 1 percent, 2 funds (stored (funds+100000)/1000)
+// labelId/fallback name the series in the check-box grid; tmplId/tmplFb is the line label template ("Res %s", spec 09 7.3); showValue = the
+// original prints the current value for this series; live >= 0 replaces the chart's newest sample in that value. format 0 number, 1 percent.
+struct GraphSeries { uint32_t labelId = 0; std::string fallback; const Chart* chart = nullptr; int format = 0;
+                     uint32_t tmplId = 0; std::string tmplFb; bool showValue = false; int64_t live = -1; };
 // The 16 series of spec 09 7.3 in the order of the observed check-box grid (three columns of 5, 6 and 5), labels filled and
 // chart == nullptr (the caller sets the charts). Default checked: City Size, Funds, Power %.
 std::vector<GraphSeries> graphSeriesTemplate();
@@ -602,7 +609,8 @@ class GraphsWindow {
   // Values oldest -> newest for a chart in a range.
   static std::vector<uint32_t> samples(const Chart& c, int range);
   // Body of the View Data window's graphs mode inside `area` (spec 09 7.3).
-  WindowResult drawBody(Ui& ui, const WinEnv& E, Rect area, const std::vector<GraphSeries>& series);
+  int year = 0;                         // current year, printed under the plot
+  WindowResult drawBody(Ui& ui, const WinEnv& E, Rect win, const std::vector<GraphSeries>& series);
 };
 
 // ---- 7.4 Charts window ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -618,7 +626,7 @@ class ChartsWindow {
  public:
   int tab = 0;                          // 0 education 1 health 2 population 3 electricity 4 garbage
   // Body of the View Data window's charts mode inside `area` (spec 09 7.1 / 7.4).
-  WindowResult drawBody(Ui& ui, const WinEnv& E, Rect area, const ChartsData& d);
+  WindowResult drawBody(Ui& ui, const WinEnv& E, Rect win, const ChartsData& d);
 };
 
 // ---- 7.1 View Data: one window for the ten data maps, the charts and the graphs ----------------------------------

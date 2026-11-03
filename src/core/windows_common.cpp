@@ -86,7 +86,36 @@ bool check(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::
   return ui.checkbox(r, label, v);
 }
 
-bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool selected) {
+// Compass: disc and star image 000005E5:0D, letters N W E S drawn over it (measured on the original's Berlin screenshot, view
+// rotation 0). With the view turned, the letters move round the disc with the map. (kx, ky) = disc centre.
+void compassRose(Ui& ui, const WinEnv& E, int kx, int ky, int rot) {
+  const uint32_t lt = rgb(0xDE, 0xDF, 0xFF);
+    if (const Image* im = E.img(0x5E5, 0x0D)) ui.blit(*im, kx - 30, ky - 30);
+    else {
+      for (int y = ky - 30; y < ky + 30; y++)
+        for (int x = kx - 30; x < kx + 30; x++)
+          if ((x + 0.5 - kx) * (x + 0.5 - kx) + (y + 0.5 - ky) * (y + 0.5 - ky) <= 29.5 * 29.5) ui.fill({x, y, 1, 1}, rgb(0x7B, 0x92, 0xFF));
+      const uint32_t dk = rgb(0x18, 0x20, 0x6B);
+      for (int k = 0; k <= 12; k++) {
+        int w = std::max(0, 3 - k / 4);
+        ui.fill({kx - w, ky - k, w, 1}, dk); ui.fill({kx, ky - k, w, 1}, lt);
+        ui.fill({kx - k, ky - w, 1, w}, dk); ui.fill({kx - k, ky, 1, w}, lt);
+        ui.fill({kx + k, ky - w, 1, w}, lt); ui.fill({kx + k, ky, 1, w}, dk);
+        ui.fill({kx - w, ky + k, w, 1}, lt); ui.fill({kx, ky + k, w, 1}, dk);
+      }
+    }
+    // Letter centres relative to the disc centre at rotation 0 (twice the offset, to keep the half pixels).
+    struct L { uint32_t id; const char* fb; int dx2, dy2; };
+    const L letters[4] = {{0x11D, "N", 0, -37}, {0x11E, "W", -39, 1}, {0x11F, "E", 40, 0}, {0x120, "S", -2, 39}};
+    for (const L& l : letters) {
+      int dx2 = l.dx2, dy2 = l.dy2;
+      for (int k = 0; k < rot; k++) { int t = dx2; dx2 = dy2; dy2 = -t; }
+      std::string t = E.win(l.id, l.fb);
+      ui.text(kx + (dx2 - ui.textWidth(t, "title9")) / 2, ky + (dy2 - 19) / 2, t, "title9", lt);
+    }
+  }
+
+bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool selected, const char* font) {
   const Skin* sk = ui.skin;
   const Image* art = sk ? sk->get("radio") : nullptr;
   const uint32_t ink = rgb(0x31, 0x38, 0x84);
@@ -98,7 +127,7 @@ bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::
     ui.frame({r.x, by, box, box}, false);
     if (selected) ui.fill({r.x + 3, by + 3, box - 6, box - 6}, ink);
   }
-  ui.text(r.x + box + 4, r.y + (r.h - ui.fonts->get("system9").height()) / 2, label, "system9", ink);
+  ui.text(r.x + box + 3, r.y + (r.h - ui.fonts->get(font).height()) / 2, label, font, ink);
   return ui.clicked(r);
 }
 
