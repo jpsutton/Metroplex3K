@@ -1,3 +1,4 @@
+#include <cstring>
 #include "core/gamedata.h"
 #include "core/settings.h"
 
@@ -59,6 +60,56 @@ OccAttr parseOccAttr(const uint8_t* p, size_t n) {
   return a;
 }
 
+// Compile "Script[zoom,orient,offX,offY]:op,op,..." into a flat op list (spec/25-rendering.md section 7.1).
+static bool compileScript(const std::string& text, CsScript& out) {
+  if (std::sscanf(text.c_str(), "Script[%d,%d,%d,%d]", &out.zoom, &out.orient, &out.offX, &out.offY) != 4) return false;
+  const size_t colon = text.find("]:");
+  if (colon == std::string::npos) return false;
+  std::string body = text.substr(colon + 2);
+  size_t pos = 0;
+  while (pos <= body.size()) {
+    size_t comma = body.find(',', pos);
+    std::string tok = body.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+    pos = comma == std::string::npos ? body.size() + 1 : comma + 1;
+    size_t b = tok.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) continue;
+    tok = tok.substr(b);
+    size_t sp = tok.find(' ');
+    const std::string op = tok.substr(0, sp);
+    const char* args = sp == std::string::npos ? "" : tok.c_str() + sp + 1;
+    int n[4] = {0, 0, 0, 0};
+    int got = std::sscanf(args, "%d %d %d %d", &n[0], &n[1], &n[2], &n[3]);
+    auto push = [&](ScriptOp::Kind k, int a = 0, int bb = 0) { ScriptOp o; o.kind = k; o.a = a; o.b = bb; out.ops.push_back(o); return &out.ops.back(); };
+    if (op == "S" && got >= 3) {
+      for (int f = 0; f < n[1]; f++) { push(ScriptOp::Draw, n[0] + f); push(ScriptOp::Wait, n[2]); }
+    } else if (op == "P" && got >= 3) {
+      for (int f = 0; f < n[1]; f++) { push(ScriptOp::Draw, n[0] + f); push(ScriptOp::Wait, n[2]); }
+      for (int f = n[1] - 2; f >= 1; f--) { push(ScriptOp::Draw, n[0] + f); push(ScriptOp::Wait, n[2]); }
+    } else if ((op == "D" || op == "DA") && got >= 1) {
+      ScriptOp* o = push(op == "D" ? ScriptOp::Draw : ScriptOp::DrawAlpha, n[0]);
+      if (got >= 3) { o->dx = n[1]; o->dy = n[2]; o->hasOffset = true; }
+    } else if (op == "W" && got >= 1) push(ScriptOp::Wait, n[0]);
+    else if (op == "WR" && got >= 2) push(ScriptOp::WaitRandom, n[0], std::max(1, n[1]));
+    else if (op == "G" && got >= 1) push(ScriptOp::Goto, n[0]);
+    else if (op == "R" && got >= 1) push(ScriptOp::RandomSkip, std::max(1, n[0]));
+    else if (op == "L" && got >= 1) push(ScriptOp::Label, n[0]);
+    else if (op == "GL") push(ScriptOp::GotoWindowTarget);
+    else if ((op == "WL" || op == "WD") && sp != std::string::npos) {
+      int target = 0;
+      char digits[16] = {0};
+      if (std::sscanf(args, "%8s %d", digits, &target) == 2) {
+        ScriptOp* o = push(ScriptOp::DateWindow);
+        // mmddMMDD: digits 1-2 start month, 3-4 start day, 5-6 end month, 7-8 end day (leading zeros kept in the text)
+        int sm = 0, sd = 0, em = 0, ed = 0;
+        if (std::strlen(digits) == 8 && std::sscanf(digits, "%2d%2d%2d%2d", &sm, &sd, &em, &ed) == 4) { o->startMD = sm * 100 + sd; o->endMD = em * 100 + ed; }
+        o->target = target; o->absTarget = op == "WD";
+      }
+    }
+    // CB, CE, CD, END...: no runtime effect.
+  }
+  return !out.ops.empty();
+}
+
 CsAttrib parseCsAttrib(const uint8_t* p, size_t n) {
   CsAttrib c;
   if (n < 4 + 0x14 || p[0] != 'B' || p[1] != 'I' || p[2] != 'N' || p[3] != '\r') return c;
@@ -90,12 +141,23 @@ CsAttrib parseCsAttrib(const uint8_t* p, size_t n) {
       for (uint32_t i = 0; i < cnt && i < 256; i++) {
         uint32_t len = r.u32();
         if (len > r.remaining()) break;
-        std::string s = r.str(len);
         CsScript sc;
-        size_t at = s.find(",S ");
-        if (std::sscanf(s.c_str(), "Script[%d,%d,%d,%d]", &sc.zoom, &sc.orient, &sc.offX, &sc.offY) == 4 && at != std::string::npos &&
-            std::sscanf(s.c_str() + at, ",S %d %d %d", &sc.start, &sc.count, &sc.ms) == 3 && sc.count > 0)
-          c.scripts.push_back(sc);
+        if (compileScript(r.str(len), sc)) c.scripts.push_back(std::move(sc));
+      }
+      // Then the child sprites: u32 count, count x "Sprite[zoom,rot,childInst(hex),dx,dy,dz]".
+      if (r.remaining() >= 4) {
+        uint32_t ccnt = r.u32();
+        for (uint32_t i = 0; i < ccnt && i < 1024 && r.remaining() >= 4; i++) {
+          uint32_t len = r.u32();
+          if (len > r.remaining()) break;
+          std::string s = r.str(len);
+          CsChild ch;
+          unsigned child = 0;
+          if (std::sscanf(s.c_str(), "Sprite[%d,%d,%x,%d,%d,%d]", &ch.zoom, &ch.orient, &child, &ch.dx, &ch.dy, &ch.dz) == 6) {
+            ch.child = child;
+            c.children.push_back(ch);
+          }
+        }
       }
     }
   } catch (const FormatError&) {}

@@ -48,10 +48,28 @@ struct OccAttr {
 
 struct CsFrame { uint32_t category = 0, spriteId = 0; int8_t flags = 0; int16_t offX = 0, offY = 0; };
 
-// Scripted overlay animation trailing a composite-sprite record (seen on SprInstCLSID 0x7315, the
-// fusion plant): "Script[zoom,orient,offX,offY]:WR ..,S start count ms,G 1,END". The overlay plays
-// frames[start .. start+count-1] at (offX, offY) from the object's anchor, `ms` per frame.
-struct CsScript { int zoom = 0, orient = 0, offX = 0, offY = 0, start = 0, count = 0, ms = 0; };
+// One compiled entry of a sprite script (spec/25-rendering.md section 7.1). S and P expand to Draw + Wait pairs, so G n,
+// R n and WD n count compiled entries, not text tokens.
+struct ScriptOp {
+  enum Kind : uint8_t { Draw, DrawAlpha, Wait, WaitRandom, Goto, RandomSkip, Label, DateWindow, GotoWindowTarget };
+  Kind kind = Wait;
+  int a = 0, b = 0;            // Draw/DrawAlpha: frame, -; Wait: ms; WaitRandom: base, range; Goto: index; RandomSkip: n; Label: id
+  int dx = 0, dy = 0;          // Draw/DrawAlpha pixel offset (added to the script offset)
+  bool hasOffset = false;      // false: keep the previous D/DA offset of the script
+  int startMD = 0, endMD = 0;  // DateWindow: month*100+day, end day exclusive
+  int target = 0;              // DateWindow: label id (WL) or absolute index (WD)
+  bool absTarget = false;
+};
+
+// A sprite script: "Script[zoom,orient,offX,offY]:op,op,...,END". Every script of a (zoom, orient) slot runs at once.
+struct CsScript {
+  int zoom = 0, orient = 0, offX = 0, offY = 0;
+  std::vector<ScriptOp> ops;
+};
+
+// Child sprite attached to a parent record ("DSprites" block): another sprite-instance record (6301:6400:child) drawn
+// at the parent's world position + (dx, dy) in 1/256 tile and dz in world-height units, for one (zoom, orient) slot.
+struct CsChild { int zoom = 0, orient = 0; uint32_t child = 0; int dx = 0, dy = 0, dz = 0; };
 
 // Composite-sprite ("BIN") record (spec/25-rendering.md 4.2).
 struct CsAttrib {
@@ -60,10 +78,7 @@ struct CsAttrib {
   int zoomCount = 0, rotCount = 0, zoomSetCount = 0, animSetCount = 0, animFrames = 0;
   std::vector<CsFrame> frames;
   std::vector<CsScript> scripts;
-  const CsScript* script(int z, int o) const {
-    for (const auto& s : scripts) if (s.zoom == z && s.orient == o) return &s;
-    return nullptr;
-  }
+  std::vector<CsChild> children;
   // Frame for animation frame a, zoom slot z, orientation slot o.
   const CsFrame* frame(int a, int z, int o) const {
     size_t idx = size_t(a) * animSetCount + size_t(z) * zoomSetCount + o;

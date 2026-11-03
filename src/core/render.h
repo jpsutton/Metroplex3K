@@ -7,11 +7,13 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "core/font.h"
 #include "core/gamedata.h"
 #include "core/image.h"
 #include "core/frame_backend.h"
+#include "core/sprite_script.h"
 #include "core/world.h"
 
 namespace m3k {
@@ -104,7 +106,8 @@ struct RenderOptions {
   // Default draws the object's own image at every zoom. A clear bit draws the registered
   // substitute (setSubstituteSprite) by footprint size if one exists.
   uint16_t ownImageFlags = 0x1F0;
-  int animTick = 0;           // animation frame counter; < 0 disables overlay frames
+  int animTick = 0;           // animation clock in kAnimTickMs ticks (the script clock); < 0 disables building animations
+  int dateMD = 0;             // game date as month*100+day (date windows in sprite scripts)
   // View City Layers filters (spec 09 7.2). Null predicates show everything.
   std::function<bool(const NetPiece&)> showNet;        // surface network pieces (roads, rail, power lines)
   std::function<bool(const Occupant&)> showOccupant;   // buildings
@@ -308,6 +311,36 @@ class Renderer : public ICityRasterizer {
     int cAx = 0, cAy = 0, cL = 0, cT = 0, cW = 0, cH = 0;
   };
   uint64_t itemListKey(const Camera& cam, const RenderOptions& opt) const;
+  // Building animations (sprite scripts + child sprites, spec/25 section 7): candidates are the animatable buildings the
+  // draw-list build saw; up to maxAnimations_ visible ones run, the rest show their static first frame.
+  struct AnimCand {
+    uint64_t key = 0;
+    ResKey appearance;
+    const CsAttrib* cs = nullptr;
+    int orient = 0;
+    Item base;                     // origin-relative geometry of the building's own sprite
+    int tileX = 0, tileZ = 0, alt = 0;
+  };
+  struct AnimChild { const CsAttrib* cs = nullptr; CsChild geo; std::vector<const CsScript*> scripts; std::vector<ScriptRun> runs; AnimRng rng; int j = 0; };
+  struct AnimInst {
+    int64_t startMs = 0, lastUpdMs = 0;
+    int j = 0;
+    AnimRng rng;
+    int slotZoom = -1, slotRot = -1;
+    std::vector<const CsScript*> scripts;
+    std::vector<ScriptRun> runs;
+    std::vector<AnimChild> children;
+  };
+  bool resolveFrame(const CsAttrib* cs, int frame, bool alpha, const SpriteImage*& img, const Plane*& plane, bool& dbl);
+  void bindAnim(AnimInst& a, const AnimCand& c, int zoom, int rot, int dateMD);
+  void emitAnimOverlay(const AnimCand& c, const CsScript& sc, const ScriptRun& run, std::vector<Item>& out);
+  void emitChild(const AnimCand& c, const AnimChild& ch, const ScriptRun& run, const CsScript& sc, std::vector<Item>& out);
+  void buildAnimItems(const Camera& cam, const RenderOptions& opt, std::vector<Item>& out);
+  std::vector<AnimCand> animCands_, cachedAnim_;
+  std::unordered_map<uint64_t, AnimInst> anim_;
+  uint64_t animSelSig_ = 0;
+  AnimRng animSelRng_{12345};
+  int maxAnimations_ = 31;   // MaxAnimationsBase (10) + 3 * machine class (7)
   bool itemCacheOn_ = false, itemCacheValid_ = false;
   uint64_t itemCacheKey_ = 0, itemsGen_ = 0;
   std::vector<Item> cachedFlat_, cachedStatics_;

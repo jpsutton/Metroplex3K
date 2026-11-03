@@ -505,7 +505,7 @@ uint64_t Game::cityViewSignature() const {
   mixf(cam_.u); mixf(cam_.v);
   mix(uint64_t(cam_.zoom)); mix(uint64_t(cam_.rot));
   mix(uint64_t(W_)); mix(uint64_t(H_));
-  mix(uint64_t(animTick_)); mix(cityVisualSerial_); mix(uint64_t(shake_));
+  mix(uint64_t(animTick_)); mix(uint64_t(ropt_.dateMD)); mix(cityVisualSerial_); mix(uint64_t(shake_));
   mix(ropt_.grid); mix(ropt_.objects); mix(ropt_.terrain); mix(ropt_.underground);
   mix(ropt_.zonePaint); mix(ropt_.background); mix(ropt_.edgeFaces); mix(ropt_.constructionSites);
   mix(ropt_.flora); mix(ropt_.pipes); mix(ropt_.subways); mix(ropt_.automata);
@@ -608,6 +608,7 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
       while (animAccMs_ >= kAnimPeriodMs) { animAccMs_ -= kAnimPeriodMs; ++animTick_; }
     }
     ropt_.animTick = animTick_;
+    { const HudSnap& hs = hudNow(); ropt_.dateMD = hs.month * 100 + hs.day; }   // date windows of sprite scripts (holidays)
     const uint64_t sig = cityViewSignature();
     const bool haveCity = gpuTry ? cityGpuValid_ : cityFbValid_;
     const bool needRaster = !haveCity || (!gpuTry && cityFb_.size() != size_t(w) * h) || sig != lastCitySig_;

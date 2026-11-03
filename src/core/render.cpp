@@ -1063,9 +1063,175 @@ bool Renderer::siteOccupant(uint32_t state, int size, uint32_t agent, ResKey& ou
   return found.instance != 0;
 }
 
+// ---- building animations -----------------------------------------------------------------------------------------
+
+namespace {
+uint64_t mix64(uint64_t h, uint64_t v) { h = (h ^ v) * 0x9E3779B97F4A7C15ull; return h ^ (h >> 29); }
+int slotZoomOf(const CsAttrib* cs, int zoom) { return cs->zoomCount < 5 ? zoom - (5 - cs->zoomCount) : zoom; }
+}  // namespace
+
+void Renderer::bindAnim(AnimInst& a, const AnimCand& c, int zoom, int rot, int dateMD) {
+  a.slotZoom = zoom; a.slotRot = rot;
+  a.scripts.clear(); a.runs.clear(); a.children.clear();
+  const int sz = slotZoomOf(c.cs, zoom);
+  for (const CsScript& sc : c.cs->scripts) {
+    if (sc.zoom != sz || sc.orient != c.orient) continue;
+    a.scripts.push_back(&sc);
+    ScriptRun run;
+    initialScriptFrame(sc, run, a.rng, dateMD);
+    a.runs.push_back(run);
+  }
+  for (const CsChild& ch : c.cs->children) {
+    if (ch.zoom != sz || ch.orient != c.orient) continue;
+    const CsAttrib* ccs = data_ ? data_->csattrib(ResKey{c.appearance.type, 0x00006400u, ch.child}) : nullptr;
+    if (!ccs || !ccs->valid) continue;
+    AnimChild child;
+    child.cs = ccs; child.geo = ch;
+    child.rng = AnimRng(mix64(c.key, ch.child * 31u + uint32_t(ch.dx) + uint32_t(ch.dy) * 7u));
+    child.j = int(child.rng.next() & 3);
+    const int csz = slotZoomOf(ccs, zoom);
+    for (const CsScript& sc : ccs->scripts) {
+      if (sc.zoom != csz || sc.orient != c.orient) continue;
+      child.scripts.push_back(&sc);
+      ScriptRun run;
+      initialScriptFrame(sc, run, child.rng, dateMD);
+      child.runs.push_back(run);
+    }
+    if (!child.scripts.empty()) a.children.push_back(std::move(child));
+  }
+}
+
+
+// Resolve the image and optional alpha plane of a Draw/DrawAlpha frame. DrawAlpha pairs frame f with frame f+1; the
+// spec says f is the colour image, but the shipped smoke data has the mask on the even frame and the colour on the odd
+// one, so the pair is resolved by what each frame actually decodes to.
+bool Renderer::resolveFrame(const CsAttrib* cs, int frame, bool alpha, const SpriteImage*& img, const Plane*& plane, bool& dbl) {
+  img = nullptr; plane = nullptr; dbl = false;
+  if (frame < 0 || frame >= int(cs->frames.size())) return false;
+  const CsFrame& f = cs->frames[size_t(frame)];
+  if (!alpha) { img = getSprite(f.category, f.spriteId); dbl = f.flags == 2; return img != nullptr; }
+  if (frame + 1 >= int(cs->frames.size())) { img = getSprite(f.category, f.spriteId); dbl = f.flags == 2; return img != nullptr; }
+  const CsFrame& g = cs->frames[size_t(frame) + 1];
+  const SpriteImage* a = getSprite(f.category, f.spriteId);
+  const SpriteImage* b = getSprite(g.category, g.spriteId);
+  if (a && !b) { img = a; plane = getPlane(g.category, g.spriteId); dbl = f.flags == 2; }
+  else if (b && !a) { img = b; plane = getPlane(f.category, f.spriteId); dbl = g.flags == 2; }
+  else { img = a; dbl = f.flags == 2; }   // both images (or neither): plain draw of f
+  return img != nullptr;
+}
+
+void Renderer::emitAnimOverlay(const AnimCand& c, const CsScript& sc, const ScriptRun& run, std::vector<Item>& out) {
+  const SpriteImage* os = nullptr; const Plane* pl = nullptr; bool dbl = false;
+  if (!resolveFrame(c.cs, run.frame, run.alpha, os, pl, dbl)) return;
+  Item ov = c.base;
+  ov.spr = os; ov.dbl = dbl; ov.pickable = false; ov.groundLevel = false;
+  ov.plane = pl;
+  ov.ax = originX_ + c.base.ax + sc.offX + run.dx;
+  ov.ay = originY_ + c.base.ay + sc.offY + run.dy;
+  const int scale = ov.dbl ? 2 : 1;
+  if (ov.ax - os->L * scale > fbW_ || ov.ax - os->L * scale + os->img.w * scale < 0 || ov.ay - os->T * scale > fbH_ ||
+      ov.ay - os->T * scale + os->img.h * scale < 0) return;
+  out.push_back(ov);
+}
+
+void Renderer::emitChild(const AnimCand& c, const AnimChild& ch, const ScriptRun& run, const CsScript& sc, std::vector<Item>& out) {
+  const SpriteImage* os = nullptr; const Plane* pl = nullptr; bool dbl = false;
+  if (!resolveFrame(ch.cs, run.frame, run.alpha, os, pl, dbl)) return;
+  const World& w = *world_;
+  const int Wh = 4 << curZoom_, Hh = 2 << curZoom_, A = 1 << curZoom_;
+  const int32_t X = c.tileX * 256 + ch.geo.dx, Z = c.tileZ * 256 + ch.geo.dy, height = c.alt * 256 + ch.geo.dz;
+  int32_t a, b;
+  worldToViewSub(curRot_, w.W, w.H, X, Z, a, b);
+  a = std::max<int32_t>(0, a); b = std::max<int32_t>(0, b);
+  Item it;
+  it.spr = os; it.dbl = dbl; it.pickable = false;
+  it.plane = pl;
+  it.ax = originX_ + Wh * (b - a) / 256 + sc.offX + run.dx;
+  it.ay = originY_ + Hh * (a + b) / 256 - A * height / 256 + sc.offY + run.dy;
+  const int scale = it.dbl ? 2 : 1;
+  if (it.ax - os->L * scale > fbW_ || it.ax - os->L * scale + os->img.w * scale < 0 || it.ay - os->T * scale > fbH_ ||
+      it.ay - os->T * scale + os->img.h * scale < 0) return;
+  const int p = a >> 8, q = b >> 8;
+  it.key = 0x3FFFC000u - 0x4000u * uint32_t(p + q) - 0x100u * uint32_t(std::max(0, height / 1024));
+  it.boxA0 = p * 256; it.boxA1 = (p + 1) * 256; it.boxB0 = q * 256; it.boxB1 = (q + 1) * 256;
+  out.push_back(it);
+}
+
+void Renderer::buildAnimItems(const Camera& cam, const RenderOptions& opt, std::vector<Item>& out) {
+  if (animCands_.empty()) { anim_.clear(); animSelSig_ = 0; return; }
+  auto visible = [&](const AnimCand& c) {
+    const Item& b = c.base;
+    const int x0 = originX_ + b.cAx - b.cL, y0 = originY_ + b.cAy - b.cT;
+    return !(x0 > fbW_ || x0 + b.cW < 0 || y0 > fbH_ || y0 + b.cH < 0);
+  };
+  std::vector<const AnimCand*> vis;
+  for (const AnimCand& c : animCands_) if (visible(c)) vis.push_back(&c);
+  const bool animate = opt.animTick >= 0 && cam.zoom >= 2;
+  // Static first frames for buildings that are not animating (so holes in the base image stay filled).
+  auto staticFrames = [&](const AnimCand& c) {
+    AnimRng rng(c.key);
+    const int sz = slotZoomOf(c.cs, cam.zoom);
+    for (const CsScript& sc : c.cs->scripts) {
+      if (sc.zoom != sz || sc.orient != c.orient) continue;
+      ScriptRun run;
+      initialScriptFrame(sc, run, rng, opt.dateMD);
+      emitAnimOverlay(c, sc, run, out);
+    }
+  };
+  if (!animate) {
+    anim_.clear(); animSelSig_ = 0;
+    for (const AnimCand* c : vis) staticFrames(*c);
+    return;
+  }
+  const int64_t clockMs = int64_t(opt.animTick) * kAnimTickMs;
+  // Cap selection when the visible candidate set or the view slot changes (spec 7.3): keep running ones that are
+  // still visible, fill the free slots with uniformly random picks among the other candidates.
+  uint64_t sig = mix64(uint64_t(cam.zoom) * 4 + uint64_t(cam.rot & 3), vis.size());
+  for (const AnimCand* c : vis) sig = mix64(sig, c->key);
+  if (sig != animSelSig_) {
+    animSelSig_ = sig;
+    std::unordered_map<uint64_t, bool> visKey;
+    for (const AnimCand* c : vis) visKey[c->key] = true;
+    for (auto it = anim_.begin(); it != anim_.end();) it = visKey.count(it->first) ? std::next(it) : anim_.erase(it);
+    std::vector<const AnimCand*> pool;
+    for (const AnimCand* c : vis) if (!anim_.count(c->key)) pool.push_back(c);
+    if (pool.size() > 200) pool.resize(200);
+    while (int(anim_.size()) < maxAnimations_ && !pool.empty()) {
+      const size_t k = animSelRng_.next() % pool.size();
+      const AnimCand* c = pool[k];
+      pool[k] = pool.back(); pool.pop_back();
+      AnimInst a;
+      a.rng = AnimRng(c->key);
+      a.j = int(a.rng.next() & 3);
+      a.startMs = a.lastUpdMs = clockMs;
+      anim_[c->key] = std::move(a);
+    }
+  }
+  for (const AnimCand* c : vis) {
+    auto it = anim_.find(c->key);
+    if (it == anim_.end()) { staticFrames(*c); continue; }
+    AnimInst& a = it->second;
+    if (a.slotZoom != cam.zoom || a.slotRot != cam.rot) bindAnim(a, *c, cam.zoom, cam.rot, opt.dateMD);
+    // Advance in fixed 16 ms updates so the result does not depend on how often render() is called.
+    int steps = 0;
+    while (a.lastUpdMs + 16 <= clockMs && steps < 256) {
+      a.lastUpdMs += 16; steps++;
+      const int64_t now = (a.lastUpdMs - a.startMs) * 1000 / 1024;   // the original's microsecond clock >> 10
+      for (size_t i = 0; i < a.scripts.size(); i++) stepScript(*a.scripts[i], a.runs[i], now, a.j, a.rng, opt.dateMD);
+      for (AnimChild& ch : a.children)
+        for (size_t i = 0; i < ch.scripts.size(); i++) stepScript(*ch.scripts[i], ch.runs[i], now, ch.j, ch.rng, opt.dateMD);
+    }
+    if (steps == 256) a.lastUpdMs = clockMs;
+    for (size_t i = 0; i < a.scripts.size(); i++) emitAnimOverlay(*c, *a.scripts[i], a.runs[i], out);
+    for (const AnimChild& ch : a.children)
+      for (size_t i = 0; i < ch.scripts.size(); i++) emitChild(*c, ch, ch.runs[i], *ch.scripts[i], out);
+  }
+}
+
 void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const RenderScene* scene) {
   items_.clear();
   occ_.clear();
+  animCands_.clear();
   itemsCam_ = cam; itemsOpt_ = opt; itemsValid_ = true;
   if (!world_ || !opt.objects) return;
   const World& w = *world_;
@@ -1077,6 +1243,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
   // `flat` holds ground-level network pieces (spec 25 5.1: surface, drawn before every object); `statics` the
   // depth-sorted objects that moving sprites are merged into.
   std::vector<Item> statics, movers, flat, sceneStatics;
+  std::vector<AnimCand> animCands;
   auto cullOut = [&](int ax, int ay, int pw, int ph, int L, int T) {
     int x0 = ax - L, y0 = ay - T;
     return x0 > fbW_ || x0 + pw < 0 || y0 > fbH_ || y0 + ph < 0;
@@ -1127,59 +1294,29 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     Item it;
     setGeometry(it, x, zz, y, sizeX, sizeZ);
     int sc = dbl ? 2 : 1;
-    // Cull box is stored, not tested here: the list is cached across camera moves and culled per frame (overlay
-    // items copy it, so they are visible exactly when their base item is).
+    // Cull box is stored, not tested here: the list is cached across camera moves and culled per frame.
     it.cAx = it.ax; it.cAy = it.ay; it.cL = sp->L * sc; it.cT = sp->T * sc; it.cW = sp->img.w * sc; it.cH = sp->img.h * sc;
-    // Uncached builds cull right away (cheap rejection of the ~90% off-screen items); the cached list keeps them.
-    if (!itemCacheOn_ && cullOut(originX_ + it.ax, originY_ + it.ay, sp->img.w * sc, sp->img.h * sc, sp->L * sc, sp->T * sc)) return;
     it.spr = sp; it.dbl = dbl; it.groundLevel = ground;
     if (ground) { it.key += 1; it.pickKey -= 1; }
     it.cat = fr ? fr->category : 0; it.id = fr ? fr->spriteId : 0;
+    // Animatable building (sprite scripts and/or attached child sprites): recorded before the early cull, because
+    // the animation cap picks among the visible ones and the cached list is culled per frame.
+    if (cs && fr && (!cs->scripts.empty() || !cs->children.empty())) {
+      AnimCand ac;
+      ac.key = (uint64_t(uint32_t(x)) * 0x9E3779B1ull) ^ (uint64_t(uint32_t(zz)) << 32) ^ (uint64_t(appearance.instance) << 17) ^ (ground ? 1u : 0u);
+      ac.appearance = appearance; ac.cs = cs;
+      ac.orient = (cs->zoomSetCount >= 4 && cs->rotCount == 4) ? ((rot + cam.rot) & 3) : 0;
+      ac.base = it; ac.tileX = x; ac.tileZ = zz; ac.alt = y;
+      animCands.push_back(ac);
+    }
+    // Uncached builds cull right away (cheap rejection of the ~90% off-screen items); the cached list keeps them.
+    if (!itemCacheOn_ && cullOut(originX_ + it.ax, originY_ + it.ay, sp->img.w * sc, sp->img.h * sc, sp->L * sc, sp->T * sc)) return;
     // A ground-level piece whose image stays near the tile diamond (road, rail, slope; not pylons, ramps or
     // bridges) lies on the surface: nothing moving can be behind it, so it must never paint over a vehicle that
     // overhangs from the tile behind. The anchor is the diamond centre: flat images reach about one tile height
     // above it, tall pieces several.
     const bool surface = ground && sp->T <= 3 * Hh;
     (surface ? flat : statics).push_back(it);
-    if (!cs || !fr) return;
-    // Scripted overlays (SprInstCLSID 0x7315): the base image has holes that the scripts' frames fill, so draw the
-    // first frame even when animation is off. A record can hold several scripts for the same zoom and orientation
-    // (the water plant has two: the pond and the pad beside it), each at its own offset. These records do not use the
-    // a * AnimSetCount layout.
-    if (!cs->scripts.empty()) {
-      int slot = z;
-      if (cs->zoomCount < 5) slot = z - (5 - cs->zoomCount);
-      int orient = (cs->zoomSetCount >= 4 && cs->rotCount == 4) ? ((rot + cam.rot) & 3) : 0;
-      for (const CsScript& scr : cs->scripts) {
-        if (scr.zoom != slot || scr.orient != orient) continue;
-        // Each frame lasts scr.ms milliseconds (the animation tick is 67 ms, so counting ticks ran 200 ms frames 3x fast).
-        const int64_t elapsedMs = opt.animTick >= 0 ? int64_t(opt.animTick) * kAnimTickMs : 0;
-        int idx = scr.start + (scr.ms > 0 ? int((elapsedMs / scr.ms) % scr.count) : 0);
-        if (idx < 0 || idx >= int(cs->frames.size())) continue;
-        const CsFrame& of = cs->frames[size_t(idx)];
-        const SpriteImage* os = getSprite(of.category, of.spriteId);
-        if (!os) continue;
-        Item ov = it;
-        ov.spr = os; ov.dbl = of.flags == 2; ov.pickable = false;
-        ov.ax += scr.offX; ov.ay += scr.offY;
-        statics.push_back(ov);
-      }
-      return;
-    }
-    // Animated overlay frame (spec 7): extra frame drawn over the base image.
-    if (cs->animFrames > 1 && opt.animTick >= 0) {
-      int a = 1 + opt.animTick % (cs->animFrames - 1);
-      int orient = (cs->zoomSetCount >= 4 && cs->rotCount == 4) ? ((rot + cam.rot) & 3) : 0;
-      const CsFrame* of = frameFor(cs, a, orient);
-      if (of) {
-        const SpriteImage* os = getSprite(of->category, of->spriteId);
-        if (os) {
-          Item ov = it;
-          ov.spr = os; ov.dbl = of->flags == 2; ov.pickable = false;
-          statics.push_back(ov);
-        }
-      }
-    }
   };
 
   auto ownFlag = [&]() { return (opt.ownImageFlags & (0x10 << z)) != 0; };
@@ -1198,6 +1335,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
   if (itemHit) {
     flat = cachedFlat_;
     statics = cachedStatics_;
+    animCands = cachedAnim_;
   } else {
     const bool net = true;
     auto addNets = [&](const std::vector<NetPiece>& v, bool filter) {
@@ -1229,7 +1367,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     }
     std::stable_sort(flat.begin(), flat.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
     std::stable_sort(statics.begin(), statics.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
-    if (itemCacheOn_) { cachedFlat_ = flat; cachedStatics_ = statics; itemCacheKey_ = itemKey; itemCacheValid_ = true; }
+    if (itemCacheOn_) { cachedFlat_ = flat; cachedStatics_ = statics; cachedAnim_ = animCands; itemCacheKey_ = itemKey; itemCacheValid_ = true; }
   }
   // Cull against this frame's screen and move to screen coordinates (cached lists are origin-relative).
   {
@@ -1250,6 +1388,8 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     cullShift(flat);
     cullShift(statics);
   }
+  animCands_ = std::move(animCands);
+  buildAnimItems(cam, opt, sceneStatics);   // overlay frames and child sprites of animating buildings, merged below
 
   // Extra sprites from other modules.
   if (scene && opt.automata) {
@@ -1543,7 +1683,7 @@ uint64_t Renderer::itemListKey(const Camera& cam, const RenderOptions& opt) cons
   mix(uint64_t(w.W)); mix(uint64_t(w.H)); mix(itemsGen_);
   mix(uint64_t(opt.underground) | uint64_t(opt.constructionSites) << 1 | uint64_t(opt.flora) << 2 | uint64_t(opt.pipes) << 3 |
       uint64_t(opt.subways) << 4 | uint64_t(bool(opt.showNet)) << 5 | uint64_t(bool(opt.showOccupant)) << 6);
-  mix(opt.ownImageFlags); mix(uint64_t(uint32_t(opt.animTick))); mix(opt.filterEpoch);
+  mix(opt.ownImageFlags); mix(opt.filterEpoch);   // animation time is not part of the key: overlays are built per frame
   if (opt.underground) {
     if (opt.pipes) h = hashVec(h, w.pipes);
     if (opt.subways) h = hashVec(h, w.subway);
