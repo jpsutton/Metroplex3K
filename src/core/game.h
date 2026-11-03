@@ -140,6 +140,7 @@ class Game {
   void gotoScreen(Screen s) { scr_ = s; }
   void setView(int tx, int tz, int zoom);
   const Camera& camera() const { return cam_; }
+  const QueryInfo& queryInfo() const { return queryInfo_; }   // the last query (tests)
   bool panelsHidden() const { return panelsHidden_; }   // F12
   bool layersDialogOpen() const { return showLayers_; }
   // Host callback: receives snapshot bytes (raw RGBA8 w,h + pixels, no PNG encoder in core) and a suggested file name.

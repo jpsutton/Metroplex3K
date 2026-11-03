@@ -54,6 +54,10 @@ QueryClass classify(const std::map<uint32_t, uint32_t>& par, uint32_t t, bool& p
   return QueryClass::None;
 }
 
+// Rating 0..4 (spec 20 5.2: 4 = best) to the letter band of the panel (A..F = 5 bands, A first) [INFERRED mapping]; returns the
+// byte that falls in the middle of band `idx` (panel bands are band * 5 / 256).
+uint8_t gradeBand(int idx) { idx = std::max(0, std::min(4, idx)); return uint8_t((idx * 256 + 128) / 5); }
+
 int absMonth(const Clock& c) { cal::Date d = c.date(); return 12 * d.year + d.month; }
 
 // Minimal uncompressed PNG (same layout as tools/png.h; pixel byte 0 = R). Returns false on I/O failure.
@@ -282,8 +286,21 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
       for (const auto& j : c.police.jails()) { q.v[0] += j.inmates; q.v[1] += j.capacity; }
       if (q.v[1] > 0) q.band[0] = clamp8(int(255 - q.v[0] * 255 / q.v[1]));
       break;
+    case QueryClass::Hospital:   // systemwide figures of the population model (spec 20 5, 17 5)
+      q.v[0] = c.pop.hospitalBeds; q.v[1] = c.pop.patients; q.v[2] = c.pop.doctors;
+      q.band[0] = gradeBand(4 - c.pop.healthRating);
+      break;
+    case QueryClass::School:
+      q.v[0] = c.pop.schoolDesks; q.v[1] = c.pop.schoolAgePop; q.v[2] = c.pop.teachers;
+      q.band[0] = gradeBand(4 - c.pop.schoolRating);
+      break;
+    case QueryClass::College:
+      q.v[0] = c.pop.collegeDesks; q.v[1] = c.pop.collegeAgePop; q.v[2] = c.pop.professors;
+      q.band[0] = gradeBand(4 - c.pop.collegeRating);
+      break;
     case QueryClass::Landmark:
-      q.builtYear = w.info.foundingYear;   // build date is not stored per occupant [OPEN]
+      // Date Built: the occupant's own build date when it saves one, else the city's founding year [INFERRED].
+      q.builtYear = (o->hasDate && o->dateYear > 0) ? o->dateYear : w.info.foundingYear;
       q.historical = true;
       break;
     case QueryClass::Station:
