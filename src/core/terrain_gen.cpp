@@ -1,4 +1,5 @@
 #include "core/terrain_gen.h"
+#include "core/gamerng.h"
 
 #include <algorithm>
 #include <chrono>
@@ -291,10 +292,26 @@ void generateTerrain(World& world, int W, int H, const TerrainGenOptions& opt) {
   world.alt = z.g;
   world.water = z.w;
   world.seaVertex = z.m;
+  // The flora service plants each tree (spec 11 6.2 [STATIC], checked against an original new city: all 65,536 cells predicted).
+  // Tiles are visited x outer, z inner; the kind comes from the height above the sea; every Rand(2) comes from a generator that
+  // belongs to the flora service alone.
+  GameRng floraRng(opt.floraRng != 0xFFFFFFFFu ? opt.floraRng : opt.seed ^ 0x5A5A5A5Au);
   for (int x = 0; x < W; x++)
     for (int zz = 0; zz < H; zz++) {
-      int d = z.t[size_t(x) * C + zz];
-      if (d >= 32) { int lvl = d / 32; world.flora[world.tIdx(x, zz)] = uint8_t(0x30 + (lvl - 1)); }
+      const int d = z.t[size_t(x) * C + zz];
+      if (d < 32) continue;
+      const int level = d >> 5;                                    // 1..7, saved as is
+      const int h = (int(world.alt[world.vIdx(x, zz)]) - L) & 255;
+      const bool palm = h >= 1 && h <= 4, decid = h >= 3 && h <= 126, pine = h >= 8 && h <= 126;
+      int kind;
+      if (palm && decid) kind = floraRng.rand(2) != 0 ? 2 : 3;
+      else if (decid && pine) kind = floraRng.rand(2) == 0 ? 4 : 3;
+      else kind = palm ? 2 : 3;
+      bool wet = false;                                            // any corner with water >= altitude refuses the tile
+      for (int c = 0; c < 4; c++) { const size_t vi = world.vIdx(x + (c & 1), zz + (c >> 1)); wet |= world.water[vi] >= world.alt[vi]; }
+      if (wet) continue;
+      floraRng.rand(2);                                            // the instance alternative; consumed for every planted tree
+      world.flora[world.tIdx(x, zz)] = uint8_t(kind * 16 + level);
     }
 }
 

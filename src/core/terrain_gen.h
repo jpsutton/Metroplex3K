@@ -11,6 +11,9 @@ struct TerrainGenOptions {
   int difficulty = 1;  // 1 easy, 2 medium, 3 hard
   int hills = 64, water = 64, trees = 64;
   int flags = 0x24;    // New City dialog default: coast on last column + river across columns
+  // State of the flora service's private generator at the start of the apply step (spec 11 6.2). Only bit 16 of each new state
+  // matters, so the low 17 bits are enough to reproduce an original terrain; 0xFFFFFFFF = derive it from `seed`.
+  uint32_t floraRng = 0xFFFFFFFFu;
 };
 
 // Generates a W x H terrain into `w` (calls w.init). Fills altitude, water surface, sea level, flora.

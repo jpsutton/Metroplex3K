@@ -626,7 +626,53 @@ receives a density d for vertex (x, z) [STATIC]:
 * otherwise, if d ≥ 32, the city's flora service is asked to plant flora at fixed-point position
   (256·a, 256·b) with density level ⌊d / 32⌋ (1–7); d < 32 plants nothing.
 
-Density level n most likely selects the generic occupant 5 + n (IDs 6–12) [INFERRED].
+**Planting a tree (the flora service).** Planting at tile (x, z) with level n works as follows
+[STATIC; checked against an original new city, where all 65,536 flora cells were predicted]:
+
+1. If the tile already holds an occupant:
+   * if it is a replaceable flora occupant, keep its kind, remove it and go on (re-plant at the new
+     level);
+   * otherwise plant nothing.
+2. If no kind was kept, choose one by height. Let h = (altitude of vertex (x, z) − sea level) mod 256.
+   * h = 1–4 makes palm possible.
+   * h = 3–126 makes deciduous possible.
+   * h = 8–126 makes pine possible.
+   * Where palm and deciduous are both possible (h = 3–4), draw `Rand(2)`: non-zero gives palm, 0
+     gives deciduous.
+   * Otherwise, where deciduous and pine are both possible (h ≥ 8), draw `Rand(2)`: 0 gives pine,
+     non-zero gives deciduous.
+   * With no draw, the kind is palm if palm is possible, else deciduous. So h = 0, h = 5–7 and
+     h ≥ 127 all give deciduous.
+
+   | h | Kind |
+   |---|---|
+   | 0 | deciduous |
+   | 1–2 | palm |
+   | 3–4 | 50 % palm, 50 % deciduous |
+   | 5–7 | deciduous |
+   | 8–126 | 50 % deciduous, 50 % pine |
+
+   The chooser returns wetlands (kind 1) for a wet tile. Step 3 refuses every wet tile, so this
+   path never plants wetlands.
+3. Refuse if the tile is wet. A tile is wet when **any** of its four corners has water surface ≥
+   altitude. The test includes equality, so a dry-looking tile with one corner exactly at sea level
+   is refused. The kind draw of step 2 has already been made by this point.
+4. Create occupant `FFD30C03:80F48961`. Its instance comes from the (kind, n) table of
+   `10-save-format.md` §6.3; one more `Rand(2)` picks between the two alternatives. This draw is
+   made for every tree that is planted. Kind must be 0–4 and n must be 0–9, otherwise nothing is
+   planted.
+5. Set the occupant's height to the tile altitude and add it to the occupant collection.
+
+The saved flora byte is kind × 16 + n, with n = ⌊d / 32⌋ used as is (1–7), not reduced by one.
+
+The draws use a generator of `16-sim-utilities.md` §1.1 that belongs to the flora service alone.
+Nothing else draws from it. It is seeded from the millisecond tick count when the flora layer is
+set up [STATIC]. Every call is `Rand(2)`, so each result depends only on bit 16 of the new state,
+and the low 17 bits of the state evolve on their own.
+
+In the original new city with terrain seed 411355049, the low 17 bits at the start of the apply
+step were `0x0FF57`. The apply step visits tiles with x outer and z inner. A clone does not have to
+reproduce the original's draws [INFERRED].
 
 ### 6.3 Flora sets (regional variants)
 

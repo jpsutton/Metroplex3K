@@ -824,6 +824,7 @@ void Game::dayPostStep() {
 
 void Game::tickSim(uint32_t dtMs) {
   if (!simReady_ || paused_ || !world_.W) return;
+  if (city().hold()) return;   // a pause or modal latch is raised: the schedule would wait for it (spec 14 6.3 rule 6)
   if (!managersReady_) initManagers();
   const uint32_t factor = SpeedControl::kFactor[std::max(1, std::min(4, speed_))];
   // One simulated day: sim step, disaster day tick, month/anniversary hooks, scenario and weekly hooks.

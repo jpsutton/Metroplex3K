@@ -229,7 +229,7 @@ Each argument line is `kind value`. [DATA][STATIC]
 * Some literals are written with a decimal point (e.g. earthquake magnitudes `2.5`, a divisor `187.33`)
   [DATA]; they load as their integer part (§3.1). [STATIC]
 
-Shipped usage statistics (all 13 files, 116 scripts): 5 780 commands with delay 0; 9 271 arguments
+Shipped usage statistics (all 13 files, 116 scripts): 5 865 commands, of which 5 780 have delay 0 and 85 a non-zero delay; 9 271 arguments
 (7 836 kind 0, 1 435 kind 1). Every command that occurs in the shipped data always occurs with the
 same `argc` value. The `argc` column of §4.6 gives that value; for commands that do not occur in the
 shipped data it gives the number of arguments the command reads (missing arguments read as 0, see

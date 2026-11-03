@@ -38,5 +38,29 @@ int main() {
   { World t; TerrainGenOptions ot; ot.seed = 3; ot.water = 200; ot.flags = 0; generateTerrain(t, 128, 128, ot);
     size_t wet = 0; for (uint8_t a : t.alt) if (a <= t.seaLevel) wet++;
     CHECK(wet >= t.alt.size() * 9 / 10); }
+  {  // flora planting rules (spec 11 6.2): level = density >> 5 (1..7), kind by the height above the sea, wet tiles refused
+    World w; TerrainGenOptions o; o.seed = 4242; o.trees = 200; o.floraRng = 0x0FF57;
+    generateTerrain(w, 64, 64, o);
+    long planted = 0, bad = 0;
+    for (int x = 0; x < w.W; x++)
+      for (int z = 0; z < w.H; z++) {
+        const int c = w.flora[w.tIdx(x, z)];
+        if (!c) continue;
+        planted++;
+        const int kind = c >> 4, level = c & 15, h = (int(w.altAt(x, z)) - int(w.seaLevel)) & 255;
+        bool wet = false;
+        for (int i = 0; i < 4; i++) wet |= w.waterAt(x + (i & 1), z + (i >> 1)) >= w.altAt(x + (i & 1), z + (i >> 1));
+        if (level < 1 || level > 7 || kind < 2 || kind > 4 || wet) bad++;
+        if (h == 0 || (h >= 5 && h <= 7) || h >= 127) bad += kind != 3;             // no draw: deciduous
+        if (h >= 1 && h <= 2) bad += kind != 2;                                     // palm only
+        if (h >= 3 && h <= 4) bad += kind != 2 && kind != 3;                        // palm or deciduous
+        if (h >= 8 && h <= 126) bad += kind != 3 && kind != 4;                      // deciduous or pine
+      }
+    CHECK(planted > 0 && bad == 0);
+    World w2; generateTerrain(w2, 64, 64, o);
+    CHECK(w2.flora == w.flora);                                                     // same generator state, same trees
+    o.floraRng = 0x1234; World w3; generateTerrain(w3, 64, 64, o);
+    CHECK(w3.alt == w.alt && w3.water == w.water);                                  // the flora generator never touches the terrain
+  }
   TEST_MAIN_END();
 }

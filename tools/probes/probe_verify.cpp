@@ -6,7 +6,7 @@
 // Groups: l0 (runs the sibling `conformance --strict`), l1 (save round trips), l2 (network re-tiling vs stored pieces),
 // audio (every .xa decodes and is not silent, every .FSC parses), scn (every .SNR scenario loads and runs, the goals window and
 // the end screen open), l3 (480-day runs vs the observed saves in REFDIR, files named W5_<City>_sNN.sc3), terrain (REFDIR/QBS_*.sc3
-// with a sibling QBS_*.txt of key=value lines seed, difficulty, hills, water, trees, flags: our generator vs the original's terrain),
+// with a sibling QBS_*.txt of key=value lines seed, difficulty, hills, water, trees, flags, florarng (optional): our generator vs the original's terrain),
 // shots. `--skip P1,P2` ignores saves whose file name starts with a prefix (default W5_,Obs,T_,QBS_: files the player or the
 // observation runs added to the install).
 // Prints one PASS / FAIL / INFO row per check (name, found, expected) and exits 1 when any check FAILs. `--report` also writes the
@@ -81,7 +81,7 @@ std::vector<fs::path> filesWithExt(const fs::path& root, std::initializer_list<c
 void groupL0(const fs::path& root, const char* argv0) {
   fs::path exe = fs::path(argv0).parent_path() / "conformance";
   if (!fs::exists(exe)) { row("conformance tool next to probe_verify", "missing", "present", false); return; }
-  const std::string cmd = "\"" + exe.string() + "\" --strict \"" + root.string() + "\" 2>&1";
+  const std::string cmd = "\"" + exe.string() + "\" --strict --allow-extra \"" + root.string() + "\" 2>&1";
   FILE* p = popen(cmd.c_str(), "r");
   if (!p) { row("run conformance", "popen failed", "ok", false); return; }
   std::string out; char buf[4096];
@@ -255,6 +255,7 @@ void groupL3(const fs::path& root, const fs::path& ref) {
     if (!ours.open(root) || !ours.load(shipped[0])) { row("load shipped " + kv.first, "fails", "loads", false); continue; }
     const int target = absDay(theirs.game.city().clock.date());
     const int observedPop = theirs.game.sim().population();
+    ours.game.city().sched.isHold = nullptr;   // a loaded city is paused; tickDay would wait for the hold forever on this single thread
     int days = 0;
     while (absDay(ours.game.city().clock.date()) < target && days < 800) { ours.game.sim().tickDay(); days++; }
     const int ourPop = ours.game.sim().population();
@@ -285,6 +286,7 @@ void groupTerrain(const fs::path& ref) {
     o.seed = uint32_t(kv.count("seed") ? kv["seed"] : 1); o.difficulty = int(kv.count("difficulty") ? kv["difficulty"] : 1);
     o.hills = int(kv.count("hills") ? kv["hills"] : 64); o.water = int(kv.count("water") ? kv["water"] : 64);
     o.trees = int(kv.count("trees") ? kv["trees"] : 64); o.flags = int(kv.count("flags") ? kv["flags"] : 0x24);
+    if (kv.count("florarng")) o.floraRng = uint32_t(kv["florarng"]);   // low 17 bits of the flora generator at the start of the apply step
     World gen; generateTerrain(gen, ref0.W, ref0.H, o);
     long altSame = 0, watSame = 0;
     const size_t vn = std::min(gen.alt.size(), ref0.alt.size());

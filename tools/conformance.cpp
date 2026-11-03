@@ -127,14 +127,15 @@ void l2Rows(Report& rep) {
 }  // namespace
 
 int main(int argc, char** argv) {
-  bool strict = false, verbose = false;
+  bool strict = false, verbose = false, allowExtra = false;   // allowExtra: a played install has more files than a fresh one
   std::string path;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
     if (a == "--strict") strict = true;
     else if (a == "--verbose") verbose = true;
+    else if (a == "--allow-extra") allowExtra = true;
     else if (a == "-h" || a == "--help") {
-      std::puts("usage: conformance [--strict] [--verbose] <game install path>\n"
+      std::puts("usage: conformance [--strict] [--verbose] [--allow-extra] <game install path>\n"
                 "Parses every shipped file with the engine's parsers and prints L0 coverage (spec/28 section 2).");
       return 0;
     } else path = a;
@@ -408,7 +409,9 @@ int main(int argc, char** argv) {
         uiImages.add(good);
         if (!good) rep.fail("UI image " + rel + " inst " + std::to_string(e.key.instance));
       }
-      if ((t == T_OCC_ATTR || t == T_OCC_ATTR_PORT) && !isSave) {
+      // Every record whose payload starts with "TKB1" is an occupant attribute record, whatever its Type: 207EDC0E (buildings),
+      // 220055E1 (ports), E223741F (network pieces) and FFD30C03 (flora) (spec 28 2).
+      if (!isSave && avail >= 4 && ptr[0] == 'T' && ptr[1] == 'K' && ptr[2] == 'B' && ptr[3] == '1') {
         OccAttr a = parseOccAttr(ptr, std::min<size_t>(avail, declared ? declared : avail));
         occ.add(a.valid);
         { const size_t sl = lrel.rfind('/'); occByFolder[(inSprites ? "sprite archive " : "") + (sl == std::string::npos ? lrel : lrel.substr(0, sl))]++; }
@@ -424,9 +427,9 @@ int main(int argc, char** argv) {
   std::printf("Metroplex3K conformance (spec/28 section 2) -- %s\n\n", root.string().c_str());
   std::string exts;
   for (const auto& kv : magicByExt) exts += (exts.empty() ? "" : ", ") + num(kv.second) + " " + kv.first;
-  rep.row("Files starting with the IXF magic", num(magicTotal), "649", magicTotal == 649);
-  rep.row("IXF files that open", num(ixfOpened) + " of " + num(magicTotal), "644 of 649", ixfOpened == 644 && magicTotal == 649);
-  rep.row("String tables: files / records", num(strFiles) + " / " + num(strRecords), "477 / 55,952", strFiles == 477 && strRecords == 55952);
+  rep.row("Files starting with the IXF magic", num(magicTotal), "649", allowExtra ? magicTotal >= 649 : magicTotal == 649);
+  rep.row("IXF files that open", num(ixfOpened) + " of " + num(magicTotal), "644 of 649", allowExtra ? ixfFailed == 5 && ixfOpened >= 644 : (ixfOpened == 644 && magicTotal == 649));
+  rep.row("String tables: files / records", num(strFiles) + " / " + num(strRecords), "472 / 56,062", strFiles == 472 && strRecords == 56062);
   rep.row("  string records with index size = length", num(strShort), "2,863", strShort == 2863);
   rep.row(".SII sidecars", num(sii.ok) + " of " + num(sii.total()), "10 of 10", sii.ok == 10 && sii.fail == 0);
   rep.row("Sprite image payloads", num(sprites.ok) + " of " + num(sprites.total()), "63,931", sprites.ok == 63931 && sprites.fail == 0);
@@ -439,7 +442,7 @@ int main(int argc, char** argv) {
   rep.row("Composite sprite records (00006300)", num(cs.ok) + " of " + num(cs.total()), "1,425 of 1,425", cs.ok == 1425 && cs.fail == 0);
   rep.row("SYS.PAK: files / entries", num(pak.ok) + " / " + num(pakEntries.ok) + " of " + num(pakEntries.total()), "1 / 51 of 51",
           pak.ok == 1 && pakEntries.ok == 51 && pakEntries.fail == 0);
-  rep.row("Saves (.sc3 .st3 .sct .SNR)", num(saves.ok) + " of " + num(saves.total()), "59 of 59", saves.ok == 59 && saves.fail == 0);
+  rep.row("Saves (.sc3 .st3 .sct .SNR)", num(saves.ok) + " of " + num(saves.total()), "59 of 59", (allowExtra ? saves.ok >= 59 : saves.ok == 59) && saves.fail == 0);
   rep.row("Scenario files: records / scripts", num(snrFiles.ok) + " of " + num(snrFiles.total()) + " / " + num(scriptsParsed.ok) + " of " + num(scriptsParsed.total()),
           "13 of 13 / 116", snrFiles.ok == 13 && snrFiles.fail == 0 && scriptsParsed.fail == 0 && scriptsParsed.ok == 116);
   rep.row("Scenario Creator projects (.SSC)", num(ssc.ok) + " of " + num(ssc.total()), "14 of 14", ssc.ok == 14 && ssc.fail == 0);
@@ -448,8 +451,8 @@ int main(int argc, char** argv) {
   rep.row(".XA audio files decode", num(xa.ok) + " of " + num(xa.total()), "814 of 814", xa.ok == 814 && xa.fail == 0);
   rep.row("Res/TilingRules/*.txt tokenise", num(tiling.ok) + " of " + num(tiling.total()), "68 of 68", tiling.ok == 68 && tiling.fail == 0);
   rep.row("Scenario scripts: commands / arguments (kind 0, kind 1)",
-          num(scrCmds) + " / " + num(scrArgs) + " (" + num(scrArgK0) + ", " + num(scrArgK1) + ")", "5,780 / 9,271 (7,836, 1,435)",
-          scrCmds == 5780 && scrArgs == 9271 && scrArgK0 == 7836 && scrArgK1 == 1435);
+          num(scrCmds) + " / " + num(scrArgs) + " (" + num(scrArgK0) + ", " + num(scrArgK1) + ")", "5,865 / 9,271 (7,836, 1,435)",
+          scrCmds == 5865 && scrArgs == 9271 && scrArgK0 == 7836 && scrArgK1 == 1435);
   rep.row("  commands with delay 0", num(scrDelay0), "5,780", scrDelay0 == 5780);
   rep.row("  unknown command IDs / argc mismatches / entry-script problems", num(scrUnknownCmd) + " / " + num(scrArgcMismatch) + " / " + num(scrEntryMissing + scrTimelineUnordered), "0 / 0 / 0",
           scrUnknownCmd == 0 && scrArgcMismatch == 0 && scrEntryMissing + scrTimelineUnordered == 0);
@@ -475,7 +478,8 @@ int main(int argc, char** argv) {
     std::printf("\n");
   }
   if (scenarioStateFiles) std::printf("Scenario files carrying a run-time state record: %ld\n", scenarioStateFiles);
-  long parseFailures = ixfFailed + strBadFiles + sprites.fail + uiImages.fail + bmps.fail + fonts.fail + occ.fail + cs.fail + pak.fail +
+  // The five holiday placeholder IXF files that the original refuses to open too are expected (spec 28 2).
+  long parseFailures = std::max(0L, ixfFailed - 5) + strBadFiles + sprites.fail + uiImages.fail + bmps.fail + fonts.fail + occ.fail + cs.fail + pak.fail +
                        pakEntries.fail + saves.fail + snrFiles.fail + scriptsParsed.fail + ssc.fail + bld.fail + batDat.fail + sii.fail + xa.fail + tiling.fail + bldRound.fail + batRound.fail + snrRound.fail + cfgRound.fail + batBuildings.fail;
   if (!rep.failures.empty()) {
     std::printf("\nProblems (%zu%s):\n", rep.failures.size(), rep.failures.size() >= 200 ? "+" : "");

@@ -102,9 +102,10 @@ void Game::launchSimJob() {
 void Game::daySimStep(bool disasterActive) {
   // Sync item-7 gate before the day cascade (Q-BJ); emergency + scenario run as items 1 and 5 (Q-BI).
   city().sched.setDisasterActive(disasterActive);
-  if (!simWorker_.onWorker()) { sim_.tickDay(); return; }
-  // On the worker the schedule's hold wait must never block: it polls until the owner releases the hold, but the
-  // owner may be joining this very job (frame start, quit). A hold raised mid-job takes effect at the next launch.
+  // The schedule's hold wait (spec 14 6.3 rule 6) polls until the owner releases a pause or modal latch. It must never block the
+  // thread that owns the latch: not the frame thread (a modal window would freeze the UI) and not the worker (the owner may be
+  // joining this very job at frame start or quit). Callers do not start a day while the hold is raised; a hold raised mid-job takes
+  // effect at the next launch.
   auto savedHold = std::move(city().sched.isHold);
   city().sched.isHold = nullptr;
   sim_.tickDay();
