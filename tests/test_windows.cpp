@@ -597,46 +597,107 @@ void testQuery() {
   CHECK(flammabilityBandId(0) == 0x23 && flammabilityBandId(255) == 0x28);
   CHECK(pollutionBandId(0, 100) == 0x2A && pollutionBandId(100000, 100) == 0x2F);
 
-  QueryInfo bare; bare.elevation = 12; bare.landValue = 100;
-  auto L = buildQueryLines(h.E, bare);
-  CHECK(L.size() >= 3);
-  CHECK(L[0].label == "Elevation:" && L[0].value == "12 m");
-  bool dirt = false; for (auto& l : L) dirt |= l.value == "Dirt";
-  CHECK(dirt);
+  auto rowsOf = [&](const QueryInfo& q) {
+    std::vector<std::string> v;
+    for (auto& l : buildQueryLines(h.E, q)) v.push_back(l.label.empty() && l.value.empty() ? std::string("|") : l.label);
+    return v;
+  };
+  auto has = [&](const QueryInfo& q, const std::string& label, const std::string& value = "") {
+    for (auto& l : buildQueryLines(h.E, q)) if (l.label == label && (value.empty() || l.value == value)) return true;
+    return false;
+  };
 
-  QueryInfo water; water.waterDepth = 5; water.saltWater = true;
-  L = buildQueryLines(h.E, water);
-  CHECK(L[0].label == "Water depth:" && L[0].value == "5 m");
-  bool salt = false; for (auto& l : L) salt |= l.value == "Salt water";
-  CHECK(salt);
+  // Bare ground ("Dirt"): Elevation, Land Value, Zone Type, Powered, Watered, Crime, Flammability, Air, Water (one group).
+  QueryInfo bare; bare.elevation = 12; bare.landValue = 100; bare.crime = 0; bare.flammability = 10; bare.airPollution = 0; bare.waterPollution = 0;
+  CHECK(queryDisplayName(h.E, bare) == "Dirt");
+  auto R0 = rowsOf(bare);
+  CHECK(R0.size() == 9 && R0[0] == "Elevation:" && R0[1] == "Land Value:" && R0[2] == "Zone Type:" && R0[3] == "Powered:" && R0[4] == "Watered:" &&
+        R0[5] == "Crime:" && R0[6] == "Flammability:" && R0[7] == "Air Pollution:" && R0[8] == "Water Pollution:");
+  CHECK(has(bare, "Elevation:", "12 Meters"));
+  // "No" in Powered / Watered is red; "Yes" is not.
+  for (auto& l : buildQueryLines(h.E, bare)) if (l.label == "Powered:" || l.label == "Watered:") CHECK(l.value == "No" && l.red);
+  bare.powered = true; bare.watered = true;
+  for (auto& l : buildQueryLines(h.E, bare)) if (l.label == "Powered:" || l.label == "Watered:") CHECK(l.value == "Yes" && !l.red);
 
-  QueryInfo police; police.name = "Police Station"; police.cls = QueryClass::Police; police.v[0] = 1234; police.v[1] = 56;
-  police.band[0] = 250; police.status = QsConstruction | QsStrike; police.showPower = true; police.powered = true; police.fundingCost = 5000;
-  L = buildQueryLines(h.E, police);
-  bool crimes = false, rating = false, status = false, pow = false, fund = false;
-  for (auto& l : L) {
-    crimes |= l.label == "Crimes per month:" && l.value == "1,234";
-    rating |= l.label == "Rating:" && l.value == "Excellent";
-    status |= l.value.find("(under construction)") != std::string::npos && l.value.find("(workers on strike)") != std::string::npos;
-    pow |= l.label == "Power:" && l.value == "Powered";
-    fund |= l.label == "Funding cost:" && l.value.find("$5,000") != std::string::npos;
-  }
-  CHECK(crimes && rating && status && pow && fund);
+  // Water: Depth, Air Pollution, Water Pollution.
+  QueryInfo water; water.waterDepth = 5; water.saltWater = true; water.airPollution = 0; water.waterPollution = 0;
+  CHECK(queryDisplayName(h.E, water) == "Salt Water");
+  auto R1 = rowsOf(water);
+  CHECK(R1.size() == 3 && R1[0] == "Depth:" && R1[1] == "Air Pollution:" && R1[2] == "Water Pollution:");
+  water.saltWater = false; CHECK(queryDisplayName(h.E, water) == "Fresh Water");
 
-  // Every class builds without crashing and has at least one occupant line.
-  for (int c = int(QueryClass::Zoned); c <= int(QueryClass::NeighbourConn); c++) {
+  // Fire station: Elevation, Powered, Watered | class rows | Funding Cost (groups split by a blank row).
+  QueryInfo fire; fire.name = "Fire Station"; fire.cls = QueryClass::Fire; fire.v[0] = 3; fire.v[1] = 7; fire.band[0] = 250; fire.fundingCost = 5000;
+  fire.status = QsAbandoned;
+  auto R2 = rowsOf(fire);
+  CHECK(R2.size() == 9 && R2[0] == "Elevation:" && R2[3] == "|" && R2[4] == "Number of Fires:" && R2[6] == "Performance Rating:" && R2[7] == "|" && R2[8] == "Funding Cost:");
+  CHECK(has(fire, "Performance Rating:", "Excellent") && has(fire, "Funding Cost:", "$5,000/Month"));
+  CHECK(queryStatusLine(h.E, fire) == "(Abandoned)");
+
+  // Power plant: Age (Max), Elevation, Pollution Generated | capacities. Hazardous pollution is red.
+  QueryInfo pp; pp.name = "Coal"; pp.cls = QueryClass::PowerPlant; pp.v[0] = 400; pp.v[1] = 300; pp.v[2] = 12; pp.v[3] = 50; pp.pollution = 100000; pp.pollutionBaseline = 100;
+  auto R3 = rowsOf(pp);
+  CHECK(R3.size() >= 7 && R3[0] == "Age (Max):" && R3[1] == "Elevation:" && R3[2] == "Pollution Generated:" && R3[3] == "|" && R3[4] == "Maximum Power Capacity:");
+  CHECK(has(pp, "Age (Max):", "12 yrs. (50 yrs.)"));
+  for (auto& l : buildQueryLines(h.E, pp)) if (l.label == "Pollution Generated:") CHECK(l.value == "Hazardous" && l.red);
+
+  // Road: Elevation | Traffic. Rail: Elevation | Rail Usage. Power line: Elevation, Powered. Landfill zone: Elevation | Capacity, Usage.
+  QueryInfo road; road.name = "Road"; road.cls = QueryClass::Road; road.band[0] = 200;
+  auto R4 = rowsOf(road);
+  CHECK(R4.size() == 3 && R4[0] == "Elevation:" && R4[1] == "|" && R4[2] == "Traffic:");
+  QueryInfo rail; rail.name = "Railroad"; rail.cls = QueryClass::Rail;
+  CHECK(rowsOf(rail).back() == "Rail Usage:");
+  QueryInfo pl; pl.name = "Power Line"; pl.cls = QueryClass::PowerLine;
+  auto R5 = rowsOf(pl); CHECK(R5.size() == 2 && R5[1] == "Powered:");
+  QueryInfo lf; lf.name = "Landfill"; lf.cls = QueryClass::LandfillZone; lf.landfillCapacity = 1200; lf.landfillUsage = 40;
+  CHECK(has(lf, "Capacity Citywide:", "1,200 Tons") && has(lf, "Usage:", "40% Full"));
+  // Underground: a pipe shows only Watered; a subway tile only Rail Usage.
+  QueryInfo pipe; pipe.name = "Water Pipe"; pipe.cls = QueryClass::Pipe; pipe.underground = true;
+  auto R6 = rowsOf(pipe); CHECK(R6.size() == 1 && R6[0] == "Watered:");
+  QueryInfo sub; sub.name = "Subway"; sub.cls = QueryClass::Subway; sub.underground = true;
+  auto R7 = rowsOf(sub); CHECK(R7.size() == 1 && R7[0] == "Rail Usage:");
+  // Marina: Depth | Boats Berthed. Zoned building: no blank rows.
+  QueryInfo mar; mar.name = "Marina"; mar.cls = QueryClass::Marina; mar.waterDepth = 3;
+  auto R8 = rowsOf(mar); CHECK(R8.size() == 3 && R8[0] == "Depth:" && R8[1] == "|" && R8[2] == "Boats Berthed:");
+  QueryInfo zq; zq.name = "House"; zq.cls = QueryClass::Zoned; zq.zoneCode = 1; zq.landValue = 100; zq.crime = 80;
+  auto R9 = rowsOf(zq); CHECK(R9.size() == 9 && std::find(R9.begin(), R9.end(), "|") == R9.end());
+  CHECK(has(zq, "Zone Type:", "Light Residential"));
+  // Status suffixes read from the table with their leading blanks trimmed.
+  QueryInfo st; st.status = QsConstruction | QsStrike;
+  CHECK(queryStatusLine(h.E, st) == "(Under Construction) (Workers on Strike)");
+
+  // Every class builds without crashing and has rows.
+  for (int c = int(QueryClass::Zoned); c <= int(QueryClass::Pipe); c++) {
     QueryInfo q; q.name = "Thing"; q.cls = QueryClass(c); q.landValue = 150; q.crime = 80; q.flammability = 100; q.pollution = 50; q.airPollution = 100; q.waterPollution = 20; q.cleanupCost = 300;
-    CHECK(buildQueryLines(h.E, q).size() >= 4);
+    CHECK(!buildQueryLines(h.E, q).empty());
   }
-  // Window: historical toggle and close.
+
+  // Window: fixed sizes (no picture = 308 x 280), position (40, 40) first, then sticky; modal; OK and close box close it.
   QueryInfo z; z.name = "House"; z.cls = QueryClass::Zoned; z.growable = true; z.x = 7; z.z = 9; z.zoneCode = 1;
-  QueryWindow w; w.open({300, 200, 10, 10});
+  QueryWindow w;
   h.drawFn = [&] { return w.draw(h.ui, h.E, z); };
   h.frame(); CHECK(h.inked() > 1000);
+  CHECK(w.rect.x == 40 && w.rect.y == 40 && w.rect.w == 308 && w.rect.h == 280);
+  Rect okr; CHECK(h.find("ok", okr) && okr.x == 40 + 308 - 50 && okr.y == 40 + 280 - 37 && okr.w == 42 && okr.h == 32);
+  Rect hist; CHECK(h.find("historical", hist) && hist.x == 40 + 20);
   WindowResult r = h.click("historical");
   CHECK(r.has(Act::ToggleHistorical) && r.find(Act::ToggleHistorical)->a == 7 && r.find(Act::ToggleHistorical)->b == 9);
-  z.growable = false; h.frame(); CHECK(!h.has("historical"));
-  // Popup near the bottom-right corner is clamped on screen.
+  z.growable = false; h.frame(); CHECK(!h.has("historical") && !h.has("replace"));
+  z.canReplace = true; h.frame(); CHECK(h.has("replace"));
+  r = h.click("replace"); CHECK(r.has(Act::QueryReplace) && r.close);
+  r = h.click("ok"); CHECK(r.close);
+  // Drag by the title band; the next panel opens where this one was left.
+  {
+    Input press; press.mx = 40 + 100; press.my = 40 + 10; press.down = press.pressed = true;
+    h.frame(press);
+    Input move = press; move.pressed = false; move.mx += 200; move.my += 100;
+    h.frame(move);
+    Input up = move; up.down = false; up.released = true;
+    h.frame(up);
+    CHECK(w.rect.x == 240 && w.rect.y == 140);
+    w.begin(); h.frame(); CHECK(w.rect.x == 240 && w.rect.y == 140);
+  }
+  // Popup placed near the bottom-right corner is clamped on screen.
   w.open({h.W - 5, h.H - 5, 10, 10});
   h.frame();
   Rect cl; CHECK(h.find("close", cl) && cl.x + cl.w <= h.W && cl.y + cl.h <= h.H);

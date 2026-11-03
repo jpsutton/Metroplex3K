@@ -235,7 +235,7 @@ void Game::saveCurrent(const std::string& name, const fs::path& into) {
 }
 
 // Prompt texts observed on the original (2.0.949): Exit -> "Now leaving" (225872FE:55 / 015E410C:16, OK/Cancel),
-// then for a modified city "Do you want to save the game?" (015E410C:1F, Yes/No). New city asks 015E410C:12 and
+// then, with a city open, "Do you want to save the game?" (015E410C:1F, Yes/No/Cancel). New city asks 015E410C:12 and
 // Load asks 029541F4:250, both titled 015E410C:6 "Save", Yes/No. All show the warning icon.
 void Game::requestLeave(int action) {
   auto cap = [&](uint32_t t, uint32_t i, const char* d) { std::string s = str(t, i); return s.empty() ? std::string(d) : s; };
@@ -255,11 +255,12 @@ void Game::requestQuit() {
 }
 
 void Game::askSaveBeforeLeave(int action) {
-  if (!(dirty_ && world_.W && simReady_)) { doLeave(action); return; }
+  // The original has no modified flag (spec 09 3.3): whenever a city is open, leaving offers to save it.
+  if (!(world_.W && simReady_)) { doLeave(action); return; }
   auto cap = [&](uint32_t t, uint32_t i, const char* d) { std::string s = str(t, i); return s.empty() ? std::string(d) : s; };
-  if (action == kLeaveQuit) msgBox_.open(cap(0x225872FE, 0x55, "Exit"), cap(0x015E410C, 0x1F, "Do you want to save the game?"), 3);
-  else if (action == kLeaveNew) msgBox_.open(cap(0x015E410C, 6, "Save"), cap(0x015E410C, 0x12, "Do you want to save your city?"), 3);
-  else msgBox_.open(cap(0x015E410C, 6, "Save"), cap(0x029541F4, 0x250, "Would you like to save this city?"), 3);
+  if (action == kLeaveQuit) msgBox_.open(cap(0x225872FE, 0x55, "Exit"), cap(0x015E410C, 0x1F, "Do you want to save the game?"), 4);
+  else if (action == kLeaveNew) msgBox_.open(cap(0x015E410C, 6, "Save"), cap(0x015E410C, 0x12, "Do you want to save your city?"), 4);
+  else msgBox_.open(cap(0x015E410C, 6, "Save"), cap(0x029541F4, 0x250, "Would you like to save this city?"), 4);
   msgBoxPurpose_ = 2; msgBoxAction_ = action;
 }
 
@@ -292,6 +293,7 @@ void Game::onMessageResult(MsgButton b) {
     return;
   }
   if (purpose != 2) return;
+  if (b == MsgButton::Cancel) return;   // abort the Exit / New / Load
   if (b != MsgButton::Yes) { doLeave(action); return; }
   if (!currentFile_.empty()) { saveCurrent(currentFile_.stem().string(), currentFile_.parent_path()); if (!dirty_) doLeave(action); return; }   // failed save: stay
   // Unnamed city: Save As first; the action runs once it has saved (cancel drops it).

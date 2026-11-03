@@ -1,6 +1,6 @@
 // Headless UI screenshot. Optionally loads a city file, then runs scripted steps in order:
 //   hud_shot --game DIR [--city FILE] --size WxH [--do STEP]... out.png
-// STEP: move:X,Y | click:X,Y | hold:X,Y (press, 90 frames, release) | frames:N | shot:FILE | cmd:HEXID[,HEXARG] | win:NAME | dirty | fps
+// STEP: move:X,Y | click:X,Y | hold:X,Y (press, 90 frames, release) | frames:N | shot:FILE | ctrl:0|1 | cmd:HEXID[,HEXARG] | win:NAME | dirty | fps
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -39,6 +39,7 @@ int main(int argc, char** argv) {
       g.runCommand(uint32_t(std::strtoul(arg.c_str(), nullptr, 16)), a1); frame(3);
     }
     else if (op == "win") { g.openWindow(arg); frame(4); }
+    else if (op == "ctrl") in.modCtrl = arg == "1";   // ctrl:1 / ctrl:0 holds the Ctrl key (query tool)
     else if (op == "dirty") g.setDirty(true);
     else if (op == "fps") g.mutableEngineOptions().showFps = true;   // engine option: frame counter overlay
     else if (op == "shot") writePng(arg, W, H, g.screen());

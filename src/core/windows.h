@@ -95,6 +95,7 @@ enum class Act {
   TipChanged, ShowTipsChanged,
   TickerClick,        // a = x, b = z (also PlaySound 47; urgent items PlaySound 54)
   ToggleHistorical,   // a = x, b = z
+  QueryReplace,       // query panel Replace button: a = x, b = z (opens the Building Replacement dialog)
   SetTimeRange,       // a = 0 year / 1 decade / 2 century
   OpenBuildingList,   // Building Replacement Manager "Edit List": open the Building List Editor
   BatRemove,          // Building List Editor "Remove": id = BAT building ID
@@ -429,7 +430,8 @@ class BuildingPicker {
 enum class QueryClass {
   None, Zoned, Road, Rail, Subway, Station, PowerLine, PowerPlant, WaterBuilding, WaterTreatment, Garbage, Recycling,
   Police, Jail, Fire, Hospital, School, College, Library, Museum, Park, Zoo, Ballpark, Marina, Landmark, Airport,
-  Seaport, NeighbourConn
+  Seaport, NeighbourConn,
+  Flora, LandfillZone, Pipe   // trees; landfill zone tile; water pipe (underground view)
 };
 // Status flags of the occupant (suffix on the building name).
 enum QueryStatus : uint32_t {
@@ -461,8 +463,16 @@ struct QueryInfo {
   int64_t monthlyIncome = 0;
   int flavour[2] = {};               // flavour string ids (0 none)
   std::string neighbour;             // neighbour connection
+  bool watered = false;              // water-serviced tile ("Watered:")
+  bool underground = false;          // the panel was opened from the underground view
+  ResKey picture;                    // appearance of the picture (type 0 = none: bare ground, networks, ...)
+  int footprint = 1;                 // lot size, for the Building Replacement dialog
+  bool canReplace = false;           // the occupant is in [ReplaceableBuildings]: shows the Replace button
+  int flavourValue[2] = {};          // made-up number shown by each flavour line
+  int landfillCapacity = 0, landfillUsage = 0;   // landfill zone rows: tons citywide, percent full
 };
-struct QueryLine { std::string label, value; };
+// One panel row. label and value empty = the blank row between groups. red = the value is drawn red ("No", "Hazardous").
+struct QueryLine { std::string label, value; bool red = false; };
 // All popup lines in spec order: terrain -> zone/land value -> occupant -> common status.
 std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q);
 // Value band helpers (spec 09 6.12).
@@ -471,13 +481,28 @@ uint32_t crimeBandId(int c);          // 1C..21
 uint32_t flammabilityBandId(int f);   // 23..28
 uint32_t pollutionBandId(int p, int b);   // 2A..2F
 
+// Display name (bare ground: Dirt / Fresh Water / Salt Water) and the status line below it ("(Abandoned)").
+std::string queryDisplayName(const WinEnv& E, const QueryInfo& q);
+std::string queryStatusLine(const WinEnv& E, const QueryInfo& q);
+// Picture sprite of an appearance at the thumbnail zoom (spec 09 6.12.1).
+bool queryPictureSprite(GameData* gd, const ResKey& appearance, uint32_t& cat, uint32_t& id, bool& dbl);
+
+// The panel of spec 09 6.12.1: three fixed sizes (308x280 no picture, 308x395 picture on top, 423x320 tall picture on the
+// left), opens at (40, 40) the first time and then where the player left it, draggable by the title band, modal.
 class QueryWindow {
  public:
-  Rect rect{};                // popup position (set by open())
+  Rect rect{};                // last drawn rectangle
+  Rect pos{40, 40, 0, 0};     // remembered top-left (session)
   bool placed = false;
-  void open(Rect r) { rect = r; placed = true; }
-  // Events: ToggleHistorical (a,b = tile), Close.
+  void open(Rect r) { pos = r; rect = r; placed = true; scroll_ = 0; dragging_ = false; }
+  void begin() { scroll_ = 0; dragging_ = false; }   // a new panel: rows scrolled to the top
+  struct Layout { int type = 1, w = 308, h = 280, picW = 0, picH = 0; };
+  Layout layoutFor(const WinEnv& E, const QueryInfo& q) const;
+  // Events: ToggleHistorical (a,b = tile), QueryReplace (a,b = tile), Close.
   WindowResult draw(Ui& ui, const WinEnv& E, const QueryInfo& q);
+ private:
+  bool dragging_ = false;
+  int grabX_ = 0, grabY_ = 0, scroll_ = 0;
 };
 
 // ---- 7 Map / data-view window ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -366,7 +366,7 @@ void Game::initAudio() {
 
 void Game::setTool(ToolKind k, int a, uint32_t occ) {
   tool_ = k; toolArg_ = a; toolOcc_ = occ; dragging_ = false;
-  hoverValid_ = false; scene_.previews.clear(); scene_.cost.show = false; costShow_ = false;
+  hoverValid_ = false; scene_.previews.clear(); scene_.tints.clear(); scene_.cost.show = false; costShow_ = false;
   if (k == ToolKind::None) toolName_.clear();
   syncViewForTool(k, a, occ);
 }
@@ -521,6 +521,10 @@ uint64_t Game::cityViewSignature() const {
   for (const auto& sp : scene_.sprites) {
     mix(sp.category); mix(sp.spriteId); mix(uint32_t(sp.x)); mix(uint32_t(sp.z));
     mix(uint32_t(sp.height)); mix(sp.magnify2x); mix(sp.moving);
+  }
+  mix(uint64_t(scene_.tints.size()));
+  for (const auto& t : scene_.tints) {
+    mix(uint64_t(t.x0)); mix(uint64_t(t.z0)); mix(uint64_t(t.x1)); mix(uint64_t(t.z1)); mix(t.r); mix(t.g); mix(t.b); mix(t.ground);
   }
   mix(uint64_t(scene_.previews.size()));
   for (const auto& p : scene_.previews) {
@@ -694,6 +698,15 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
   }
   if (ubOpen) { ui_.in = ubLive; drawUserBuildings(); }
   drawMessage();
+  // Right-button drag scroll (original behaviour): a fixed anchor-point marker where the drag began, and the PAN arrow
+  // for the scroll direction at the pointer. Both are drawn here so they show whatever the OS cursor does.
+  panCursor_.clear();
+  if (panning_ && scr_ == Screen::InCity) {
+    panCursor_ = cursorName_;
+    drawSoftCursor("anchor point cursor", panAnchorX_, panAnchorY_);
+    drawSoftCursor(panCursor_, in.mx, in.my);
+    cursorName_ = "BLANK";
+  }
   // Over any HUD element, window or dialog the cursor is the normal desktop arrow; tool cursors only apply on the map.
   if ((uiHit_ && !panning_) || scr_ != Screen::InCity) cursorName_.clear();
   if (!ui_.tooltip.empty()) {
@@ -981,17 +994,17 @@ void Game::drawHud() {
     Rect eb{place.p3x + 38, place.p3y, 40, 39};
     if (eb.x + eb.w > navX - RciGeometry::imgW - 2) eb = {place.p3x + 18, place.p3y - 36, 40, 39};
     bool ec = false;
-    if (skin_.imageButtonCells(ui_, skin_.get("engine"), 4, eb, "Metroplex3K options", showEngine_, true, ec)) {
+    if (skin_.imageButtonCells(ui_, skin_.get("engine"), 4, eb, "M3K Options", false, true, ec)) {
       if (ec) openWindow("engine");
     } else {
-      if (ui_.hover(eb)) { uiHit_ = true; ui_.tooltip = "Metroplex3K options"; }
-      if (ui_.button({eb.x + 2, eb.y + 8, 36, 22}, "M3K", true, showEngine_)) openWindow("engine");
+      if (ui_.hover(eb)) { uiHit_ = true; ui_.tooltip = "M3K Options"; }
+      if (ui_.button({eb.x + 2, eb.y + 8, 36, 22}, "M3K", true, false)) openWindow("engine");
     }
   } else {
     if (ui_.button({fbx, H_ - bh + 3, 44, 24}, paused_ ? "Run" : "Pause")) { setPaused(!paused_); sound(paused_ ? 24 : 23); }
     for (int i = 1; i <= 4; i++)
       if (ui_.button({fbx + 48 + (i - 1) * 26, H_ - bh + 3, 24, 24}, std::to_string(i), true, !paused_ && speed_ == i)) setSpeedBtn(i);
-    if (ui_.button({fbx + 156, H_ - bh + 3, 44, 24}, "M3K", true, showEngine_)) openWindow("engine");
+    if (ui_.button({fbx + 156, H_ - bh + 3, 44, 24}, "M3K", true, false)) openWindow("engine");
   }
 
   drawNavigator(bh);
@@ -1092,7 +1105,7 @@ City::Quote Game::quoteTool(int x0, int z0, int x1, int z1) {
 }
 
 void Game::buildScene() {
-  scene_.previews.clear();
+  scene_.previews.clear(); scene_.tints.clear();
   scene_.cost.show = false;
   if (!hoverValid_ || uiHit_) return;
   if (tool_ == ToolKind::None || tool_ == ToolKind::Unavailable) return;
@@ -1135,7 +1148,20 @@ void Game::buildScene() {
       showCost = scr_ == Screen::InCity && toolArg_ != 100;
       scene_.previews.push_back(pv);
       break;
-    case ToolKind::Dispatch: case ToolKind::Query:
+    case ToolKind::Query: {
+      // Spec 25 9.4 [OBSERVED]: the object under the pointer is tinted per pixel (50% towards RGB 0,130,176). A building
+      // tints its whole sprite; anything else tints one tile (flat diamond plus the sprites on it).
+      SpriteTint t; t.r = 0; t.g = 130; t.b = 176;
+      t.x0 = t.x1 = x1; t.z0 = t.z1 = z1; t.ground = true;
+      int oi = sim_.occupantAt(x1, z1);
+      if (oi >= 0 && size_t(oi) < world_.occupants.size()) {
+        const Occupant& o = world_.occupants[size_t(oi)];
+        t.x0 = o.x; t.z0 = o.z; t.x1 = o.x + o.sizeX - 1; t.z1 = o.z + o.sizeZ - 1; t.ground = false;
+      }
+      scene_.tints.push_back(t); showCost = false; q.valid = true;
+      break;
+    }
+    case ToolKind::Dispatch:
       pv.x0 = pv.x1 = x1; pv.z0 = pv.z1 = z1; pv.customColour = true; pv.r = 240; pv.g = 240; pv.b = 80; pv.alpha = 90;
       scene_.previews.push_back(pv); showCost = false; q.valid = true;
       break;
@@ -1218,8 +1244,7 @@ void Game::executeTool(int x0, int z0, int x1, int z1) {
     case ToolKind::Query: {
       if (audio_) audio_->notifyQuery(tileSoundContext(x1, z1));
       buildQueryInfo(x1, z1, queryInfo_);
-      Rect r{std::min(ui_.in.mx + 10, std::max(0, W_ - 330)), std::min(ui_.in.my + 10, std::max(0, H_ - 280)), 0, 0};
-      queryWin_.open(r);
+      queryWin_.begin();   // opens at (40, 40) the first time, then where the player left it (spec 09 6.12.1)
       showQuery_ = true;
       break;
     }
@@ -1269,6 +1294,39 @@ std::string Game::cursorForTool() const {
     }
     default: return "";
   }
+}
+
+void Game::drawSoftCursor(const std::string& name, int x, int y) {
+  if (!haveData_ || name.empty()) return;
+  auto it = softCur_.find(name);
+  if (it == softCur_.end()) {
+    CursorImage ci;
+    if (!loadCursor(data_, name, ci)) ci = CursorImage();
+    it = softCur_.emplace(name, std::move(ci)).first;
+  }
+  if (it->second.ok()) ui_.blit(it->second.image, x - it->second.hotX, y - it->second.hotY);
+}
+
+// Holding Alt puts the bulldozer in hand, holding Ctrl the query tool; releasing the key gives back the selected tool.
+void Game::updateModifierTool() {
+  const Input& in = ui_.in;
+  if (dragging_ || panning_) return;   // never swap the tool under a drag in progress
+  const bool typing = ui_.focusId != 0 || cheatOpen_;
+  const ToolKind want = typing ? ToolKind::None : in.modAlt ? ToolKind::Demolish : in.modCtrl ? ToolKind::Query : ToolKind::None;
+  if (want == ToolKind::None) {
+    if (!modTool_) return;
+    modTool_ = false;
+    tool_ = modSavedTool_; toolArg_ = modSavedArg_; toolOcc_ = modSavedOcc_; toolName_ = modSavedName_;
+    hoverValid_ = false; scene_.previews.clear(); scene_.tints.clear(); scene_.cost.show = false; costShow_ = false;
+    return;
+  }
+  if (modTool_ && tool_ == want) return;
+  if (!modTool_) {
+    modTool_ = true;
+    modSavedTool_ = tool_; modSavedArg_ = toolArg_; modSavedOcc_ = toolOcc_; modSavedName_ = toolName_;
+  }
+  tool_ = want; toolArg_ = 0; toolOcc_ = 0; toolName_.clear();
+  hoverValid_ = false; scene_.previews.clear(); scene_.tints.clear(); scene_.cost.show = false; costShow_ = false;
 }
 
 void Game::handleScrolling(uint32_t dtMs) {
@@ -1344,7 +1402,7 @@ void Game::handleMap() {
   if (dragging_ && in.released) {
     dragging_ = false;
     if (onTile) executeTool(ax_, az_, tx, tz);
-    if (tool_ == ToolKind::Query && toolName_.empty()) tool_ = ToolKind::None;
+    // The query tool stays armed after a panel closes (spec 09 6.12.1).
   }
   buildScene();
 }
@@ -1357,16 +1415,15 @@ void Game::drawInCity(uint32_t dtMs) {
   if (!typing) {
     float s = 32.f;
     float dx = (in.held[1] ? s : 0) - (in.held[0] ? s : 0), dy = (in.held[3] ? s : 0) - (in.held[2] ? s : 0);
-    if (dx || dy) {
+    if ((dx || dy) && !showQuery_) {   // arrow-key scrolling is ignored while the query panel is open (spec 09 6.12.1)
       float Wt = 8.f * float(1 << cam_.zoom), Ht = Wt / 2;
       float du = (dy / (Ht / 2) - dx / (Wt / 2)) / 2, dv = (dy / (Ht / 2) + dx / (Wt / 2)) / 2;
       cam_.u = std::max(0.f, std::min(float(world_.W), cam_.u + du)); cam_.v = std::max(0.f, std::min(float(world_.H), cam_.v + dv));
     }
     handleKeys(in);
     if (in.key[K_TAB]) cheatOpen_ = true;
-    if (in.key[K_ESC]) {
-      if (showQuery_) showQuery_ = false;
-      else if (tool_ != ToolKind::None) setTool(ToolKind::None);
+    if (in.key[K_ESC] && !showQuery_) {   // Esc does not close the query panel (spec 09 6.12.1)
+      if (tool_ != ToolKind::None) setTool(ToolKind::None);
       else if (openRoot_) openRoot_ = 0;
       else if (!anyBlockingWindow()) { if (dirty_ && false) {} scr_ = Screen::MainMenu; }
     }
@@ -1374,6 +1431,7 @@ void Game::drawInCity(uint32_t dtMs) {
   if (!panelsHidden_) { drawToolMenu(); drawHud(); }
   drawWindows(dtMs);
   drawCheatBox();
+  updateModifierTool();
   if (!anyBlockingWindow() && msgText_.empty()) handleMap();
   else { hoverValid_ = false; buildScene(); }
 }

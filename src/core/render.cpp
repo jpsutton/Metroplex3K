@@ -1036,6 +1036,8 @@ uint32_t floraInstance(uint8_t cell, uint32_t hash) {
 }
 }  // namespace
 
+uint32_t floraSpriteInstance(uint8_t cell, int x, int z) { return floraInstance(cell, uint32_t(x * 73856093u ^ z * 19349663u) >> 7); }
+
 bool Renderer::siteOccupant(uint32_t state, int size, uint32_t agent, ResKey& out) {
   if (!data_) return false;
   if (!bldIniTried_) {
@@ -1524,6 +1526,7 @@ void Renderer::drawSprite(const Item& it, const RenderOptions& opt, int bandY0, 
       int sx = x / sc;
       uint32_t p = row[sx];
       if (!(p >> 24)) continue;
+      if (it.tinted) p = (p & 0xFF000000u) | pack((int(p & 255) + it.tintR) / 2, (int((p >> 8) & 255) + it.tintG) / 2, (int((p >> 16) & 255) + it.tintB) / 2);
       uint32_t& d = fb_[size_t(dy) * fbW_ + dx];
       if (!blendAll) { d = p; continue; }
       int mask = pl ? pl->v[size_t(sy) * pl->w + sx] : 31;
@@ -1548,6 +1551,55 @@ void Renderer::drawItems(const RenderOptions& opt, int y0, int y1) {
 // ======================================================================================
 // Overlays
 // ======================================================================================
+
+// Marks the draw-list items hit by a scene tint. Items persist between frames (item list cache), so every frame resets them.
+void Renderer::applySceneTints(const Camera& cam, const RenderScene* scene) {
+  for (Item& it : items_) it.tinted = false;
+  if (!scene || scene->tints.empty() || !world_) return;
+  const World& w = *world_;
+  for (const SpriteTint& t : scene->tints) {
+    int us[4], vs[4];
+    const int xa = std::min(t.x0, t.x1), xb = std::max(t.x0, t.x1) + 1, za = std::min(t.z0, t.z1), zb = std::max(t.z0, t.z1) + 1;
+    int cx[4] = {xa, xb, xa, xb}, cz[4] = {za, za, zb, zb};
+    for (int i = 0; i < 4; i++) worldToViewVertex(cam.rot, w.W, w.H, cx[i], cz[i], us[i], vs[i]);
+    const int u0 = *std::min_element(us, us + 4), u1 = *std::max_element(us, us + 4);
+    const int v0 = *std::min_element(vs, vs + 4), v1 = *std::max_element(vs, vs + 4);
+    for (Item& it : items_) {
+      if (it.moving || (!it.pickable && !it.groundLevel)) continue;
+      if (it.u0 < u1 && u0 < it.u1 && it.v0 < v1 && v0 < it.v1) { it.tinted = true; it.tintR = t.r; it.tintG = t.g; it.tintB = t.b; }
+    }
+  }
+}
+
+// Flat terrain tiles of `ground` tints, blended 50/50 before the sprites go on top (so roads and trees on the tile are
+// tinted by their own pass and not twice).
+void Renderer::drawGroundTints(const Camera& cam, const RenderScene& scene, int y0, int y1) {
+  if (scene.tints.empty() || !world_) return;
+  const World& w = *world_;
+  const float A = float(1 << cam.zoom);
+  Ctx ctx{fb_.data(), fbW_, y1, cam.zoom, noiseLand_, noiseEdge_, y0};
+  for (const SpriteTint& t : scene.tints) {
+    if (!t.ground) continue;
+    for (int x = std::max(0, std::min(t.x0, t.x1)); x <= std::min(w.W - 1, std::max(t.x0, t.x1)); x++)
+      for (int zz = std::max(0, std::min(t.z0, t.z1)); zz <= std::min(w.H - 1, std::max(t.z0, t.z1)); zz++) {
+        int u = 1 << 30, v = 1 << 30;
+        for (int i = 0; i < 4; i++) {
+          int uu, vv;
+          worldToViewVertex(cam.rot, w.W, w.H, x + (i & 1), zz + (i >> 1), uu, vv);
+          u = std::min(u, uu); v = std::min(v, vv);
+        }
+        float qx[4], qy[4]; int wx[4], wz[4];
+        tileQuad(cam, u, v, qx, qy, wx, wz);
+        float P[4][5];
+        for (int i = 0; i < 4; i++) {
+          int h = std::max(w.altAt(wx[i], wz[i]), w.waterAt(wx[i], wz[i]));
+          P[i][0] = qx[i]; P[i][1] = qy[i] - float(h) * A;
+        }
+        blendTri(ctx, P[0], P[2], P[3], t.r, t.g, t.b, 128);
+        blendTri(ctx, P[0], P[3], P[1], t.r, t.g, t.b, 128);
+      }
+  }
+}
 
 void Renderer::drawPreviews(const Camera& cam, const RenderScene& scene) {
   const World& w = *world_;
@@ -1717,7 +1769,7 @@ bool Renderer::renderForGpu(const Camera& cam, const RenderOptions& opt, const R
   if (gpuTerrainWanted_ && gpuTerrainFn_) return false;
   if (opt.objects && !(data_ || spriteFn_)) return false;                    // fallback boxes are CPU drawn
   if (scene) {
-    if (!scene->previews.empty()) return false;                              // tool previews blend into the frame
+    if (!scene->previews.empty() || !scene->tints.empty()) return false;     // tool previews and sprite tints blend into the frame
     if (scene->cost.show && !textHook_) return false;                        // cost label would draw text into it
   }
   gpuPass_ = true;
@@ -1787,6 +1839,7 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
   if (opt.terrain) { if (layerHit) ensureShade(); else prepareTerrain(opt); }
   const auto bi0 = StageClock::now();
   buildItems(cam, opt, scene);
+  applySceneTints(cam, scene);
   itemsBuildMs = stageMs(bi0, StageClock::now());
   stages_ = StageTimes();
   stages_.layerKeyMs = keyMs; stages_.buildItemsMs = itemsBuildMs;
@@ -1866,7 +1919,10 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
       if (layerStore) std::memcpy(terrainLayer_.data() + rowOff, fb_.data() + rowOff, rowN * sizeof(uint32_t));
       terrainNs += nsSince(t); t = StageClock::now();
     }
-    if (!gpuPass_) drawItems(opt, y0, y1);
+    if (!gpuPass_) {
+      if (scene) drawGroundTints(cam, *scene, y0, y1);
+      drawItems(opt, y0, y1);
+    }
     itemsNs += nsSince(t);
   });
   stages_.bandsWallMs = stageMs(sb0, StageClock::now());

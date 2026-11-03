@@ -75,6 +75,15 @@ struct TilePreview {
   uint8_t r = 0, g = 0, b = 0;
 };
 
+// Per-pixel sprite tint (spec 25 9.4, query hover / occupied target): every static or ground-level sprite whose footprint
+// overlaps the world-tile rectangle (inclusive) has its opaque pixels blended 50/50 with the colour. `ground` also tints the
+// flat terrain tiles of the rectangle (drawn under the sprites).
+struct SpriteTint {
+  int x0 = 0, z0 = 0, x1 = 0, z1 = 0;
+  uint8_t r = 0, g = 0, b = 0;
+  bool ground = false;
+};
+
 struct CostLabel {
   bool show = false;
   int tileX = 0, tileZ = 0;
@@ -85,6 +94,7 @@ struct CostLabel {
 struct RenderScene {
   std::vector<SceneSprite> sprites;
   std::vector<TilePreview> previews;
+  std::vector<SpriteTint> tints;
   CostLabel cost;
 };
 
@@ -182,6 +192,9 @@ struct GpuTerrainTri {
   int32_t key[3];              // shore colour-key
   int32_t rep[3];              // shore water replacement
 };
+
+// Sprite instance a flora cell draws (the choice between two look-alikes is a per-tile hash); 0 = none.
+uint32_t floraSpriteInstance(uint8_t cell, int x, int z);
 
 class Renderer : public ICityRasterizer {
  public:
@@ -300,6 +313,7 @@ class Renderer : public ICityRasterizer {
     bool dbl = false;
     int m2 = 32;
     bool moving = false, pickable = true, groundLevel = false;
+    bool tinted = false; uint8_t tintR = 0, tintG = 0, tintB = 0;   // scene tint for this frame (applySceneTints)
     int32_t boxA0 = 0, boxA1 = 0, boxB0 = 0, boxB1 = 0;  // static boxes (view, 1/256)
     int32_t posA = 0, posB = 0;                           // moving objects
     int tileX = 0, tileZ = 0;
@@ -356,6 +370,8 @@ class Renderer : public ICityRasterizer {
   void prepareTerrain(const RenderOptions& opt);
   void drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs = 0, int xe = 1 << 30);
   void collectTerrainTris(const Camera& cam, const RenderOptions& opt, std::vector<GpuTerrainTri>& out);
+  void applySceneTints(const Camera& cam, const RenderScene* scene);
+  void drawGroundTints(const Camera& cam, const RenderScene& scene, int y0, int y1);
   void drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs = 0, int xe = 1 << 30);
   void drawEdgeFaces(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs = 0, int xe = 1 << 30);
   void drawPreviews(const Camera& cam, const RenderScene& scene);

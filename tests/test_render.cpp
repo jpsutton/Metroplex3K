@@ -197,6 +197,28 @@ int main() {
     r.render(cam, opt, &s5);
     CHECK(r.pixels()[size_t(cy + 1) * r.width() + cx] == rgba(240, 20, 40));
 
+    // Sprite tint (spec 25 9.4): opaque pixels of sprites over the tile go 50/50 towards the tint colour; a ground tint
+    // also blends the flat tile under them.
+    {
+      RenderScene s6; s6.sprites = {st};
+      r.render(cam, opt, &s6);
+      uint32_t plainSprite = r.pixels()[size_t(sy - 3) * r.width() + sx];
+      CHECK(plainSprite == rgba(255, 0, 0));
+      SpriteTint tn; tn.x0 = tn.x1 = 8; tn.z0 = tn.z1 = 8; tn.r = 0; tn.g = 130; tn.b = 176;
+      s6.tints.push_back(tn);
+      r.render(cam, opt, &s6);
+      CHECK(r.pixels()[size_t(sy - 3) * r.width() + sx] == rgba(127, 65, 88));
+      tn.x0 = tn.x1 = 3; tn.z0 = tn.z1 = 3; s6.tints[0] = tn;       // another tile: the sprite is untouched
+      r.render(cam, opt, &s6);
+      CHECK(r.pixels()[size_t(sy - 3) * r.width() + sx] == rgba(255, 0, 0));
+      RenderScene g0; r.render(cam, opt, &g0);
+      uint32_t ground = r.pixels()[size_t(cy + 1) * r.width() + cx];
+      RenderScene g1; tn.x0 = tn.x1 = 8; tn.z0 = tn.z1 = 8; tn.ground = true; g1.tints.push_back(tn);
+      r.render(cam, opt, &g1);
+      auto mixc = [](int d, int c) { return d + (c - d) * 128 / 255; };
+      CHECK(r.pixels()[size_t(cy + 1) * r.width() + cx] == rgba(mixc(ground & 255, 0), mixc((ground >> 8) & 255, 130), mixc((ground >> 16) & 255, 176)));
+    }
+
     // Data overlay solid colour: flat terrain -> shade 15 -> column 7, no noise.
     TerrainPalettes tp2 = r.palettes();
     tp2.data[2] = solid(64, 32, rgba(1, 2, 3));

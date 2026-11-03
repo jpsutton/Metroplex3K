@@ -243,6 +243,7 @@ int main(int argc, char** argv) {
       }
     }
     const Uint8* ks = SDL_GetKeyboardState(nullptr);
+    { const SDL_Keymod km = SDL_GetModState(); in.modCtrl = (km & KMOD_CTRL) != 0; in.modAlt = (km & KMOD_ALT) != 0; }
     in.held[0] = ks[SDL_SCANCODE_LEFT];
     in.held[1] = ks[SDL_SCANCODE_RIGHT];
     in.held[2] = ks[SDL_SCANCODE_UP];

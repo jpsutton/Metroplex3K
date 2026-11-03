@@ -647,6 +647,12 @@ void Game::handleWindowResult(const WindowResult& r) {
       case Act::ToggleHistorical:
         queryInfo_.historical = !queryInfo_.historical;
         break;
+      case Act::QueryReplace:
+        // Replace closes the panel and opens the Building Replacement dialog on the queried building's footprint (spec 09 6.12.1).
+        showQuery_ = false;
+        openUserBuildings();
+        brmState_.sizeFilter = std::max(0, std::min(4, queryInfo_.footprint - 1));
+        break;
     }
   }
 }

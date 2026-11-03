@@ -30,6 +30,8 @@ struct Input {
   bool released = false;   // went up this frame
   bool rightPressed = false;
   bool rightDown = false;  // right button currently held
+  bool modCtrl = false;    // Ctrl key currently held (map: temporary query tool)
+  bool modAlt = false;     // Alt key currently held (map: temporary bulldozer tool)
   int wheel = 0;
   std::string text;        // typed characters this frame
   bool key[16] = {};

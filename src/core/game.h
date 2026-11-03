@@ -11,6 +11,7 @@
 #pragma once
 #include <functional>
 #include <map>
+#include <set>
 #include <memory>
 #include <string>
 #include <vector>
@@ -145,6 +146,8 @@ class Game {
   // Cursor for the next frame: file stem in Res/UI/Shared/Cursors (empty = host default arrow). The host calls
   // cursorImage() when the name changes.
   const std::string& cursorName() const { return cursorName_; }
+  // While right-drag scrolling: the PAN/EARLY MOVER cursor drawn at the pointer (empty otherwise).
+  const std::string& panCursor() const { return panCursor_; }
   bool cursorImage(const std::string& name, CursorImage& out) { return haveData_ && loadCursor(data_, name, out); }
   // Screen position (inside the last rendered frame) of the middle of a tile; false if off-screen / not pickable. For tools & tests.
   bool tileScreenPos(int tx, int tz, int& sx, int& sy);
@@ -203,7 +206,7 @@ class Game {
   void loadFile(const fs::path& p);
   void saveCurrent(const std::string& name, const fs::path& dir = fs::path());   // dir empty = Cities/
   // Leaving the current city (Exit / New / Load). `action`: kLeaveQuit, kLeaveNew, or kLeaveLoad + file kind (0..3).
-  // Exit first shows the "Now leaving" prompt; a modified city then asks to save (Yes / No) before the action runs.
+  // Exit first shows the "Now leaving" prompt; a city that is open then asks to save (Yes / No / Cancel) before the action runs.
   static constexpr int kLeaveQuit = 1, kLeaveNew = 2, kLeaveLoad = 10;
   void requestLeave(int action);
   void askSaveBeforeLeave(int action);
@@ -490,6 +493,14 @@ class Game {
   double scrollAcc_ = 0;
   std::string cursorName_;
   void handleScrolling(uint32_t dtMs);
+  bool isReplaceableOccupant(uint32_t occId);   // in [ReplaceableBuildings] (Replace button of the query panel)
+  std::set<uint32_t> replaceableOcc_; bool replaceableLoaded_ = false;
+  void drawSoftCursor(const std::string& name, int x, int y);   // cursor image blitted into the frame at a hotspot
+  std::map<std::string, CursorImage> softCur_;
+  std::string panCursor_;
+  void updateModifierTool();   // holding Alt/Ctrl swaps in the bulldozer/query tool until released
+  bool modTool_ = false;       // a modifier tool is standing in for the selected one
+  ToolKind modSavedTool_ = ToolKind::None; int modSavedArg_ = 0; uint32_t modSavedOcc_ = 0; std::string modSavedName_;
   std::string cursorForTool() const;
   std::vector<RenderScene> unusedScenes_;
   std::vector<Spot>* spotSink_ = nullptr;

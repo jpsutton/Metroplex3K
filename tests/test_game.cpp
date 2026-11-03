@@ -169,34 +169,40 @@ int main() {
   frame(5);
   CHECK(game.currentScreen() == Screen::InCity || game.currentScreen() == Screen::MainMenu);
 
-  // Leaving the city: Exit asks "Now leaving" (OK / Cancel), then a modified city asks to save (Yes / No);
-  // New / Load ask to save only when modified. Enter = first button, Esc = last.
+  // Leaving the city: Exit asks "Now leaving" (OK / Cancel), then, with a city open, asks to save (Yes / No / Cancel).
+  // The original has no modified flag, so New / Load / Exit ask whether or not the city changed.
+  // Enter = first button, Esc = last (Cancel).
   auto key = [&](int k) { in.key[k] = true; frame(2); };
-  game.gotoScreen(Screen::InCity); game.setDirty(true); frame(2);
-  game.runCommand(0xA10438E9); frame(2);
-  CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);
-  key(K_ESC);                                       // Cancel: stay
-  CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);
-  game.runCommand(0xE3270FE9); frame(2);
-  CHECK(game.currentScreen() == Screen::InCity);    // save prompt up, not yet the New City screen
-  key(K_ESC);                                       // No: discard and go on
-  CHECK(game.currentScreen() == Screen::NewCity);
-  game.gotoScreen(Screen::InCity); game.setDirty(false); frame(2);
-  game.runCommand(0x610438A4); frame(2);
-  CHECK(game.currentScreen() == Screen::LoadList);  // unmodified: no prompt
-  // The window's close button and the quit hotkeys go through the same prompts as the Exit menu item.
-  game.gotoScreen(Screen::InCity); game.setDirty(true); frame(2);
-  game.requestQuit(); frame(2);
-  CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);   // "Now leaving" is up, nothing quit yet
-  game.requestQuit(); frame(1);                     // a second close request while the prompt is up changes nothing
-  CHECK(!game.wantQuit());
-  key(K_ESC);                                       // Cancel
-  CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);
-  game.gotoScreen(Screen::InCity); game.setDirty(true); frame(2);
-  game.runCommand(0xA10438E9); frame(2);
-  key(K_ENTER);                                     // OK on "Now leaving"
-  CHECK(!game.wantQuit());                          // save prompt follows for a modified city
-  key(K_ESC);                                       // No
-  CHECK(game.wantQuit());
+  for (bool dirty : {true, false}) {
+    game.gotoScreen(Screen::InCity); game.setDirty(dirty); frame(2);
+    game.runCommand(0xA10438E9); frame(2);
+    CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);
+    key(K_ESC);                                       // Cancel on "Now leaving": stay
+    CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);
+    game.runCommand(0xE3270FE9); frame(2);
+    CHECK(game.currentScreen() == Screen::InCity);    // save prompt up, not yet the New City screen
+    key(K_ESC);                                       // Cancel: abort the New
+    CHECK(game.currentScreen() == Screen::InCity);
+    game.runCommand(0x610438A4); frame(2);
+    CHECK(game.currentScreen() == Screen::InCity);    // Load asks too, even for an unmodified city
+    key(K_ESC);
+    CHECK(game.currentScreen() == Screen::InCity);
+    // The window's close button and the quit hotkeys go through the same prompts as the Exit menu item.
+    game.requestQuit(); frame(2);
+    CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);   // "Now leaving" is up, nothing quit yet
+    game.requestQuit(); frame(1);                     // a second close request while the prompt is up changes nothing
+    CHECK(!game.wantQuit());
+    key(K_ESC);                                       // Cancel
+    CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);
+    game.runCommand(0xA10438E9); frame(2);
+    key(K_ENTER);                                     // OK on "Now leaving"
+    CHECK(!game.wantQuit());                          // the save prompt follows
+    key(K_ESC);                                       // Cancel: abort the Exit
+    CHECK(!game.wantQuit() && game.currentScreen() == Screen::InCity);
+    game.requestQuit(); frame(2);
+    key(K_ENTER);                                     // OK on "Now leaving"
+    key(K_ENTER);                                     // Yes: the city has no file yet, so Save As opens; no quit
+    CHECK(!game.wantQuit() && game.currentScreen() != Screen::InCity);
+  }
   TEST_MAIN_END();
 }

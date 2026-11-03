@@ -100,6 +100,20 @@ bool writePngFile(const fs::path& path, int w, int h, const std::vector<uint32_t
 
 }  // namespace
 
+// Occupants listed in SC3CityScheme.ini [ReplaceableBuildings] are the ones the Replace button is shown for (spec 09 6.12.1, spec 24 2.4).
+bool Game::isReplaceableOccupant(uint32_t occId) {
+  if (!replaceableLoaded_) {
+    replaceableLoaded_ = true;
+    IniFile ini;
+    if (haveData_ && data_.ini().load("SC3CityScheme.ini", ini))
+      for (const auto& kv : ini.section("ReplaceableBuildings")) {
+        unsigned long long a, b, c;
+        if (std::sscanf(kv.first.c_str(), "%llu , %llu , %llu", &a, &b, &c) == 3) replaceableOcc_.insert(uint32_t(c));
+      }
+  }
+  return replaceableOcc_.count(occId) != 0;
+}
+
 // ================================================================================== query (spec 09 6.12)
 void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   q = QueryInfo();
@@ -127,23 +141,61 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   // Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: one query line = trunc(G × s); G = standing garbage.
   if (!c.pollution.standing.empty()) q.garbageScaled = c.pollution.queryGarbageScaled(x, z);
   q.powered = c.powered(x, z);
+  q.watered = c.watered(x, z);
+  q.underground = ropt_.underground;
 
   const auto& par = c.config().parent;
+  // Piece name from the occupant name table (spec 09 6.12.1: "Road", "Highway", "Railroad", "Power Line", ...).
+  auto pieceName = [&](uint32_t pieceId, const char* fallback) {
+    std::string n = haveData_ ? str(kTblOccName, pieceId) : std::string();
+    return n.empty() ? std::string(fallback) : n;
+  };
+  // Underground view: the target is the pipe or subway piece on the tile (spec 09 6.12.1); a tile with nothing underground
+  // gives the surface tile's bare-ground query. Surface buildings are hidden in that view, so they are not queried [INFERRED].
+  if (ropt_.underground) {
+    for (const auto& p : w.pipes) if (p.x == x && p.z == z) { q.cls = QueryClass::Pipe; q.name = pieceName(p.pieceId, "Water Pipe"); return; }
+    for (const auto& p : w.subway) if (p.x == x && p.z == z) {
+      q.cls = QueryClass::Subway; q.name = pieceName(p.pieceId, "Subway");
+      q.band[0] = uint8_t(c.trafficDensityAt(x, z));
+      return;
+    }
+    return;
+  }
   const int idx = c.occupantAt(x, z);
   const Occupant* o = (idx >= 0 && size_t(idx) < w.occupants.size()) ? &w.occupants[size_t(idx)] : nullptr;
   q.showPower = o != nullptr || c.isPowerLine(x, z);
   if (!o) {
+    const NetPiece* named = nullptr;
     if (c.isRoadTile(x, z)) q.cls = QueryClass::Road;
     for (const auto& p : w.surface) {
       if (p.x != x || p.z != z) continue;
       uint32_t k = c.kindOf(p);
-      if (k == uint32_t(NetworkKind::Rail)) q.cls = QueryClass::Rail;
-      else if (k == uint32_t(NetworkKind::Power)) q.cls = c.isRoadTile(x, z) ? q.cls : QueryClass::PowerLine;
+      if (k == uint32_t(NetworkKind::Rail)) { q.cls = QueryClass::Rail; named = &p; }
+      else if (k == uint32_t(NetworkKind::Power)) { if (!c.isRoadTile(x, z)) { q.cls = QueryClass::PowerLine; named = &p; } }
+      else if (!named) named = &p;
     }
     if (q.cls == QueryClass::None) for (const auto& p : w.subway) if (p.x == x && p.z == z) q.cls = QueryClass::Subway;
     if (q.cls == QueryClass::None && c.isPowerLine(x, z)) q.cls = QueryClass::PowerLine;
+    if (named) {
+      const char* fb = q.cls == QueryClass::Rail ? "Railroad" : q.cls == QueryClass::PowerLine ? "Power Line" : "Road";
+      q.name = pieceName(named->pieceId, fb);
+    }
     if (q.cls == QueryClass::Road || q.cls == QueryClass::Rail || q.cls == QueryClass::Subway)
       q.band[0] = uint8_t(c.trafficDensityAt(x, z));   // usage band of the panel from the live traffic load
+    if (q.cls == QueryClass::None && q.zoneCode == 17) {   // landfill zone tile: capacity and usage of the landfill store
+      q.cls = QueryClass::LandfillZone; q.name = "Landfill";
+      q.landfillCapacity = int(std::min<int64_t>(c.pollution.disp.store.D, 2000000000));
+      q.landfillUsage = c.pollution.disp.store.capPct;   // [INFERRED] percent full
+    }
+    if (q.cls == QueryClass::None && ti < w.flora.size() && w.flora[ti]) {   // a tree
+      uint32_t inst = floraSpriteInstance(w.flora[ti], x, z);
+      if (inst) {
+        q.cls = QueryClass::Flora;
+        q.name = haveData_ ? str(kTblOccName, inst) : std::string();
+        if (q.name.empty()) q.name = "Tree";
+        if (haveData_) if (const OccAttr* oa = data_.occupant(inst)) q.picture = oa->appearance;
+      }
+    }
     return;
   }
 
@@ -158,10 +210,16 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
     case 8: case 16: q.status |= QsDestroyed; break;
     default: break;
   }
+  q.footprint = std::max<int>(o->sizeX, o->sizeZ);
+  if (haveData_) {
+    if (const OccAttr* oa = data_.occupant(o->occId, false, o->keyType == T_OCC_ATTR_PORT)) q.picture = oa->appearance;
+    q.canReplace = isReplaceableOccupant(o->occId);
+  }
   bool plant = false;
   q.cls = classify(par, o->agentType, plant);
   if (q.status & QsDestroyed) q.cleanupCost = c.budget.specialCost(12);
-  q.growable = q.cls == QueryClass::Zoned && o->state == 1;
+  q.growable = q.cls == QueryClass::Zoned && (o->state == 1 || o->state == 2);   // Make Historical: abandoned zoned buildings too
+  if (q.cls == QueryClass::Zoned && o->state == 2) q.canReplace = false;           // but no Replace on an abandoned one
   q.showPower = true;
   // Business-deal reachability (spec 18 §10) [STATIC]: MegaMall/Casino/Toxic/Prison fire an uncounted
   // "reach anything" trip when their query window is built (powered/watered/state-1 is the rest of the
@@ -176,6 +234,7 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
         q.v[0] = p.capacity; q.v[1] = p.output;
         q.band[0] = clamp8(p.output > 0 ? p.load * 255 / p.output : 0);
         q.v[2] = std::max(0, (absMonth(c.clock) - p.buildAbsMonth) / 12);
+        q.v[3] = p.lmax > 0 ? p.lmax / 12 : 0;   // maximum life in whole years ("Age (Max)")
         if (p.expired) q.status |= QsDefunct;
         else if (p.lmax > 0 && absMonth(c.clock) - p.buildAbsMonth > p.lmax - 12) q.status |= QsAging;
         break;
