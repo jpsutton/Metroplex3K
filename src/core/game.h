@@ -139,6 +139,9 @@ class Game {
   bool scenarioActive() const;
   void gotoScreen(Screen s) { scr_ = s; }
   void setView(int tx, int tz, int zoom);
+  const Camera& camera() const { return cam_; }
+  bool panelsHidden() const { return panelsHidden_; }   // F12
+  bool layersDialogOpen() const { return showLayers_; }
   // Host callback: receives snapshot bytes (raw RGBA8 w,h + pixels, no PNG encoder in core) and a suggested file name.
   std::function<void(const std::string& name, int w, int h, const std::vector<uint32_t>& rgba)> onSnapshot;
   const std::vector<std::string>& snapshots() const { return snapshotNames_; }
@@ -417,6 +420,7 @@ class Game {
   int64_t edFunds_ = 1000000000;
   RenderScene scene_;
   int snapSize_ = 0;
+  double viewAcc_ = 0; int viewUpdates_ = 0;   // view updates due this frame at kViewUpdateHz (keyboard / drag scroll)
   uint32_t frameDt_ = 0;   // dt of the current frame (ticker scrolling)
   uint32_t pauseFlashMs_ = 0;   // position in the 1500 ms paused-indicator flash cycle (0 when running)
   bool disastersOn_ = true, autoBudget_ = false;

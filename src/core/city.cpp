@@ -2347,27 +2347,51 @@ void City::monthlyPollution() {
   // age from the build date.
   std::vector<us::PollutionLayer::RecyclingCentre> centres;
   const int now = absMonthOf(clock);
-  for (const auto& o : world_->occupants) {
-    if (o.agentType != kAgentRecycling) continue;
+  for (size_t i = 0; i < world_->occupants.size(); i++) {
+    if (world_->occupants[i].agentType != kAgentRecycling) continue;
     int built = now;
-    if (o.hasDate && o.dateYear > 0) built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
+    {
+      const Occupant& o = world_->occupants[i];
+      if (o.hasDate && o.dateYear > 0) built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
+    }
+    const int age = std::max(0, now - std::min(built, now));
+    retireAged(i, age, pollution.params().recyclingMaxLifespan);   // age >= MaxLifespan: replaced in its monthly step (spec 16 4.3)
+    const Occupant& o = world_->occupants[i];
     bool working = (o.state & ~0x200u) == 1 && power.powered(o.x, o.z) && !(traffic && traffic->tripResult(o.x, o.z) == 1);
-    centres.push_back(pollution.recyclingCentreValues(working, std::max(0, now - std::min(built, now))));
+    centres.push_back(pollution.recyclingCentreValues(working, age));
   }
   pollution.monthEnd(d.month, d.year, residents_, &centres);
-  updateTreatmentCaps();
+  updateTreatmentCaps(true);
+}
+// Recycling centres and water-treatment plants are replaced like power plants when age >= MaxLifespan (greater or equal), in
+// their monthly step: same agent type, lot state 8, build date and lifespans kept, expired flag set (spec 16 4.3, Q-BD).
+void City::retireAged(size_t oi, int age, int maxLife) {
+  if (maxLife <= 0 || age < maxLife || oi >= world_->occupants.size()) return;
+  Occupant& o = world_->occupants[oi];
+  if ((o.state & ~0x200u) == 8) return;
+  damageOccupant(int(oi), 8);
+  Occupant& r = world_->occupants[oi];
+  for (auto& kv : r.intProps) if (kv.first == 0x2351FAFB) { kv.second = 1; return; }
+  r.intProps.push_back({0x2351FAFB, 1});
+  std::sort(r.intProps.begin(), r.intProps.end());
 }
 // Water-treatment plants' capacities (spec 16 s3.1) [STATIC]: set monthly; working = lot occupied (state 1) and the plant
 // tile powered and watered; age from the build date as for recycling centres.
-void City::updateTreatmentCaps() {
+void City::updateTreatmentCaps(bool monthly) {
   std::vector<int64_t> caps;
   const int now = absMonthOf(clock);
-  for (const auto& o : world_->occupants) {
-    if (o.agentType != 12820) continue;   // water treatment plant (spec 17 s7.2.3 facility list)
+  for (size_t i = 0; i < world_->occupants.size(); i++) {
+    if (world_->occupants[i].agentType != 12820) continue;   // water treatment plant (spec 17 s7.2.3 facility list)
     int built = now;
-    if (o.hasDate && o.dateYear > 0) built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
+    {
+      const Occupant& o = world_->occupants[i];
+      if (o.hasDate && o.dateYear > 0) built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
+    }
+    const int age = std::max(0, now - std::min(built, now));
+    if (monthly) retireAged(i, age, pollution.params().treatmentMaxLifespan);   // replaced at age >= MaxLifespan (spec 16 3.1)
+    const Occupant& o = world_->occupants[i];
     bool working = (o.state & ~0x200u) == 1 && power.powered(o.x, o.z) && water.tileServiced(o.x, o.z);
-    caps.push_back(pollution.treatmentCapacity(working, std::max(0, now - std::min(built, now))));
+    caps.push_back(pollution.treatmentCapacity(working, age));
   }
   pollution.setTreatmentCaps(std::move(caps));
 }

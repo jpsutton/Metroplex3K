@@ -189,8 +189,10 @@ void Game::hotkeyCommand(int cmd, int, int arg2) {
     case 40: cheatOpen_ = true; break;
     case 41: cam_.zoom = std::min(4, cam_.zoom + 1); sound(1); break;
     case 42: cam_.zoom = std::max(0, cam_.zoom - 1); sound(2); break;
-    case 43: rotate(1); sound(4); break;
-    case 44: rotate(-1); sound(4); break;
+    // PageDown turns the map clockwise as seen on screen: the bottom corner goes to the left corner (spec 08 5.4 [OBSERVED]).
+    // With this renderer's view transform that is the lower rotation index.
+    case 43: rotate(-1); sound(4); break;
+    case 44: rotate(1); sound(4); break;
     case 45: scroll(-32, 0); break;
     case 46: scroll(0, -32); break;
     case 47: scroll(32, 0); break;
@@ -204,6 +206,7 @@ void Game::hotkeyCommand(int cmd, int, int arg2) {
     case 81: case 82: cam_.zoom = 3; break;
     case 83: case 84: cam_.zoom = 4; break;
     case 85: setTool(ToolKind::None); break;
+    case 94: if (showLayers_) showLayers_ = false; else openWindow("layers"); sound(12); break;   // Ctrl+G: the navigator's layers button
     case 113: takeSnapshot(snapSizeIdx_); break;
     case 114: takeSnapshot(std::max(1, std::min(3, arg2 ? arg2 : snapSizeIdx_))); break;
     default: break;   // 74, 96-100, 104, 108, 112, 115 and unknown commands: no effect
@@ -571,6 +574,11 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
   asyncFrameBegin(in);
   phases_.simWaitMs += phaseMs(pa0, PhaseClock::now());
   W_ = w; H_ = h; frameDt_ = dtMs;
+  // The original's view update is unthrottled; 60 Hz is the recommended fixed rate (spec 25 10, [OBSERVED] + [INFERRED]).
+  constexpr double kViewUpdateHz = 60.0;
+  viewAcc_ += double(dtMs) * kViewUpdateHz / 1000.0;
+  viewUpdates_ = std::min(8, int(viewAcc_));
+  viewAcc_ -= std::floor(viewAcc_);
   syncScreenPending();
   if (audio_) { audio_->setAudioZoom(cam_.zoom + 1); audio_->update(dtMs); }
   const bool ext = outPixels != nullptr;
@@ -607,7 +615,7 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
     } else { ropt_.overlay = nullptr; stopAmbience(); }
     // Building animations: wall-clock tick (~15 Hz, same period as automata), not sim day.
     // Driving them from sim_.day froze them between day ticks and raced at high speed.
-    if (!paused_ && scr_ == Screen::InCity) {
+    if (scr_ == Screen::InCity) {   // building animations keep running while the game is paused (spec 25 7.1 [OBSERVED])
       animAccMs_ += dtMs;
       while (animAccMs_ >= kAnimPeriodMs) { animAccMs_ -= kAnimPeriodMs; ++animTick_; }
     }
@@ -1338,10 +1346,7 @@ void Game::handleScrolling(uint32_t dtMs) {
   };
   if (in.rightPressed && !uiHit_) { panning_ = true; panAnchorX_ = in.mx; panAnchorY_ = in.my; }
   if (!in.rightDown) panning_ = false;
-  scrollAcc_ += dtMs * 30.0 / 1000.0;
-  int updates = int(scrollAcc_);
-  scrollAcc_ -= updates;
-  if (updates > 4) updates = 4;
+  const int updates = viewUpdates_;   // fixed-rate view updates (spec 25 10)
   cursorName_ = cursorForTool();
   if (panning_) {
     int dx = (in.mx - panAnchorX_) / 2, dy = (in.my - panAnchorY_) / 2;
@@ -1418,9 +1423,13 @@ void Game::drawInCity(uint32_t dtMs) {
   const Input& in = ui_.in;
   bool typing = ui_.focusId != 0 || cheatOpen_;
   if (!typing) {
-    float s = 32.f;
-    float dx = (in.held[1] ? s : 0) - (in.held[0] ? s : 0), dy = (in.held[3] ? s : 0) - (in.held[2] ? s : 0);
-    if ((dx || dy) && !showQuery_) {   // arrow-key scrolling is ignored while the query panel is open (spec 09 6.12.1)
+    // Arrow keys on every view update: 32 px per update; one key, or two perpendicular keys (diagonal); any other combination
+    // (three or four keys, or two opposite keys) does not scroll (spec 25 10 [STATIC]).
+    const bool l = in.held[0], r = in.held[1], u = in.held[2], d = in.held[3];
+    const int nh = int(l) + int(r), nv = int(u) + int(d);
+    if (nh <= 1 && nv <= 1 && nh + nv >= 1 && !showQuery_) {   // arrow-key scrolling is ignored while the query panel is open (spec 09 6.12.1)
+      const float s = 32.f * float(viewUpdates_);
+      const float dx = (r ? s : 0) - (l ? s : 0), dy = (d ? s : 0) - (u ? s : 0);
       float Wt = 8.f * float(1 << cam_.zoom), Ht = Wt / 2;
       float du = (dy / (Ht / 2) - dx / (Wt / 2)) / 2, dv = (dy / (Ht / 2) + dx / (Wt / 2)) / 2;
       cam_.u = std::max(0.f, std::min(float(world_.W), cam_.u + du)); cam_.v = std::max(0.f, std::min(float(world_.H), cam_.v + dv));
@@ -1434,6 +1443,20 @@ void Game::drawInCity(uint32_t dtMs) {
     }
   }
   if (!panelsHidden_) { drawToolMenu(); drawHud(); }
+  else {
+    // F12 hid the tool column, the bottom bar and the navigator: only a small round "show UI" button stays, bottom-right
+    // (about 20 x 20 px; spec 08 5.4 [OBSERVED]).
+    const Rect b{W_ - 26, H_ - 26, 20, 20};
+    const bool hot = ui_.hover(b);
+    if (hot) { uiHit_ = true; ui_.tooltip = "Show UI"; }
+    for (int y = 0; y < b.h; y++)
+      for (int x = 0; x < b.w; x++) {
+        const float dx = float(x) + 0.5f - 10.f, dy = float(y) + 0.5f - 10.f, d2 = dx * dx + dy * dy;
+        if (d2 > 100.f) continue;
+        ui_.fill({b.x + x, b.y + y, 1, 1}, d2 > 72.f ? rgb(0x31, 0x36, 0x7C) : hot ? rgb(0xDC, 0xE4, 0xF0) : rgb(0x7B, 0x92, 0xFF));
+      }
+    if (ui_.clicked(b)) panelsHidden_ = false;
+  }
   drawWindows(dtMs);
   drawCheatBox();
   updateModifierTool();

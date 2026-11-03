@@ -637,8 +637,10 @@ void Game::typeCheat(const std::string& s) {
   applyCheat(r);
 }
 
-// Effects of spec 27 section 5.3 that the engine models. Build-menu unlocks, petitioner/advisor forcing and the
-// developer cheats are not wired yet (tracked in issue #33).
+// Effects of spec 27 section 5.3. `traffic lights on|off` and `tuneup` have no visible effect in the original (the first sets a
+// flag nothing reads; the second drives a developer object on a file that is not shipped), so they are accepted and ignored.
+// The build-menu cheats (`power to the masses`, `water in the desert`, `garbage in, garbage out`) are read from the cheat
+// registry by the pickers (game_windows.cpp).
 void Game::applyCheat(const CheatResult& r) {
   const CheatInfo& c = *r.match.info;
   std::string phrase;

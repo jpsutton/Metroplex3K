@@ -547,9 +547,9 @@ again at step 0. The state is also re-bound when the view zoom or rotation chang
 (zoom, rotation) slot has its own scripts. [STATIC]
 
 **Pause.** The elapsed time comes from the view's real-time update, not from the simulation clock,
-so game speed has no effect. [STATIC] Whether view updates continue while the game is paused was
-not traced. [OPEN] Recommended: keep animating while paused, consistent with automata
-(`26-automata.md`).
+so game speed has no effect. [STATIC] View updates **continue while the game is paused**: with the
+simulation paused, building animations (smoke plumes) keep running, automata keep moving, and the
+view scrolls normally. [OBSERVED]
 
 ### 7.2 Attached child sprites (smokestacks and other effects)
 
@@ -772,13 +772,24 @@ is the terrain-side highlight primitive.
   entries are hard-coded to **32.0 pixels per update**, and no preference overrides them, so the
   step is the same number of screen pixels at every zoom. [STATIC]
 * **Drag and edge scroll** use the velocity rules in `08-ui-framework.md` §8.3, applied through the
-  same per-update scroll call. [STATIC] The view update period (and so the scroll speed in pixels
-  per second) is [OPEN]. On zoom change the view passes the value 60.0 to its update scheduler,
-  which suggests a 60 Hz target. [INFERRED, low confidence]
+  same per-update scroll call. [STATIC]
+* **Update rate.** The original's view update is **not throttled to a fixed rate** on current
+  hardware. [OBSERVED] Measured under Wine on a modern CPU at 800 × 600 with the simulation paused:
+  * a held arrow key, or a right-button drag 100 px from its anchor, crossed an entire 256-tile map
+    at zoom 4 in under 0.5 s, which is roughly 20 000+ px/s;
+  * a single key tap (press and immediate release) moved the view by about 300 px, that is, about
+    10 updates of 32 px;
+  * screen redraws, captured at 60 fps, each showed jumps of 150–300 px.
+
+  The loop therefore runs many updates per displayed frame, and the scroll speed depends on the
+  machine. There is no original px/s figure to match. On zoom change the view passes 60.0 to its
+  update scheduler [STATIC], which reads as the designers' intended rate. **Recommended:** run view
+  updates at a fixed 60 Hz. That gives keyboard scroll = 32 px × 60 = 1920 px/s, and drag scroll =
+  the `08-ui-framework.md` §8.3 per-update step × 60.
 * **Redraw.** The city surface is cached and updated through dirty rectangles (per tile changes and
-  automata movement). Automata and animations are redrawn on an animation tick. The tick rate is
-  [OPEN]. Building animation timing does not depend on it, because scripts use their own
-  millisecond clock (§7.1).
+  automata movement). Automata and animations are redrawn as the view updates; use the same 60 Hz
+  recommendation. Building animation timing does not depend on the update rate, because scripts use
+  their own millisecond clock (§7.1).
 
 ### Persisted state: view record
 
@@ -807,9 +818,7 @@ world or view coordinates is [INFERRED: world tile coordinates].
   and row 0..31. This is decided in the view module, not traced.
 * The underground view's sprite set and the hiding of above-ground objects. The selection highlight, the
   placement preview and the cost text at the cursor (view module, not traced).
-* The view update tick rate (and so the keyboard scroll speed in pixels per second; the step is
-  32 px per update) and whether view updates (and so building animation, §7.1) continue while the
-  game is paused.
+* None for the view update rate: it is unthrottled in the original; 60 Hz is recommended (§10).
 * The meaning of each SprInstCLSID and of LayerFlags; whether the 2× magnification uses any filtering.
 * Edge-scroll rectangle sizes.
 * The tie-break rule for ordering moving objects against static objects.

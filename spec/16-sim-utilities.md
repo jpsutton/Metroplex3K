@@ -231,7 +231,7 @@ consumption is *n* × (lot width × lot depth in tiles); buildings without an en
 **Treatment capacity** [STATIC]: each month a treatment plant's capacity is set to
 `OptimalPollutionCap`, reduced linearly after `DeclineAge` (cap − ⌊(age − DeclineAge) × cap /
 (MaxLifespan − DeclineAge)⌋). It is 0 if the plant's lot is not occupied (state 1), its tile is
-unpowered, or its tile has no water service. At age ≥ `MaxLifespan` the plant expires. No
+unpowered, or its tile has no water service. At age ≥ `MaxLifespan` (greater **or equal**), in its monthly step, the plant's capacity is set to 0 and it is **replaced** like a power plant: a new occupant of the same agent type at the same position, lot state 8, carrying over its dates and lifespans, with the expired flag set. An expired plant is skipped by later monthly steps [STATIC]. No
 funding factor is applied. The pollution layer sums these capacities at the start of **every
 pollution run** (one per simulated day with the shipped `UpdatePeriod`), so the cap is
 **per run**, not per month (`17-sim-services.md` §7.2.4 step 4). Correction: earlier text said
@@ -452,7 +452,7 @@ stages below, and any part not disposed is added to the landfill store's pending
 (descending). Walk them while `served < P`: `served += popServed_c`,
 `w += pct_c × popServed_c / 100`. Then `r = w / P` if `served < P`, else `r = w / served`; `r` = 0
 when there is no centre. A centre's monthly values [STATIC]:
-* 0 and 0 if it is expired, if its age ≥ `MaxLifespan` (it is then retired), if its tile is
+* 0 and 0 if it is expired, if its age ≥ `MaxLifespan` (it is then **replaced** in that monthly step like a power plant: same agent type, lot state 8, dates and lifespans carried over, expired flag set; comparison is ≥) [STATIC], if its tile is
   unpowered, if its lot state is not 1, or if its trip failed twice (§4.3 "Traffic access");
 * otherwise `OptimalPctReduction` and `OptimalPopServed` (`SC3Tune.ini [RecyclingCenter]`), both
   reduced linearly after `DeclineAge`: value − ⌊(age − `DeclineAge`) × value /

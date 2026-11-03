@@ -214,6 +214,7 @@ class City {
   // A building burns (16) or becomes rubble (8): the occupant is replaced, so a lot that counted in the committed demand
   // P (state 1 or 4) leaves it (spec 15 s4 "Committed demand") [INFERRED, medium-high].
   void damageOccupant(int index, uint32_t newState);
+  void retireAged(size_t occupantIndex, int ageMonths, int maxLifespanMonths);   // recycling / treatment replacement at MaxLifespan
   // A connection tile of saved set `setIndex` (rail, road, pipe, power, highway, subway) to neighbour `neighbour`.
   bool connectionTile(int setIndex, int neighbour, int& tx, int& tz) const;
   std::optional<size_t> evaluateBusinessDeals(const BusinessDeals::Inputs& in) { return business.weeklyEvaluate(in, rng_); }
@@ -277,7 +278,7 @@ class City {
   void monthlyPopulation();
   void monthlyTraffic(); void monthlyBudget(); void monthlyPower(); void monthlyWater();
   void monthlyPollution(); void monthlyCrime(); void monthlyAura(); void monthlyWeather();
-  void updateTreatmentCaps();
+  void updateTreatmentCaps(bool monthly = false);
  public:
   // Spacing grid 01FD7A8C (spec 10 s6.3): one byte per 4 x 4 block; bits 2-5 = overlap counter. add(): if any block of
   // the 5 x 5-block neighbourhood has 15, refuse; else +1 on all of them. rem(): c ← c−1 on the same 25 blocks (no

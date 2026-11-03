@@ -565,7 +565,7 @@ fixed global vehicle list there is then not the key-vehicle list [INFERRED, low 
   §6.1–§6.2, whose speeds use the same microsecond time base) advance by elapsed **real**
   (wall-clock) time, not by simulated time: their on-screen speed does not change with the game
   speed setting. [INFERRED, high confidence: all their timers are in microseconds and none is tied to
-  the simulation clock] Whether they freeze while the game is paused is [OPEN]; recommended: freeze.
+  the simulation clock] They do **not** freeze while the game is paused: with the simulation paused, cars and trains keep moving and building animations (smoke) keep running [OBSERVED].
 
 * Speed: a vehicle moves at most at its MaxSpeed and at most at the lane's Speed (§3.1 for the
   conversion factor) [INFERRED min rule]. Vehicles keep a gap of at least their Length from the

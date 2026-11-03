@@ -58,8 +58,8 @@ void Game::drawNavigator(int barH) {
     const int by1 = nav.y + 6, by2 = nav.y + 34, bw = 34, gap = 2, x0 = nav.x + 6, bw2 = 46;
     if (ui_.button({x0, by1, bw, 24}, "+")) zoomBy(1);
     if (ui_.button({x0 + (bw + gap), by1, bw, 24}, "-")) zoomBy(-1);
-    if (ui_.button({x0 + 2 * (bw + gap), by1, bw, 24}, "<")) rot(-1);
-    if (ui_.button({x0 + 3 * (bw + gap), by1, bw, 24}, ">")) rot(1);
+    if (ui_.button({x0 + 2 * (bw + gap), by1, bw, 24}, "<")) rot(1);
+    if (ui_.button({x0 + 3 * (bw + gap), by1, bw, 24}, ">")) rot(-1);
     if (ui_.button({x0, by2, bw2, 24}, "Grid", true, ropt_.grid)) ropt_.grid = !ropt_.grid;
     if (ui_.button({x0 + bw2 + gap, by2, bw2, 24}, "Query", true, tool_ == ToolKind::Query)) setTool(ToolKind::Query);
     if (ui_.button({x0 + 2 * (bw2 + gap), by2, bw2 - 4, 24}, "Map")) openWindow("map");
@@ -119,8 +119,15 @@ void Game::drawNavigator(int barH) {
     }
   }
 
-  // "N" marker above the diamond.
-  ui_.textCentered({ox + kCx - 10, oy + kCy - kMapHalf - 17, 20, 14}, "N", "main10", rgb(255, 199, 24));
+  // "N" marker at the diamond corner where the map's north corner (world 0,0) is: top at rotation 0, and it moves
+  // top -> right -> bottom -> left as the map turns clockwise (spec 08 5.4 [OBSERVED]).
+  {
+    int nu, nv; Renderer::worldToViewVertex(cam_.rot, world_.W, world_.H, 0, 0, nu, nv);
+    const int sxs = nv - nu, sys = nu + nv - world_.W;   // screen x / y direction of the corner from the centre
+    const int dxs = (sxs > 0) - (sxs < 0), dys = (sys > 0) - (sys < 0);
+    const int off = kMapHalf + 10;
+    ui_.textCentered({ox + kCx + dxs * off - 10, oy + kCy + dys * off - 7, 20, 14}, "N", "main10", rgb(255, 199, 24));
+  }
 
   // Buttons: 4-cell strips (26x29 cells) centred on the observed button centres.
   auto cellBtn = [&](const char* art, int cx, int cy, int cw, int ch, const std::string& tip, const std::function<void()>& fn) {
@@ -132,8 +139,9 @@ void Game::drawNavigator(int barH) {
   auto tip = [&](uint32_t id, const char* fb) { std::string t = str(0x225872FE, id); return t.empty() ? std::string(fb) : t; };
   cellBtn("nav.btn.0", 26, 112, 26, 29, tip(0xA, "Zoom in"), [&] { zoomBy(1); });
   cellBtn("nav.btn.1", 133, 112, 26, 29, tip(0xB, "Zoom out"), [&] { zoomBy(-1); });
-  cellBtn("nav.btn.2", 47, 133, 26, 29, tip(0xC, "Rotate counter-clockwise"), [&] { rot(-1); });
-  cellBtn("nav.btn.3", 112, 133, 26, 29, tip(0xD, "Rotate clockwise"), [&] { rot(1); });
+  // Clockwise = the map turns clockwise as seen: the bottom corner goes to the left corner (lower rotation index; spec 08 5.4).
+  cellBtn("nav.btn.2", 47, 133, 26, 29, tip(0xC, "Rotate counter-clockwise"), [&] { rot(1); });
+  cellBtn("nav.btn.3", 112, 133, 26, 29, tip(0xD, "Rotate clockwise"), [&] { rot(-1); });
   cellBtn("nav.layers", 131, 24, 36, 35, tip(0xA7, "Layer views"), [&] { if (showLayers_) showLayers_ = false; else openWindow("layers"); });
 }
 

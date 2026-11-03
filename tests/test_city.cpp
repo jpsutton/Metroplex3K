@@ -179,6 +179,25 @@ int main() {
   for (int d = 0; d < 40; d++) s.tickDay();
   CHECK(c.powered(20, 42) && c.lastPowerProduced() > 0);
 
+  // Recycling centres and treatment plants are replaced at age >= MaxLifespan (spec 16 4.3): lot state 8, expired flag set.
+  {
+    const int ri = s.occupantAt(43, 31);
+    CHECK(ri >= 0);
+    c.retireAged(size_t(ri), 119, 120);                                   // one month short: unchanged
+    CHECK((w.occupants[size_t(ri)].state & ~0x200u) == 1);
+    c.retireAged(size_t(ri), 200, 0);                                     // no lifespan configured: unchanged
+    CHECK((w.occupants[size_t(ri)].state & ~0x200u) == 1);
+    c.retireAged(size_t(ri), 120, 120);                                   // age == MaxLifespan: retired (>=)
+    CHECK((w.occupants[size_t(ri)].state & ~0x200u) == 8);
+    bool expired = false;
+    for (auto& kv : w.occupants[size_t(ri)].intProps) if (kv.first == 0x2351FAFB && kv.second == 1) expired = true;
+    CHECK(expired);
+    c.retireAged(size_t(ri), 130, 120);                                   // already retired: stays
+    CHECK((w.occupants[size_t(ri)].state & ~0x200u) == 8);
+    w.occupants[size_t(ri)].state = 1;                                    // restore the plant for the checks below
+    for (auto& kv : w.occupants[size_t(ri)].intProps) if (kv.first == 0x2351FAFB) kv.second = 0;
+  }
+
   // --- save / load round trip with unknown raw records ---
   const ResKey unkInner{0x12345678, 0x9ABCDEF0, 7};
   const ResKey unkOuter{0x0BADF00D, 0x0BADF00D, 3};

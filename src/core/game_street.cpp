@@ -156,7 +156,7 @@ void Game::streetSimFrame(uint32_t dtMs) {
   v.y0 = std::max(0, std::min(za, zb)); v.y1 = std::min(world_.H - 1, std::max(za, zb));
   v.zoom = cam_.zoom; v.rotation = cam_.rot;
   street_->setView(v);
-  if (!paused_ && !anyBlockingWindow()) {
+  if (!anyBlockingWindow()) {   // cars and trains keep moving while the game is paused (spec 26 [OBSERVED])
     street_->update(int64_t(dtMs) * 1000);
   }
   for (const AutomatonSprite& s : street_->sprites()) {
