@@ -196,7 +196,7 @@ const std::vector<CityLayerView>& cityLayerViews() {
 // the navigator's lattice strip (02F78C6D:22F96E31) as the grid button and the GZBtnDone check mark.
 WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   WindowResult R;
-  Rect r = centered(ui, 296, 336);
+  Rect r = placedAt(ui, 32, 32, 296, 336);
   const Skin* sk = ui.skin;
   const uint32_t ink = rgb(0x31, 0x38, 0x84), grey = rgb(0x9C, 0xA2, 0xBD), white = rgb(255, 255, 255);
   if (frame(ui, E, r, E.win(0x269, "View City Layers"))) { R.close = true; R.add(Act::Close); }
@@ -327,7 +327,7 @@ const uint32_t kSeriesCol[14] = {rgb(200, 0, 0), rgb(0, 140, 0), rgb(0, 0, 200),
 WindowResult GraphsWindow::draw(Ui& ui, const WinEnv& E, const std::vector<GraphSeries>& series) {
   WindowResult R;
   int lh = lineHeight(ui);
-  Rect r = centered(ui, 680, 420);
+  Rect r = placedAt(ui, 40, 34, 680, 420);   // original: 424 x 440 at (40, 34); the content layout is not reproduced yet [#57]
   if (frame(ui, E, r, E.win(0x184, "Graphs"))) { R.close = true; R.add(Act::Close); }
   Rect plot{r.x + 14, r.y + 40, 440, 280};
   ui.fill(plot, rgb(255, 255, 255)); ui.frame(plot, false);

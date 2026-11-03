@@ -133,6 +133,8 @@ struct WindowResult {
 namespace wui {
 // Centred w x h window, moved by any title-bar drag (Ui::movable); registers the frame in ui.windowRects.
 Rect centered(Ui& ui, int w, int h);
+// Same at a fixed client position (the original opens several windows at code-constant positions, spec 09 6.x [OBSERVED]).
+Rect placedAt(Ui& ui, int x, int y, int w, int h);
 // Window chrome with title bar and close button. Returns true when the close button was clicked.
 bool frame(Ui& ui, const WinEnv& E, Rect r, const std::string& title);
 // Button that registers a test spot.
@@ -238,6 +240,8 @@ class OrdinancesWindow {
   int scroll = 0;
   // Lists available ordinances with check boxes. `advisorFilter` != 0 lists only that advisor's ordinances.
   WindowResult draw(Ui& ui, const WinEnv& E, Ordinances& o, const OrdinanceMoneyInput& money, uint32_t advisorFilter = 0, bool framed = true, Rect area = {});
+ private:
+  WindowResult drawFramed(Ui& ui, const WinEnv& E, Ordinances& o, const OrdinanceMoneyInput& money, uint32_t advisorFilter);
 };
 std::string ordinanceName(const WinEnv& E, const OrdinanceDef& d);
 

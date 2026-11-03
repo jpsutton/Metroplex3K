@@ -255,12 +255,29 @@ void groupL3(const fs::path& root, const fs::path& ref) {
     if (!ours.open(root) || !ours.load(shipped[0])) { row("load shipped " + kv.first, "fails", "loads", false); continue; }
     const int target = absDay(theirs.game.city().clock.date());
     const int observedPop = theirs.game.sim().population();
+    // The original's population is not monotonic (water-pump outages dip it, e.g. Madrid): compare with the band of the last three
+    // observed saves (spec 28 s5.3: inside the original's min-max band, 10 % tolerance), not with one point.
+    int lo = observedPop, hi = observedPop;
+    {
+      std::vector<std::string> names;
+      for (const auto& e2 : fs::directory_iterator(ref)) {
+        const std::string n2 = e2.path().filename().string();
+        if (n2.compare(0, 3 + kv.first.size() + 2, "W5_" + kv.first + "_s") == 0 && lower(e2.path().extension().string()) == ".sc3") names.push_back(n2);
+      }
+      std::sort(names.begin(), names.end());
+      for (size_t k = names.size() > 3 ? names.size() - 3 : 0; k < names.size(); k++) {
+        Session other;
+        if (other.open(root) && other.load(ref / names[k])) { const int p2 = other.game.sim().population(); lo = std::min(lo, p2); hi = std::max(hi, p2); }
+      }
+    }
     ours.game.city().sched.isHold = nullptr;   // a loaded city is paused; tickDay would wait for the hold forever on this single thread
     int days = 0;
     while (absDay(ours.game.city().clock.date()) < target && days < 800) { ours.game.sim().tickDay(); days++; }
     const int ourPop = ours.game.sim().population();
-    const double dev = observedPop > 0 ? 100.0 * std::fabs(double(ourPop) - observedPop) / observedPop : 100.0;
-    row("population after " + str(days) + " days, " + kv.first + " (ours " + str(ourPop) + ", original " + str(observedPop) + ")", pct(dev) + " off", "<= 10.0%", dev <= 10.0);
+    const bool pass = double(ourPop) >= lo * 0.9 && double(ourPop) <= hi * 1.1;
+    const double dev = observedPop > 0 ? 100.0 * (double(ourPop) - observedPop) / observedPop : 100.0;
+    row("population after " + str(days) + " days, " + kv.first + " (ours " + str(ourPop) + ", original " + str(lo) + ".." + str(hi) + ")",
+        pct(dev) + " vs the last save", "inside the last-3-saves band +-10%", pass);
   }
 }
 
@@ -353,10 +370,9 @@ void groupShots(const fs::path& root, const fs::path& outDir) {
     shot("in_city");
     const char* wins[] = {"budget", "ordinances", "neighbours", "deals", "advisors", "map", "graphs", "charts", "prefs", "layers", "engine", "goals"};
     for (const char* w : wins) {
+      g.closeAllWindows(); g.gotoScreen(Screen::InCity); frame(2);   // every window from the same plain city view
       g.openWindow(w); frame(4);
       shot(std::string("window_") + w);
-      in.key[K_ESC] = true; frame(3);
-      g.closeAllWindows();
     }
   }
   std::FILE* f = std::fopen((outDir / "manifest.tsv").string().c_str(), "wb");

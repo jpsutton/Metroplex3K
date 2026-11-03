@@ -363,7 +363,7 @@ void BudgetWindow::drawLoans(Ui& ui, const WinEnv& E, Budget& b, const BudgetVie
 WindowResult BudgetWindow::draw(Ui& ui, const WinEnv& E, Budget& b, const BudgetView& v) {
   WindowResult R;
   if (page == Page::Main) {
-    drawMainPage(ui, E, b, v, centered(ui, 500, 480), R);
+    drawMainPage(ui, E, b, v, placedAt(ui, 102, 32, 500, 480), R);
     return R;
   }
   if (page == Page::Loans) {
@@ -377,11 +377,11 @@ WindowResult BudgetWindow::draw(Ui& ui, const WinEnv& E, Budget& b, const Budget
       bool inc = incomeTab;
       incomeTab = false;
       WindowResult ignored;
-      drawMainPage(ui, bg, b, v, centered(ui, 500, 480), ignored);
+      drawMainPage(ui, bg, b, v, placedAt(ui, 102, 32, 500, 480), ignored);
       incomeTab = inc;
       ui.in = saved;
     }
-    drawLoans(ui, E, b, v, centered(ui, 360, 400), R);
+    drawLoans(ui, E, b, v, placedAt(ui, 102, 32, 360, 400), R);
     return R;
   }
   int lh = lineHeight(ui);
@@ -512,15 +512,79 @@ std::string ordinanceName(const WinEnv& E, const OrdinanceDef& d) {
   return E.text(kTblOrdinance, d.nameStr, buf);
 }
 
+// The Review > Ordinances window as observed on the original (spec 09 6.3, 800x600): 384 x 354 frame at (8, 8) with no close box,
+// header "Ordinance" / "Current Monthly Cost", a list box with a classic scroll bar grouped by advisor (24 px band with the advisor
+// title and a "?" button, then 18 px rows: check box, name, cost right-aligned and grey while not enacted), "Monthly Total" and an OK
+// check-mark button at the bottom right.
+WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o, const OrdinanceMoneyInput& money, uint32_t advisorFilter) {
+  WindowResult R;
+  const uint32_t ink = rgb(0x31, 0x34, 0x7B), grey = rgb(0x90, 0x94, 0xA0), band = rgb(0x7B, 0x92, 0xFF);
+  Rect r = placedAt(ui, 8, 8, 384, 354);
+  ui.panel(r, E.win(0x76, "Ordinances"));
+  ui.text(r.x + 14, r.y + 40, "Ordinance", "main10", ink);
+  rightText(ui, r.x + r.w - 30, r.y + 40, "Current Monthly Cost", "main10", ink);
+  const Rect list{r.x + 4, r.y + 62, 368, 223};
+  ui.fill(list, rgb(0xE6, 0xE8, 0xFF)); sunkenLines(ui, list);
+  static const uint32_t order[7] = {kAdvUtilities, kAdvDemographics, kAdvSafety, kAdvEnvironment, kAdvPlanner, kAdvTransport, kAdvBudget};
+  struct Item { bool header; uint32_t id; std::string name; };
+  std::vector<Item> items;
+  for (uint32_t adv : order) {
+    if (advisorFilter && adv != advisorFilter) continue;
+    std::vector<Item> rows;
+    for (auto& kv : o.catalogue())
+      if (kv.second.category == adv && o.available(kv.first)) rows.push_back({false, kv.first, ordinanceName(E, kv.second)});
+    if (rows.empty()) continue;
+    items.push_back({true, adv, AdvisorWindow::advisorName(E, adv)});
+    items.insert(items.end(), rows.begin(), rows.end());
+  }
+  const int bodyW = list.w - 18;                       // the scroll bar takes the right edge
+  int visible = 0;
+  { int h = 0; for (size_t i = size_t(scroll); i < items.size(); i++) { h += items[i].header ? 24 : 18; if (h > list.h) break; visible++; } }
+  scrollBar(ui, E, {list.x + list.w - 16, list.y, 16, list.h}, int(items.size()), std::max(1, visible - 1), scroll);
+  int y = list.y;
+  for (size_t i = size_t(scroll); i < items.size(); i++) {
+    const Item& it = items[i];
+    const int h = it.header ? 24 : 18;
+    if (y + h > list.y + list.h) break;
+    if (it.header) {
+      ui.fill({list.x, y, bodyW, h}, band);
+      ui.text(list.x + 8, y + 5, it.name, "title12", rgb(255, 255, 255));
+      bool c = false;
+      const Rect q{list.x + bodyW - 38, y, 36, h};
+      E.spot("adv." + std::to_string(it.id), q);
+      if (ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Gonzo, 0x19), 4, q, "", false, true, c)) {}
+      else c = ui.button(q, "?");
+      if (c) R.add(Act::OpenAdvisor, it.id);
+    } else {
+      const bool en = o.enacted(it.id);
+      bool on = en;
+      if (check(ui, E, "ord." + std::to_string(it.id), {list.x + 6, y, bodyW - 90, h}, "", on)) {
+        const bool ok = en ? o.repeal(it.id) : o.enact(it.id);
+        if (ok) R.add(Act::SetOrdinance, it.id, !en);
+      }
+      ui.text(list.x + 28, y + 2, it.name, "main9", ink);
+      const int64_t val = o.monthlyValue(it.id, money);
+      rightText(ui, list.x + bodyW - 8, y + 2, E.money(val), "main9", en ? ink : grey);
+    }
+    y += h;
+  }
+  const auto m = o.monthlyMoney(money);
+  const int64_t net = m.income - m.cost;
+  ui.text(r.x + 14, r.y + 296, E.win(0x1C4, "Monthly Total"), "title12", ink);
+  ui.text(r.x + 14 + ui.textWidth(E.win(0x1C4, "Monthly Total"), "title12") + 10, r.y + 298, E.money(net), "main10", net < 0 ? rgb(160, 0, 0) : ink);
+  const Rect done{r.x + r.w - 56, r.y + r.h - 40, 44, 34};
+  E.spot("ok", done);
+  bool c = false;
+  if (!(ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Sys, 0xA2DEFD9A), 4, done, "", false, true, c))) c = ui.button(done, E.app(0xB4, "OK"));
+  if (c || ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
+  return R;
+}
+
 WindowResult OrdinancesWindow::draw(Ui& ui, const WinEnv& E, Ordinances& o, const OrdinanceMoneyInput& money,
                                     uint32_t advisorFilter, bool framed, Rect area) {
   WindowResult R;
   Rect r = area;
-  if (framed) {
-    r = centered(ui, 520, 400);
-    if (frame(ui, E, r, E.win(0x76, "Ordinances"))) { R.close = true; R.add(Act::Close); }
-    r = {r.x + 10, r.y + 30, r.w - 20, r.h - 40};
-  }
+  if (framed) return drawFramed(ui, E, o, money, advisorFilter);
   int lh = lineHeight(ui);
   struct Row { uint32_t id; std::string name; };
   std::vector<Row> rows;
@@ -656,7 +720,7 @@ PetitionerView makeDealOfferView(const WinEnv& E, const Deal& d, size_t pendingI
 WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) {
   WindowResult R;
   const uint32_t ink = rgb(0x31, 0x34, 0x7B), lav = rgb(0x7B, 0x7D, 0xB5), white = rgb(255, 255, 255);
-  Rect r = centered(ui, 372, 445);
+  Rect r = placedAt(ui, 50, 50, 372, 445);
   if (frame(ui, E, r, E.win(0x117, "Neighbors Map"))) { R.close = true; R.add(Act::Close); }
   for (Rect b : {Rect{10, 325, 111, 26}, Rect{232, 300, 131, 51}, Rect{10, 326, 11, 110}, Rect{352, 300, 11, 136}, Rect{10, 395, 353, 41}})
     ui.fill({r.x + b.x, r.y + b.y, b.w, b.h}, rgb(0x7B, 0x92, 0xFF));

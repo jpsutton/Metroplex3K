@@ -255,7 +255,13 @@ void testOrdinances() {
   CHECK(filt > 0 && filt <= inCat);
   // Close.
   h.drawFn = [&] { return w.draw(h.ui, h.E, o, money); };
-  r = h.click("close"); CHECK(r.close);
+  r = h.click("ok"); CHECK(r.close);   // the original has no close box: an OK check-mark button closes it (spec 09 6.3)
+  h.frame();
+  Rect fr; CHECK(!h.find("close", fr));
+  // Placement (spec 09 6.3 [OBSERVED]): 384 x 354 at (8, 8); grouped by advisor with one "?" band per group.
+  Rect okr; CHECK(h.find("ok", okr) && okr.x == 8 + 384 - 56 && okr.y == 8 + 354 - 40);
+  size_t bands = 0; for (auto& s : h.spots) if (s.name.rfind("adv.", 0) == 0) bands++;
+  CHECK(bands >= 1 && bands <= 7);
 }
 
 

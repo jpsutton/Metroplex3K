@@ -57,6 +57,12 @@ Rect centered(Ui& ui, int w, int h) {
   return r;
 }
 
+Rect placedAt(Ui& ui, int x, int y, int w, int h) {
+  Rect r = ui.movable({x, y, w, h});
+  ui.windowRects.push_back(r);
+  return r;
+}
+
 int lineHeight(const Ui& ui) { return ui.fonts->ui().height() + 3; }
 
 bool button(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool enabled, bool toggled) {
