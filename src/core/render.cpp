@@ -593,6 +593,14 @@ void Renderer::prepareTerrain(const RenderOptions& opt) {
   const bool netSprites = opt.objects && (data_ || spriteFn_);
   if (opt.zonePaint && !opt.underground && !netSprites)
     for (const auto& np : w.surface) if (w.inTiles(np.x, np.z)) roadMask_[w.tIdx(np.x, np.z)] = 1;
+  // Zone tint belongs on empty zoned land. A building's sprite does not always cover its whole footprint (the water
+  // treatment plant leaves a corner bare), and the tint showing there reads as a stray coloured rectangle.
+  occMask_.assign(size_t(w.W) * w.H, 0);
+  if (opt.zonePaint && !opt.underground && netSprites)
+    for (const auto& o : w.occupants)
+      for (int dx = 0; dx < o.sizeX; dx++)
+        for (int dz = 0; dz < o.sizeZ; dz++)
+          if (w.inTiles(o.x + dx, o.z + dz)) occMask_[w.tIdx(o.x + dx, o.z + dz)] = 1;
 }
 
 void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs, int xe) {
@@ -689,7 +697,7 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, 
         if (tintRow)
           for (int i = 0; i < 4; i++) if (dry[i] || !anyDry) for (int k = 0; k < 3; k++) col[i][k] = (col[i][k] + tintCol[k]) / 2;
         // Legacy zone/road paint.
-        if (!tintRow && allDry && opt.zonePaint && !opt.underground) {
+        if (!tintRow && allDry && opt.zonePaint && !opt.underground && !(tIdx < int(occMask_.size()) && occMask_[size_t(tIdx)])) {
           int zt = w.zone[tIdx];
           float tr = 0, tg = 0, tb = 0, ta = 0;
           if (roadMask_[tIdx]) { tr = 90; tg = 90; tb = 95; ta = 0.85f; }
@@ -850,7 +858,7 @@ void Renderer::collectTerrainTris(const Camera& cam, const RenderOptions& opt, s
         if (tintRow) basicTint(tintRow, tintCol);
         if (tintRow)
           for (int i = 0; i < 4; i++) if (dry[i] || !anyDry) for (int k = 0; k < 3; k++) col[i][k] = (col[i][k] + tintCol[k]) / 2;
-        if (!tintRow && allDry && opt.zonePaint && !opt.underground) {
+        if (!tintRow && allDry && opt.zonePaint && !opt.underground && !(tIdx < int(occMask_.size()) && occMask_[size_t(tIdx)])) {
           int zt = w.zone[tIdx];
           float tr = 0, tg = 0, tb = 0, ta = 0;
           if (roadMask_[tIdx]) { tr = 90; tg = 90; tb = 95; ta = 0.85f; }
@@ -1525,6 +1533,8 @@ uint64_t Renderer::terrainLayerKey(const Camera& cam, const RenderOptions& opt) 
   // The road mask (grey network paint) is drawn from the surface pieces only in this mode.
   if (opt.zonePaint && !opt.underground && !netSprites)
     for (const auto& np : w.surface) { mix(uint64_t(uint32_t(np.x)) << 32 | uint32_t(np.z)); }
+  if (opt.zonePaint && !opt.underground && netSprites)   // building footprints suppress the zone tint
+    for (const Occupant& o : w.occupants) { mix(uint64_t(uint32_t(o.x)) << 32 | uint32_t(o.z)); mix(uint64_t(uint32_t(o.sizeX)) << 32 | uint32_t(o.sizeZ)); }
   if (opt.overlay) { mix(uint64_t(opt.overlay->slot) + 1); h = hashVec(h, opt.overlay->row); } else mix(0);
   return h;
 }

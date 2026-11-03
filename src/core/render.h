@@ -340,6 +340,7 @@ class Renderer : public ICityRasterizer {
   bool shadeValid_ = false;
   int maxAlt_ = 255;
   std::vector<uint8_t> roadMask_;
+  std::vector<uint8_t> occMask_;   // tiles under a building footprint (no zone tint there when sprites are drawn)
   std::vector<uint8_t> tint_;
   TerrainPalettes pal_;
   bool palOverride_ = false;
