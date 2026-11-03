@@ -228,8 +228,24 @@ and description from the `.SNR` (`23-scenarios.md`). Fonts: `systemloadsave.fbf`
 (`05-text-and-fonts.md`).
 
 Save flow: if the target exists ask `015E410C:C` (overwrite?); read-only targets give `26`/`29`;
-invalid names `27`, too long `2A`, bad path `2D`, failure `2E`. Leaving a modified city (New, Load,
-Exit) asks `015E410C:12` / `029541F4:250` with Yes/No/Cancel (`209E6378:C0`, `C2`, `B6`).
+invalid names `27`, too long `2A`, bad path `2D`, failure `2E`.
+
+Leaving the current city: [STATIC]
+* **There is no "modified" or dirty flag.** Neither the Exit path nor the New/Load path tests
+  whether the city changed. Letting the simulation run, editing the city, and saving or loading do
+  not set or clear anything that controls the prompt.
+* **New / Load** (when a city is open): the command carries an "ask to save" argument, which
+  defaults to true. If it is true, the game asks `029541F4:250` ("Would you like to save this
+  city?") or `015E410C:12` ("Do you want to save your city?"), with a `015E410C:6` "Save" caption.
+  Answering Yes opens the save flow, No continues without saving, and Cancel aborts.
+* **Exit** takes two arguments: *confirm* and *ask to save*. If *confirm* is set, the game first
+  shows `209E6378:A3` "Now leaving Sim City 3000." (title `225872FE:55` "Exit") with OK/Cancel.
+  Cancel aborts. If *ask to save* is set and a city is open, it then asks `209E6378:127` "Do you
+  want to save the game?" with Yes/No/Cancel (`209E6378:C0`, `C2`, `B6`). Yes saves, No exits, and
+  Cancel aborts.
+* Which UI entry points pass *ask to save* = false was not traced. [OBSERVED] Closing the window
+  shows "Now leaving", and after OK the save prompt follows when a city is open. Implement *ask to
+  save* = true for window close, quit hotkeys, menu Exit, New and Load.
 
 Scenario end screens (`23-scenarios.md`): status `041F2625:4`/`5`, greeting `3`, completion `7`,
 results `25`, buttons replay `8`, another scenario `9`, main menu `A`.
@@ -872,6 +888,150 @@ simulation documents (`16`, `17`, `18`).
 Query on a building in a scenario or holiday building set uses the same lines. Holiday-specific
 flavour strings are in `SC3StringsBuildings_Holidays.IXF` (`13-buildings-occupants.md`).
 
+#### 6.12.1 Query panel layout
+
+Coordinates are pixels relative to the panel's top-left corner. y values are the **top of the FBF
+line box** (`05-text-and-fonts.md` §4; ink starts 3 px lower in `main9`/`main10`). Measured at
+800 × 600 on the original. [OBSERVED] The sizes are code constants, so they do not change with
+resolution. [STATIC]
+
+**Layout types.** There are three fixed sizes; the panel never computes its size from the row
+count or text width. [STATIC]
+
+| Type | Size (w × h) | Used when | Picture |
+|---|---|---|---|
+| 1 | 308 × 280 | the target has no picture: bare ground, water, road, rail, highway, subway, power line, pipe, bridge, landfill zone | none |
+| 2 | 308 × 395 | the target has a picture with height/width ≤ 1.2 | top, centred |
+| 3 | 423 × 320 | the target has a picture with height/width > 1.2 (tall, narrow sprites: tall buildings, tall flora) | left, centred |
+
+The ratio test uses the rendered picture's size. [STATIC]
+
+**Position.** The first panel opens with its top-left at (40, 40) relative to the game's client
+area, wherever the click was. [STATIC][OBSERVED] The panel can be dragged by its title band. Later
+panels open where the last one was left, and a drag does not snap back or recentre. [OBSERVED]
+The original reads a saved position before falling back to (40, 40). After a game restart the
+default was used again; whether the position survives a clean exit was not verified.
+[STATIC][OBSERVED]
+
+**Chrome** (the same window chrome as the game's other modal dialogs) [OBSERVED]:
+* Top edge, from y = 0 down: 1 px white, then 3 px #EFEBFF, then 1 px #ADB6FF. The title band
+  (#7B92FF) runs from y 5 to y 33 (29 px). Below it come 1 px #ADB6FF and a few px of light blend
+  into the body.
+* Left edge, from x = 0 across: 1 px white, then 3 px #CED3FF, then 1 px #ADB6FF, then a 6 px
+  #7B92FF bar at x 5–10 running from the title band to the bottom, then 1 px #ADB6FF.
+* Right and bottom edges: 1 px black (x = w−1, y = h−1). There is no light border inside the
+  black.
+* Body: the standard light-blue cloud texture of the game's dialogs.
+* Title: `82E0074C:1` "Query", in `title12`, colour ≈ #DEDFFF, ink from x 8, y 14–30.
+* Close box: the dialog close button image, 23 × 23 at (w−31, 7).
+
+**Picture** [OBSERVED; layout STATIC]:
+* The occupant's own sprite, drawn with transparency over the cloud background (no fill). It is
+  framed by a 1 px #7B8AFF rectangle that sits 1 px outside the image. The box size follows the
+  image. Observed sizes: coal plant 130 × 110, 3 × 3 industry 98 × 79, small tower 98 × 77,
+  bamboo flora 102 × 135, tall abandoned building 66 × 83.
+* Type 2: the box is centred on (160, 97). Type 3: the box is centred on (77, 160).
+* The picture is rendered from the occupant by a thumbnail renderer. The exact zoom and scale it
+  uses are [OPEN]. Types-1 targets have no picture.
+
+**Name and status lines** (`main10`, default text colour RGB 0x31 0x36 0x7C):
+* Name: type 1 and type 2 at x 22; line top 42 (type 1) or 160 (type 2). Type 3 at x 140, line
+  top 42.
+* Status suffix (`C4`–`C7`, `186`, `196`, `197`, `1B4`, `1B8`, shown as "(Abandoned)",
+  "(Decommissioned)" and so on) goes on its own line 20 px below the name, indented by 15 px.
+* **Editable name** (rewards and landmarks with a player-renamable name, and marinas): the name is
+  drawn in a single-line edit field instead. The field is a white rectangle at (21, 159),
+  278 × 18, inside a 1 px #7B8AFF border at (20, 158), 280 × 20; text starts at x 22. Rename
+  behaviour: see the next batch [OPEN].
+
+**Rows** (`main9`, 14 px pitch = the font's line height):
+* Label column x and value column x:
+
+  | Layout | Label x | Value x |
+  |---|---|---|
+  | Types 1 and 2, no scrollbar | 23 | 160 |
+  | Types 1 and 2, scrollbar shown | 23 | 150 |
+  | Type 3 | 141 | 276 |
+
+  Labels are left-aligned and values are left-aligned at the value column.
+* First row: one blank line (14 px) below the last name or status line. That gives line top 71
+  (type 1), 189 (type 2), 209 (type 2 with a status line), 71 (type 3), and 91 (type 3 with a
+  status line).
+* **Groups:** each contributing subsystem's lines form a group, and groups are separated by one
+  blank row (14 px). See the per-target table below.
+* **Wrapping:** a label wraps to the next row at a word boundary when it does not fit before the
+  value column. Examples: "Reason for / Abandonment:", "Maximum Power / Capacity:", "Students in /
+  Attendance:", "Number of Eggs / Thrown:". The value is drawn on the label's **last** line. Values
+  wrap the same way within the value column ("Lack of chocolate / sprinkles"). Each wrapped line
+  takes one 14 px row. No truncation or ellipsis was seen.
+* **Colours:** values are red (#FF0000) for "No" in Powered/Watered and for "Hazardous" in
+  Pollution Generated. Everything else uses the default navy text colour.
+* **Scrolling** (type 2): rows are clipped to a viewport ending at y 354 (just above the buttons).
+  When the rows overflow, a vertical scrollbar appears at x 285–300, from the first row's top − 1
+  down to y 354. Measured: (285, 188, 16 × 167) without a status line; (285, 208, 16 × 147) with
+  one. The value column then moves to x 150. Zoned buildings with a "Reason for Abandonment" row
+  and colleges overflow; most other targets fit.
+
+**Buttons** (h = panel height, w = panel width) [OBSERVED]:
+* **OK**: checkmark image button, 42 × 32 at (w−50, h−37). It is the only control on most
+  targets.
+* **Replace** (`82E0074C` button text "Replace"): 73 × 33.
+  * Alone: at (16, h−38).
+  * With Make Historical: at (20, h−58), above the check box.
+  * It closes the query panel and opens the **Building Replacement** dialog (§ "Building
+    Replacement", strings `041F2625:12F` …), titled with the footprint size, e.g. "Building
+    Replacement 4x4". That dialog lists the replaceable buildings of the same footprint; nothing is
+    charged until it is confirmed there.
+* **Make Historical**: a 13 × 13 check box (white face, dark 1 px frame) at (20, h−23) in type 2,
+  or at (138, h−23) in type 3. Label `82E0074C:30` "Make Historical" in `main10` starts 14 px right
+  of the box.
+* Which targets get which controls:
+
+  | Target | Replace | Make Historical |
+  |---|---|---|
+  | Zoned (growable) building, not abandoned | yes | yes |
+  | Abandoned zoned building | no | yes |
+  | Civic/service buildings (fire station, college …), power plants, rewards (e.g. Mayor's House), marinas | yes | no |
+  | Landmarks such as "The Wall", flora, networks, terrain, water, landfill | no | no |
+
+**Behaviour** [OBSERVED]:
+* The panel is modal.
+* The **simulation is paused while the panel is open**: the date did not advance in 20 s at the
+  fastest speed. It resumes when the panel closes. The news ticker keeps scrolling.
+* **Closes:** OK and the close box. **Does not close:** Esc, Enter, Space, or clicking outside the
+  panel; an outside click does not start a new query either.
+* Arrow-key scrolling of the map is ignored while the panel is open.
+* The query tool stays armed after the panel closes.
+* The contents are a snapshot. Because the simulation is paused, nothing changes while the panel
+  is open.
+
+**Per-target rows** (one row per line, `|` = blank-row group separator) [OBSERVED]:
+
+| Target (layout) | Name | Rows |
+|---|---|---|
+| Zoned building (2 or 3) | building name (+ status) | Elevation, Land Value, Zone Type, [Reason for Abandonment — abandoned only], Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution (single group) |
+| Flora (2 or 3) | flora name | Elevation, Land Value, Zone Type, Powered, Watered, Flammability, Air Pollution, Water Pollution |
+| Landmark "The Wall" (2) | name | Elevation, Land Value, Zone Type, Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution |
+| Fire station (2) | name | Elevation, Powered, Watered \| Number of Fires, Number of Calls, Performance Rating, (flavour e.g. Spots on Dalmatian) \| Funding Cost |
+| College (2) | name | Elevation, Powered, Watered \| Capacity, Students in Attendance, Number of Professors, Grade … |
+| Reward (Mayor's House) (2) | editable name | (flavour, e.g. Number of Eggs Thrown) \| Date Built |
+| Marina (2) | editable name | Depth \| Boats Berthed |
+| Coal power plant (2) | name | Age (Max), Elevation, Pollution Generated \| Maximum Power Capacity, Current Power Capacity, Usage |
+| Bare ground (1) | "Dirt" (`C1`) | Elevation, Land Value, Zone Type, Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution |
+| Water (1) | "Fresh Water" / "Salt Water" | Depth, Air Pollution, Water Pollution |
+| Road / highway (1) | "Road" / "Highway" | Elevation \| Traffic |
+| Bridge (1) | "Bridge Ramp" (piece name) | Elevation \| Traffic |
+| Rail, rail station (1) | "Railroad" / "Train House" | Elevation \| Rail Usage |
+| Power line (1) | "Power Line" / "Power Line Terminus" | Elevation, Powered |
+| Landfill zone (1) | "Landfill" (+ status, e.g. "(Decommissioned)") | Elevation \| Capacity Citywide, Usage |
+| **Underground view:** water pipe (1) | "Water Pipe" | Watered (no Elevation) |
+| **Underground view:** subway (1) | "Subway" | Rail Usage (no Elevation) |
+| **Underground view:** tile with nothing underground | — | the surface tile's normal query (e.g. Dirt) |
+
+Not yet observed: neighbour connections, seaport/airport zones, water pump/tower, highway
+on-ramps, stations of other kinds, and click-target selection on overlapping sprites. These will
+follow in a later batch.
+
 ### 6.13 Snapshots (Unlimited edition) [STATIC]
 
 * *Take snapshot* (Review ▸ Take snapshot ▸ small/medium/large; message `2435FF70` with param 1/2/3):
@@ -1069,7 +1229,7 @@ closed with OK or the close box.
 
 | Target | Fields (top to bottom) | Extra controls |
 |---|---|---|
-| Zoned building (R, C or I) | picture, name, Elevation, Land Value, Zone Type (e.g. "Medium Residential", "Dense Commercial", "Light Commercial", "Medium Industrial"), Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution | Tall buildings put the picture on the left and add **Replace** and a **Make Historical** check box |
+| Zoned building (R, C or I) | picture, name, Elevation, Land Value, Zone Type (e.g. "Medium Residential", "Dense Commercial", "Light Commercial", "Medium Industrial"), Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution | **Make Historical** check box; **Replace** unless abandoned. Narrow, tall pictures go on the left (layout type 3, §6.12.1) |
 | Flora | name, picture, Elevation, Land Value, Zone Type, Powered, Watered, Flammability, Air Pollution, Water Pollution | — |
 | Power plant | picture, name, Age (Max) "N yrs. (M yrs.)", Elevation, Pollution Generated (red when "Hazardous"), Maximum Power Capacity, Current Power Capacity, Usage (MW-h/Month) | **Replace** |
 | Landfill | Elevation, Capacity Citywide (tons), Usage (% full) | — |
