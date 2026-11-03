@@ -581,8 +581,10 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
   // Dialogs opened from a city (Load / Save As) keep the city view and HUD behind them, frozen.
   const bool cityBackdrop = (scr_ == Screen::LoadList || scr_ == Screen::NewCity) && world_.W && simReady_;
   bool world3d = (scr_ == Screen::InCity || scr_ == Screen::TerrainEdit || cityBackdrop) && world_.W;
+  const bool gpuTry = world3d && citySink_ && ext && scr_ == Screen::InCity;
+  bool cityOnGpu = false;
   if (world3d) {
-    if (renderer_.width() != w || renderer_.height() != h) { renderer_.resize(w, h); cityFbValid_ = false; }
+    if (renderer_.width() != w || renderer_.height() != h) { renderer_.resize(w, h); cityFbValid_ = false; cityGpuValid_ = false; }
     if (scr_ == Screen::InCity) {
       const auto pt0 = PhaseClock::now();
       tickSim(dtMs);
@@ -607,35 +609,55 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
     }
     ropt_.animTick = animTick_;
     const uint64_t sig = cityViewSignature();
-    const bool needRaster = !cityFbValid_ || cityFb_.size() != size_t(w) * h || sig != lastCitySig_;
+    const bool haveCity = gpuTry ? cityGpuValid_ : cityFbValid_;
+    const bool needRaster = !haveCity || (!gpuTry && cityFb_.size() != size_t(w) * h) || sig != lastCitySig_;
     if (needRaster) {
       costShow_ = false;
       renderer_.setCostTextHook([this](int sx, int sy, const std::string& text, bool ok) {
         costText_ = text; costX_ = sx; costY_ = sy; costOk_ = ok; costShow_ = true;
       });
       const auto pr0 = PhaseClock::now();
-      renderer_.render(cam_, ropt_, &scene_);
+      bool onGpu = false;
+      if (gpuTry) {
+        GpuCityFrame gf;
+        onGpu = renderer_.renderForGpu(cam_, ropt_, &scene_, gf) && citySink_->submitCity(gf);
+      }
+      if (onGpu) {
+        cityGpuValid_ = true; cityFbValid_ = false;
+      } else {
+        renderer_.render(cam_, ropt_, &scene_);
+        // Keep a city-only copy so UI-only frames can skip the rasteriser.
+        if (cityFb_.size() != size_t(w) * h) cityFb_.assign(size_t(w) * h, 0);
+        renderer_.swapPixels(cityFb_);
+        cityFbValid_ = true; cityGpuValid_ = false;
+      }
       phases_.rasterMs = phaseMs(pr0, PhaseClock::now());
       phases_.rastered = true;
-      // Keep a city-only copy so UI-only frames can skip the rasteriser.
-      if (cityFb_.size() != size_t(w) * h) cityFb_.assign(size_t(w) * h, 0);
-      renderer_.swapPixels(cityFb_);
-      cityFbValid_ = true;
       lastCitySig_ = sig;
       ++cityRasterFrames_;
     } else {
       ++cityCacheHits_;
       applyCostLabelFromScene();
     }
-    blitCityToDest();
+    cityOnGpu = gpuTry && cityGpuValid_;
+    if (cityOnGpu) {
+      // The city is on the GPU: the UI is drawn over transparent pixels and composited there.
+      for (int y = 0; y < h; y++) std::fill(drawPx_ + size_t(y) * drawPitch_, drawPx_ + size_t(y) * drawPitch_ + w, 0u);
+      citySink_->setCityVisible(true);
+    } else {
+      if (citySink_ && ext) citySink_->setCityVisible(false);
+      blitCityToDest();
+    }
     if (!ext) drawPx_ = screen_.data();
   } else if (scr_ != Screen::Intro) {
     stopAmbience();
-    cityFbValid_ = false;
+    cityFbValid_ = false; cityGpuValid_ = false;
+    if (citySink_ && ext) citySink_->setCityVisible(false);
     for (int y = 0; y < h; y++)
       for (int x = 0; x < w; x++) drawPx_[size_t(y) * drawPitch_ + x] = 0xFF3A2C20u;
   }
   ui_.begin(drawPx_, w, h, in, drawPitch_);
+  ui_.overlay = cityOnGpu;
   if (haveData_ && (skinH_ != h || skinW_ != w)) { skin_ = Skin(); skin_.load(data_, h, w); skinH_ = h; skinW_ = w; }
   ui_.skin = (haveData_ && skin_.loaded()) ? &skin_ : nullptr;
   uiHit_ = false;
@@ -711,7 +733,7 @@ void Game::drawFpsCounter(uint32_t dtMs) {
   ui_.fill({box.x, box.y, 1, box.h}, green);
   ui_.fill({box.x + box.w - 1, box.y, 1, box.h}, green);
   const int tx = box.x + pad, ty = box.y + pad;
-  fpsFont_.draw(drawPx_, W_, H_, tx, ty, t, green, drawPitch_);
+  fpsFont_.draw(drawPx_, W_, H_, tx, ty, t, green, drawPitch_, ui_.overlay);
   // Frame-time sparkline: one pixel column per recent frame (oldest left → newest right).
   const int gx = box.x + pad + (innerW - graphW) / 2, gy = ty + textH + gap;
   int peak = 33;   // at least a 30 FPS scale so short frames still read

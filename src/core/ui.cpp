@@ -67,6 +67,7 @@ void Ui::fillAlpha(Rect r, uint32_t c, float a) {
   uint32_t cr = c & 255, cg = (c >> 8) & 255, cb = (c >> 16) & 255;
   for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) {
     uint32_t& d = at(x, y);
+    if (overlay && (d >> 24) != 255) { d = overlayOver(d, float(cr), float(cg), float(cb), a); continue; }
     uint32_t dr = d & 255, dg = (d >> 8) & 255, db = (d >> 16) & 255;
     d = 0xFF000000u | (uint32_t(db + (float(cb) - db) * a) << 16) | (uint32_t(dg + (float(cg) - dg) * a) << 8) | uint32_t(dr + (float(cr) - dr) * a);
   }
@@ -84,7 +85,7 @@ void Ui::blitRect(const Image& im, int dx, int dy, int sx, int sy, int sw, int s
     for (int i = 0; i < sw; i++) {
       int x = dx + i; if (x < 0 || x >= W || sx + i >= im.w) continue;
       uint32_t p = im.px[size_t(sy + j) * im.w + sx + i];
-      if (p >> 24) at(x, y) = p;
+      if (p >> 24) at(x, y) = overlay ? (p | 0xFF000000u) : p;
     }
   }
 }
@@ -100,7 +101,7 @@ void Ui::panel(Rect r, const std::string& title) {
 }
 
 void Ui::text(int x, int y, const std::string& s, const char* font, uint32_t col) {
-  fonts->get(font).draw(pixels, W, H, x, y, s, col ? col : textCol, pitch);
+  fonts->get(font).draw(pixels, W, H, x, y, s, col ? col : textCol, pitch, overlay);
 }
 int Ui::textWidth(const std::string& s, const char* font) const { return fonts->get(font).measure(s); }
 void Ui::textCentered(Rect r, const std::string& s, const char* font, uint32_t col) {
@@ -115,7 +116,7 @@ void Ui::blit(const Image& im, int x, int y, int sx, int sw) {
     for (int i = 0; i < sw; i++) {
       int dx = x + i; if (dx < 0 || dx >= W) continue;
       uint32_t p = im.px[size_t(j) * im.w + sx + i];
-      if (p >> 24) at(dx, dy) = p;
+      if (p >> 24) at(dx, dy) = overlay ? (p | 0xFF000000u) : p;
     }
   }
 }

@@ -102,6 +102,8 @@ void Game::loadSchemes() {
 
 void Game::attachWorld() {
   syncSim();   // the world is about to be replaced
+  cityGpuValid_ = false;
+  if (citySinkSeen_) citySinkSeen_->invalidateSprites();   // data_.unmountSets() below may free sprite images
   if (haveData_) {
     data_.unmountSets();
     if (world_.scheme.buildingSet) data_.mountBuildingSet(world_.scheme.buildingSet);

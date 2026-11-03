@@ -1556,6 +1556,39 @@ uint64_t Renderer::itemListKey(const Camera& cam, const RenderOptions& opt) cons
   return h;
 }
 
+bool Renderer::renderForGpu(const Camera& cam, const RenderOptions& opt, const RenderScene* scene, GpuCityFrame& out) {
+  if (!world_ || fbW_ <= 0 || fbH_ <= 0 || !terrainCacheOn_ || !opt.terrain || opt.exact5bit) return false;
+  if (gpuTerrainWanted_ && gpuTerrainFn_) return false;
+  if (opt.objects && !(data_ || spriteFn_)) return false;                    // fallback boxes are CPU drawn
+  if (scene) {
+    if (!scene->previews.empty()) return false;                              // tool previews blend into the frame
+    if (scene->cost.show && !textHook_) return false;                        // cost label would draw text into it
+  }
+  gpuPass_ = true;
+  render(cam, opt, scene);
+  gpuPass_ = false;
+  if (!terrainLayerValid_ || terrainLayer_.size() != size_t(fbW_) * fbH_) return false;
+  gpuItems_.clear();
+  gpuItems_.reserve(items_.size());
+  for (const Item& it : items_) {
+    const SpriteImage& s = *it.spr;
+    GpuSpriteItem g;
+    g.spr = it.spr;
+    g.plane = (it.plane && it.plane->w == s.img.w && it.plane->h == s.img.h) ? it.plane : nullptr;
+    g.sc = it.dbl ? 2 : 1;
+    g.x0 = it.ax - s.L * g.sc; g.y0 = it.ay - s.T * g.sc;
+    g.w = s.img.w * g.sc; g.h = s.img.h * g.sc;
+    g.m2 = it.m2;
+    g.blendAll = g.plane || it.m2 < 32;
+    gpuItems_.push_back(g);
+  }
+  out.w = fbW_; out.h = fbH_;
+  out.base = terrainLayer_.data();
+  out.baseGen = terrainLayerGen_;
+  out.items = &gpuItems_;
+  return true;
+}
+
 void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderScene* scene) {
   if (fbW_ <= 0 || fbH_ <= 0) return;
   if (!world_) { std::fill(fb_.begin(), fb_.end(), 0xFF302820u); return; }
@@ -1628,8 +1661,8 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
     auto t = StageClock::now();
     const size_t rowOff = size_t(y0) * fbW_, rowN = size_t(y1 - y0) * fbW_;
     if (layerHit) {
-      // Cached background + terrain + grid + edge faces for these rows.
-      std::memcpy(fb_.data() + rowOff, terrainLayer_.data() + rowOff, rowN * sizeof(uint32_t));
+      // Cached background + terrain + grid + edge faces for these rows (the GPU pass reads the layer directly).
+      if (!gpuPass_) std::memcpy(fb_.data() + rowOff, terrainLayer_.data() + rowOff, rowN * sizeof(uint32_t));
       terrainNs += nsSince(t); t = StageClock::now();
     } else if (layerShift) {
       // Panned: B(x, y) = A(x - sdx, y - sdy). Copy what stays visible, redraw the exposed rows and columns.
@@ -1677,12 +1710,12 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
       if (layerStore) std::memcpy(terrainLayer_.data() + rowOff, fb_.data() + rowOff, rowN * sizeof(uint32_t));
       terrainNs += nsSince(t); t = StageClock::now();
     }
-    drawItems(opt, y0, y1);
+    if (!gpuPass_) drawItems(opt, y0, y1);
     itemsNs += nsSince(t);
   });
   stages_.bandsWallMs = stageMs(sb0, StageClock::now());
-  if (layerStore) { terrainLayerValid_ = true; terrainLayerOX_ = originX_; terrainLayerOY_ = originY_; }
-  if (layerShift) { terrainLayer_.swap(terrainLayerNew_); terrainLayerOX_ = originX_; terrainLayerOY_ = originY_; }
+  if (layerStore) { terrainLayerValid_ = true; terrainLayerOX_ = originX_; terrainLayerOY_ = originY_; ++terrainLayerGen_; }
+  if (layerShift) { terrainLayer_.swap(terrainLayerNew_); terrainLayerOX_ = originX_; terrainLayerOY_ = originY_; ++terrainLayerGen_; }
   stages_.bgCpuMs = double(bgNs.load()) / 1e6;
   stages_.terrainCpuMs = double(terrainNs.load()) / 1e6;
   stages_.itemsCpuMs = double(itemsNs.load()) / 1e6;

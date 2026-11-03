@@ -11,6 +11,7 @@
 #include "core/font.h"
 #include "core/gamedata.h"
 #include "core/image.h"
+#include "core/frame_backend.h"
 #include "core/world.h"
 
 namespace m3k {
@@ -253,6 +254,10 @@ class Renderer : public ICityRasterizer {
   // surface pieces when the road mask is drawn), so it needs no invalidation calls from the host.
   void setTerrainLayerCache(bool on) { terrainCacheOn_ = on; terrainLayerValid_ = false; }
   bool terrainLayerCache() const { return terrainCacheOn_; }
+  // Phase 3: render the base (background + terrain) and the sprite list for a GPU compositor instead of drawing
+  // sprites. Needs the terrain layer cache and no CPU-drawn overlays (tool previews, text fallback); returns false
+  // without touching the frame when the frame must be drawn with render() instead.
+  bool renderForGpu(const Camera& cam, const RenderOptions& opt, const RenderScene* scene, GpuCityFrame& out);
 
   // ---- configuration / injection ----
   void setPalettes(const TerrainPalettes& p) { pal_ = p; palOverride_ = true; }
@@ -368,7 +373,9 @@ public:
   void setItemListCache(bool on) { itemCacheOn_ = on; itemCacheValid_ = false; }
   bool itemListCache() const { return itemCacheOn_; }
 private:
-  bool terrainCacheOn_ = false, terrainLayerValid_ = false;
+  bool terrainCacheOn_ = false, terrainLayerValid_ = false, gpuPass_ = false;
+  uint64_t terrainLayerGen_ = 0;
+  std::vector<GpuSpriteItem> gpuItems_;
   uint64_t terrainLayerKey_ = 0;
   std::vector<uint32_t> terrainLayer_, terrainLayerNew_;
   int terrainLayerOX_ = 0, terrainLayerOY_ = 0;   // originX_/originY_ the layer was drawn with   // fb_-sized snapshot taken after the terrain pass, before sprites

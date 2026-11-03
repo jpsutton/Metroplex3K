@@ -125,6 +125,7 @@ void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst) {
       if (a == 255) { ui.at(dx, dy) = p; continue; }
       if (!a) continue;
       uint32_t& d = ui.at(dx, dy);   // partial alpha (button shadow): blend over what is there
+      if (ui.overlay && (d >> 24) != 255) { d = overlayOver(d, float(p & 255), float(p >> 8 & 255), float(p >> 16 & 255), float(a) / 255.f); continue; }
       uint32_t out = 0xFF000000u;
       for (int sh = 0; sh < 24; sh += 8) out |= (((p >> sh) & 255) * a + ((d >> sh) & 255) * (255 - a) + 127) / 255 << sh;
       d = out;

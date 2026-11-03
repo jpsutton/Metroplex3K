@@ -1,5 +1,6 @@
 // Decoded image types and sprite/UI image decoders. See spec/04-graphics-formats.md.
 #pragma once
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 #include "core/bytes.h"
@@ -18,6 +19,16 @@ struct Plane {
   int w = 0, h = 0;
   std::vector<uint8_t> v;
 };
+
+// GPU-city overlay frames: the UI is drawn over alpha-0 pixels that stand for the city. A blend over such a pixel
+// (alpha < 255) cannot know the colour underneath, so it is kept as straight-alpha "over" and the GPU finishes it.
+inline uint32_t overlayOver(uint32_t d, float cr, float cg, float cb, float a) {
+  const float da = float(d >> 24) / 255.f, oa = a + da * (1.f - a);
+  if (oa <= 0.f) return d;
+  auto ch = [&](float c, uint32_t dc) { return std::min(255.f, (c * a + float(dc) * da * (1.f - a)) / oa + 0.5f); };
+  const uint32_t A = std::min<uint32_t>(255, uint32_t(oa * 255.f + 0.5f));
+  return (A << 24) | (uint32_t(ch(cb, (d >> 16) & 255)) << 16) | (uint32_t(ch(cg, (d >> 8) & 255)) << 8) | uint32_t(ch(cr, d & 255));
+}
 
 constexpr uint32_t rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) {
   return uint32_t(r) | (uint32_t(g) << 8) | (uint32_t(b) << 16) | (uint32_t(a) << 24);

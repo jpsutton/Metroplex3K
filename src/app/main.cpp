@@ -66,7 +66,8 @@ int main(int argc, char** argv) {
                    "or auto-detected GOG install locations. You can also drop the folder or the GOG installer\n"
                    "onto the window, or type the path on the first screen.\n"
                    "Render: $M3K_RENDER=cpu|gpu (default cpu). gpu uses OpenGL compute for terrain when available.\n"
-                   "Present: $M3K_PRESENT=gl presents through an OpenGL 3.3 context in the window (experimental, default SDL renderer).\n"
+                   "Present (experimental, default SDL renderer): $M3K_PRESENT=gl presents through an OpenGL context and, with 4.3,\n"
+                   "composites the city sprites on the GPU (turns the render caches on); gl-basic only presents through GL.\n"
                    "Render caches (experimental, default off): $M3K_TERRAIN_CACHE=1 keeps the background + terrain layer between frames,\n"
                    "$M3K_ITEM_CACHE=1 keeps the world part of the sprite draw list.\n"
                    "Sim thread: $M3K_SIM_THREAD=1 runs the sim day tick on a worker thread (experimental, default off).\n"
@@ -77,9 +78,11 @@ int main(int argc, char** argv) {
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { std::cerr << "SDL_Init: " << SDL_GetError() << "\n"; return 1; }
   // GL present (experimental): the window itself owns a GL context. Falls back to the SDL renderer when unavailable.
   std::unique_ptr<GlPresenter> glPresent;
+  bool gpuCityWanted = false;
   SDL_Window* win = nullptr;
 #if defined(M3K_HAS_GL_PRESENT) && M3K_HAS_GL_PRESENT
-  if (const char* pe = std::getenv("M3K_PRESENT"); pe && std::strcmp(pe, "gl") == 0) {
+  if (const char* pe = std::getenv("M3K_PRESENT"); pe && (std::strcmp(pe, "gl") == 0 || std::strcmp(pe, "gl-basic") == 0)) {
+    gpuCityWanted = std::strcmp(pe, "gl") == 0;
     win = SDL_CreateWindow("Metroplex3K", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 800, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
     glPresent = std::make_unique<GlPresenter>();
     if (!win || !glPresent->init(win)) {
@@ -109,10 +112,14 @@ int main(int argc, char** argv) {
   const bool simThread = simThreadEnv && simThreadEnv[0] && std::strcmp(simThreadEnv, "0") != 0;
   game.setAsyncSim(simThread);
   const char* tcEnv = std::getenv("M3K_TERRAIN_CACHE");
-  const bool terrainCache = tcEnv && tcEnv[0] && std::strcmp(tcEnv, "0") != 0;
+  bool terrainCache = tcEnv && tcEnv[0] && std::strcmp(tcEnv, "0") != 0;
   game.renderer().setTerrainLayerCache(terrainCache);
   const char* icEnv = std::getenv("M3K_ITEM_CACHE");
-  const bool itemCache = icEnv && icEnv[0] && std::strcmp(icEnv, "0") != 0;
+  bool itemCache = icEnv && icEnv[0] && std::strcmp(icEnv, "0") != 0;
+  // GPU city: the sprite pass needs the terrain layer cache; the item cache makes the draw list cheap.
+  const bool gpuCity = glPresent && gpuCityWanted && glPresent->hasGpuCity();
+  if (glPresent) glPresent->setGpuCityEnabled(gpuCity);
+  if (gpuCity) { itemCache = true; terrainCache = true; game.renderer().setTerrainLayerCache(true); }
   game.renderer().setItemListCache(itemCache);
 
   if (wantGpu && glTerrain.available()) {
@@ -166,7 +173,7 @@ int main(int argc, char** argv) {
     if (const char* e = std::getenv("M3K_FRAMELOG")) frameLogArg = e;
   if (!frameLogArg.empty()) {
     const bool gpuActive = wantGpu && glTerrain.available();
-    if (frameLog.open(frameLogArg, gpuActive ? "gpu" : "cpu", std::string(glPresent ? "glpresent," : "") + std::string(simThread ? "thread" : "sync") + (terrainCache ? "+terrain-cache" : "") + (itemCache ? "+item-cache" : ""))) std::cerr << "metroplex3k: logging frame times to " << frameLogArg << "\n";
+    if (frameLog.open(frameLogArg, gpuActive ? "gpu" : "cpu", std::string(glPresent ? (gpuCity ? "gpucity," : "glpresent,") : "") + std::string(simThread ? "thread" : "sync") + (terrainCache ? "+terrain-cache" : "") + (itemCache ? "+item-cache" : ""))) std::cerr << "metroplex3k: logging frame times to " << frameLogArg << "\n";
     else std::cerr << "metroplex3k: cannot open frame log " << frameLogArg << "\n";
   }
   auto msBetween = [](FrameLog::Clock::time_point a, FrameLog::Clock::time_point b) {

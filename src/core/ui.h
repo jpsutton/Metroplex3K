@@ -43,6 +43,7 @@ class Ui {
   std::vector<uint32_t>* fb = nullptr;   // optional owning vector (packed); pixels aliases its data when set
   uint32_t* pixels = nullptr;            // row-major framebuffer (may have pitch > W)
   int pitch = 0;                         // pixels per row
+  bool overlay = false;                  // drawing over a GPU-composited city (alpha 0 = city, see overlayOver)
   int W = 0, H = 0;
   const Fonts* fonts = nullptr;
   Input in;

@@ -47,7 +47,7 @@ int Font::measure(const std::string& s) const {
   return std::max(best, x);
 }
 
-void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::string& s, uint32_t col, int pitch) const {
+void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::string& s, uint32_t col, int pitch, bool overlay) const {
   if (!loaded() || !fb) return;
   if (pitch <= 0) pitch = fbW;
   int x = x0, y = y0;
@@ -71,6 +71,7 @@ void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::strin
         } else {
           if (idx < 1 || idx > 15) continue;
           float cov = float(16 - idx) / 15.f;
+          if (overlay && (d >> 24) != 255) { d = overlayOver(d, float(cr), float(cg), float(cb), cov); continue; }
           uint32_t dr = d & 255, dg = (d >> 8) & 255, db = (d >> 16) & 255;
           dr = uint32_t(dr + (float(cr) - dr) * cov); dg = uint32_t(dg + (float(cg) - dg) * cov); db = uint32_t(db + (float(cb) - db) * cov);
           d = 0xFF000000u | (db << 16) | (dg << 8) | dr;

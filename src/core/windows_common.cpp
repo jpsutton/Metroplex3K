@@ -232,6 +232,7 @@ void spriteAt(Ui& ui, GameData* gd, uint32_t cat, uint32_t id, int ax, int ay) {
       if (!pl && (c & 0xFFFFFF) == 0xFF00FF) a = 0;
       if (a <= 0) continue;
       uint32_t& d = ui.at(dx, dy);
+      if (ui.overlay && (d >> 24) != 255) { d = overlayOver(d, float(c & 255), float((c >> 8) & 255), float((c >> 16) & 255), float(a) / 255.f); continue; }
       uint32_t o = 0xFF000000u;
       for (int k = 0; k < 24; k += 8) o |= uint32_t((int((c >> k) & 255) * a + int((d >> k) & 255) * (255 - a) + 127) / 255) << k;
       d = o;

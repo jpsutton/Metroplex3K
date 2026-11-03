@@ -70,7 +70,10 @@ class Game {
   void frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixels = nullptr, int outPitchBytes = 0);
   // Same as frame(..., dest.pixels, dest.pitchBytes) when a FrameBackend::beginFrame filled `dest`.
   void frame(const Input& in, uint32_t dtMs, const FrameBuffer& dest) {
+    citySink_ = dest.citySink;
+    if (citySink_) citySinkSeen_ = citySink_;
     frame(in, dest.w, dest.h, dtMs, dest.pixels, dest.pitchBytes);
+    citySink_ = nullptr;
   }
   const std::vector<uint32_t>& screen() const { return screen_; }
   bool wantQuit() const { return quit_; }
@@ -323,6 +326,9 @@ class Game {
   std::vector<uint32_t> screen_;
   std::vector<uint32_t> cityFb_;  // last city-only raster (no HUD); reused when the view signature matches
   bool cityFbValid_ = false;
+  CityGpuSink* citySinkSeen_ = nullptr;   // last sink seen, kept across frames to invalidate its sprite atlas
+  CityGpuSink* citySink_ = nullptr;   // set for the duration of frame(in, dt, dest) when the backend composites on the GPU
+  bool cityGpuValid_ = false;         // the sink holds the city for lastCitySig_ (alternative to cityFb_)
   uint64_t lastCitySig_ = 0;
   uint64_t cityVisualSerial_ = 0;   // bumps when the world / shade / layer overlay changes
   uint64_t cityRasterFrames_ = 0, cityCacheHits_ = 0;

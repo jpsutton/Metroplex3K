@@ -20,7 +20,7 @@ class Font {
   int measure(const std::string& s) const;
   // Draw text with top-left at (x,y) into an RGBA framebuffer. Mono/AA fonts use `colour`.
   // `pitch` is pixels per row (0 = fbW).
-  void draw(uint32_t* fb, int fbW, int fbH, int x, int y, const std::string& s, uint32_t colour, int pitch = 0) const;
+  void draw(uint32_t* fb, int fbW, int fbH, int x, int y, const std::string& s, uint32_t colour, int pitch = 0, bool overlay = false) const;
   void draw(std::vector<uint32_t>& fb, int fbW, int fbH, int x, int y, const std::string& s, uint32_t colour) const {
     draw(fb.data(), fbW, fbH, x, y, s, colour, fbW);
   }
