@@ -13,6 +13,7 @@ Point each at the install with the first argument or `$M3K_GAME_DIR`.
 | `probe_compare_saves GAME <city> <observed.sc3> [x,z...]` | Runs a shipped city to the date of a save written by the original (spec 28 s5.1 reference runs, kept outside the repo) and diffs the layers: land value, air/water pollution, crime, power and water service, lot states, valves, connection supplies; optional tiles side by side. | #78 #44 #49 |
 | `probe_rule_members GAME [ruleIdHex...]` | Members (size, building flag word) of the non-scatter developer rules, for checking the member-list filing of spec 15 s5.5. | #14 |
 | `probe_retile GAME [city...]` | Re-run the network tiler over each saved road/rail/power network and diff against the stored pieces. | #47 |
+| `probe_cursors GAME [sheet.png]` | Decode every city-view cursor from its `.cur` (what the game shows: black/white with a transparency mask), check the hotspots lie inside the image, report how the colour `.bmp` preview differs (54 of 96 do), and optionally write a contact sheet with the hotspots marked. | #67 |
 | `probe_xa GAME` | Decode every shipped `.xa`; compare with `ffmpeg` when it is on `PATH`. | #66 |
 | `probe_disasters GAME [city]` | Start each disaster in a loaded city and report how it ends and what it damages. | #35 #37 |
 | `probe_overview GAME [name...]` | Compare the overview colours (mini-map / thumbnail) with the preview thumbnail of every shipped `.sc3` and `.sct`. Expect 0 differing tiles. | |

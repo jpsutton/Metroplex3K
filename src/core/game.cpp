@@ -1301,7 +1301,7 @@ void Game::drawSoftCursor(const std::string& name, int x, int y) {
   auto it = softCur_.find(name);
   if (it == softCur_.end()) {
     CursorImage ci;
-    if (!loadCursor(data_, name, ci)) ci = CursorImage();
+    if (!loadCursor(data_, name, ci, name == "anchor point cursor")) ci = CursorImage();   // the anchor marker is the .bmp (spec 04 8.3)
     it = softCur_.emplace(name, std::move(ci)).first;
   }
   if (it->second.ok()) ui_.blit(it->second.image, x - it->second.hotX, y - it->second.hotY);
