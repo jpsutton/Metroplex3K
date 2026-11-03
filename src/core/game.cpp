@@ -1370,6 +1370,11 @@ void Game::handleMap() {
   if (in.wheel && !uiHit_) cam_.zoom = std::max(0, std::min(4, cam_.zoom + (in.wheel > 0 ? 1 : -1)));
   int tx = 0, tz = 0;
   bool onTile = !uiHit_ && renderer_.pickGround(cam_, in.mx, in.my, tx, tz);
+  // The query target is the object under the pointer by per-pixel sprite hit test, else the clicked tile (spec 09 6.12.2).
+  if (onTile && tool_ == ToolKind::Query) {
+    PickResult pr;
+    if (renderer_.pick(cam_, in.mx, in.my, pr) && pr.hit && world_.inTiles(pr.tileX, pr.tileZ)) { tx = pr.tileX; tz = pr.tileZ; }
+  }
   // Right button: cancel tool, else pan by dragging.
   if (in.rightPressed && !uiHit_) {
     if (dragging_) dragging_ = false;

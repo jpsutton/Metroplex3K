@@ -356,7 +356,10 @@ void Game::drawQueryPopup() {
   uiHit_ = true;   // the query panel is modal: map clicks are ignored until it is closed (spec 09 7a.4)
   (void)qr;
   handleWindowResult(r);
-  if (r.close || r.has(Act::Close)) showQuery_ = false;
+  if (r.close || r.has(Act::Close)) {
+    showQuery_ = false;
+    if (!r.has(Act::QueryOk) && !r.has(Act::QueryReplace)) sound(56);   // the close box plays CloseWindow (spec 09 6.12.2)
+  }
 }
 
 // ---------------------------------------------------------------- drawing
@@ -645,9 +648,21 @@ void Game::handleWindowResult(const WindowResult& r) {
         saveSettings();
         break;
       case Act::ToggleHistorical:
-        queryInfo_.historical = !queryInfo_.historical;
+        queryInfo_.historical = !queryInfo_.historical;   // only the box changes; OK writes it, the close box discards it
+        sound(13);
         break;
+      case Act::QueryOk: {
+        sound(12);
+        const int oi = sim_.occupantAt(e.a, e.b);
+        if (oi >= 0 && size_t(oi) < world_.occupants.size() && queryInfo_.growable) {
+          Occupant& oc = world_.occupants[size_t(oi)];
+          const bool stored = (oc.state & 0x200u) != 0;
+          if (stored != queryInfo_.historical) { oc.state ^= 0x200u; dirty_ = true; }   // protected flag [INFERRED], spec 13 3
+        }
+        break;
+      }
       case Act::QueryReplace:
+        sound(12);
         // Replace closes the panel and opens the Building Replacement dialog on the queried building's footprint (spec 09 6.12.1).
         showQuery_ = false;
         openUserBuildings();

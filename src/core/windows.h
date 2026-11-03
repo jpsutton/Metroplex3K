@@ -95,6 +95,7 @@ enum class Act {
   TipChanged, ShowTipsChanged,
   TickerClick,        // a = x, b = z (also PlaySound 47; urgent items PlaySound 54)
   ToggleHistorical,   // a = x, b = z
+  QueryOk,            // query panel OK: a = x, b = z (commits Make Historical; the close box discards it)
   QueryReplace,       // query panel Replace button: a = x, b = z (opens the Building Replacement dialog)
   SetTimeRange,       // a = 0 year / 1 decade / 2 century
   OpenBuildingList,   // Building Replacement Manager "Edit List": open the Building List Editor
@@ -470,6 +471,7 @@ struct QueryInfo {
   bool canReplace = false;           // the occupant is in [ReplaceableBuildings]: shows the Replace button
   int flavourValue[2] = {};          // made-up number shown by each flavour line
   int landfillCapacity = 0, landfillUsage = 0;   // landfill zone rows: tons citywide, percent full
+  int ageYears = -1, maxAgeYears = -1;           // "Age (Max)" of ageing utilities (-1 = not shown)
 };
 // One panel row. label and value empty = the blank row between groups. red = the value is drawn red ("No", "Hazardous").
 struct QueryLine { std::string label, value; bool red = false; };

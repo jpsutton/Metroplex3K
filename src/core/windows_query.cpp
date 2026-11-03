@@ -9,8 +9,8 @@ using namespace wui;
 
 uint32_t landValueBandId(int v) { return v < 35 ? 0x1C0 : v < 75 ? 9 : v < 130 ? 0xA : v < 175 ? 0xB : v < 225 ? 0xC : 0xD; }
 uint32_t crimeBandId(int c) { return c <= 0 ? 0x1C : c < 47 ? 0x1D : c < 84 ? 0x1E : c < 122 ? 0x1F : c <= 150 ? 0x20 : 0x21; }
-// [OPEN] split between "very high" (27) and "extreme" (28): 220 assumed.
-uint32_t flammabilityBandId(int f) { return f <= 0 ? 0x23 : f < 72 ? 0x24 : f < 129 ? 0x25 : f < 187 ? 0x26 : f < 220 ? 0x27 : 0x28; }
+// Spec 09 6.12: 187..229 -> very high (27), above 229 -> extreme (28, drawn red).
+uint32_t flammabilityBandId(int f) { return f <= 0 ? 0x23 : f < 72 ? 0x24 : f < 129 ? 0x25 : f < 187 ? 0x26 : f <= 229 ? 0x27 : 0x28; }
 uint32_t pollutionBandId(int p, int b) {
   if (b < 1) b = 1;
   if (p <= 0) return 0x2A;
@@ -29,6 +29,8 @@ const char* const kU4[] = {"Low", "Moderate", "High", "Very high"};
 const char* const kU5[] = {"Very low", "Low", "Moderate", "High", "Very high"};
 const char* const kU6[] = {"None", "Low", "Medium", "High", "Very High", "Hazardous"};
 const char* const kCrime[] = {"None", "Low", "Medium", "High", "Very High", "Rampant"};
+const char* const kEff[] = {"None", "Low", "Medium", "High", "Unusable"};
+const char* const kRec[] = {"Adequate", "Inadequate"};
 const char* const kLV[] = {"Very Low", "Low", "Medium", "High", "Very High", "Astronomical"};
 
 enum Kind { Num, Band, Bool, Text, Year, Money };
@@ -41,6 +43,8 @@ struct Spec {
   int slot;                // Num/Money/Year/Bool: v[slot]; Band: band[slot]
   int bands;               // Band: number of bands
   const char* const* fbBands;
+  bool redZero = false;    // Num: the value is drawn red when it is 0 (a utility's current capacity)
+  int redBand = -1;        // Band: this band index is drawn red ("Inadequate")
 };
 
 std::string fmtNum(double v) {
@@ -76,15 +80,15 @@ const std::vector<Spec>& specsFor(QueryClass c) {
     {QueryClass::Station, {{Num, 0x37, "Passengers Per Day:", 0x38, "%s", 0, 0, nullptr}, {Band, 0x181, "Service Quality:", 0x182, nullptr, 0, 4, kG4}}},
     {QueryClass::Airport, {{Band, 0xFE, "Air Traffic:", 0xFF, nullptr, 0, 4, kU4}, {Num, 0x103, "On Time Flights:", 0x104, "%d%%", 0, 0, nullptr}}},
     {QueryClass::Seaport, {{Band, 0x105, "Port Traffic:", 0x106, nullptr, 0, 4, kU4}}},
-    {QueryClass::PowerPlant, {{Num, 0x198, "Maximum Power Capacity:", 0x1B7, "%s MW-h/Month", 0, 0, nullptr}, {Num, 0x56, "Current Power Capacity:", 0x57, "%s MW-h/Month", 1, 0, nullptr},
-                              {Band, 0x58, "Usage:", 0x59, nullptr, 0, 5, kU5}}},   // "Age (Max)" is the first row of the panel (buildQueryLines)
-    {QueryClass::WaterBuilding, {{Num, 0x180, "Maximum Water Capacity:", 0, "%s", 0, 0, nullptr}, {Num, 0x5E, "Current Water Capacity:", 0x5F, "%s m³/Month", 1, 0, nullptr},
-                                 {Band, 0x6B, "Usage:", 0x6C, nullptr, 0, 5, kU5}, {Bool, 0x73, "Connected to Pipe Network:", 0x74, nullptr, 2, 0, nullptr},
-                                 {Num, 0x1B5, "Age (Max):", 0x1B6, "%s yrs. (%s yrs.)", 3, 0, nullptr}}},
+    // Utility "Usage" lines show a number, not a band word (spec 09 6.12); a current capacity of 0 is drawn red.
+    {QueryClass::PowerPlant, {{Num, 0x198, "Maximum Power Capacity:", 0x1B7, "%s MW-h/Month", 0, 0, nullptr}, {Num, 0x56, "Current Power Capacity:", 0x57, "%s MW-h/Month", 1, 0, nullptr, true},
+                              {Num, 0x58, "Usage:", 0x57, "%s MW-h/Month", 4, 0, nullptr}}},   // "Age (Max)" is the first row of the panel (buildQueryLines)
+    {QueryClass::WaterBuilding, {{Num, 0x180, "Maximum Water Capacity:", 0x5F, "%s m\u00b3/Month", 0, 0, nullptr}, {Num, 0x5E, "Current Water Capacity:", 0x5F, "%s m\u00b3/Month", 1, 0, nullptr, true},
+                                 {Num, 0x6B, "Usage:", 0x5F, "%s m\u00b3/Month", 4, 0, nullptr}, {Band, 0x60, "Effect of Water Pollution:", 0x61, nullptr, 2, 5, kEff}}},
     {QueryClass::WaterTreatment, {{Num, 0x1A2, "Maximum Treatment Capacity:", 0x1A3, "Current Treatment Capacity:", 0, 0, nullptr}, {Band, 0x1A5, "Usage:", 0x1A6, nullptr, 0, 5, kU5}}},
     {QueryClass::Garbage, {{Num, 0x1AB, "Maximum Disposal Capacity:", 0, "%s", 0, 0, nullptr}, {Num, 0x76, "Current Disposal Capacity:", 0x77, "%s Tons/Month", 1, 0, nullptr},
                            {Band, 0x78, "Usage:", 0x79, nullptr, 0, 5, kU5}}},
-    {QueryClass::Recycling, {{Num, 0x1AE, "Citywide Recycling Capacity:", 0x1AF, "Adequate", 0, 0, nullptr}}},
+        {QueryClass::Recycling, {{Band, 0x1AE, "Citywide Recycling Capacity:", 0x1AF, nullptr, 0, 2, kRec, false, 1}}},
     {QueryClass::NeighbourConn, {{Text, 0x54, "Connected To:", 0x55, nullptr, 0, 0, nullptr}}},
   };
   static const std::vector<Spec> none;
@@ -117,7 +121,7 @@ std::string trimLead(std::string s) {
 }
 
 // Which row set (spec 09 6.12.1 per-target table) a target gets.
-enum class Target { Zoned, Flora, Wall, Bare, Water, Road, Rail, PowerLine, Landfill, Pipe, SubwayTile, Reward, Marina, PowerPlant, Service };
+enum class Target { Zoned, Flora, Wall, Bare, Water, Road, Rail, PowerLine, Landfill, Pipe, SubwayTile, Reward, Marina, PowerPlant, Utility, Service };
 
 Target targetOf(const QueryInfo& q) {
   switch (q.cls) {
@@ -130,6 +134,7 @@ Target targetOf(const QueryInfo& q) {
     case QueryClass::Pipe: return Target::Pipe;
     case QueryClass::Subway: return q.underground ? Target::SubwayTile : Target::Rail;
     case QueryClass::PowerPlant: return Target::PowerPlant;
+    case QueryClass::WaterBuilding: case QueryClass::Recycling: return Target::Utility;
     case QueryClass::Marina: return Target::Marina;
     case QueryClass::Landmark: return q.canReplace ? Target::Reward : Target::Wall;
     case QueryClass::None: return q.waterDepth > 0 ? Target::Water : Target::Bare;
@@ -183,7 +188,9 @@ std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q) {
   auto flammability = [&] {
     uint32_t id = flammabilityBandId(q.flammability);
     static const char* fb[] = {"None", "Low", "Medium", "High", "Very High", "Extreme"};
-    return QueryLine{E.query(0x22, "Flammability:"), E.query(id, fb[id - 0x23])};
+    QueryLine l{E.query(0x22, "Flammability:"), E.query(id, fb[id - 0x23])};
+    l.red = id == 0x28;   // "Extreme" is drawn red
+    return l;
   };
   auto airPollution = [&] { int i = std::min(5, std::max(0, q.airPollution) * 6 / 256); return QueryLine{E.query(0x187, "Air Pollution:"), band(E, 0x188, i, kU6[i])}; };
   auto waterPollution = [&] { int i = std::min(5, std::max(0, q.waterPollution) * 6 / 256); return QueryLine{E.query(0x18E, "Water Pollution:"), band(E, 0x18F, i, kU6[i])}; };
@@ -199,14 +206,16 @@ std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q) {
     Group g;
     for (const Spec& s : specsFor(q.cls)) {
       switch (s.kind) {
-        case Num: g.push_back({E.query(s.label, s.fbLabel), num(s.value, s.fbValue, q.v[s.slot])}); break;
+        case Num: { QueryLine l{E.query(s.label, s.fbLabel), num(s.value, s.fbValue, q.v[s.slot])}; l.red = s.redZero && q.v[s.slot] <= 0; g.push_back(l); break; }
         case Money: g.push_back({E.query(s.label, s.fbLabel), subst(E.query(s.value, s.fbValue), {E.money(q.monthlyIncome)})}); break;
         case Year: g.push_back({E.query(s.label, s.fbLabel), subst(E.query(s.value, s.fbValue), {std::to_string(q.builtYear)})}); break;
         case Bool: g.push_back({E.query(s.label, s.fbLabel), q.v[s.slot] > 0 ? E.query(s.value, "Yes") : E.query(s.value + 1, "No")}); break;
         case Text: g.push_back({E.query(s.label, s.fbLabel), q.neighbour.empty() ? E.query(s.value, "-") : q.neighbour}); break;
         case Band: {
           int n = s.bands, idx = std::min(n - 1, int(q.band[s.slot]) * n / 256);
-          g.push_back({E.query(s.label, s.fbLabel), band(E, s.value, idx, s.fbBands[idx])});
+          QueryLine l{E.query(s.label, s.fbLabel), band(E, s.value, idx, s.fbBands[idx])};
+          l.red = idx == s.redBand;
+          g.push_back(l);
           break;
         }
       }
@@ -268,11 +277,23 @@ std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q) {
       break;
     case Target::PowerPlant: {
       Group g;
-      g.push_back({E.query(0x1B5, "Age (Max):"), subst(E.query(0x1B6, "%s yrs. (%s yrs.)"), {fmtNum(q.v[2]), fmtNum(q.v[3])})});
+      if (q.ageYears >= 0) g.push_back({E.query(0x1B5, "Age (Max):"), subst(E.query(0x1B6, "%s yrs. (%s yrs.)"), {fmtNum(q.ageYears), fmtNum(q.maxAgeYears)})});
       g.push_back(elevation());
       if (q.pollution >= 0) g.push_back(pollutionGenerated());
       groups.push_back(g);
       groups.push_back(classRows());
+      break;
+    }
+    case Target::Utility: {   // water tower, recycling centre: Age (Max), Elevation, Powered | the family rows
+      Group g;
+      if (q.ageYears >= 0) g.push_back({E.query(0x1B5, "Age (Max):"), subst(E.query(0x1B6, "%s yrs. (%s yrs.)"), {fmtNum(q.ageYears), fmtNum(q.maxAgeYears)})});
+      g.push_back(elevation());
+      g.push_back(powered());
+      groups.push_back(g);
+      Group c = classRows();
+      Group f = flavour();
+      c.insert(c.end(), f.begin(), f.end());
+      if (!c.empty()) groups.push_back(c);
       break;
     }
     case Target::Service: {
@@ -431,7 +452,7 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
   {
     bool c = false;
     if (!(ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Sys, 0xA2DEFD9A), 4, done, "", false, true, c))) c = ui.button(done, E.app(0xB4, "OK"));
-    if (c) { R.close = true; R.add(Act::Close); }
+    if (c) { R.add(Act::QueryOk, 0, q.x, q.z); R.close = true; }   // OK commits Make Historical; the close box discards it
   }
   return R;
 }

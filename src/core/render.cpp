@@ -1355,9 +1355,10 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
         if (opt.showOccupant && !opt.showOccupant(o)) continue;
         bool port = o.keyType == T_OCC_ATTR_PORT;
         uint32_t id = o.occId;
-        if (opt.constructionSites && o.state != 1 && o.state != 2 && data_) {
+        const uint32_t ost = o.state & ~0x200u;   // bit 0x200 = protected, not a lot state
+        if (opt.constructionSites && ost != 1 && ost != 2 && data_) {
           ResKey rk;
-          if (siteOccupant(o.state, std::max(o.sizeX, o.sizeZ), o.agentType, rk)) { id = rk.instance; port = rk.type == T_OCC_ATTR_PORT; }
+          if (siteOccupant(ost, std::max(o.sizeX, o.sizeZ), o.agentType, rk)) { id = rk.instance; port = rk.type == T_OCC_ATTR_PORT; }
         }
         addOccupant(id, false, port, o.x, o.z, o.y, o.rot, o.sizeX, o.sizeZ, false);
       }

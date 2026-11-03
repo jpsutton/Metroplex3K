@@ -635,11 +635,30 @@ void testQuery() {
   CHECK(queryStatusLine(h.E, fire) == "(Abandoned)");
 
   // Power plant: Age (Max), Elevation, Pollution Generated | capacities. Hazardous pollution is red.
-  QueryInfo pp; pp.name = "Coal"; pp.cls = QueryClass::PowerPlant; pp.v[0] = 400; pp.v[1] = 300; pp.v[2] = 12; pp.v[3] = 50; pp.pollution = 100000; pp.pollutionBaseline = 100;
+  QueryInfo pp; pp.name = "Coal"; pp.cls = QueryClass::PowerPlant; pp.v[0] = 400; pp.v[1] = 300; pp.ageYears = 12; pp.maxAgeYears = 50; pp.v[4] = 0; pp.pollution = 100000; pp.pollutionBaseline = 100;
   auto R3 = rowsOf(pp);
   CHECK(R3.size() >= 7 && R3[0] == "Age (Max):" && R3[1] == "Elevation:" && R3[2] == "Pollution Generated:" && R3[3] == "|" && R3[4] == "Maximum Power Capacity:");
   CHECK(has(pp, "Age (Max):", "12 yrs. (50 yrs.)"));
   for (auto& l : buildQueryLines(h.E, pp)) if (l.label == "Pollution Generated:") CHECK(l.value == "Hazardous" && l.red);
+
+  // Utility usage lines are numbers; a current capacity of 0 is red. Flammability "Extreme" is red.
+  for (auto& l : buildQueryLines(h.E, pp)) {
+    if (l.label == "Current Power Capacity:") CHECK(l.value == "300 MW-h/Month" && !l.red);
+    if (l.label == "Usage:") CHECK(l.value == "0 MW-h/Month");
+  }
+  pp.v[1] = 0;
+  for (auto& l : buildQueryLines(h.E, pp)) if (l.label == "Current Power Capacity:") CHECK(l.red);
+  CHECK(flammabilityBandId(229) == 0x27 && flammabilityBandId(230) == 0x28);
+  QueryInfo ex; ex.name = "Barn"; ex.cls = QueryClass::Zoned; ex.flammability = 250;
+  for (auto& l : buildQueryLines(h.E, ex)) if (l.label == "Flammability:") CHECK(l.value == "Extreme" && l.red);
+  // Water tower: Age (Max), Elevation, Powered | capacities, usage, effect of water pollution.
+  QueryInfo wt; wt.name = "Water Tower"; wt.cls = QueryClass::WaterBuilding; wt.ageYears = 3; wt.maxAgeYears = 40; wt.v[0] = 100; wt.v[1] = 0; wt.band[2] = 10;
+  auto RW = rowsOf(wt);
+  CHECK(RW.size() >= 8 && RW[0] == "Age (Max):" && RW[1] == "Elevation:" && RW[2] == "Powered:" && RW[3] == "|" && RW[4] == "Maximum Water Capacity:");
+  CHECK(std::find(RW.begin(), RW.end(), "Effect of Water Pollution:") != RW.end() && std::find(RW.begin(), RW.end(), "Watered:") == RW.end());
+  // Recycling centre: "Inadequate" is red.
+  QueryInfo rc; rc.name = "Recycling Center"; rc.cls = QueryClass::Recycling; rc.band[0] = 200;
+  for (auto& l : buildQueryLines(h.E, rc)) if (l.label == "Citywide Recycling Capacity:") CHECK(l.value == "Inadequate" && l.red);
 
   // Road: Elevation | Traffic. Rail: Elevation | Rail Usage. Power line: Elevation, Powered. Landfill zone: Elevation | Capacity, Usage.
   QueryInfo road; road.name = "Road"; road.cls = QueryClass::Road; road.band[0] = 200;
@@ -685,7 +704,8 @@ void testQuery() {
   z.growable = false; h.frame(); CHECK(!h.has("historical") && !h.has("replace"));
   z.canReplace = true; h.frame(); CHECK(h.has("replace"));
   r = h.click("replace"); CHECK(r.has(Act::QueryReplace) && r.close);
-  r = h.click("ok"); CHECK(r.close);
+  r = h.click("ok"); CHECK(r.close && r.has(Act::QueryOk) && r.find(Act::QueryOk)->a == 7 && r.find(Act::QueryOk)->b == 9 && !r.has(Act::Close));
+  r = h.click("close"); CHECK(r.close && r.has(Act::Close) && !r.has(Act::QueryOk));   // the close box discards
   // Drag by the title band; the next panel opens where this one was left.
   {
     Input press; press.mx = 40 + 100; press.my = 40 + 10; press.down = press.pressed = true;

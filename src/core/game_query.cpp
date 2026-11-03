@@ -204,7 +204,9 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   if (nm.empty()) nm = o->name;
   if (nm.empty()) nm = "Building " + std::to_string(o->agentType);
   q.name = nm;
-  switch (o->state) {
+  const uint32_t ostate = o->state & ~0x200u;   // bit 0x200 = protected (Make Historical) [INFERRED, spec 13 3]
+  q.historical = (o->state & 0x200u) != 0;
+  switch (ostate) {
     case 2: q.status |= QsAbandoned; break;
     case 4: q.status |= QsConstruction; break;
     case 8: case 16: q.status |= QsDestroyed; break;
@@ -217,9 +219,10 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   }
   bool plant = false;
   q.cls = classify(par, o->agentType, plant);
+  if (q.cls == QueryClass::WaterBuilding || q.cls == QueryClass::WaterTreatment) q.canReplace = false;   // utilities have no Replace (spec 09 6.12.2)
   if (q.status & QsDestroyed) q.cleanupCost = c.budget.specialCost(12);
-  q.growable = q.cls == QueryClass::Zoned && (o->state == 1 || o->state == 2);   // Make Historical: abandoned zoned buildings too
-  if (q.cls == QueryClass::Zoned && o->state == 2) q.canReplace = false;           // but no Replace on an abandoned one
+  q.growable = q.cls == QueryClass::Zoned && (ostate == 1 || ostate == 2);   // Make Historical: abandoned zoned buildings too
+  if (q.cls == QueryClass::Zoned && ostate == 2) q.canReplace = false;           // but no Replace on an abandoned one
   q.showPower = true;
   // Business-deal reachability (spec 18 §10) [STATIC]: MegaMall/Casino/Toxic/Prison fire an uncounted
   // "reach anything" trip when their query window is built (powered/watered/state-1 is the rest of the
@@ -231,10 +234,15 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
     case QueryClass::PowerPlant:
       for (const auto& p : c.power.plants()) {
         if (p.x != o->x || p.z != o->z) continue;
-        q.v[0] = p.capacity; q.v[1] = p.output;
+        q.v[0] = p.capacity; q.v[1] = p.output; q.v[4] = p.load;
         q.band[0] = clamp8(p.output > 0 ? p.load * 255 / p.output : 0);
-        q.v[2] = std::max(0, (absMonth(c.clock) - p.buildAbsMonth) / 12);
-        q.v[3] = p.lmax > 0 ? p.lmax / 12 : 0;   // maximum life in whole years ("Age (Max)")
+        q.ageYears = std::max(0, (absMonth(c.clock) - p.buildAbsMonth) / 12);
+        q.maxAgeYears = p.lmax > 0 ? p.lmax / 12 : 0;   // maximum life in whole years ("Age (Max)")
+        {   // Pollution Generated (spec 09 6.12): p = air * round(1.0466667 rA^2) + water * round(1.0466667 rW^2); baseline 22000
+          const us::PollutionEntry e = c.pollution.entryFor(o->agentType);
+          q.pollution = int(std::min<int64_t>(int64_t(e.air) * std::lround(1.0466667 * e.rA * e.rA) + int64_t(e.water) * std::lround(1.0466667 * e.rW * e.rW), 2000000000));
+          q.pollutionBaseline = 22000;
+        }
         if (p.expired) q.status |= QsDefunct;
         else if (p.lmax > 0 && absMonth(c.clock) - p.buildAbsMonth > p.lmax - 12) q.status |= QsAging;
         break;
@@ -244,9 +252,13 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
       for (const auto& f : c.water.facilities()) {
         if (f.x != o->x || f.z != o->z) continue;
         q.v[0] = q.v[1] = f.output;
+        // This facility's share of the water used [INFERRED]: citywide use split by capacity.
+        q.v[4] = c.water.stats.supply > 0 ? double(c.water.stats.used) * f.output / double(c.water.stats.supply) : 0;
         q.band[0] = clamp8(c.water.stats.supply > 0 ? int(c.water.stats.used * 255 / c.water.stats.supply) : 0);
+        q.band[2] = q.waterPollution >= 0 ? uint8_t(std::min(255, q.waterPollution)) : 0;   // "Effect of Water Pollution"
         q.v[2] = f.status == us::WaterFacility::Good || f.status == us::WaterFacility::Far;
-        q.v[3] = std::max(0, (absMonth(c.clock) - f.buildAbsMonth) / 12);
+        q.ageYears = std::max(0, (absMonth(c.clock) - f.buildAbsMonth) / 12);
+        q.maxAgeYears = f.lmax > 0 ? f.lmax / 12 : 0;
         if (f.expired) q.status |= QsDefunct;
         break;
       }

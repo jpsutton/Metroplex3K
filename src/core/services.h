@@ -297,6 +297,7 @@ class PollutionLayer {
   int queryGarbageScaled(int x, int z) const;
   bool airPolluted(int x, int z) const { return airAt(x, z) >= params_.airThreshold; }
   const PollutionParams& params() const { return params_; }
+  PollutionEntry entryFor(uint32_t type) { return lookup(type); }   // modifier entry of an occupant type (query panel)
   bool waterPolluted(int x, int z) const { return waterAt(x, z) >= params_.waterThreshold; }
   bool garbagePolluted(int x, int z) const { return standingGarbageAt(x, z) >= params_.garbageThreshold; }
   // Recycling ratio r (spec 16 s4.3) [STATIC]: centres sorted by reduction percent, walked while served < P.
