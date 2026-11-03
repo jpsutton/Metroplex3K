@@ -191,13 +191,6 @@ void Skin::buildEngineButton() {
   Image im = *help;
   const int cells = 4, cw = im.w / cells, ch = im.h;
   auto at = [&](int x, int y) -> uint32_t& { return im.px[size_t(y) * im.w + x]; };
-  auto putDisk = [&](int cx, int cy, float r, uint32_t col, int x0, int x1) {
-    const int rr = int(std::ceil(r));
-    const int r2 = int(r * r + 0.5f);
-    for (int y = cy - rr; y <= cy + rr; y++)
-      for (int x = cx - rr; x <= cx + rr; x++)
-        if (x >= x0 && x < x1 && y >= 0 && y < ch && (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2) at(x, y) = col;
-  };
   for (int cell = 0; cell < cells; cell++) {
     const int x0 = cell * cw, x1 = x0 + cw;
     const int cx = x0 + cw / 2 - 1, cy = ch / 2 - 1;
@@ -230,35 +223,66 @@ void Skin::buildEngineButton() {
         const int dist = std::abs(r - fr) + std::abs(g - fg) + std::abs(b - fb);
         if (yellow || dark || dist > 55) at(x, y) = (p & 0xFF000000u) | (face & 0x00FFFFFFu);
       }
-    // Cog: yellow fill + black outline on active cells; dark embossed on the disabled cell.
-    const bool yellow = cell != CELL_DISABLED;
+    // Cog: an analytic gear (trapezoid teeth on a round body, hollow hub) rendered with 4x4 supersampling, so the
+    // edges are smooth. Dark outline, yellow body shaded top-left to bottom-right, a thin highlight on the upper rim.
+    // The disabled cell is the same gear in dull greys; the pressed cell moves it one pixel down and right.
+    const bool active = cell != CELL_DISABLED;
     const bool pressed = cell == CELL_PRESSED;
-    const int gx = cx + (pressed ? 1 : 0), gy = cy + (pressed ? 1 : 0);
-    const uint32_t outline = yellow ? rgba(12, 12, 16) : rgba(18, 18, 24);
-    const uint32_t fill = yellow ? rgba(255, 224, 48) : rgba(52, 52, 60);
-    constexpr int kTeeth = 8;
-    auto plot = [&](int x, int y, uint32_t col) {
-      if (x >= x0 && x < x1 && y >= 0 && y < ch) at(x, y) = col;
+    const double gx = cx + (pressed ? 1 : 0) + 0.5, gy = cy + (pressed ? 1 : 0) + 0.5;
+    constexpr int kTeeth = 8, kSS = 4;
+    constexpr double kTip = 10.4, kRoot = 7.7, kHub = 2.7, kPi = 3.14159265358979323846;
+    // Gear radius at angle phi: flat tip over 34% of the tooth pitch, flanks over the next 20%, flat root between teeth.
+    auto gearR = [&](double phi) {
+      double u = std::fmod(phi / (2 * kPi) * kTeeth, 1.0);
+      if (u < 0) u += 1.0;
+      const double t = std::abs(u - 0.5);   // 0 at the tooth centre, 0.5 at the gap centre
+      if (t < 0.17) return kTip;
+      if (t < 0.31) return kTip + (kRoot - kTip) * (t - 0.17) / 0.14;
+      return kRoot;
     };
-    for (int t = 0; t < kTeeth; t++) {
-      const double a = (t * 360.0 / kTeeth - 90.0) * 0.017453292519943295;
-      for (int rad = 5; rad <= 10; rad++)
-        for (double da : {-0.18, -0.09, 0.0, 0.09, 0.18})
-          plot(int(std::lround(gx + rad * std::cos(a + da))), int(std::lround(gy + rad * std::sin(a + da))), outline);
-    }
-    putDisk(gx, gy, 7.2f, outline, x0, x1);
-    putDisk(gx, gy, 6.0f, fill, x0, x1);
-    for (int t = 0; t < kTeeth; t++) {
-      const double a = (t * 360.0 / kTeeth - 90.0) * 0.017453292519943295;
-      for (int rad = 5; rad <= 9; rad++)
-        for (double da : {-0.12, -0.04, 0.04, 0.12})
-          plot(int(std::lround(gx + rad * std::cos(a + da))), int(std::lround(gy + rad * std::sin(a + da))), fill);
-      for (double da : {-0.14, 0.0, 0.14})
-        plot(int(std::lround(gx + 10 * std::cos(a + da))), int(std::lround(gy + 10 * std::sin(a + da))), outline);
-    }
-    putDisk(gx, gy, 3.6f, outline, x0, x1);
-    putDisk(gx, gy, 2.6f, fill, x0, x1);
-    putDisk(gx, gy, 1.4f, outline, x0, x1);
+    // Coverage in [0,1] of the gear grown by `grow` pixels, over the pixel at (px, py).
+    auto cover = [&](int px, int py, double grow, bool hubHole) {
+      int hit = 0;
+      for (int sy = 0; sy < kSS; sy++)
+        for (int sx = 0; sx < kSS; sx++) {
+          const double dx = px + (sx + 0.5) / kSS - gx, dy = py + (sy + 0.5) / kSS - gy;
+          const double d = std::sqrt(dx * dx + dy * dy);
+          if (hubHole ? d < kHub + grow : d < gearR(std::atan2(dy, dx)) + grow) hit++;
+        }
+      return double(hit) / (kSS * kSS);
+    };
+    auto mixPx = [&](uint32_t& dst, int r, int g, int b, double w) {
+      if (w <= 0) return;
+      const int dr = int(dst & 255), dg = int((dst >> 8) & 255), db = int((dst >> 16) & 255);
+      const int nr = int(std::lround(dr + (r - dr) * w)), ng = int(std::lround(dg + (g - dg) * w)), nb = int(std::lround(db + (b - db) * w));
+      dst = (dst & 0xFF000000u) | uint32_t(nb) << 16 | uint32_t(ng) << 8 | uint32_t(nr);
+    };
+    const int reach = int(kTip) + 3;
+    for (int y = int(gy) - reach; y <= int(gy) + reach; y++)
+      for (int x = int(gx) - reach; x <= int(gx) + reach; x++) {
+        if (x < x0 || x >= x1 || y < 0 || y >= ch) continue;
+        uint32_t& px = at(x, y);
+        if ((px >> 24) < 128) continue;
+        const double covOut = cover(x, y, 1.0, false), covBody = cover(x, y, 0.0, false);
+        if (covOut <= 0) continue;
+        // Outline first (soft where the body does not reach), then the shaded body on top.
+        if (active) mixPx(px, 14, 14, 20, covOut); else mixPx(px, 20, 20, 26, covOut);
+        if (covBody > 0) {
+          const double dx = x + 0.5 - gx, dy = y + 0.5 - gy;
+          double shade = std::clamp((dx + dy) / (2.0 * kTip) + 0.5, 0.0, 1.0);   // 0 top-left .. 1 bottom-right
+          int r, g, b;
+          if (active) { r = int(255 - 30 * shade); g = int(236 - 78 * shade); b = int(96 - 84 * shade); }
+          else { r = int(92 - 28 * shade); g = int(92 - 28 * shade); b = int(100 - 28 * shade); }
+          // Thin highlight just inside the upper-left rim.
+          const double d = std::sqrt(dx * dx + dy * dy), rim = gearR(std::atan2(dy, dx));
+          if (active && d > rim - 1.6 && dx + dy < 0) { r = std::min(255, r + 18); g = std::min(255, g + 16); b = std::min(255, b + 40); }
+          mixPx(px, r, g, b, covBody);
+        }
+        // Hub: dark ring with the button face showing through the hole.
+        const double hubOut = cover(x, y, 1.0, true), hubIn = cover(x, y, 0.0, true);
+        if (hubOut > 0) { if (active) mixPx(px, 14, 14, 20, hubOut); else mixPx(px, 20, 20, 26, hubOut); }
+        if (hubIn > 0) mixPx(px, fr, fg, fb, hubIn);
+      }
   }
   extras_["engine"] = std::move(im);
 }
