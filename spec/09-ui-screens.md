@@ -1490,12 +1490,12 @@ at a fixed position (§6.0).
 * Two-state maps: two 32 × 33 colour swatches stacked at (292, 363)–(323, 429), the upper one with
   the diagonal cut. The labels sit at the top (y ≈ 361) and the bottom (y ≈ 419):
   * Power: Powered `12A`, yellow (214, 186, 49); Unpowered `23F`, dark navy (33, 32, 66).
-  * Water Supply: Watered `136`, blue (0, 0, 214); Unwatered `24A`, light grey (198, 199, 206).
+  * Water Supply: Watered `136`, blue (8, 0, 198); Unwatered `24A`, light grey (198, 199, 198).
 * Zones: two legend boxes, each with 17 px swatches (32 wide at x = 292) and labels at x ≈ 332.
-  * Top box (287, 54)–(416, 114): Residential `139` (green), Commercial `13A` (blue-violet),
-    Industrial `13B` (ochre).
-  * Bottom box, the standard legend box: Government `13C` (orange), Seaports `2D5` (sea green),
-    Airports `2D6` (teal), Landfill `2D7` (brown).
+  * Top box (287, 54)–(416, 114): Residential `139` (57, 117, 33), Commercial `13A` (90, 93, 173),
+    Industrial `13B` (198, 158, 33).
+  * Bottom box, the standard legend box: Government `13C` (239, 93, 0), Seaports `2D5` (99, 162, 132),
+    Airports `2D6` (107, 166, 181), Landfill `2D7` (132, 105, 82).
 * Crime and Flammability: an extra inset box (287, 48)–(415, 90) at the top right. It holds a round
   toggle (a radio-style ⊙ about 20 px across, centred at (308, 69)) and the two-line label
   "Police Station Coverage" (`2A1`) or "Fire Station Coverage" (`2A5`), in the small bold font,
@@ -1519,8 +1519,8 @@ at a fixed position (§6.0).
   (`1E4`) is written vertically (rotated 90°, two lines) at x ≈ 68–92, centred at y ≈ 170.
 * Workforce band (Education page): pink stripes over about age 22–67, i.e. x ≈ 197–315. "Workforce"
   (`1E5`) is drawn in orange at the top of the band.
-* The plot background is horizontal stripes in alternating pinks. Bars are drawn in dark navy
-  (49, 48, 115).
+* The plot background is horizontal stripes in alternating pinks. The band colour is about (231, 199, 198). Bar colour: dark navy, as in the clone's Berlin shot (not
+  measured on the original, which had no population).
 * Captions: centred at x ≈ 225. The first line, y ≈ 249, is dark blue and bold (`1E2`). The second,
   y ≈ 265, is orange and bold (`1E3`).
 * Page radios: about 10 px, centred at x ≈ 197, at y = 314, 334, 354, 374 and 394 (20 px pitch).
