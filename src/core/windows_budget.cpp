@@ -363,7 +363,7 @@ void BudgetWindow::drawLoans(Ui& ui, const WinEnv& E, Budget& b, const BudgetVie
 WindowResult BudgetWindow::draw(Ui& ui, const WinEnv& E, Budget& b, const BudgetView& v) {
   WindowResult R;
   if (page == Page::Main) {
-    drawMainPage(ui, E, b, v, placedAt(ui, 102, 32, 500, 480), R);
+    drawMainPage(ui, E, b, v, centredInView(ui, 500, 480), R);
     return R;
   }
   if (page == Page::Loans) {
@@ -377,11 +377,11 @@ WindowResult BudgetWindow::draw(Ui& ui, const WinEnv& E, Budget& b, const Budget
       bool inc = incomeTab;
       incomeTab = false;
       WindowResult ignored;
-      drawMainPage(ui, bg, b, v, placedAt(ui, 102, 32, 500, 480), ignored);
+      drawMainPage(ui, bg, b, v, centredInView(ui, 500, 480), ignored);
       incomeTab = inc;
       ui.in = saved;
     }
-    drawLoans(ui, E, b, v, placedAt(ui, 102, 32, 360, 400), R);
+    drawLoans(ui, E, b, v, [&] { Rect m = viewAreaCentre(ui, 500, 480); return placedAt(ui, m.x, m.y, 360, 400); }(), R);
     return R;
   }
   int lh = lineHeight(ui);
@@ -521,8 +521,8 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   const uint32_t ink = rgb(0x31, 0x34, 0x7B), grey = rgb(0x90, 0x94, 0xA0), band = rgb(0x7B, 0x92, 0xFF);
   Rect r = placedAt(ui, 8, 8, 384, 354);
   ui.panel(r, E.win(0x76, "Ordinances"));
-  ui.text(r.x + 14, r.y + 40, "Ordinance", "main10", ink);
-  rightText(ui, r.x + r.w - 30, r.y + 40, "Current Monthly Cost", "main10", ink);
+  ui.text(r.x + 14, r.y + 40, E.win(0x1C2, "Ordinance"), "main10", ink);
+  rightText(ui, r.x + r.w - 30, r.y + 40, E.win(0x1C3, "Current Monthly Cost"), "main10", ink);
   const Rect list{r.x + 4, r.y + 62, 368, 223};
   ui.fill(list, rgb(0xE6, 0xE8, 0xFF)); sunkenLines(ui, list);
   static const uint32_t order[7] = {kAdvUtilities, kAdvDemographics, kAdvSafety, kAdvEnvironment, kAdvPlanner, kAdvTransport, kAdvBudget};
@@ -540,7 +540,7 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   const int bodyW = list.w - 18;                       // the scroll bar takes the right edge
   int visible = 0;
   { int h = 0; for (size_t i = size_t(scroll); i < items.size(); i++) { h += items[i].header ? 24 : 18; if (h > list.h) break; visible++; } }
-  scrollBar(ui, E, {list.x + list.w - 16, list.y, 16, list.h}, int(items.size()), std::max(1, visible - 1), scroll);
+  classicScrollBar(ui, E, {list.x + list.w - 17, list.y + 1, 16, list.h - 2}, list, int(items.size()), std::max(1, visible - 1), scroll);
   int y = list.y;
   for (size_t i = size_t(scroll); i < items.size(); i++) {
     const Item& it = items[i];
@@ -548,7 +548,7 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
     if (y + h > list.y + list.h) break;
     if (it.header) {
       ui.fill({list.x, y, bodyW, h}, band);
-      ui.text(list.x + 8, y + 5, it.name, "title12", rgb(255, 255, 255));
+      ui.text(list.x + 8, y + (h - ui.fonts->get("main10").height()) / 2, it.name, "main10", ink);   // small bold dialog font, dark blue
       bool c = false;
       const Rect q{list.x + bodyW - 38, y, 36, h};
       E.spot("adv." + std::to_string(it.id), q);
@@ -557,21 +557,36 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
       if (c) R.add(Act::OpenAdvisor, it.id);
     } else {
       const bool en = o.enacted(it.id);
-      bool on = en;
-      if (check(ui, E, "ord." + std::to_string(it.id), {list.x + 6, y, bodyW - 90, h}, "", on)) {
+      // 11 px check box
+      const Rect cb{list.x + 8, y + (h - 11) / 2, 11, 11};
+      const Rect hit{list.x + 4, y, bodyW - 8, h};
+      E.spot("ord." + std::to_string(it.id), hit);
+      ui.fill(cb, rgb(255, 255, 255));
+      ui.fill({cb.x, cb.y, cb.w, 1}, rgb(0x7B, 0x8A, 0xFF)); ui.fill({cb.x, cb.y, 1, cb.h}, rgb(0x7B, 0x8A, 0xFF));
+      ui.fill({cb.x, cb.y + cb.h - 1, cb.w, 1}, rgb(0xFF, 0xF3, 0xFF)); ui.fill({cb.x + cb.w - 1, cb.y, 1, cb.h}, rgb(0xFF, 0xF3, 0xFF));
+      if (en) {
+        for (int k = 0; k < 3; k++) ui.fill({cb.x + 2 + k, cb.y + 5 + k, 1, 2}, ink);
+        for (int k = 0; k < 5; k++) ui.fill({cb.x + 4 + k, cb.y + 7 - k, 1, 2}, ink);
+      }
+      if (ui.clicked(hit)) {
         const bool ok = en ? o.repeal(it.id) : o.enact(it.id);
         if (ok) R.add(Act::SetOrdinance, it.id, !en);
       }
-      ui.text(list.x + 28, y + 2, it.name, "main9", ink);
-      const int64_t val = o.monthlyValue(it.id, money);
-      rightText(ui, list.x + bodyW - 8, y + 2, E.money(val), "main9", en ? ink : grey);
+      const int th = ui.fonts->get("system9").height();
+      ui.text(list.x + 28, y + (h - th) / 2, it.name, "system9", ink);
+      const int64_t val = en ? o.monthlyValue(it.id, money) : o.ifEnactedValue(it.id, money);   // not enacted: the cost it would have, in grey
+      rightText(ui, list.x + bodyW - 8, y + (h - th) / 2, E.money(val), "system9", en ? ink : grey);
     }
     y += h;
   }
   const auto m = o.monthlyMoney(money);
   const int64_t net = m.income - m.cost;
-  ui.text(r.x + 14, r.y + 296, E.win(0x1C4, "Monthly Total"), "title12", ink);
-  ui.text(r.x + 14 + ui.textWidth(E.win(0x1C4, "Monthly Total"), "title12") + 10, r.y + 298, E.money(net), "main10", net < 0 ? rgb(160, 0, 0) : ink);
+  { // Footer: "Monthly Total" in the small bold font, right-aligned next to the cost column, value in black.
+    const std::string lab = E.win(0x1C4, "Monthly Total"), val = E.money(net);
+    const int fh = ui.fonts->get("main10").height();
+    rightText(ui, list.x + bodyW - 8, r.y + 296 + (22 - fh) / 2, val, "main10", 0);
+    ui.text(list.x + bodyW - 8 - ui.textWidth(val, "main10") - 12 - ui.textWidth(lab, "main10"), r.y + 296 + (22 - fh) / 2, lab, "main10", ink);
+  }
   const Rect done{r.x + r.w - 56, r.y + r.h - 40, 44, 34};
   E.spot("ok", done);
   bool c = false;
@@ -643,6 +658,7 @@ WindowResult BusinessDealsWindow::draw(Ui& ui, const WinEnv& E, BusinessDeals& d
     std::string name = "Deal " + std::to_string(t);
     int val = 0;
     for (auto& def : d.defs) if (def.buildingType == t) { name = def.name.empty() ? name : def.name; val = def.value; break; }
+    if (auto nm = names.find(t); nm != names.end() && !nm->second.empty()) name = nm->second;
     Rect row{lr.x + 1, lr.y + 1 + 14 * i, lr.w - 2, 14};
     E.spot("row." + std::to_string(i), row);
     bool on = selType == int(t);

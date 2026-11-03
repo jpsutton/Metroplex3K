@@ -3,6 +3,7 @@
 
 #include "core/game.h"
 #include "core/game_scenario.h"
+#include "core/records.h"
 #include "core/tiler.h"
 
 namespace m3k {
@@ -242,6 +243,11 @@ void Game::initManagers() {
   petitioners_.clear();
   petShown_.clear();
   petView_.reset();
+  // The pending petitions travel with the city (spec 22 P.2). They are listed in the Meet window but not re-presented
+  // as pop-ups on load.
+  if (world_.raw)
+    if (const InnerRecord* pr = world_.raw->findInner({kPetitionerRecType, kPetitionerRecGroup, kPetitionerRecInstance}))
+      if (petitioners_.load(pr->data)) for (const auto& p : petitioners_.list()) petShown_.push_back(p.id);
   advisors_.initBuildingUnlocks(city().clock.date().year);
   advisors_.initTransportFlags(city().clock.date().year);   // spec 22 "Building availability": unlocked at load
 }

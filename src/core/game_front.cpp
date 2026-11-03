@@ -6,6 +6,7 @@
 
 #include "core/game.h"
 #include "core/game_scenario.h"
+#include "core/records.h"
 #include "core/gamedir.h"
 #include "core/newcity_template.h"
 #include "core/peicon.h"
@@ -240,7 +241,10 @@ void Game::saveCurrent(const std::string& name, const fs::path& into) {
   fs::path dir = into.empty() ? resolveCI(root_, "Cities") : into;
   if (dir.empty()) { dir = (root_.empty() ? configDir() : root_) / "Cities"; std::error_code ec; fs::create_directories(dir, ec); }
   fs::path p = dir / (name + ".sc3");
-  if (simReady_) sim_.city().flush();
+  if (simReady_) {
+    sim_.city().flush();
+    if (managersReady_ && world_.raw) world_.raw->setInner({kPetitionerRecType, kPetitionerRecGroup, kPetitionerRecInstance}, petitioners_.save());
+  }
   Bytes b = saveCity(world_);
   if (scen_) b = scen_->mergeState(b);
   { std::vector<uint32_t> log = cheats_.log(); if (!log.empty()) b = writeCheatLog(b, log); }

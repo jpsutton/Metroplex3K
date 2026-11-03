@@ -629,8 +629,13 @@ void Ordinances::makeAllAvailable(std::vector<uint32_t>* announced) {
 }
 
 int64_t Ordinances::monthlyValue(uint32_t id, const OrdinanceMoneyInput& in) const {
+  return enacted(id) ? ifEnactedValue(id, in) : 0;
+}
+
+// The monthly value the ordinance would have if it were enacted (the Ordinances window shows it for rows not enacted).
+int64_t Ordinances::ifEnactedValue(uint32_t id, const OrdinanceMoneyInput& in) const {
   const OrdinanceDef* d = def(id);
-  if (!d || !available(id) || !enacted(id)) return 0;
+  if (!d || !available(id)) return 0;
   int64_t D = d->costDivisor <= 0 ? 100 : d->costDivisor;
   int64_t P = in.population;
   int64_t W = in.world >= 0 ? in.world : P / 1000;   // [OPEN] spec 29 2.2 default

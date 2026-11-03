@@ -287,6 +287,7 @@ class Ordinances {
   struct Money { int64_t income = 0, cost = 0; };
   // Monthly value of one ordinance (positive = income, negative = cost); 0 when not enacted+available.
   int64_t monthlyValue(uint32_t id, const OrdinanceMoneyInput& in) const;
+  int64_t ifEnactedValue(uint32_t id, const OrdinanceMoneyInput& in) const;   // value if enacted; monthlyValue is 0 for a row not enacted
   Money monthlyMoney(const OrdinanceMoneyInput& in) const;
 
   // Monthly availability scan (10% chance, at most one ordinance). Returns the new ID if any.

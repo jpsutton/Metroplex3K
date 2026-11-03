@@ -84,7 +84,7 @@ bool sysButton(Ui& ui, const WinEnv& E, const std::string& name, int row, int x,
 WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, const PetitionerManager& pm) {
   WindowResult R;
   if (selected == 0) {
-    Rect r = centered(ui, 383, 354);
+    Rect r = placedAt(ui, 8, 8, 383, 354);
     if (frame(ui, E, r, " ")) { R.close = true; R.add(Act::Close); }
     blueBand(ui, {r.x + 4, r.y + 4, 8, 346});
     if (ui.skin) ui.fill({r.x + 5, r.y + 5, 8, 29}, rgb(0x7B, 0x92, 0xFF));
@@ -127,7 +127,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
   }
 
   // ---- one advisor
-  Rect r = centered(ui, 384, 354);
+  Rect r = placedAt(ui, 8, 8, 384, 354);
   if (frame(ui, E, r, advisorName(E, selected))) { R.close = true; R.add(Act::Close); }
   if (sysButton(ui, E, "back", 1, r.x + 328, r.y + 7)) { selected = 0; comboOpen = false; return R; }
   ui.text(r.x + 9, r.y + 46, E.win(0x75, "Discuss:"), "main9", kInk);

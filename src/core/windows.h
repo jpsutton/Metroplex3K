@@ -135,6 +135,8 @@ namespace wui {
 Rect centered(Ui& ui, int w, int h);
 // Same at a fixed client position (the original opens several windows at code-constant positions, spec 09 6.x [OBSERVED]).
 Rect placedAt(Ui& ui, int x, int y, int w, int h);
+Rect viewAreaCentre(const Ui& ui, int w, int h);   // rect only, nothing registered
+Rect centredInView(Ui& ui, int w, int h);          // spec 09 s6.0: Budget
 // Window chrome with title bar and close button. Returns true when the close button was clicked.
 bool frame(Ui& ui, const WinEnv& E, Rect r, const std::string& title);
 // Button that registers a test spot.
@@ -155,6 +157,7 @@ bool stepper(Ui& ui, const WinEnv& E, const std::string& name, Rect r, int& v, i
 // Vertical scrolling helper: clamps `scroll`, handles the wheel and up/down arrow buttons at the right edge.
 // Returns the first visible row. `visible` rows fit in `r`.
 void scrollBar(Ui& ui, const WinEnv& E, Rect r, int total, int visible, int& scroll);
+void classicScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int total, int visible, int& scroll);   // spec 09 6.3
 // Portrait or filler box when no image is available.
 void portrait(Ui& ui, Rect r, const Image* im, const std::string& fallbackLetter, uint32_t col);
 // Original-look pieces measured on the shipped dialogs:
@@ -250,6 +253,8 @@ class BusinessDealsWindow {
  public:
   int scroll = 0;
   int selType = -1;   // selected deal (building type), -1 none
+  // Display names from Sc3StringsBuildings by deal building type (spec 09 6.4); a type not in the map shows the def's name.
+  std::map<uint32_t, std::string> names;
   // `briefing` = finance briefing text from the financial advisor (may be empty). A pending offer is
   // shown with Accept / Decline buttons (events AcceptDeal / DeclineDeal; the deal is applied in place).
   WindowResult draw(Ui& ui, const WinEnv& E, BusinessDeals& d, const std::string& briefing);

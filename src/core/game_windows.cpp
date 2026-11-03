@@ -476,6 +476,20 @@ void Game::drawWindows(uint32_t dtMs) {
     finish(ordWin_.draw(ui_, E, city.ordinances, money), showOrd_);
   }
   if (showDeals_) {
+    if (haveData_ && dealsWin_.names.empty()) {
+      // Display names (2026960B:A1096A4F:<occupant id>) of the reward buildings the deals place, found by agent type.
+      for (const auto& def : city.business.defs) {
+        if (dealsWin_.names.count(def.buildingType)) continue;
+        for (const ResKey& k : data_.db().keysOfType(T_OCC_ATTR)) {
+          if (k.group != 0x57E) continue;
+          const OccAttr* a = data_.occupant(k.instance);
+          if (!a || !a->valid || a->agentType != def.buildingType) continue;
+          std::string nm = data_.string(0xA1096A4F, k.instance);
+          if (nm.empty() && a->nameKey.instance) nm = data_.string(a->nameKey.group, a->nameKey.instance);
+          if (!nm.empty()) { dealsWin_.names[def.buildingType] = nm; break; }
+        }
+      }
+    }
     finish(dealsWin_.draw(ui_, E, city.business, lastBriefing_), showDeals_);
   }
   if (showAdv_) {

@@ -63,6 +63,17 @@ Rect placedAt(Ui& ui, int x, int y, int w, int h) {
   return r;
 }
 
+// Spec 09 s6.0 [OBSERVED]: centred in the city-view area = the client minus the 96 px right panel and the bottom bar
+// (56 px at 800 wide, 64 px at 1024 and up).
+Rect viewAreaCentre(const Ui& ui, int w, int h) {
+  const int bar = ui.W <= 800 ? 56 : 64;
+  return {(ui.W - 96 - w) / 2, (ui.H - bar - h) / 2, w, h};
+}
+Rect centredInView(Ui& ui, int w, int h) {
+  Rect c = viewAreaCentre(ui, w, h);
+  return placedAt(ui, c.x, c.y, w, h);
+}
+
 int lineHeight(const Ui& ui) { return ui.fonts->ui().height() + 3; }
 
 bool button(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool enabled, bool toggled) {
@@ -172,6 +183,44 @@ void scrollBar(Ui& ui, const WinEnv& E, Rect r, int total, int visible, int& scr
     int ty = r.y + 16 + (track - th) * scroll / std::max(1, total - visible);
     ui.fill({r.x + r.w - 12, r.y + 16, 10, track}, ui.panelDark);
     ui.fill({r.x + r.w - 12, ty, 10, th}, ui.panelLight);
+  }
+}
+
+// Classic scroll bar of the original's list boxes (spec 09 6.3 [OBSERVED]): square arrow buttons, a thin blue track and a
+// square thumb; r is 16 px wide. The mouse wheel works over `wheelArea`; a press on the track follows the pointer.
+void classicScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int total, int visible, int& scroll) {
+  const uint32_t face = rgb(0xD6, 0xDB, 0xFF), hi = rgb(0xFF, 0xF3, 0xFF), lo = rgb(0x31, 0x38, 0x84), mid = rgb(0x7B, 0x8A, 0xFF);
+  auto bevel = [&](Rect b, bool down) {
+    ui.fill(b, face);
+    ui.fill({b.x, b.y, b.w, 1}, down ? lo : hi); ui.fill({b.x, b.y, 1, b.h}, down ? lo : hi);
+    ui.fill({b.x, b.y + b.h - 1, b.w, 1}, down ? hi : lo); ui.fill({b.x + b.w - 1, b.y, 1, b.h}, down ? hi : lo);
+  };
+  auto arrow = [&](const std::string& name, Rect b, bool up) {
+    E.spot(name, b);
+    const bool down = ui.hover(b) && ui.in.down;
+    bevel(b, down);
+    const int cx = b.x + b.w / 2 + (down ? 1 : 0), cy = b.y + b.h / 2 + (down ? 1 : 0);
+    for (int i = 0; i < 4; i++) ui.fill({cx - i, up ? cy - 2 + i : cy + 1 - i, 2 * i + 1, 1}, lo);
+    return ui.clicked(b);
+  };
+  const Rect up{r.x, r.y, r.w, 16}, dn{r.x, r.y + r.h - 16, r.w, 16};
+  if (ui.hover(wheelArea) && ui.in.wheel) scroll -= ui.in.wheel;
+  if (arrow("scroll.up", up, true)) scroll--;
+  if (arrow("scroll.down", dn, false)) scroll++;
+  const int range = std::max(0, total - visible);
+  const Rect track{r.x, r.y + 16, r.w, r.h - 32};
+  ui.fill({track.x + track.w / 2 - 1, track.y, 3, track.h}, mid);
+  if (range > 0) {
+    const int th = std::min(16, track.h);
+    E.spot("scroll.track", track);
+    if (ui.hover(track) && ui.in.down) {
+      const int pos = ui.in.my - track.y - th / 2;
+      scroll = (pos * range + (track.h - th) / 2) / std::max(1, track.h - th);
+    }
+    scroll = std::max(0, std::min(scroll, range));
+    bevel({track.x, track.y + (track.h - th) * scroll / range, track.w, th}, false);
+  } else {
+    scroll = 0;
   }
 }
 
