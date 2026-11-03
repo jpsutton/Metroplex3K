@@ -847,13 +847,16 @@ adds them after its functional lines.
 c≤150 → `20`; c>150 → `21`. [STATIC]
 
 **Flammability** (label `22`) — byte *f*: f=0 → `23`; f<72 → `24`; f<129 → `25`; f<187 → `26`;
-then `27`/`28` (very high / extreme) [OPEN: split point between `27` and `28`]. [STATIC]
+f≤229 → `27`; f>229 → `28` ("Extreme"), and the value is drawn in red. [STATIC]
 
-**Pollution generated** (label `29`) — produced amount *p* compared with the occupant's baseline
-*b*: p≤0 → `2A`; p<b/5 → `2B`; p<5b → `2C`; p<10b → `2D`; p<50b → `2E`; else `2F`. Additional
-lines: air pollution `187` (`188`–`18D`), water pollution `18E` (`18F`–`194`), landfill capacity
-`10C`/`10D` and usage `10E`/`10F` (percent full) for landfill zones. [STATIC; the meaning of *b*:
-OPEN, see `17-sim-services.md`]
+**Pollution generated** (label `29`) — produced amount *p* compared with the baseline
+*b* = `MaxAirPolluteForUI` + `MaxWaterPolluteForUI` (`SC3Pollution.ini [TuningParameters]`;
+shipped 11000 + 11000 = 22000). The bands are: p≤0 → `2A`; p<b/5 → `2B`; p<5b → `2C`;
+p<10b → `2D`; p<50b → `2E`; else `2F`.
+p = air·round(1.0466667·r_air²) + water·round(1.0466667·r_water²), where air, water, r_air and
+r_water are the occupant's pollution modifier entry (`17-sim-services.md`). Additional lines: air
+pollution `187` (`188`–`18D`), water pollution `18E` (`18F`–`194`), and for landfill zones
+capacity `10C`/`10D` and usage `10E`/`10F` (percent full). [STATIC]
 
 **Per-occupant-family lines** (labels → value templates) [STATIC]
 
@@ -880,9 +883,10 @@ OPEN, see `17-sim-services.md`]
 | Recycling centre | `1AE` citywide recycling `1AF`/`1B0`; `1B1`/`1B2` flavour |
 | Neighbour connection | `54`/`55` connected-to (neighbour name) |
 
-Band thresholds for usage/traffic lines follow the same 72/129/187 split points as flammability
-on a 0–255 scale where the owning subsystem exposes a byte [STATIC for traffic]; usage lines of
-utilities compare used/capacity [OPEN: exact ratios]. The numbers themselves are owned by the
+Band thresholds for traffic lines follow the same 72/129/187 split points as flammability on a
+0–255 scale [STATIC]. The utility **Usage** lines (`58` power, `6B` water) show a **number**
+("0 MW-h/Month", "0 m³/Month"), not a band word. The band strings `59`–`5D` and `6C`–`70` are
+never referenced by code. [STATIC][OBSERVED] The numbers themselves are owned by the
 simulation documents (`16`, `17`, `18`).
 
 Query on a building in a scenario or holiday building set uses the same lines. Holiday-specific
@@ -1028,9 +1032,64 @@ default was used again; whether the position survives a clean exit was not verif
 | **Underground view:** subway (1) | "Subway" | Rail Usage (no Elevation) |
 | **Underground view:** tile with nothing underground | — | the surface tile's normal query (e.g. Dirt) |
 
-Not yet observed: neighbour connections, seaport/airport zones, water pump/tower, highway
-on-ramps, stations of other kinds, and click-target selection on overlapping sprites. These will
-follow in a later batch.
+Not yet observed: neighbour connections (use the `54`/`55` "Connected to" line from §6.12),
+airport zones, pumping stations, highway on-ramps and other station kinds.
+
+#### 6.12.2 Query panel: targeting, commit rules, extra targets
+
+**Target selection** [STATIC]: the query uses the object picked under the pointer by the view's
+per-pixel sprite hit test, which is the same pick as the hover highlight (`25-rendering.md` §9.4).
+If no sprite is hit, the clicked tile (world coordinate >> 8) is used, in this order:
+1. the network piece on that tile, if any;
+2. otherwise, if the terrain type is water, the water lines;
+3. otherwise, the ground lines.
+
+Overlapping sprites therefore resolve to the topmost opaque pixel, and a click on a multi-tile
+building anywhere on its opaque pixels queries that building. In the **underground view** the same
+rules apply to underground pieces (pipe, subway). A tile with nothing underground gives the
+surface tile's query. [OBSERVED]
+
+**Commit rules** [OBSERVED]:
+* **Make Historical:** toggling the box changes only the box. The occupant's historical flag is
+  written when the panel is closed with **OK**. Closing with the close box **discards** the change.
+  The next query on the same building shows the stored state.
+* **Editable name:** apply on OK and discard on close, the same as Make Historical. [INFERRED; not
+  exercised]
+
+**Hover:** while the panel is open the map gets no hover highlight. [OBSERVED]
+
+**Red values:** each subsystem can flag a value as an alert, and flagged values are drawn in
+#FF0000. [STATIC] Observed or traced alerts:
+* Powered "No" and Watered "No";
+* Pollution Generated "Hazardous";
+* Flammability "Extreme";
+* a utility's current capacity of 0 (e.g. "0 m³/Month" on an unpowered water tower);
+* recycling "Inadequate".
+
+**Sounds** (`06-audio.md`):
+* opening the panel on an occupant plays that occupant's `UiQuery…` sound (§6 of `06`);
+* the close box plays `CloseWindow` (56);
+* the check box plays `UiCheckboxClick` (13) [INFERRED];
+* OK and Replace play `UiButtonClick` (12) [INFERRED].
+
+There is no cursor change over the panel and no open/close animation. [OBSERVED]
+
+**More observed targets** [OBSERVED]:
+
+| Target (layout) | Name | Rows | Controls |
+|---|---|---|---|
+| Empty zoned tile, e.g. Seaport zone (1) | "Dirt" | Elevation, Land Value, Zone Type, **Reason for Lack of Development** (flavour value, e.g. "Planets not aligned"), Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution | — |
+| Water tower (2) | name | Age (Max), Elevation, Powered \| Maximum Water Capacity, Current Water Capacity (red when 0), Usage, Effect of Water Pollution | **no Replace** |
+| Recycling center (2) | name | Age (Max), Elevation, Powered \| Citywide Recycling Capacity (band, red "Inadequate"), flavour (Milk Containers Processed) | Replace |
+| Solar power plant (2) | name | Age (Max), Elevation, Pollution Generated \| Maximum Power Capacity, Current Power Capacity, Usage | Replace |
+| Landfill tile holding garbage (2) | "Landfill" | Elevation \| Capacity Citywide, Usage | — (it has a picture: the garbage sprite) |
+
+Correction to the §6.12.1 controls table: utility buildings such as water towers have **no**
+Replace button. Power plants, recycling centres and civic/service buildings do.
+
+**Picture scale:** the thumbnail renderer's zoom and scale rule is [OPEN]. Recommended: render the
+occupant at zoom 2 (32 px tile width). The observed boxes (4 × 4 plant 130 px wide, 3 × 3 industry
+98 px) fit zoom 2.
 
 ### 6.13 Snapshots (Unlimited edition) [STATIC]
 
