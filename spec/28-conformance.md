@@ -29,9 +29,9 @@ language folders present). Counts are over the whole installation unless a path 
 
 | Check | Expected result | Spec |
 |---|---|---|
-| Files starting with the IXF magic | 649 (536 `.ixf`, 37 `.dat`, 21 `.sct`, 17 `.bld`, 15 `.sc3`, 13 `.SNR`, 10 `.st3`) | 02 |
+| Files starting with the IXF magic | 649 (536 `.ixf`, 37 `.dat`, 21 `.sct`, 17 `.bld`, 15 `.sc3`, 13 `.SNR`, 10 `.st3`) in a fresh install. A played install has more: the game writes IXF-format `.cfg` files and a `.tmp` file, and every city the player saves adds one. Exclude those, or count only the listed extensions outside `Cities/` plus the shipped saves | 02 |
 | IXF files that open | 644 of 649. The five `Sc3HolidaysStringsPetitionerTickerY.IXF` files outside `ENGLISH` reach end of file before the index terminator, and the original refuses to open them too. The engine must treat them as missing, not crash | 02, 05 |
-| String tables (Type `2026960B`) | 55,952 records in 477 files parse. Use the length prefix of each string, not the index size, because 2,863 records state a size 4 bytes too small | 02, 05 |
+| String tables (Type `2026960B`) | 56,062 records in 485 files parse: 55,952 in the 472 readable text files of `Res/Text/**` (477 files including the five placeholders above, which hold no records) plus 110 in the 13 `.SNR` scenario files. Per language folder: DUTCH 7,981, ENGLISH 8,003, ENGLISH-UK 8,061, FRENCH 7,982, GERMAN 7,982, ITALIAN 7,963, SWEDISH 7,980. Use the length prefix of each string, not the index size, because 2,863 records state a size 4 bytes too small | 02, 05 |
 | `.SII` sidecars | 10 of 10 parse. Every record matches the span record of the same sprite. One file states a record count one higher than the number of records present | 02, 04 |
 | Sprite image payloads | 63,931 decode (63,691 in `Res/Sprites/**` plus 240 in `BARender/BAT.DAT`). Pixel encodings present: 565 RLE 62,702; 555 RLE 90; 8-bit opacity masks 1,139 | 04 |
 | UI images (Type `62B9DA24`) | 729 of 729 decode | 04, 08 |
@@ -39,7 +39,7 @@ language folders present). Counts are over the whole installation unless a path 
 | `.FBF` fonts | 56 of 56 parse (8 distinct fonts, identical in every language folder) | 05 |
 | `.XA` audio | 814 of 814 decode with no 16-bit overflow | 06 |
 | `INTRO.TGQ` | 1,051 video chunks and 1,088 audio chunks | 07 |
-| Occupant attribute records (`TKB1`) | 1,530 of 1,530 parse: 1,108 in the five occupant files of `Res/Occupant/` plus 422 inside the building-set and flora-set sprite archives (`Res/Sprites/BuildingSets/**` 314, `Res/Sprites/FloraSets/**` 108) | 03, 13 |
+| Occupant attribute records (`TKB1`) | 1,530 of 1,530 parse: 1,108 in the five occupant files of `Res/Occupant/` plus 422 inside the building-set and flora-set sprite archives (`Res/Sprites/BuildingSets/**` 314, `Res/Sprites/FloraSets/**` 108). Count every record whose payload starts with `TKB1`, whatever its Type: the records use four Types (`207EDC0E`, `E223741F`, `FFD30C03`, `220055E1`; see 03 §3.1). Per file: `OccupantAttribs.IXF` 1,043, `OccupantAttribs_2.IXF` 41, `OccupantAttribs_Holidays.IXF` 16, `OccupantAttribs_German.IXF` 5, `HOLIDAYF.IXF` 3; `MBE_0015.dat` 170, `BST_0004.dat` 144; each of the four flora-set `.dat` files 27 | 03, 13 |
 | Composite sprite records (Type `00006300`) | 1,425 of 1,425 parse | 25 |
 | Automata attribute files in `Res/SSimData/**` | All 24 files and all 8 record kinds parse | 26 |
 | `Res/TilingRules/*.txt` | 68 of 68 tokenise. The subset the game actually loads is listed in 12 | 12 |
@@ -47,7 +47,7 @@ language folders present). Counts are over the whole installation unless a path 
 | `MenuItem.INI` | 90 items, 109 buttons and 21 menus. Every string reference resolves | 08, 09 |
 | `SYS.PAK` | 51 entries. Each packed INI decodes to text | 02 |
 | Saves (`.sc3`, `.st3`, `.sct`, `.SNR`) | 59 of 59. Each packed segment decompresses to exactly its stated raw size, and each inner database parses with the directory ending exactly at the end of the data | 10 |
-| Scenario records | 13 of 13 `.SNR` files. All scripts parse | 23 |
+| Scenario records | 13 of 13 `.SNR` files. All 116 scripts parse: 5,865 commands (5,780 with delay 0) and 9,271 arguments (7,836 kind 0, 1,435 kind 1) | 23 |
 | Scenario Creator projects (`.SSC`) | 14 of 14 parse. The game itself never reads them | 23 |
 | BAT buildings | 17 of 17 `.bld` files and 15 of 15 buildings in `BAT.DAT` | 24 |
 
