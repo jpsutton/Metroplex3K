@@ -291,6 +291,7 @@ class Renderer : public ICityRasterizer {
   // palBasic tint row for a world tile (0 = none, 1..52); spec 6.4 tints.
   void setTileTint(int x, int z, uint8_t basicRow);
   void clearTileTints() { tint_.clear(); }
+  void setTileTints(const std::vector<uint8_t>& rows) { if (world_ && rows.size() == size_t(world_->W) * world_->H) tint_ = rows; }   // one palBasic row per tile (0 = none)
   // Cost text: called each render with the screen anchor, the text and affordability.
   void setCostTextHook(TextHook h) override { textHook_ = std::move(h); }
   void setCostFont(const Font* f) override { costFont_ = f; }  // used when no hook is set

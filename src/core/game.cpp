@@ -612,6 +612,13 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
         if (++layerOverlayAge_ >= 30 && !simBusy()) refreshLayerOverlay();
         ropt_.overlay = &layerOverlay_;
       }
+      // Zones layer (spec 25 9.2): with the building layers hidden every lot is a flat palBasic colour; otherwise zoned terrain
+      // carries the 50/50 palBasic tint of spec 25 6.4.
+      if (!simBusy()) {
+        const bool zonesOn = layers_.mode == CityLayers::AboveGround && layers_.zones && !ropt_.overlay;
+        if (zonesOn && !layers_.zonedBuildings && !layers_.otherBuildings) { buildZoneOverlay(); ropt_.overlay = &zoneOverlay_; }
+        updateZoneTint(zonesOn && !ropt_.overlay);
+      }
     } else { ropt_.overlay = nullptr; stopAmbience(); }
     // Building animations: wall-clock tick (~15 Hz, same period as automata), not sim day.
     // Driving them from sim_.day froze them between day ticks and raced at high speed.
@@ -1302,6 +1309,56 @@ std::string Game::cursorForTool() const {
     }
     default: return "";
   }
+}
+
+// Zones layer (spec 25 9.2 [OBSERVED]; rows of the lighter zone types INFERRED): every zoned tile is a flat palBasic colour,
+// non-zoned building lots are rust (row 34); empty unzoned land keeps its terrain colour. Roads, flora and vehicles draw on top.
+void Game::buildZoneOverlay() {
+  const World& w = world_;
+  zoneOverlay_.slot = 0;
+  zoneOverlay_.row.assign(size_t(w.W) * w.H, 0xFF);
+  auto rowOf = [](int zone) -> int {
+    switch (zone) {
+      case 1: return 26; case 2: return 25; case 3: return 24;       // residential light / medium / dense
+      case 5: return 29; case 6: return 28; case 7: return 27;       // commercial
+      case 9: return 23; case 10: return 22; case 11: return 21;     // industrial
+      case 15: return 30; case 14: return 31; case 17: return 32;    // seaport, airport, landfill
+      default: return 0xFF;
+    }
+  };
+  const City& c = sim_.city();
+  for (int x = 0; x < w.W; x++)
+    for (int z = 0; z < w.H; z++) {
+      const size_t ti = w.tIdx(x, z);
+      int r = ti < w.zone.size() ? rowOf(w.zone[ti]) : 0xFF;
+      if (r == 0xFF) {
+        const int oi = c.occupantAt(x, z);
+        if (oi >= 0 && size_t(oi) < w.occupants.size()) {
+          const uint32_t k = w.occupants[size_t(oi)].agentType / 1000;
+          if (!(k >= 3 && k <= 9)) r = 34;      // civic buildings, landmarks: rust lots
+        }
+      }
+      zoneOverlay_.row[ti] = uint8_t(r);
+    }
+}
+
+void Game::updateZoneTint(bool on) {
+  if (!on) { if (!zoneTint_.empty()) { renderer_.clearTileTints(); zoneTint_.clear(); invalidateCityView(); } return; }
+  const World& w = world_;
+  std::vector<uint8_t> rows(size_t(w.W) * w.H, 0);
+  for (size_t i = 0; i < rows.size() && i < w.zone.size(); i++) {
+    switch (w.zone[i]) {
+      case 1: rows[i] = 26; break; case 2: rows[i] = 25; break; case 3: rows[i] = 24; break;
+      case 5: rows[i] = 29; break; case 6: rows[i] = 28; break; case 7: rows[i] = 27; break;
+      case 9: rows[i] = 23; break; case 10: rows[i] = 22; break; case 11: rows[i] = 21; break;
+      case 15: rows[i] = 30; break; case 14: rows[i] = 31; break; case 17: rows[i] = 32; break;
+      default: break;
+    }
+  }
+  if (rows == zoneTint_) return;
+  zoneTint_ = rows;
+  renderer_.setTileTints(rows);
+  invalidateCityView();
 }
 
 void Game::drawSoftCursor(const std::string& name, int x, int y) {

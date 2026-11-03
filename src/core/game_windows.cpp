@@ -318,7 +318,8 @@ void Game::applyLayers() {
   // Data layers hide buildings, flora and automata; networks stay (spec 25 9.2). Traffic keeps the zone tint.
   ropt_.flora = above && L.flora;
   ropt_.automata = above && L.transport;
-  ropt_.zonePaint = above ? L.zones : view && cityLayerViews()[li].layer == DataLayer::Traffic;
+  // The Zones layer is a flat palBasic overlay (buildZoneOverlay); the translucent road tint stays only for the Traffic layer.
+  ropt_.zonePaint = view && cityLayerViews()[li].layer == DataLayer::Traffic;
   if (above && (!L.transport || !L.powerLines)) {
     const bool t = L.transport, p = L.powerLines;
     ropt_.showNet = [this, t, p](const NetPiece& np) { return sim_.city().kindOf(np) == uint32_t(NetworkKind::Power) ? p : t; };

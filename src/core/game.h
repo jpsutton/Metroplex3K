@@ -114,6 +114,7 @@ class Game {
   ToolKind currentTool() const { return tool_; }
   int toolArg() const { return toolArg_; }
   const CityLayers& layers() const { return layers_; }
+  void setLayers(const CityLayers& l) { layers_ = l; layersDlg_.edit = l; applyLayers(); }   // tools / tests
   void startDisaster(DisasterType t);
   void setDisastersOn(bool on);   // city flag + schedule monthly DM gate; probes and scripts
   bool disasterActive() const { return disasters_.anyActiveNonParade(); }
@@ -500,6 +501,10 @@ class Game {
   void handleScrolling(uint32_t dtMs);
   bool isReplaceableOccupant(uint32_t occId);   // in [ReplaceableBuildings] (Replace button of the query panel)
   std::set<uint32_t> replaceableOcc_; bool replaceableLoaded_ = false;
+  void buildZoneOverlay();
+  void updateZoneTint(bool on);
+  std::vector<uint8_t> zoneTint_;
+  DataOverlay zoneOverlay_;
   void drawSoftCursor(const std::string& name, int x, int y);   // cursor image blitted into the frame at a hotspot
   std::map<std::string, CursorImage> softCur_;
   std::string panCursor_;

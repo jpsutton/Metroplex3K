@@ -711,6 +711,37 @@ Quantisation [INFERRED]: row = 31 − ⌊value × 32 / 256⌋, i.e. low values o
 high values on the top row of the ramp, consistent with all eight screenshots. The exact band
 edges are [OPEN].
 
+**Zones layer** [OBSERVED; palBasic row assignment partly INFERRED]:
+* With the **Zones** box ticked in View City Layers and Zoned Buildings / Other Buildings
+  unticked, every lot is drawn as a flat palBasic colour with relief shading. This is overlay
+  S = 0: the colour replaces the terrain colour and no noise is added.
+* Roads, rails, highways, power lines, vehicles and flora are drawn normally on top. The zone
+  colour is not blended with them.
+* Empty zoned tiles and tiles holding a zoned building get the same colour. Hidden buildings stay
+  pickable by the query tool.
+* Lots of **non-zoned** buildings (civic buildings, landmarks such as The Wall, hospitals) get a
+  rust colour: palBasic row 34.
+* Measured flat-tile colours (16-bit screen):
+
+  | Zone | Flat-tile colour | palBasic row |
+  |---|---|---|
+  | Dense industrial | #C67D00 | 21 (#D89300) |
+  | Medium industrial | #AD8A18 | 22 (#C59C27) |
+  | Light industrial | #A59242 | 23 (#BBA44A) |
+  | Dense residential | #215D08 | 24 (#2F6F10) |
+  | Medium residential | #427129 | 25 (#4C8236) |
+  | Unzoned building lot | #AD5D21 | 34 (#C76A2B) |
+
+  Each measured colour is about 0.88 × its row, which is the flat-tile relief shade.
+* By the row pattern [INFERRED]:
+  * light residential = row 26 (#5B9648);
+  * dense, medium and light commercial = rows 27–29 (blues #4346B1, #565FA6, #6A72AB);
+  * seaport = row 30 (#71BFCA);
+  * airport = row 31 (#67B88D);
+  * landfill = rows 32/33 (browns).
+* Zone colours appear elsewhere only as the 50/50 palBasic tint of §6.4 on zoned terrain, and in
+  the zoning drag preview.
+
 ### 9.3 Underground view
 
 In the underground view the land tiles are drawn with palette slot 5 (`palUnder`) in place of the

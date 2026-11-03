@@ -40,6 +40,7 @@ int main(int argc, char** argv) {
     }
     else if (op == "win") { g.openWindow(arg); frame(4); }
     else if (op == "ctrl") in.modCtrl = arg == "1";   // ctrl:1 / ctrl:0 holds the Ctrl key (query tool)
+    else if (op == "zones") { CityLayers l = g.layers(); l.zones = true; l.zonedBuildings = l.otherBuildings = arg != "only"; g.setLayers(l); frame(3); }   // zones:only = Zones layer with the buildings hidden
     else if (op == "dirty") g.setDirty(true);
     else if (op == "fps") g.mutableEngineOptions().showFps = true;   // engine option: frame counter overlay
     else if (op == "shot") writePng(arg, W, H, g.screen());

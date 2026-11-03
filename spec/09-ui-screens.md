@@ -744,6 +744,22 @@ you garbage (`145`). Deal offers and terms come from `NeighborDeals.ini` (`19-si
 an offer is presented as a petitioner-style dialog with accept/decline. Breaking a deal early
 incurs the penalty defined there.
 
+**Layout and compass** [STATIC][OBSERVED]:
+* The map diamond is drawn at view rotation 0 with the region image of `11-world-terrain.md` §9
+  turned 45° clockwise.
+* The four neighbour cells sit on the diamond's **diagonal edges**:
+  * neighbour 0 (map edge x = 0) is the **upper-right** cell;
+  * neighbour 1 (z = 0) is the **upper-left**;
+  * neighbour 2 (x = W−1) is the **lower-left**;
+  * neighbour 3 (z = H−1) is the **lower-right**.
+  Each cell is outlined in light blue, and the selected cell is outlined in red.
+* The compass rose (60 × 60 image `000005E5:0x0D`, at (20, 50) in the window) has four letter
+  labels at its top, left, bottom and right positions. Label k gets N, W, S, E for
+  (rotation + k) mod 4 = 0, 1, 2, 3 respectively, so the letters turn with the view rotation. At
+  rotation 0, N is at the top.
+* The neighbours are therefore **not** on compass points: at rotation 0, neighbour 0 is north-east,
+  1 north-west, 2 south-west and 3 south-east. No text names a neighbour by direction.
+
 The terrain shown in the map diamond (the city in the centre and invented land or sea for the
 four neighbours around it) is rebuilt each time the window is built. It is deterministic: it uses
 a fixed seed and depends only on the city's terrain and its edge sea-water flags. Nothing about
@@ -1155,6 +1171,94 @@ refusal on the tile (codes 9–18) and the abandonment cause when it abandons (c
 * Airport zone tile: the same rows as the seaport zone tile above, with Zone Type "Airport".
 * Pumping station: the same rows as the water tower.
 * Highway on-ramp: like Highway, with the piece's own name.
+
+#### 6.12.3 Query values of service, culture and transport buildings [STATIC]
+
+The tables below use these terms:
+* **M** is the city's demographics layer (the population, health and education model of
+  `20-sim-population.md`).
+* **N(t)** is the citywide count of buildings of agent type t.
+* **t** is the aura byte (−128..127) at the building's tile, and **a** is the city's average aura
+  (`17-sim-services.md` §8).
+* **LV** is the land-value byte at the tile.
+* All divisions are integer and all float→int conversions truncate, unless a row says otherwise.
+
+The flavour numbers are deterministic formulas, not random. "red" marks the alert colour.
+
+**Health and education** (systemwide values from M):
+
+| Building | Line | Value |
+|---|---|---|
+| Hospital | Beds (Systemwide) `A7` | Σ beds of all hospitals (`OptimalBedCount` each) |
+| | Patients `A9` | the patients count of `20` §5.1; **red** when beds < patients |
+| | Doctors `AB` | Σ funded doctors of all hospitals |
+| | Grade `AD` | health rating 0–4 (`20` §5.2): 4 → A, 3 → B, 2 → C, 1 → D, 0 → F; D and F are red |
+| School | Desks `B3` | Σ school capacity |
+| | Students `B5` | school-age population (ages **6–18**); **red** when desks < students |
+| | Teachers `B7` | Σ funded teachers |
+| | Grade `B9` | school rating 0–4 (`20` §4.4): 4 → A, 3 → B, 2 → C, 1 → D, 0 → F; D and F are red |
+| | Apples for the Teacher `BF` | v = max(0, t)/10 (integer), +3 if the reading ordinance `0xE0D07233` is on, +2 if junior sports `0x815B4CEF` is on |
+| College | Capacity `C8` | Σ college capacity |
+| | Students in Attendance `CA` | college-age population (ages 19–24); **red** when capacity < students |
+| | Professors `CC` | Σ funded professors |
+| | Grade `CE` | college rating 0–4, mapped as for School |
+| Library | Books Systemwide `D4` | B = EQ×19 + P_lib×10 + S×13 − 52 + (day mod 17), where EQ = M's average EQ of ages 20–65 (byte), P_lib = Σ library capacity (`PopServed`), S = school rating, day = second value of the city date |
+| | Books in Circulation `D6` | min(population, EQ × B / 303 + (first date value mod 17)) |
+| | Grade `D8` | cov = 100 if population = 0, else min(100, P_lib × 100 / population); s = funding × cov / `[Library] MonthlyUpkeep`; s ≥ 88 → A, ≥ 72 → B, ≥ 64 → C, ≥ 47 → D (red), else F (red) |
+| Museum | Attendance (last year) `DE` | `[Museum] PopServed` × population / (P_mus + 1) if population < P_mus, else `[Museum] PopServed`; P_mus = Σ museum capacity |
+| | Dinosaur Bones `E0` | (a city counter) mod 53 − (third date value mod 3). It is shown only when that city object exists [INFERRED: the counter is not identified] |
+| | Grade `E4` | s = funding × min(100, P_mus × 100 / population) / `[Museum] MonthlyUpkeep`; s ≥ 84 → A, ≥ 66 → B, ≥ 52 → C, ≥ 40 → D (red), else F (red) |
+| | Mummies `E2` | never shown (the string is unused) |
+| All funded | Funding Cost `86` | the building's monthly upkeep property, as money "§x/Month" |
+
+**Safety** (per station):
+
+| Building | Line | Value |
+|---|---|---|
+| Police | Crimes per Month `88` | S = Σ crime byte over the diamond \|dx\| + \|dy\| ≤ `[PoliceStation] OptimalCoverageRadius` around the lot centre (clipped to the map), n = tiles; value = S×10/n + S mod 13 (0 if n = 0) |
+| | Performance Rating `8C` | R = avgCoverage × 100 / ((Max − Min)/3 + Min), where avgCoverage is the police-coverage layer averaged over tiles within the station's radius, and Min/Max are the coverage tunables (shipped 20/80, so ÷40). R < 50 → Poor (red); R < 80 → Fair; R > `OppressionThreshold` (210) and crimes ≠ 0 → Oppressive (red); else Good |
+| | Arrests per Month `8A` | R × crimes / `OppressionThreshold` |
+| | Donuts flavour `91` | d = max(\|dx\|,\|dy\|) + min(\|dx\|,\|dy\|)/2 from the station tile to a city reference point (unidentified city object); crimes ≤ 0 → d×10; crimes < 100 → d×(11 − 0.1×crimes); else d×100/crimes |
+| Fire | Fires per Month `9C` | Σ flammability byte over the diamond of radius `[FireStation]` radius (25) / (2 × tiles) |
+| | Calls per Month `9E` | fires × (1.5 − 0.3 × (t + 127)/255) |
+| | Performance Rating `A0` | f = funding / `[FireStation] OptimalMonthlyUpkeep` (30); f < 0.4 → Poor (red); < 0.7 → Fair; < 1.0 → Good; else Excellent |
+| | Spots on Dalmatian `A5` | LV × 2/3 at the station tile [INFERRED: the layer is land value] |
+
+**Parks and recreation** (citywide unless noted):
+
+| Building | Line | Value |
+|---|---|---|
+| Any park | Acres Systemwide `EA` | 1·N(14311 small park) + 9·N(14312 big park) + 16·N(14313 baseball) + 4·N(14314 playground) + 4·N(14315 pond) + 1·N(14316 fountain). The section is omitted when this is 0 |
+| | Benches in Use `EC` | let S = round(R-valve supply × working-age share) and J = jobs-valve value; S = 0 → 0; J < S → min(5, (S − J)/acres) × the building's footprint w × h; else 1. Halved when the homeless-shelter ordinance `0x20D07175` is on [INFERRED for J's meaning] |
+| Zoo | Attendance `EE` | population × (t + a + 255)/512 × 0.1 / N(14450) |
+| | Manure Donated `F0` | (t + 128)/4 × (1 + 0.5 if ordinance `0xA2F917CF` is on) × (1 + 0.25·N(12851 recycling)) |
+| Baseball | Little Leaguers `F2` | population × (share of ages 6–10) × (t + 128)/255 × 0.25 / N(14313), capped at 210 |
+| | Record `110` | wins = (LV + 128 + a)/20; shown "wins − (25 − wins)" |
+| | Season Tickets `112` | wins × 2000 |
+| | Team name `1AD` | a per-building stored string, shown in an editable field |
+| Marina | Boats Berthed `F4` | population × (t + 128)/255 × (1 + 0.5·N(13871 university)) × (1 + 0.25·N(13873 local college)) × 0.01 / N(14430), capped at 400 |
+
+**Transport hubs**:
+
+| Building | Line | Value |
+|---|---|---|
+| Airport | Air Traffic `FE` | r = C-valve supply / (N(12310) × 4000); r < 0.8 Light, < 1.1 Medium, < 1.5 Heavy, else Congested (red) |
+| | On-Time `103` | min(98, (a + 128)/255 × (1/r) × 100); r = 0 also gives 98 |
+| Seaport | Port Traffic `105` | r = I-valve supply / (N(12330) × 4000); same bands as the airport |
+| | Barnacles Removed `10A` | (1 − (a + 128)/255) × r × 1 000 000 |
+| Bus stop, rail or subway station | Passengers per Day `37` | 4.3 × the traffic simulator's station value at the queried tile (`18-sim-transport.md`); 0 while the transit strike state is active |
+
+**Landmarks and rewards**:
+* Date Built `F6`: the occupant's build date (day/month/year), formatted by the locale.
+* Monthly Income `118`: business-deal buildings only, the business-deal manager's income for that
+  building's type (`19-sim-economy.md`); otherwise 0.
+* Flavour numbers:
+  * Number of Eggs Thrown `F8` = (255 − a)/20;
+  * Number of Pigeons `FC` = N(13000);
+  * Miles of Red Tape `FA` = a count from the ordinance manager [INFERRED: number of active
+    ordinances].
+
+Not traced: the transit service-quality lines `181`–`185`.
 
 ### 6.13 Snapshots (Unlimited edition) [STATIC]
 
