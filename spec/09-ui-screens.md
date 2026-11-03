@@ -1551,10 +1551,10 @@ at a fixed position (§6.0).
     168 px wide, filled in the slice colour, with the label in bold.
   * The pie is on the right, centred at about (318, 117), roughly 175 × 110 px, with a dark rim
     below it. Percentages are drawn in black on the slices.
-  * Electricity colours: Coal Power (132, 66, 66), Wind Power (255, 130, 0), Solar Power
+  * Electricity colours: Coal Power (132, 65, 66), Wind Power (255, 130, 0), Solar Power
     (0, 255, 0), Nuclear Power (255, 255, 0). Caption: "Total Electricity Usage Annually = 1,906,937
     MW-h" (`289`).
-  * Garbage colours: Landfill (255, 65, 222), Recycling (66, 65, 255). Caption: "Total Garbage
+  * Garbage colours: Landfill (247, 56, 231), Recycling (57, 69, 247). Caption: "Total Garbage
     Produced Annually = 937,319 Tons" (`1F8`).
 * Which stripe tile (`000005E5:31`/`33`/`35`) each page uses was not identified [OPEN]. All three
   bar pages look the same.
