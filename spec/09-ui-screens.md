@@ -594,6 +594,9 @@ building-picker window (§6.11); choosing a building there arms a plop tool for 
 
 `[OBSERVED]` (shipped city, February 2067, 1024 × 768).
 
+* **Placement** `[OBSERVED]` (800 × 600, no other window open): the frame is exactly 500 × 480 px
+  with its top-left at (102, 32) of the client area. The same position is used when another window
+  is open.
 * **Layout.** A modal panel about 500 × 480 px with two tabs, **Expenditures** and **Income**.
   Top-left is a caption box (`<year> Budget` / `<Month> <year>`). The columns are Adjust,
   Yr. To Date Expense, Year End Estimate and Meet Advisor.
@@ -702,6 +705,39 @@ threshold; name string; cost) and `[ORDINANCE_TRIGGERS]` (conditions that make a
 appear: `HOMELESS_SHELTER_PERCENT`, `EARTHQUAKE_PREP_BUILDINGS`, `TOURIST_PROMOTION_BUILDINGS`,
 `AEROSPACE_AVAILABLE_YEAR`). [DATA keys; semantics owned by `19-sim-economy.md`]
 
+`[OBSERVED]` (800 × 600, new city, January 2000, population 0):
+
+* **Frame.** 384 × 354 px with its top-left at (8, 8) of the client area. There is **no close box**.
+* **Title bar.** About 30 px tall, with the title in the large title font.
+* **Header row.** "Ordinance" on the left and "Current Monthly Cost" on the right.
+* **List box.** From about (4, 62) to (372, 285) relative to the frame, with a vertical scroll bar
+  (up and down arrow buttons and a thumb) at its right edge.
+* **List rows.** Grouped by advisor:
+  * Each group starts with a 24 px band in the darker title blue. The band shows the advisor's
+    title in bold and a "?" speech-bubble button at its right that opens that advisor.
+  * Below the band come the advisor's ordinances, one 18 px row each: a small check box, the
+    name, and the cost right-aligned. The cost is in grey while the ordinance is not enacted.
+  * Group order: Utilities Advisor; Health, Education and Aura Advisor; Public Safety Advisor;
+    Environment Advisor; City Planner; Transportation Advisor; Financial Advisor.
+  * The rows observed, in order:
+    * Water Conservation, Power Conservation, Stairwell Lighting, Mandatory Water Meters.
+    * Community CPR Training, Free Clinics, Junior Sports, Nuclear Free Zone, Pro-Reading, Public
+      Smoking Ban.
+    * Mandatory Smoke Detectors, Neighborhood Watch, Crossing Guards.
+    * Leaf Burning Ban, Landfill Gas Recovery, Backyard Composting, Paper Reduction Act, Trash
+      Presort, Lawn Chemicals Ban, Clean Air, Industrial Waste Disposal, Mandatory Car Smogging,
+      Tire Recycling.
+    * Industrial Pollutant Impact Fee, Electronics Tax Incentive, Farmer's Market, Conservation
+      Corps, Electronics Job Fair, Public Access Cable, Clean Industry Association, Biotech Tax
+      Incentives.
+    * Parking Fines, Carpool Incentive, Alternate Day Driving.
+    * Legalized Gambling.
+  * Costs at population 0: −§1 for most rows, and §0 for Leaf Burning Ban, Industrial Waste
+    Disposal, Industrial Pollutant Impact Fee, Farmer's Market, Parking Fines and Legalized
+    Gambling.
+* **Footer.** Below the list box: "Monthly Total" in bold followed by the total. Below that, at the
+  bottom right, an OK (check-mark) button of about 44 × 34 px that closes the window.
+
 ### 6.4 Business deals window [STATIC]
 
 Title `029541F4:1FE`. Lists current business deals (`1D0`) with each deal's monthly contribution
@@ -733,6 +769,10 @@ plays a crowd reaction (sounds 70–73: boo, disappointment, neutral, cheer — 
 petitioner's reaction field). [STATIC; reaction choice rule in `22`]
 
 ### 6.7 Neighbours window and neighbour deals [STATIC]
+
+`[OBSERVED]` (800 × 600): the frame is 372 × 445 px with its top-left at (50, 50) of the client
+area. It has a close box. On opening, the first neighbour (here the north-west one) is selected:
+its diamond has a red outline and its name is in the City field.
 
 Opened by Review ▸ Neighbors (`630288E9`, toggle). Title `029541F4:117`; a map with up to four
 neighbour cities placed by compass side (`11D` N, `11E` W, `120` S, `11F` E). Selecting a
@@ -1324,7 +1364,7 @@ Clicking a point on the mini-map centres the main view there (`25-rendering.md`)
 ### 7.2 Data maps [STATIC]
 
 `[OBSERVED]` In the main view, data layers are chosen in the **View City Layers** dialog, opened
-with the layers button on the navigator panel. The dialog has:
+with the layers button on the navigator panel. At 800 × 600 its frame is 296 × 336 px with the top-left at (32, 32) of the client area. The dialog has:
 * an *Above Ground* group of six checkboxes: Transportation, Power Lines, Flora, Zoned Buildings,
   Other Buildings, Zones;
 * an *Underground* pair of radio buttons: Subways, Water Pipes;
@@ -1366,6 +1406,8 @@ the same ramp and is the reference for which palette and which row direction a m
 layer-value → row quantisation is [OPEN] (`25-rendering.md` §9.2 suggests row = ⌊value/8⌋).
 
 ### 7.3 Graphs window [STATIC]
+
+`[OBSERVED]` At 800 × 600 the frame is 424 × 440 px with its top-left at (40, 34) of the client area. It has a close box; Esc does not close it.
 
 Title `029541F4:184` (also `160`). Series (check-box list, any combination shown at once):
 city size `161`, residents `162`, commerce `163`, industry `164`, national population `165`,
