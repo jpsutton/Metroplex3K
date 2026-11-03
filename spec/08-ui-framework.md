@@ -555,10 +555,10 @@ All shipped data follows this grammar: 7/7 files, 14/14 tables, 881/881 lines. `
 | 40 | Ctrl+Alt+Shift+C | Open the cheat-code entry dialog (`09-ui-screens.md`) |
 | 41 | keypad + | Zoom in `[INFERRED]` |
 | 42 | keypad − | Zoom out `[INFERRED]` |
-| 43 | PageDown | Rotate the view by one 90° step `[INFERRED]`; direction `[OPEN]` (see below) |
-| 44 | PageUp | Rotate the view by one 90° step in the opposite direction to 43 `[INFERRED]` |
+| 43 | PageDown | Rotate the view one 90° step **clockwise as seen on screen**. The map content turns clockwise: the tile at the screen's bottom corner moves to the left corner, and the navigator's compass N marker moves from the top corner to the right corner. `[OBSERVED]` |
+| 44 | PageUp | Rotate the view one 90° step counter-clockwise as seen (it undoes 43). `[OBSERVED]` |
 | 45–48 | Left, Up, Right, Down | Scroll the view in that direction `[INFERRED]` |
-| 49 | F12 | Toggle the game UI panels: hide them if they are shown, show them if hidden (the "hide/show toolbars" toggle of `09-ui-screens.md` §4) `[STATIC]` toggle / `[INFERRED]` which panels |
+| 49 | F12 | Toggle the game UI panels (the "hide/show toolbars" toggle of `09-ui-screens.md` §4). Hidden: the whole tool-menu column with any open fly-out, the whole bottom bar (news ticker, city name, population, funds, date, pause/speed controls, query button, RCI indicator, messages button), and the navigator (minimap, zoom/rotate buttons, layers button). Visible: only a small round "show UI" button in the window's bottom-right corner (about 20 × 20 px). The map does **not** move or resize: it already fills the client area under the panels, so hiding just uncovers it. A second F12 restores everything. `[STATIC]` toggle / `[OBSERVED]` panels |
 | 50 | Space | Centre the view on the tile under the mouse pointer `[INFERRED]` |
 | 51 | Ctrl+E | `0xE2ED3560` param `0x62E925A2` power-plant picker (`0x10005002`) |
 | 52 | Shift+R | `0x42B5DE86` highway (`0x10004301`); only if available |
@@ -586,7 +586,7 @@ All shipped data follows this grammar: 7/7 files, 14/14 tables, 881/881 lines. `
 | 77, 78 | keypad 2, 2 | Set zoom level index 1 |
 | 79, 80 | keypad 3, 3 | Set zoom level index 2 |
 | 81, 82 | keypad 4, 4 | Set zoom level index 3 |
-| 83, 84 | keypad 5, 5 | Set zoom level index 4 (see `25-rendering.md` for which index is closest) |
+| 83, 84 | keypad 5, 5 | Set zoom level index 4. Keypad 1 = zoom 0 = **farthest**; keypad 5 = zoom 4 = **nearest** `[OBSERVED]` |
 | 85 | Esc | Cancel the current tool (select no tool) |
 | 86 | F5 | same as 29 |
 | 87 | Ctrl+F | `0x610438A4` param `0x63172B74` load starter town (`0x10009302`) |
@@ -595,7 +595,7 @@ All shipped data follows this grammar: 7/7 files, 14/14 tables, 881/881 lines. `
 | 90 | F1 | same as 31 |
 | 91 | Ctrl+Q | Application exit request |
 | 93 | Y | `0xC2E889B6` landfill zone (`0x10003004`) |
-| 94 | Ctrl+G | Runs the same command as one of the in-game panel buttons, a button that also plays UI sound 12 when clicked `[STATIC]`. It is not a `MenuItem.INI` command. `[OPEN]` Which button is it, and which screen does it open? |
+| 94 | Ctrl+G | Same as the navigator's **layers** button (the stacked-layers icon above the minimap): opens the **View City Layers** dialog (above-ground / underground layer check boxes, City Layer Views radio list, Apply, Default View, OK). It is not a `MenuItem.INI` command. `[STATIC]` + `[OBSERVED]` |
 | 95 | Ctrl+Y | `0xE2ED3560` param `0xC2F291A9` garbage-building picker (`0x1000500A`) |
 | 96–100 | Ctrl+Shift+F5, F1, F2, F3, F4 | No effect in this build `[STATIC]` (see note below) |
 | 102 | Alt+F4 | Application exit request |

@@ -547,9 +547,9 @@ again at step 0. The state is also re-bound when the view zoom or rotation chang
 (zoom, rotation) slot has its own scripts. [STATIC]
 
 **Pause.** The elapsed time comes from the view's real-time update, not from the simulation clock,
-so game speed has no effect. [STATIC] Whether view updates continue while the game is paused was
-not traced. [OPEN] Recommended: keep animating while paused, consistent with automata
-(`26-automata.md`).
+so game speed has no effect. [STATIC] View updates **continue while the game is paused**: with the
+simulation paused, building animations (smoke plumes) keep running, automata keep moving, and the
+view scrolls normally. [OBSERVED]
 
 ### 7.2 Attached child sprites (smokestacks and other effects)
 
@@ -807,9 +807,7 @@ world or view coordinates is [INFERRED: world tile coordinates].
   and row 0..31. This is decided in the view module, not traced.
 * The underground view's sprite set and the hiding of above-ground objects. The selection highlight, the
   placement preview and the cost text at the cursor (view module, not traced).
-* The view update tick rate (and so the keyboard scroll speed in pixels per second; the step is
-  32 px per update) and whether view updates (and so building animation, §7.1) continue while the
-  game is paused.
+* None for the view update rate: it is unthrottled in the original; 60 Hz is recommended (§10).
 * The meaning of each SprInstCLSID and of LayerFlags; whether the 2× magnification uses any filtering.
 * Edge-scroll rectangle sizes.
 * The tie-break rule for ordering moving objects against static objects.

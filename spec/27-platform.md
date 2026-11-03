@@ -341,8 +341,8 @@ the session.
 | `Salt off` | action | Clears the salt-water flag on every cell (x = 0 … width−2, y = 0 … height−2), which makes all water fresh. [STATIC] |
 | `Terrain one up`, `Terrain one down`, `Terrain ten up`, `Terrain ten down` | action | Shift the whole map vertically by +1, −1, +10 or −10 altitude units. For every cell, the ground altitude and the water-surface altitude each become clamp(value + delta, 2, 253), and the map's sea level becomes clamp(sea level + delta, 2, 253). The map is then re-derived (slopes, water, redraw) as after a terrain edit. [STATIC] |
 | `Load terrain <arg>` | action | Developer cheat that loads a terrain named by the argument. [STATIC; argument handling INFERRED] |
-| `traffic lights <arg>` | action | The argument is the text after the 15-character prefix `traffic lights `. If it is `on` or `ON`, a traffic-simulator option is switched on; otherwise it is switched off. [STATIC] What the option changes is [OPEN]; it is probably a developer visualisation. |
-| `tuneup` | action | Developer cheat. [OPEN] exact effect, probably re-reading `SimTune.INI` `[Tunables]`. An implementation may treat it as a no-op. [INFERRED, low confidence] |
+| `traffic lights <arg>` | action | The argument is the text after the 15-character prefix `traffic lights `. If it is `on` or `ON`, a traffic-simulator option is switched on; otherwise it is switched off. [STATIC] The traffic simulator stores the option in a flag that nothing reads [STATIC]. Toggling it on or off in a running city had **no visible effect** [OBSERVED]. Treat it as an accepted no-op. |
+| `tuneup` | action | Developer cheat. It asks the sim-variables service's tuning object (class 0x2424854F) to run its action. That object works on the developer tuning file `\Sys\SimTune.INI`, which is not shipped [STATIC]. Entering it in a running city had **no visible effect** [OBSERVED]. Treat it as an accepted no-op. |
 | `The Birds` | toggle | Toggles a flag in the sprite/animation layer; visual effect only. [INFERRED] |
 | `force petitioners to say <n>`, `force <advisor> to say <n>`, `stop forcing advice` | debug | Advisor names: Mortimer = budget, Moe = transportation, Constance = city planning, Maria = public safety, Randall = health & education, Gus = utilities, Karen = environment. `<n>` is parsed as a **decimal** integer (C `atoi`) and is a topic ID of that advisor. It is appended to the advisor's forced-topic list. At the end of every evaluation of that advisor (weekly, `22-advisors-news-petitioners.md` §3.6, after the rules, the topic-list step and the post-update rules), every topic in the list is raised as a plain topic (no key, L = 0). So a forced topic stays listed until `stop forcing advice`. That cheat empties the forced lists of all seven advisors; the topics then lapse at the next evaluation by the normal life cycle (§3.4). Forcing the same n twice adds it twice. The lists are not saved. [STATIC] |
 
@@ -392,6 +392,6 @@ present. The ticker works without advertisements [INFERRED from the design].
 
 ## Open questions
 
-* The effects of `***`, `traffic lights` and `tuneup` (§5).
+* The effect of `***` (§5).
 * The owners/meanings of `SC3.cfg` records 2–15 and of the [OPEN] fields of record 1 (byte layouts are complete).
 * The meaning of `-cheats:`.
