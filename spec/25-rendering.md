@@ -468,9 +468,160 @@ Use single-precision floats and truncation as stated. Column differences of one 
 * **Animated buildings.** These have sprite-instance records with AnimFrames > 1 (SprInstCLSID
   0x7312). Animation frame a is drawn by adding a·AnimSetCount to the frame index. The extra frame
   is usually a small overlay image (lights, smoke, flags) whose anchor is offset through negative L
-  values in its span. [DATA]
-* `MaxAnimationsBase` in `[BuildingAnimationTunables]` of `Sys/SC3Tune.ini` (shipped value: 10)
-  is the base cap on the number of building animations running at once. [INFERRED]
+  values in its span. [DATA] No separate timer for these frames was found in the view module. The
+  only time-driven building animation is the sprite-script runner (§7.1). The other frame choices
+  follow simulation state. [INFERRED]
+* Building overlay animation is script-driven (§7.1). Smoke plumes and other attached effects are
+  child sprites (§7.2). The number of buildings animating at once is capped (§7.3).
+
+### 7.1 Sprite scripts (text sprite-instance records, type 0x00006301)
+
+Text sprite-instance records (key type 0x00006301, CLSID 0x7315) can end with a script block:
+an optional `ScriptCountries:<n>` / `ScriptCountry:<name>` header (one block per country; see §8),
+then `Scripts: <n>` followed by n script lines, then an optional `DSprites: <n>` block (§7.2).
+A script line may continue onto the next line when it ends in `\`. [STATIC]
+
+**Script header.** `Script[zoom,rot,offX,offY]:` followed by comma-separated ops, terminated by
+`END` (any token starting with `E`). The script belongs to one (zoom 0–4, rotation 0–3) slot. A
+slot may hold **several scripts**. All of them run at the same time, each with its own step
+index and timer, and each draws its own overlay. A renderer must run every script of the slot,
+not only the first. offX/offY are added to the pixel offset of every D/DA/S/P draw in the script.
+[STATIC]
+
+**Compilation.** Each text op compiles to one or more entries in a flat op list. `G n` targets
+and `R n` arithmetic count **compiled entries**, not text tokens: [STATIC]
+
+| Text | Compiled to | Runtime meaning |
+|---|---|---|
+| `S start count ms` | for f = start … start+count−1: `Draw(f)`, `Wait(ms)` (2·count entries) | play frames in sequence |
+| `P start count ms` | as S forward (start … start+count−1), then backward start+count−2 … start+1, each `Draw`+`Wait(ms)` | ping-pong loop (not sound) |
+| `D f dx dy` | `Draw(f)` at (offX+dx, offY+dy) | show frame f opaque |
+| `DA f dx dy` | `DrawAlpha(f)` at (offX+dx, offY+dy) | show frame f, using frame **f+1** as its alpha plane |
+| `W ms` | `Wait(ms)` | see timing below |
+| `WR base range` | `WaitRandom` | next = now + base + rand() mod range, a uniform value in [base, base+range) ms |
+| `G n` | `Goto` | step := n (absolute compiled index) |
+| `R n` | `RandomSkip` | step := step + 1 + (rand() mod n), so it lands on one of the next n entries (normally n `G` entries) |
+| `L n` | `Label(n)` | no-op marker. It is skipped at no cost in the same update |
+| `WL mmddMMDD n` | `DateWindow(label n)` | see below |
+| `WD mmddMMDD n` | `DateWindow(index n)` | as WL but n is an absolute compiled index |
+| `GL n` | `GotoWindowTarget` | step := position of label **t**, where t is the target of the most recently armed WL. The number written after GL is **ignored** |
+| `CB a b`, `CE a b`, `CD` | (nothing) | parsed. No runtime effect was found |
+
+Frame numbers f are indices into the record's frame list. [STATIC] D with fewer than three numbers
+(for example `D 0`) keeps the dx/dy of the previous D/DA in the same script. [STATIC]
+
+**Runner.** Each running animated sprite owns a millisecond clock, `now`, that starts at 0 when its
+animation starts. For each script of the current (zoom, rotation) slot it also keeps a step index
+(start 0) and a next-time value (start 0, so the first entry runs at once). On every view update
+with elapsed time dt: [STATIC]
+
+1. now += dt_µs >> 10. Elapsed time is in microseconds, and the shift divides by 1024, not 1000.
+   The animation clock therefore runs about 2.3% slow against real time.
+2. For each script with next-time ≤ now: if step ≥ list length, step := 0, so a script with no
+   final `G` loops from the start. Skip any Label entries. Execute **exactly one** other entry:
+   * Draw / DrawAlpha: set this script's current overlay frame and offset, invalidate the old and
+     new rectangles, then step+1.
+   * Wait(ms): next := now + ms + j·((ms>>6) + (ms>>5)), then step+1. j = 0..3 is fixed for each
+     sprite object, which gives a deterministic 0–14% per-building slowdown that desynchronises
+     neighbours (for W 200 the period is 200/209/218/227 ms). A clone should pick j uniformly per
+     building instance.
+   * WaitRandom: as defined in the table, then step+1. No j term applies.
+   * Goto / RandomSkip / GotoWindowTarget: change step only. The new entry runs on the next update.
+   * DateWindow: arm the date window (start mm/dd, end MM/DD, target n), then step+1.
+3. After the entry, if a date window is armed and today's **game date** (month, day from the city
+   clock) is outside [start, end), with the start inclusive and the end day **exclusive**: jump to
+   the target (label n for WL, index n for WD) and disarm. While the date is inside, the window
+   stays armed and is re-checked after every later entry.
+
+Because a Draw and the following Wait are separate entries, each takes its own update. The frame
+period of `S … ms` is therefore ms (plus the j term) plus about one update interval. **It is not
+a global 15 Hz tick.** For example, `S 35 5 200` holds each frame about 200–230 ms. [STATIC]
+
+Holiday chains: `L 1, WL 01010331 2, …frames…, GL 1, L 2, WL 04010430 3, …` play only the block
+whose window contains today's game date. Every other block's WL jumps straight to the next label,
+and a block's GL leaves it for its WL target. [STATIC]
+
+**State lifetime.** Script state (clock, steps, timers) is created when a building's animation is
+started by the cap logic (§7.3) and destroyed when it is stopped. A restarted animation begins
+again at step 0. The state is also re-bound when the view zoom or rotation changes, because each
+(zoom, rotation) slot has its own scripts. [STATIC]
+
+**Pause.** The elapsed time comes from the view's real-time update, not from the simulation clock,
+so game speed has no effect. [STATIC] Whether view updates continue while the game is paused was
+not traced. [OPEN] Recommended: keep animating while paused, consistent with automata
+(`26-automata.md`).
+
+### 7.2 Attached child sprites (smokestacks and other effects)
+
+Smoke plumes are **not** particles and do not depend on wind or pollution. They are ordinary
+scripted child sprites listed in the parent building's text record: [STATIC]/[DATA]
+
+```
+DSprites: <n>
+Sprite[zoom,rot,childInst(hex),dx,dy,dz]
+```
+
+Each line attaches a child sprite instance (`6301:6400:childInst`) to the parent's (zoom,
+rotation) slot. When the parent starts animating, each child of the current slot is created at the
+parent's world position + (dx, dy, dz). dx/dy are in 1/256-tile units and dz is in the world-height
+units of §2.3. The engine adds the values without rotating them. The data already gives
+rotation-specific offsets per slot. The child is projected and depth-sorted as a separate object.
+It is ticked from the parent's update with the same dt and runs its own scripts (§7.1). When the
+parent stops, all children are removed. [STATIC]
+
+Shipped data (`CSATTRIB.IXF`):
+
+| Parent record | Child | Children per slot (typical) |
+|---|---|---|
+| 0x84, 0x85, 0xA1, 0x138C | 0xFC (smoke) | 1 |
+| 0xA0 | 0xFC | 2 |
+| 0x13A0 | 0xFC | 2–4 |
+| 0x13B0 | 0xFC | up to 8 |
+| 0xC9, 0xCA | 0x484F | 1 |
+| 0xCB | 0x484E | 2 |
+| 0xCF | 0x4850 | 4 |
+| 0x1F49 | 0x4854 | 1 |
+
+Offsets per slot differ by rotation (example: 0x84, zoom 3 rotation 1: dx 208, dy 48, dz 1264).
+Parents are mapped to occupants through the occupant appearance key. [DATA]
+
+**Smoke record 0xFC** has 230 frames, all from sprite category 0x10 (`Smoke.DAT`), and one script
+per zoom. Each script draws even frame indices with `DA`, so even frame f is the colour image and
+odd frame f+1 is its alpha plane. Per zoom, the frames used are: [DATA]
+
+| Zoom | Segment A (8 frames) | Segment B (8 frames) | Tail (7 frames) |
+|---|---|---|---|
+| 4 | 0–14 | 80–94 | 160–172 |
+| 3 | 16–30 | 96–110 | 174–186 |
+| 2 | 32–46 | 112–126 | 188–200 |
+| 1 | 48–62 | 128–142 | 202–214 |
+| 0 | 64–78 | 144–158 | 216–228 |
+
+(Only even values are listed; each is paired with the next odd frame.) The script has the form
+`R 4, G 5, G 22, G 40, G 56, WR 200 200, <A: DA/W 200 ×8>, <B: DA/W 200 ×8>, R 3, G 21, G 21,
+<tail: DA/W 200 ×7>, D 0, WR 800 900, R 2, G 56, G 5`. It starts at a random point (a full puff, the
+middle of the puff, a short wait or the idle gap) and plays 200 ms frames. After the tail it shows
+frame 0 and idles 0.8–1.7 s, then randomly either idles again or starts a new puff. There is no
+lifetime, spawn rate, drift or scale beyond what is drawn into the frames. Per-zoom scale is a
+separate frame range for each zoom. [STATIC]/[DATA]
+
+### 7.3 Animation cap (`MaxAnimationsBase`)
+
+* Cap = `MaxAnimationsBase` (`Sys/SC3Tune.ini [BuildingAnimationTunables]`, default and shipped
+  value 10) + 3·m. m is the machine-profile byte that also sets the default detail levels (the
+  machine class 1–7 of `27-platform.md` §3), so the cap is 13–31. It is read once. [STATIC];
+  m = machine class [INFERRED].
+* The cap counts animating **buildings** (parents). Their child sprites and automata are not
+  counted. [STATIC]
+* Selection runs on every view change (scroll, zoom, rotate) and on the animation-option message.
+  First, gather up to 200 animatable objects in the visible rectangle. Then keep every currently
+  animating building that is still among them. Fill the remaining (cap − kept) slots with
+  **uniformly random** picks from the other candidates; if the candidates fit, take them all.
+  Finally, stop animations that were not kept and start the new ones. Distance to the view centre
+  is not used. [STATIC]
+* All building animation is off unless the animation display option is enabled and a zoom-like
+  view value is ≥ 2 (the closer zoom levels). [STATIC for the gate; INFERRED that the value is the
+  zoom index]
 * Day/night cycle: none was found (there are no night sprites or strings). [INFERRED]
 * **Construction appearance.** There are no multi-stage construction sprites. While a lot is in
   state 4 (under construction), the building layer draws a substitute **construction-site
@@ -612,7 +763,8 @@ is the terrain-side highlight primitive.
   which suggests a 60 Hz target. [INFERRED, low confidence]
 * **Redraw.** The city surface is cached and updated through dirty rectangles (per tile changes and
   automata movement). Automata and animations are redrawn on an animation tick. The tick rate is
-  [OPEN].
+  [OPEN]. Building animation timing does not depend on it, because scripts use their own
+  millisecond clock (§7.1).
 
 ### Persisted state: view record
 
@@ -641,8 +793,9 @@ world or view coordinates is [INFERRED: world tile coordinates].
   and row 0..31. This is decided in the view module, not traced.
 * The underground view's sprite set and the hiding of above-ground objects. The selection highlight, the
   placement preview and the cost text at the cursor (view module, not traced).
-* The exact role of `MaxAnimationsBase`, and the animation and view update tick rates (and so the
-  keyboard scroll speed in pixels per second; the step is 32 px per update).
+* The view update tick rate (and so the keyboard scroll speed in pixels per second; the step is
+  32 px per update) and whether view updates (and so building animation, §7.1) continue while the
+  game is paused.
 * The meaning of each SprInstCLSID and of LayerFlags; whether the 2× magnification uses any filtering.
 * Edge-scroll rectangle sizes.
 * The tie-break rule for ordering moving objects against static objects.
