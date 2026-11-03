@@ -85,7 +85,7 @@ void Game::closeAllWindows() {
 }
 
 void Game::closeModelessWindows() {
-  showMap_ = showGraphs_ = showCharts_ = showGoals_ = showNeigh_ = showQuery_ = showLayers_ = false;
+  showMap_ = showGoals_ = showNeigh_ = showQuery_ = showLayers_ = false;
 }
 
 // ---------------------------------------------------------------- opening
@@ -143,10 +143,14 @@ void Game::openWindow(const std::string& name) {
     showProps_ = true;
   }
   else if (name == "goals") showGoals_ = true;
-  else if (name == "map") showMap_ = true;
+  else if (name == "map" || name == "graphs" || name == "charts") {   // one View Data window (spec 09 7.1)
+    MapSource src; buildMapSource(src);
+    if (name == "graphs") viewData_.setMode(ViewDataWindow::ModeGraphs, src);
+    else if (name == "charts") viewData_.setMode(ViewDataWindow::ModeCharts, src);
+    else if (!showMap_) viewData_.setMode(viewData_.mode, src);
+    showMap_ = true;
+  }
   else if (name == "layers") { layersDlg_.edit = layers_; showLayers_ = true; }
-  else if (name == "graphs") showGraphs_ = true;
-  else if (name == "charts") showCharts_ = true;
   else if (name == "tip") showTip_ = true;
   else if (name == "userbuildings") openUserBuildings();
   else if (name == "buildinglist") { openUserBuildings(); openBuildingList(); }
@@ -282,7 +286,7 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
         }
         break;
       case DataLayer::Pollution: {
-        int kind = pollutionKind >= 0 ? pollutionKind : mapWin_.pollutionKind;
+        int kind = pollutionKind >= 0 ? pollutionKind : viewData_.map.pollutionKind;
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
           int v = kind == 0 ? c.pollution.airAt(x, z) : kind == 1 ? c.pollution.waterAt(x, z) : c.pollution.standingGarbageAt(x, z);
           // Air / water: the cell amount against MaxAir/WaterPolluteForUI (11000), byte = min(255, v * 256 / 11000) (spec 25 9.2
@@ -398,54 +402,61 @@ void Game::drawWindows(uint32_t dtMs) {
   // Modeless.
   if (showMap_) {
     MapSource src; buildMapSource(src);
-    finish(mapWin_.draw(ui_, E, src), showMap_);
+    std::vector<GraphSeries> series;
+    ChartsData cd;
+    if (viewData_.mode == int(ViewDataWindow::ModeGraphs)) {
+      series = graphSeriesTemplate();
+      Chart conv[4];
+      auto cv = [](const us::Chart& u, Chart& c) {
+        std::copy(u.monthly, u.monthly + 12, c.monthly); std::copy(u.yearly, u.yearly + 10, c.yearly);
+        std::copy(u.decade, u.decade + 10, c.decade); c.max = u.max;
+      };
+      cv(city.pollution.chart, conv[0]); cv(city.crime.chart, conv[1]); cv(city.power.chart, conv[2]); cv(city.water.chart, conv[3]);
+      // World layer charts (spec 10 6.13): city size, commerce, industry, unemployment, national population.
+      Chart wc[5];
+      for (int k = 0; k < 5; k++) {
+        const auto& w = city.valves.world.charts[k].w;
+        for (int i = 0; i < 12; i++) wc[k].monthly[i] = w[size_t(i)];
+        for (int i = 0; i < 10; i++) { wc[k].yearly[i] = w[size_t(12 + i)]; wc[k].decade[i] = w[size_t(22 + i)]; }
+        wc[k].max = w[32];
+      }
+      // Traffic (0x166) = the traffic record's road-traffic history with its graph scale; land value (0x16F) = the land-value
+      // record's final 132 bytes (spec 10 s6.12/s6.13): 12 monthly, 10 yearly, 10 decade samples, then the scale.
+      Chart trafficChart, lvChart;
+      auto fill32 = [](Chart& ch, const uint32_t* h, uint32_t mx) {
+        for (int i = 0; i < 12; i++) ch.monthly[i] = h[i];
+        for (int i = 0; i < 10; i++) { ch.yearly[i] = h[12 + i]; ch.decade[i] = h[22 + i]; }
+        ch.max = mx;
+      };
+      if (city.traffic) fill32(trafficChart, city.traffic->rec().history, city.traffic->rec().graphMax);
+      fill32(lvChart, city.landValue.history.data(), city.landValue.tail);
+      Chart auraC;
+      cv(city.aura.chart, auraC);
+      if (series.size() >= 16) {   // order of graphSeriesTemplate()
+        series[0].chart = &auraC;               // Approval Rating
+        series[1].chart = &city.pop.popChart;   // Residents
+        series[2].chart = &lvChart;             // Land Value
+        series[3].chart = &wc[0];               // City Size
+        series[4].chart = &wc[3];               // Unemployment
+        series[5].chart = &conv[0];             // Pollution
+        series[6].chart = &city.pop.eqChart;    // Education
+        series[7].chart = &trafficChart;        // Traffic
+        series[8].chart = &wc[1];               // Commerce
+        series[9].chart = &wc[4];               // Nat'l Pop
+        series[10].chart = &conv[3];            // Water %
+        series[11].chart = &conv[1];            // Crime
+        series[12].chart = &city.pop.leChart;   // Health
+        series[13].chart = &city.budget.treasuryChart;   // Funds
+        series[14].chart = &wc[2];              // Industry
+        series[15].chart = &conv[2];            // Power %
+      }
+
+    } else if (viewData_.mode == int(ViewDataWindow::ModeCharts)) {
+      cd = chartsFromPopulation(city.pop, uint32_t(std::max(0, city.population())));
+    }
+    finish(viewData_.draw(ui_, E, src, series, cd), showMap_);
   }
   if (showLayers_) finish(layersDlg_.draw(ui_, E, ropt_.grid), showLayers_);
-  if (showGraphs_) {
-    auto series = graphSeriesTemplate();
-    Chart conv[4];
-    auto cv = [](const us::Chart& u, Chart& c) {
-      std::copy(u.monthly, u.monthly + 12, c.monthly); std::copy(u.yearly, u.yearly + 10, c.yearly);
-      std::copy(u.decade, u.decade + 10, c.decade); c.max = u.max;
-    };
-    cv(city.pollution.chart, conv[0]); cv(city.crime.chart, conv[1]); cv(city.power.chart, conv[2]); cv(city.water.chart, conv[3]);
-    // World layer charts (spec 10 6.13): city size, commerce, industry, unemployment, national population.
-    Chart wc[5];
-    for (int k = 0; k < 5; k++) {
-      const auto& w = city.valves.world.charts[k].w;
-      for (int i = 0; i < 12; i++) wc[k].monthly[i] = w[size_t(i)];
-      for (int i = 0; i < 10; i++) { wc[k].yearly[i] = w[size_t(12 + i)]; wc[k].decade[i] = w[size_t(22 + i)]; }
-      wc[k].max = w[32];
-    }
-    // Traffic (0x166) = the traffic record's road-traffic history with its graph scale; land value (0x16F) = the land-value
-    // record's final 132 bytes (spec 10 s6.12/s6.13): 12 monthly, 10 yearly, 10 decade samples, then the scale.
-    Chart trafficChart, lvChart;
-    auto fill32 = [](Chart& ch, const uint32_t* h, uint32_t mx) {
-      for (int i = 0; i < 12; i++) ch.monthly[i] = h[i];
-      for (int i = 0; i < 10; i++) { ch.yearly[i] = h[12 + i]; ch.decade[i] = h[22 + i]; }
-      ch.max = mx;
-    };
-    if (city.traffic) fill32(trafficChart, city.traffic->rec().history, city.traffic->rec().graphMax);
-    fill32(lvChart, city.landValue.history.data(), city.landValue.tail);
-    if (series.size() >= 14) {
-      series[5].chart = &trafficChart;
-      series[13].chart = &lvChart;
-      series[0].chart = &wc[0]; series[2].chart = &wc[1]; series[3].chart = &wc[2];
-      series[7].chart = &wc[3]; series[4].chart = &wc[4];
-      series[1].chart = &city.pop.popChart;
-      series[6].chart = &conv[0];
-      series[8].chart = &conv[1];
-      series[9].chart = &conv[2];
-      series[10].chart = &conv[3];
-      series[11].chart = &city.pop.leChart;
-      series[12].chart = &city.pop.eqChart;
-    }
-    finish(graphsWin_.draw(ui_, E, series), showGraphs_);
-  }
-  if (showCharts_) {
-    ChartsData d = chartsFromPopulation(city.pop, uint32_t(std::max(0, city.population())));
-    finish(chartsWin_.draw(ui_, E, d), showCharts_);
-  }
   if (showNeigh_) {
     neighWin_.cityName = world_.info.cityName; neighWin_.cityPop = city.population();
     // The SimNation population is the newest sample of the world layer's fifth chart (Berlin: 41,000,660 = the original's value).
@@ -664,7 +675,7 @@ void Game::handleWindowResult(const WindowResult& r) {
       }
       case Act::DataMapOptionChanged: {
         MapSource src; buildMapSource(src);
-        mapWin_.select(mapWin_.selected, src);
+        viewData_.map.select(viewData_.map.selected, src);
         break;
       }
       case Act::CenterView: case Act::TickerClick:

@@ -453,7 +453,7 @@ class Game {
 
   // windows
   bool showBudget_ = false, showOrd_ = false, showNeigh_ = false, showDeals_ = false, showAdv_ = false,
-       showProps_ = false, showGoals_ = false, showMap_ = false, showGraphs_ = false, showCharts_ = false,
+       showProps_ = false, showGoals_ = false, showMap_ = false,
        showPicker_ = false, showQuery_ = false, showTip_ = false, showLayers_ = false;
   BudgetWindow budgetWin_;
   OrdinancesWindow ordWin_;
@@ -464,7 +464,7 @@ class Game {
   CityPropsState propsState_;
   Image neighRegion_;   // Neighbors Map region image (spec 11 section 9), rebuilt when the window opens
   ScenarioGoalsWindow goalsWin_;
-  MapWindow mapWin_;
+  ViewDataWindow viewData_;   // data maps, charts and graphs in one window (spec 09 7.1)
   CityLayersDialog layersDlg_;
   CityLayers layers_;            // applied View City Layers settings
   DataOverlay layerOverlay_;     // City Layer Views overlay (mode LayerView)
@@ -479,8 +479,6 @@ class Game {
   HudSnap hud_;
   uint64_t frameNo_ = 0, hudFrame_ = ~0ull;   // hudNow() recomputes live at most once per frame
   int layerOverlayAge_ = 0;      // frames since layerOverlay_ was rebuilt
-  GraphsWindow graphsWin_;
-  ChartsWindow chartsWin_;
   TickerWidget ticker_;
   QueryWindow queryWin_;
   QueryInfo queryInfo_;

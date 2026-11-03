@@ -337,8 +337,8 @@ bool Game::windowOpen(const std::string& n) const {
   if (n == "goals") return showGoals_;
   if (n == "map") return showMap_;
   if (n == "layers") return showLayers_;
-  if (n == "graphs") return showGraphs_;
-  if (n == "charts") return showCharts_;
+  if (n == "graphs") return showMap_ && viewData_.mode == int(ViewDataWindow::ModeGraphs);
+  if (n == "charts") return showMap_ && viewData_.mode == int(ViewDataWindow::ModeCharts);
   if (n == "picker") return showPicker_;
   if (n == "query") return showQuery_;
   return false;
@@ -607,7 +607,7 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
       phases_.simMs = phaseMs(pt0, pt1);
       phases_.streetMs = phaseMs(pt1, PhaseClock::now());
       updateAmbience(dtMs);
-      ropt_.overlay = (showMap_ && mapWin_.showInCityView) ? mapWin_.activeOverlay() : nullptr;
+      ropt_.overlay = (showMap_ && viewData_.map.showInCityView) ? viewData_.activeOverlay() : nullptr;
       if (!ropt_.overlay && layers_.mode == CityLayers::LayerView) {   // City Layer Views: kept current with the sim
         if (++layerOverlayAge_ >= 30 && !simBusy()) refreshLayerOverlay();
         ropt_.overlay = &layerOverlay_;

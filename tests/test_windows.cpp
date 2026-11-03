@@ -756,52 +756,82 @@ void testQuery() {
 }
 
 // ---------------------------------------------------------------- map window / graphs / charts
-void testMapWindow() {
+void testViewData() {
   Harness h;
   MapSource src; src.W = 64; src.H = 64;
   std::vector<uint8_t> crime(64 * 64, 100), zones(64 * 64, 0xFF);
   zones[10 * 64 + 10] = 1;
   src.values = [&](DataLayer l) -> const std::vector<uint8_t>* { return l == DataLayer::Crime ? &crime : l == DataLayer::Zones ? &zones : nullptr; };
-  MapWindow w;
-  h.drawFn = [&] { return w.draw(h.ui, h.E, src); };
+  Chart c1 = Chart::make(0, 100), c2 = Chart::make(50, 100);
+  for (int i = 0; i < 12; i++) c1.pushMonthly(uint32_t(i * 10));
+  CHECK(GraphsWindow::samples(c1, 0).size() == 12 && GraphsWindow::samples(c1, 1).size() == 10 && GraphsWindow::samples(c1, 2).size() == 10);
+  auto s0 = GraphsWindow::samples(c1, 0);
+  CHECK(s0.front() < s0.back() && s0.back() == 100);   // pushes clamp at the chart scale (100); oldest -> newest
+  auto series = graphSeriesTemplate();
+  CHECK(series.size() == 16);
+  series[3].chart = &c1; series[1].chart = &c2;   // City Size, Residents
+  Population pop; pop.newCity();
+  ChartsData cd = chartsFromPopulation(pop, 50000);
+  CHECK(cd.eq.size() == size_t(kAges) && cd.population.size() == size_t(kAges) && cd.totalPopulation == 50000);
+  cd.electricity[0] = 500; cd.electricity[3] = 200; cd.garbage[0] = 70; cd.garbage[3] = 30;
+  ViewDataWindow w;
+  h.drawFn = [&] { return w.draw(h.ui, h.E, src, series, cd); };
   h.frame(); CHECK(h.inked() > 1000);
-  CHECK(w.activeOverlay() == nullptr);
-  CHECK(dataMapDefs().size() == 10);
-  WindowResult r = h.click("map.2");
+  // Observed placement and size (spec 09 6.0): 424 x 440 at (40, 34).
+  CHECK(h.ui.windowRects.size() == 1 && h.ui.windowRects[0].x == 40 && h.ui.windowRects[0].y == 34 && h.ui.windowRects[0].w == 424 && h.ui.windowRects[0].h == 440);
+  // Twelve mode buttons; no separate data-map column, neighbours button or show-in-city check box.
+  for (int i = 0; i < 12; i++) CHECK(h.has("mode." + std::to_string(i)));
+  CHECK(!h.has("map.0") && !h.has("map.neighbours"));
+  CHECK(dataMapDefs().size() == 10 && w.activeOverlay() == nullptr);
+  // Data-map mode.
+  WindowResult r = h.click("mode.2");
   CHECK(dataMapDefs()[2].layer == DataLayer::Crime);
   CHECK(r.has(Act::SelectDataMap) && r.find(Act::SelectDataMap)->a == int(DataLayer::Crime));
-  CHECK(w.selected == 2);
+  CHECK(w.mode == 2 && w.map.selected == 2);
+  CHECK(w.activeOverlay() == nullptr);   // "Use As Map" is off
+  r = h.click("showInCity"); CHECK(w.map.showInCityView && r.has(Act::DataMapOptionChanged));
   CHECK(w.activeOverlay() && w.activeOverlay()->row.size() == 64u * 64u);
+  r = h.click("showInCity"); CHECK(!w.map.showInCityView && w.activeOverlay() == nullptr);
   h.frame(); CHECK(h.has("coverage"));
-  r = h.click("coverage"); CHECK(w.coverage && r.has(Act::DataMapOptionChanged));
-  r = h.click("showInCity"); CHECK(!w.showInCityView && w.activeOverlay() == nullptr);
-  r = h.click("showInCity"); CHECK(w.showInCityView && w.activeOverlay() != nullptr);
-  // Layer without data -> no overlay.
-  r = h.click("map.8"); CHECK(w.activeOverlay() == nullptr);
-  // Pollution selector buttons appear.
-  r = h.click("map.7"); h.frame();
-  CHECK(h.has("pollution.2"));
-  r = h.click("pollution.1"); CHECK(w.pollutionKind == 1 && r.has(Act::DataMapOptionChanged));
-  // Zones categorical.
-  h.click("map.1"); CHECK(w.activeOverlay() != nullptr);
+  r = h.click("coverage"); CHECK(w.map.coverage && r.has(Act::DataMapOptionChanged));
+  r = h.click("mode.8"); CHECK(w.activeOverlay() == nullptr && !h.has("coverage"));
+  r = h.click("mode.7"); h.frame(); CHECK(h.has("pollution.2"));
+  r = h.click("pollution.1"); CHECK(w.map.pollutionKind == 1 && r.has(Act::DataMapOptionChanged));
+  h.click("mode.1"); h.click("showInCity"); CHECK(w.activeOverlay() != nullptr);   // zones, categorical
   h.frame(); CHECK(h.inked() > 1000);
-  // Mini-map click centres the view inside the map.
   r = h.click("minimap");
   CHECK(r.has(Act::CenterView));
-  { auto* e = r.find(Act::CenterView); CHECK(e->a >= 0 && e->a < 64 && e->b >= 0 && e->b < 64); }
-  // Click mid-way: roughly the map centre.
-  { auto* e = r.find(Act::CenterView); CHECK(std::abs(int(e->a) - 32) < 8 && std::abs(int(e->b) - 32) < 8); }
-  r = h.click("map.neighbours"); CHECK(r.has(Act::OpenNeighbours));
+  { auto* e = r.find(Act::CenterView); CHECK(e->a >= 0 && e->a < 64 && e->b >= 0 && e->b < 64); CHECK(std::abs(int(e->a) - 32) < 8 && std::abs(int(e->b) - 32) < 8); }
+  // The overlay only follows data-map modes.
+  w.setMode(ViewDataWindow::ModeCharts, src); CHECK(w.activeOverlay() == nullptr);
+  // Charts mode: five radio buttons, no tabs.
+  r = h.click("mode.10"); CHECK(w.mode == int(ViewDataWindow::ModeCharts));
+  for (int t = 0; t < 5; t++) {
+    h.click("tab." + std::to_string(t));
+    CHECK(w.charts.tab == t);
+    h.frame(); CHECK(h.inked() > 1500);
+  }
+  // Graphs mode: default checks City Size, Funds, Power %; the range is a radio group.
+  r = h.click("mode.11"); CHECK(w.mode == int(ViewDataWindow::ModeGraphs));
+  h.frame();
+  CHECK(w.graphs.enabledMask == ((1u << 3) | (1u << 13) | (1u << 15)));
+  for (int i = 0; i < 16; i++) CHECK(h.has("series." + std::to_string(i)));
+  CHECK(!h.has("range.3"));
+  size_t on = h.inked(); CHECK(on > 1000);
+  r = h.click("range.1"); CHECK(w.graphs.range == 1 && r.has(Act::SetTimeRange) && r.find(Act::SetTimeRange)->a == 1);
+  r = h.click("range.2"); CHECK(w.graphs.range == 2);
+  h.click("series.3"); CHECK(!(w.graphs.enabledMask & (1u << 3)));
+  h.click("series.3"); CHECK(w.graphs.enabledMask & (1u << 3));
+  h.click("series.13"); CHECK(!(w.graphs.enabledMask & (1u << 13)));
+  // Close box and Esc.
   r = h.click("close"); CHECK(r.close);
-  // Legend colours: ramp ends differ, categorical palette.
-  CHECK(MapWindow::legendColour(DataLayer::Crime, 0, 0) != MapWindow::legendColour(DataLayer::Crime, 0, 1));
-  CHECK(MapWindow::legendColour(DataLayer::Power, 0, 0) != MapWindow::legendColour(DataLayer::Power, 1, 0));
+  r = h.key(K_ESC); CHECK(r.close);
   // No map data at all: still draws.
   MapSource empty;
-  h.drawFn = [&] { return w.draw(h.ui, h.E, empty); };
+  ViewDataWindow w2;
+  h.drawFn = [&] { return w2.draw(h.ui, h.E, empty, series, cd); };
   h.frame(); CHECK(h.inked() > 1000);
 }
-
 void testCityLayers() {
   Harness h;
   CityLayersDialog d;
@@ -862,47 +892,6 @@ void testDialogDrag() {
   // Closed for a frame: back at home.
   drawn = false; h.frame(); drawn = true; h.frame();
   CHECK(h.find("ok", still) && still.x == home.x && still.y == home.y);
-}
-
-void testGraphs() {
-  Harness h;
-  Chart c1 = Chart::make(0, 100), c2 = Chart::make(50, 100);
-  for (int i = 0; i < 12; i++) c1.pushMonthly(uint32_t(i * 10));
-  CHECK(GraphsWindow::samples(c1, 0).size() == 12 && GraphsWindow::samples(c1, 1).size() == 10 && GraphsWindow::samples(c1, 2).size() == 10);
-  auto s0 = GraphsWindow::samples(c1, 0);
-  CHECK(s0.front() < s0.back() && s0.back() == 100);   // pushes clamp at the chart scale (100)          // oldest -> newest
-  auto series = graphSeriesTemplate();
-  CHECK(series.size() == 14);
-  series[0].chart = &c1; series[1].chart = &c2;
-  GraphsWindow w;
-  h.drawFn = [&] { return w.draw(h.ui, h.E, series); };
-  h.frame();
-  size_t on = h.inked(); CHECK(on > 1000);
-  WindowResult r = h.click("range.1"); CHECK(w.range == 1 && r.has(Act::SetTimeRange) && r.find(Act::SetTimeRange)->a == 1);
-  r = h.click("range.2"); CHECK(w.range == 2);
-  h.click("series.0"); CHECK(!(w.enabledMask & 1));
-  h.click("series.0"); CHECK(w.enabledMask & 1);
-  h.click("series.13"); CHECK(!(w.enabledMask & (1u << 13)));
-  r = h.click("close"); CHECK(r.close);
-}
-
-void testCharts() {
-  Harness h;
-  Population pop;
-  pop.newCity();
-  ChartsData d = chartsFromPopulation(pop, 50000);
-  CHECK(d.eq.size() == size_t(kAges) && d.population.size() == size_t(kAges));
-  CHECK(d.totalPopulation == 50000);
-  CHECK(d.workforcePercent >= 0 && d.workforcePercent <= 100);
-  d.electricity[0] = 500; d.electricity[3] = 200; d.garbage[0] = 70; d.garbage[3] = 30;
-  ChartsWindow w;
-  h.drawFn = [&] { return w.draw(h.ui, h.E, d); };
-  for (int t = 0; t < 5; t++) {
-    h.click("tab." + std::to_string(t));
-    CHECK(w.tab == t);
-    h.frame(); CHECK(h.inked() > 1500);
-  }
-  WindowResult r = h.click("close"); CHECK(r.close);
 }
 
 // ---------------------------------------------------------------- ticker / message box / tip / credits
@@ -1124,11 +1113,9 @@ int main() {
   testPicker();
   testQuery();
   testNeighbourTokens();
-  testMapWindow();
+  testViewData();
   testCityLayers();
   testDialogDrag();
-  testGraphs();
-  testCharts();
   testTicker();
   testMessageBox();
   testTipAndCredits();

@@ -33,7 +33,7 @@ const Game::HudSnap& Game::hudNow() {
 }
 
 bool Game::anyWindowOpen() const {
-  return anyBlockingWindow() || showMap_ || showGraphs_ || showCharts_ || showNeigh_;
+  return anyBlockingWindow() || showMap_ || showNeigh_;
 }
 
 // A frame may run while the tick is still going only when it cannot reach sim state: nothing was clicked or typed,

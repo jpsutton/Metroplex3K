@@ -90,90 +90,81 @@ void MapWindow::select(int index, const MapSource& src) {
   rebuild(src);
 }
 
-WindowResult MapWindow::draw(Ui& ui, const WinEnv& E, const MapSource& src) {
+// Data-map mode of the View Data window (spec 09 7.1 [OBSERVED]): the whole city as one large diamond on the right, compass rose at the
+// top left, "Use As Map" toggle at the bottom left, the Good..Bad legend at the bottom right. The corners of the diamond's box are empty,
+// so the legend and the toggle sit in them.
+WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect area, const MapSource& src) {
   WindowResult R;
-  int lh = lineHeight(ui);
-  Rect r = centered(ui, 640, 440);
-  if (frame(ui, E, r, E.win(0x269, "View city layers"))) { R.close = true; R.add(Act::Close); }
-  // ---- mini-map (356x189 iso diamond)
-  Rect mm{r.x + 12, r.y + 34, 356, 189};
-  ui.fill(mm, rgb(20, 24, 50)); ui.frame(mm, false);
+  const int lh = lineHeight(ui);
+  const Rect mm{area.x, area.y + (area.h - 372) / 2, 372, 372};
   const DataMapDef* def = selected >= 0 && selected < int(dataMapDefs().size()) ? &dataMapDefs()[size_t(selected)] : nullptr;
   const std::vector<uint8_t>* vals = def && src.values ? src.values(def->layer) : nullptr;
   if (src.W > 0 && src.H > 0) {
-    for (int py = 0; py < mm.h - 2; py++)
-      for (int px = 0; px < mm.w - 2; px++) {
-        int a = px * 2 * src.W / (mm.w - 2) - src.W;
-        int b = py * 2 * src.H / (mm.h - 2);
+    for (int py = 0; py < mm.h; py++)
+      for (int px = 0; px < mm.w; px++) {
+        int a = px * 2 * src.W / mm.w - src.W;
+        int b = py * 2 * src.H / mm.h;
         int x = (a + b) / 2, z = (b - a) / 2;
         if (a + b < 0 || b - a < 0 || x < 0 || z < 0 || x >= src.W || z >= src.H) continue;
         uint32_t col = src.baseColour ? src.baseColour(x, z) : rgb(90, 130, 70);
-        if (vals && vals->size() >= size_t(src.W) * src.H) {
+        if (def && vals && vals->size() >= size_t(src.W) * src.H) {
           uint8_t v = (*vals)[size_t(x) * src.H + z];
           if (categorical(def->layer)) { if (v != 0xFF) col = MapWindow::legendColour(def->layer, v, 0); }
           else col = MapWindow::legendColour(def->layer, 0, float(v) / 255.f);
         }
-        ui.at(mm.x + 1 + px, mm.y + 1 + py) = col;
+        ui.at(mm.x + px, mm.y + py) = col;
       }
     E.spot("minimap", mm);
-    if (ui.clicked(mm) && ui.in.mx > mm.x && ui.in.my > mm.y) {
-      int px = ui.in.mx - mm.x - 1, py = ui.in.my - mm.y - 1;
-      int a = px * 2 * src.W / (mm.w - 2) - src.W, b = py * 2 * src.H / (mm.h - 2);
+    if (ui.clicked(mm)) {
+      int px = ui.in.mx - mm.x, py = ui.in.my - mm.y;
+      int a = px * 2 * src.W / mm.w - src.W, b = py * 2 * src.H / mm.h;
       int x = std::max(0, std::min(src.W - 1, (a + b) / 2)), z = std::max(0, std::min(src.H - 1, (b - a) / 2));
       R.add(Act::CenterView, 0, x, z);
     }
   }
-  // ---- legend
-  int ly = mm.y + mm.h + 10;
-  if (def) {
-    ui.text(mm.x, ly, E.win(def->titleId, mapFallback(def->layer)), "title12");
-    ly += lh + 8;
-    if (const Image* li = E.img(0x000005E5, def->legendImage)) ui.blit(*li, mm.x, ly);
-    if (categorical(def->layer)) {
-      static const char* const zfb[7] = {"Residential", "Commercial", "Industrial", "Government", "Seaports", "Airports", "Landfills"};
-      for (size_t i = 0; i < def->categories.size(); i++) {
-        int cx = mm.x + int(i % 4) * 90, cy = ly + int(i / 4) * (lh + 6);
-        ui.fill({cx, cy + 1, 12, 12}, legendColour(def->layer, int(i), 0));
-        std::string fb = def->layer == DataLayer::Zones ? zfb[i] : def->layer == DataLayer::Power ? (i ? "Unpowered" : "Powered") : (i ? "Unwatered" : "Watered");
-        ui.text(cx + 16, cy, E.win(def->categories[i], fb));
-      }
-    } else {
-      for (int i = 0; i < 200; i++) ui.fill({mm.x + i, ly, 1, 12}, legendColour(def->layer, 0, float(i) / 199.f));
-      ui.frame({mm.x, ly, 200, 12}, false);
-      auto el = endLabels(def->layer);
-      ui.text(mm.x, ly + 16, E.win(def->lowId, el.first));
-      rightText(ui, mm.x + 200, ly + 16, E.win(def->highId, el.second));
-    }
-  } else {
-    ui.text(mm.x, ly, E.win(0x269, "View city layers"));
-  }
-  // ---- data-map buttons (right column)
-  int bx = r.x + 384, by = r.y + 34;
-  for (size_t i = 0; i < dataMapDefs().size(); i++) {
-    const auto& d = dataMapDefs()[i];
-    if (button(ui, E, "map." + std::to_string(i), {bx, by + int(i) * 28, 104, 26}, E.win(d.titleId, mapFallback(d.layer)), true, selected == int(i))) {
-      select(int(i), src);
-      R.add(Act::SelectDataMap, 0, int(d.layer));
-    }
-  }
-  if (button(ui, E, "map.neighbours", {bx + 112, by, 104, 26}, E.win(0x117, "Neighbors"))) R.add(Act::OpenNeighbours);
-  // ---- options
-  int oy = r.y + 34 + 10 * 28 + 10;
-  bool v = showInCityView;
-  if (check(ui, E, "showInCity", {bx, oy, 240, 18}, E.win(0x186, "Show in city view"), v)) {
-    showInCityView = v;
-    overlayActive_ = v && selected >= 0 && overlay_.row.size() > 0;
+  // compass rose, top left (image 000005E5:0D)
+  if (const Image* c = E.img(0x000005E5, 0x0D)) ui.blit(*c, area.x, area.y);
+  // "Use As Map", bottom left
+  if (button(ui, E, "showInCity", {area.x, area.y + area.h - 26, 110, 24}, E.win(0x2D4, "Use As Map"), true, showInCityView)) {
+    showInCityView = !showInCityView;
+    overlayActive_ = showInCityView && selected >= 0 && overlay_.row.size() > 0;
     R.add(Act::DataMapOptionChanged, 0, 0, 0, "showInCity");
   }
-  if (def && def->toggleId) {
-    v = coverage;
-    if (check(ui, E, "coverage", {bx, oy + 22, 240, 18}, E.win(def->toggleId, "Show coverage"), v)) { coverage = v; R.add(Act::DataMapOptionChanged, 0, 0, 0, "coverage"); }
+  // legend, bottom right
+  if (def) {
+    const int right = area.x + area.w - 4;
+    if (categorical(def->layer)) {
+      static const char* const zfb[7] = {"Residential", "Commercial", "Industrial", "Government", "Seaports", "Airports", "Landfills"};
+      const int n = int(def->categories.size());
+      int cy = area.y + area.h - 4 - n * (lh + 2);
+      for (int i = 0; i < n; i++, cy += lh + 2) {
+        std::string fb = def->layer == DataLayer::Zones ? zfb[i] : def->layer == DataLayer::Power ? (i ? "Unpowered" : "Powered") : (i ? "Unwatered" : "Watered");
+        std::string t = E.win(def->categories[size_t(i)], fb);
+        ui.text(right - ui.textWidth(t, "system9"), cy, t, "system9", rgb(0x31, 0x38, 0x84));
+        ui.fill({right - ui.textWidth(t, "system9") - 16, cy + 1, 12, 12}, legendColour(def->layer, i, 0));
+      }
+    } else {
+      auto el = endLabels(def->layer);
+      const std::string top = E.win(def->lowId, el.first), bot = E.win(def->highId, el.second);
+      const int bh = 90, bx = right - 16, by = area.y + area.h - 4 - bh - lh;
+      ui.text(right - ui.textWidth(top, "system9"), by - lh, top, "system9", rgb(0x31, 0x38, 0x84));
+      for (int i = 0; i < bh; i++) ui.fill({bx, by + i, 16, 1}, legendColour(def->layer, 0, float(i) / float(bh - 1)));
+      ui.frame({bx, by, 16, bh}, false);
+      ui.text(right - ui.textWidth(bot, "system9"), by + bh + 2, bot, "system9", rgb(0x31, 0x38, 0x84));
+    }
   }
-  if (def && !def->selector.empty()) {
+  // Layer options, top right (spec 09 7.2: coverage toggle, pollution kind). Their place in the original window is not observed yet [#57].
+  if (def && (def->toggleId || !def->selector.empty())) {
+    int oy = area.y + 2;
+    const int ox = area.x + area.w - 112;
+    if (def->toggleId) {
+      bool v = coverage;
+      if (check(ui, E, "coverage", {ox, oy, 112, 16}, E.win(def->toggleId, "Show coverage"), v)) { coverage = v; R.add(Act::DataMapOptionChanged, 0, 0, 0, "coverage"); }
+      oy += 18;
+    }
     static const char* const sfb[3] = {"Air", "Water", "Garbage"};
-    ui.text(bx, oy + 46, E.win(0x2D8, "Show"));
-    for (size_t i = 0; i < def->selector.size(); i++)
-      if (button(ui, E, "pollution." + std::to_string(i), {bx + 44 + int(i) * 66, oy + 44, 62, 22}, E.win(def->selector[i], sfb[i]), true, pollutionKind == int(i))) {
+    for (size_t i = 0; i < def->selector.size(); i++, oy += 16)
+      if (radio(ui, E, "pollution." + std::to_string(i), {ox, oy, 112, 16}, E.win(def->selector[i], sfb[i]), pollutionKind == int(i))) {
         pollutionKind = int(i);
         R.add(Act::DataMapOptionChanged, 0, int(i), 0, "pollution");
       }
@@ -300,12 +291,14 @@ std::vector<uint32_t> GraphsWindow::samples(const Chart& c, int range) {
 }
 
 std::vector<GraphSeries> graphSeriesTemplate() {
-  static const std::pair<uint32_t, const char*> t[14] = {
-    {0x161, "City size"}, {0x162, "Residents"}, {0x163, "Commerce"}, {0x164, "Industry"}, {0x165, "National population"},
-    {0x166, "Traffic"}, {0x167, "Pollution"}, {0x168, "Unemployment"}, {0x169, "Crime"}, {0x16B, "Power %"},
-    {0x16C, "Water %"}, {0x16D, "Health"}, {0x16E, "Education"}, {0x16F, "Land value"}};
+  // Spec 09 7.3 [OBSERVED]: the grid lists three columns; the string ids of Approval Rating and Funds are not known yet (0 = fallback text).
+  struct E { uint32_t id; const char* fb; int fmt; };
+  static const E t[16] = {
+    {0, "Approval Rating", 0}, {0x162, "Residents", 0}, {0x16F, "Land Value", 0}, {0x161, "City Size", 0}, {0x168, "Unemployment", 1},
+    {0x167, "Pollution", 0}, {0x16E, "Education", 0}, {0x166, "Traffic", 0}, {0x163, "Commerce", 0}, {0x165, "Nat'l Pop", 0}, {0x16C, "Water %", 1},
+    {0x169, "Crime", 0}, {0x16D, "Health", 0}, {0x16A, "Funds", 2}, {0x164, "Industry", 0}, {0x16B, "Power %", 1}};
   std::vector<GraphSeries> v;
-  for (auto& e : t) v.push_back({e.first, e.second, nullptr});
+  for (auto& e : t) { GraphSeries g; g.labelId = e.id; g.fallback = e.fb; g.format = e.fmt; v.push_back(g); }
   return v;
 }
 
@@ -320,55 +313,76 @@ void line(Ui& ui, int x0, int y0, int x1, int y1, uint32_t col) {
     if (e2 <= dx) { err += dx; y0 += sy; }
   }
 }
-const uint32_t kSeriesCol[14] = {rgb(200, 0, 0), rgb(0, 140, 0), rgb(0, 0, 200), rgb(160, 120, 0), rgb(120, 0, 160), rgb(0, 150, 150), rgb(90, 90, 90),
-                                 rgb(220, 90, 0), rgb(150, 0, 80), rgb(0, 100, 220), rgb(0, 170, 200), rgb(90, 160, 0), rgb(160, 80, 160), rgb(60, 60, 60)};
+const uint32_t kSeriesCol[16] = {rgb(0, 150, 60), rgb(0, 140, 0), rgb(60, 60, 60), rgb(200, 0, 0), rgb(220, 90, 0), rgb(90, 90, 90), rgb(160, 80, 160), rgb(0, 150, 150),
+                                 rgb(160, 120, 0), rgb(120, 0, 160), rgb(0, 170, 200), rgb(150, 0, 80), rgb(90, 160, 0), rgb(0, 0, 200), rgb(130, 90, 40), rgb(0, 100, 220)};
 }  // namespace
 
-WindowResult GraphsWindow::draw(Ui& ui, const WinEnv& E, const std::vector<GraphSeries>& series) {
+// Graphs mode of the View Data window (spec 09 7.3 [OBSERVED]): only the checked series are plotted, each labelled at its right end with its
+// name and current value; below the plot a three-column check-box grid; the 1 / 10 / 100 Years radio buttons at the bottom right.
+WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect area, const std::vector<GraphSeries>& series) {
   WindowResult R;
-  int lh = lineHeight(ui);
-  Rect r = placedAt(ui, 40, 34, 680, 420);   // original: 424 x 440 at (40, 34); the content layout is not reproduced yet [#57]
-  if (frame(ui, E, r, E.win(0x184, "Graphs"))) { R.close = true; R.add(Act::Close); }
-  Rect plot{r.x + 14, r.y + 40, 440, 280};
+  const int lh = lineHeight(ui);
+  const uint32_t ink = rgb(0x31, 0x38, 0x84);
+  if (!maskInit) {   // defaults: City Size, Funds, Power %
+    enabledMask = 0;
+    for (size_t i = 0; i < series.size() && i < 16; i++)
+      if (series[i].fallback == "City Size" || series[i].fallback == "Funds" || series[i].fallback == "Power %") enabledMask |= 1u << i;
+    maskInit = true;
+  }
+  const Rect plot{area.x, area.y + 2, area.w, area.h - 142};
   ui.fill(plot, rgb(255, 255, 255)); ui.frame(plot, false);
   for (int i = 1; i < 4; i++) ui.fill({plot.x + 1, plot.y + i * plot.h / 4, plot.w - 2, 1}, rgb(225, 228, 240));
-  int shown = 0;
-  for (size_t i = 0; i < series.size() && i < 14; i++) {
+  int labelRight = 0;   // the plot leaves room on the right for the end labels
+  struct Lab { std::string text; int y; uint32_t col; };
+  std::vector<Lab> labs;
+  for (size_t i = 0; i < series.size() && i < 16; i++) {
     if (!(enabledMask & (1u << i)) || !series[i].chart) continue;
     auto s = samples(*series[i].chart, range);
     if (s.size() < 2) continue;
-    uint32_t lo = *std::min_element(s.begin(), s.end()), hi = *std::max_element(s.begin(), s.end());
+    uint32_t lo = 0, hi = series[i].chart->max;
+    if (hi == 0) { lo = *std::min_element(s.begin(), s.end()); hi = *std::max_element(s.begin(), s.end()); }
+    const int px0 = plot.x + 6, px1 = plot.x + plot.w - 120;
     int px = 0, py = 0;
     for (size_t k = 0; k < s.size(); k++) {
-      int x = plot.x + 8 + int(k) * (plot.w - 16) / int(s.size() - 1);
-      float t = hi == lo ? 0.5f : float(s[k] - lo) / float(hi - lo);
-      int y = plot.y + plot.h - 10 - int(t * float(plot.h - 20));
+      int x = px0 + int(k) * (px1 - px0) / int(s.size() - 1);
+      float t = hi <= lo ? 0.5f : std::max(0.f, std::min(1.f, float(int64_t(s[k]) - int64_t(lo)) / float(hi - lo)));
+      int y = plot.y + plot.h - 8 - int(t * float(plot.h - 16));
       if (k) line(ui, px, py, x, y, kSeriesCol[i]);
       px = x; py = y;
     }
-    shown++;
+    const uint32_t cur = s.back();
+    std::string val = series[i].format == 1 ? std::to_string(cur) + "%" : series[i].format == 2 ? groupDigits(int64_t(cur) * 1000 - 100000) : groupDigits(cur);
+    labs.push_back({E.win(series[i].labelId, series[i].fallback) + " " + val, py - lh / 2, kSeriesCol[i]});
+    labelRight = px1;
   }
-  (void)shown;
-  ui.text(plot.x + 4, plot.y + 2, E.win(0x187, "High"), "main10", rgb(0x60, 0x68, 0x90));
-  ui.text(plot.x + 4, plot.y + plot.h - lh, E.win(0x188, "Low"), "main10", rgb(0x60, 0x68, 0x90));
-  // range buttons
+  std::sort(labs.begin(), labs.end(), [](const Lab& a, const Lab& b) { return a.y < b.y; });
+  int lastY = -1000;
+  for (auto& l : labs) {   // keep the labels from overprinting each other
+    int y = std::max(l.y, lastY + lh - 2);
+    y = std::max(plot.y + 1, std::min(plot.y + plot.h - lh, y));
+    ui.text(labelRight + 4, y, l.text, "system9", l.col);
+    lastY = y;
+  }
+  // check-box grid: three columns of 5, 6 and 5
+  static const int colSize[3] = {5, 6, 5};
+  const int gx = area.x + 4, gy = plot.y + plot.h + 8, cw = area.w / 3, rowH = 18;
+  size_t idx = 0;
+  for (int c = 0; c < 3; c++)
+    for (int r = 0; r < colSize[c] && idx < series.size() && idx < 16; r++, idx++) {
+      bool on = (enabledMask & (1u << idx)) != 0;
+      if (check(ui, E, "series." + std::to_string(idx), {gx + c * cw, gy + r * rowH, cw - 6, rowH}, E.win(series[idx].labelId, series[idx].fallback), on)) {
+        if (on) enabledMask |= 1u << idx; else enabledMask &= ~(1u << idx);
+      }
+    }
+  // range radio buttons, bottom right
   const uint32_t rid[3] = {0x170, 0x171, 0x172};
-  const char* rfb[3] = {"1 year", "10 years", "100 years"};
+  const char* rfb[3] = {"1 Year", "10 Years", "100 Years"};
   for (int i = 0; i < 3; i++)
-    if (button(ui, E, "range." + std::to_string(i), {plot.x + i * 110, plot.y + plot.h + 10, 104, 24}, E.win(rid[i], rfb[i]), true, range == i)) {
+    if (radio(ui, E, "range." + std::to_string(i), {area.x + area.w - 96, area.y + area.h - 56 + i * 18, 96, 18}, E.win(rid[i], rfb[i]), range == i)) {
       range = i;
       R.add(Act::SetTimeRange, 0, i);
     }
-  // series check list
-  int cx = r.x + 470, cy = r.y + 40;
-  for (size_t i = 0; i < series.size() && i < 14; i++) {
-    bool on = (enabledMask & (1u << i)) != 0;
-    ui.fill({cx, cy + 4, 10, 10}, kSeriesCol[i]);
-    if (check(ui, E, "series." + std::to_string(i), {cx + 16, cy, 190, 18}, E.win(series[i].labelId, series[i].fallback), on)) {
-      if (on) enabledMask |= 1u << i; else enabledMask &= ~(1u << i);
-    }
-    cy += 22;
-  }
+  (void)ink;
   return R;
 }
 
@@ -407,24 +421,20 @@ void barChart(Ui& ui, Rect r, const std::vector<float>& v, uint32_t col, float m
 }
 }  // namespace
 
-WindowResult ChartsWindow::draw(Ui& ui, const WinEnv& E, const ChartsData& d) {
+// Charts mode (spec 09 7.1 [OBSERVED]): the chart on top, the two caption lines below it, then a centred column of five radio buttons.
+WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect area, const ChartsData& d) {
   WindowResult R;
-  int lh = lineHeight(ui);
-  Rect r = centered(ui, 600, 420);
-  if (frame(ui, E, r, E.win(0x183, "Charts"))) { R.close = true; R.add(Act::Close); }
-  const uint32_t tid[5] = {0x1DD, 0x1E0, 0x1E1, 0x1DE, 0x1DF};
-  const char* tfb[5] = {"Education", "Health", "Population", "Electricity", "Garbage"};
-  for (int i = 0; i < 5; i++)
-    if (button(ui, E, "tab." + std::to_string(i), {r.x + 12 + i * 114, r.y + 34, 110, 24}, E.win(tid[i], tfb[i]), true, tab == i)) tab = i;
-  Rect plot{r.x + 16, r.y + 72, r.w - 32, 220};
+  const int lh = lineHeight(ui);
+  Rect plot{area.x + 4, area.y + lh + 6, area.w - 8, 190};
   int cy = plot.y + plot.h + 8;
   auto ax = [&](const std::string& y) {
     ui.text(plot.x + 2, plot.y - lh + 2, y, "main10", rgb(0x60, 0x68, 0x90));
     ui.textCentered({plot.x, plot.y + plot.h + 2, plot.w, lh}, E.win(0x1E6, "Age"), "main10", rgb(0x60, 0x68, 0x90));
     cy = plot.y + plot.h + lh + 10;
   };
-  auto caption = [&](uint32_t id, const char* fb, const std::string& val, int col) {
-    labelValue(ui, r.x + 16 + col * 280, cy, 260, E.win(id, fb), val);
+  // two caption lines, label left / value right, one per line
+  auto caption = [&](uint32_t id, const char* fb, const std::string& val, int line) {
+    labelValue(ui, area.x + 12, cy + line * lh, area.w - 24, E.win(id, fb), val);
   };
   auto f1 = [](double v) { char b[32]; std::snprintf(b, sizeof b, "%.1f", v); return std::string(b); };
   if (tab == 0) {
@@ -453,12 +463,47 @@ WindowResult ChartsWindow::draw(Ui& ui, const WinEnv& E, const ChartsData& d) {
     int n = int(v.size());
     for (int i = 0; i < n; i++) {
       int x = plot.x + 2 + i * (plot.w - 4) / n;
-      ui.text(x + 2, plot.y + plot.h + 2 + (i % 2) * lh, E.win(labels[size_t(i)].first, labels[size_t(i)].second));
+      ui.text(x + 2, plot.y + plot.h + 2 + (i % 2) * lh, E.win(labels[size_t(i)].first, labels[size_t(i)].second), "system9");
     }
     cy = plot.y + plot.h + 2 * lh + 10;
-    caption(el ? 0x289u : 0x1F8u, el ? "Total (MW-h per year)" : "Total (tons per year)", groupDigits(int64_t(total)), 0);
-    ui.text(plot.x + 2, plot.y + 2, E.win(el ? 0x28A : 0x1F3, el ? "Annual average production" : "Garbage by destination"), "main10", rgb(0x60, 0x68, 0x90));
+    caption(el ? 0x28Au : 0x1F3u, el ? "Annual average production" : "Garbage by destination", "", 0);
+    caption(el ? 0x289u : 0x1F8u, el ? "Total (MW-h per year)" : "Total (tons per year)", groupDigits(int64_t(total)), 1);
   }
+  // radio column, centred
+  const uint32_t tid[5] = {0x1DD, 0x1E0, 0x1E1, 0x1DE, 0x1DF};
+  const char* tfb[5] = {"Education", "Health", "Population", "Electricity", "Garbage"};
+  const int ry = cy + 2 * lh + 8, rw = 120;
+  for (int i = 0; i < 5; i++)
+    if (radio(ui, E, "tab." + std::to_string(i), {area.x + (area.w - rw) / 2, ry + i * 18, rw, 18}, E.win(tid[i], tfb[i]), tab == i)) tab = i;
+  return R;
+}
+
+// ================================================================ View Data window (7.1)
+void ViewDataWindow::setMode(int m, const MapSource& src) {
+  mode = std::max(0, std::min(int(ModeGraphs), m));
+  if (mode < int(ModeCharts)) map.select(mode, src);
+}
+
+WindowResult ViewDataWindow::draw(Ui& ui, const WinEnv& E, const MapSource& src, const std::vector<GraphSeries>& series, const ChartsData& cd) {
+  WindowResult R;
+  const Rect r = placedAt(ui, 40, 34, 424, 440);
+  std::string title = mode == int(ModeCharts) ? E.win(0x183, "Charts") : mode == int(ModeGraphs) ? E.win(0x184, "Graphs")
+                      : E.win(dataMapDefs()[size_t(mode)].titleId, "Data Map");
+  if (frame(ui, E, r, title) || ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
+  // mode strip: ten data maps, a gap, Charts, Graphs. The icon art is not identified yet, so the buttons carry short captions [#57].
+  static const char* const cap[12] = {"Au", "Cr", "De", "Po", "Fl", "LV", "Pl", "Tr", "Wa", "Zo", "Ch", "Gr"};
+  const int sx = r.x + 8, sy = r.y + 38, pitch = 30, bs = 28;
+  for (int i = 0; i < 12; i++) {
+    const int y = sy + i * pitch + (i >= 10 ? 8 : 0);
+    const Rect b{sx, y, bs, bs};
+    std::string tip = i == 10 ? E.win(0x183, "Charts") : i == 11 ? E.win(0x184, "Graphs") : E.win(dataMapDefs()[size_t(i)].titleId, "Data Map");
+    if (button(ui, E, "mode." + std::to_string(i), b, cap[i], true, mode == i)) { setMode(i, src); R.add(Act::SelectDataMap, 0, i < 10 ? int(dataMapDefs()[size_t(i)].layer) : -1); }
+    if (ui.hover(b)) ui.tooltip = tip;
+  }
+  const Rect area{r.x + 44, r.y + 34, r.w - 52, r.h - 42};
+  if (mode < int(ModeCharts)) { if (map.selected != mode) map.select(mode, src); R.merge(map.drawBody(ui, E, area, src)); }
+  else if (mode == int(ModeCharts)) R.merge(charts.drawBody(ui, E, area, cd));
+  else R.merge(graphs.drawBody(ui, E, area, series));
   return R;
 }
 

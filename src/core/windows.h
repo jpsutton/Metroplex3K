@@ -143,6 +143,7 @@ bool frame(Ui& ui, const WinEnv& E, Rect r, const std::string& title);
 bool button(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool enabled = true, bool toggled = false);
 bool check(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool& v);
 // Coloured-caption button (message box).
+bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool selected);   // radio button with caption; true when clicked
 bool colourButton(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, uint32_t col);
 std::vector<std::string> wrap(const Ui& ui, const std::string& s, int width, const char* font = "main10");
 // Draws wrapped text, returns the height used. Stops drawing past maxH (<=0: unlimited).
@@ -542,13 +543,13 @@ struct MapSource {
 class MapWindow {
  public:
   int selected = -1;                    // index into dataMapDefs(); -1 = plain map
-  bool showInCityView = true;
+  bool showInCityView = false;          // "Use As Map" (spec 09 7.1): paint the layer over the city view
   bool coverage = false;                // police/fire coverage toggle
   int pollutionKind = 0;                // 0 air 1 water 2 garbage
   // Overlay for the main view: valid when a data map is selected and "show in city view" is on.
   const DataOverlay* activeOverlay() const { return overlayActive_ ? &overlay_ : nullptr; }
-  // Events: SelectDataMap, CenterView (click on mini-map), OpenNeighbours, DataMapOptionChanged.
-  WindowResult draw(Ui& ui, const WinEnv& E, const MapSource& src);
+  // Body of the View Data window's data-map mode inside `area` (events: CenterView, DataMapOptionChanged).
+  WindowResult drawBody(Ui& ui, const WinEnv& E, Rect area, const MapSource& src);
   void select(int index, const MapSource& src);
   static uint32_t legendColour(DataLayer l, int category, float t);   // ramp used by mini-map + legend
  private:
@@ -589,16 +590,19 @@ class CityLayersDialog {
 };
 
 // ---- 7.3 Graphs window -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-struct GraphSeries { uint32_t labelId = 0; std::string fallback; const Chart* chart = nullptr; };
-// The 14 series of spec 09 7.3 in order with labels filled and chart == nullptr (caller sets the charts).
+struct GraphSeries { uint32_t labelId = 0; std::string fallback; const Chart* chart = nullptr; int format = 0; };   // format 0 number, 1 percent, 2 funds (stored (funds+100000)/1000)
+// The 16 series of spec 09 7.3 in the order of the observed check-box grid (three columns of 5, 6 and 5), labels filled and
+// chart == nullptr (the caller sets the charts). Default checked: City Size, Funds, Power %.
 std::vector<GraphSeries> graphSeriesTemplate();
 class GraphsWindow {
  public:
   int range = 0;                        // 0 = 12 months, 1 = 10 years, 2 = 10 decades
-  uint32_t enabledMask = 0x3FFF;        // bit per series
+  uint32_t enabledMask = 0;             // bit per series; 0 = not yet initialised (the defaults are applied on first draw)
+  bool maskInit = false;
   // Values oldest -> newest for a chart in a range.
   static std::vector<uint32_t> samples(const Chart& c, int range);
-  WindowResult draw(Ui& ui, const WinEnv& E, const std::vector<GraphSeries>& series);
+  // Body of the View Data window's graphs mode inside `area` (spec 09 7.3).
+  WindowResult drawBody(Ui& ui, const WinEnv& E, Rect area, const std::vector<GraphSeries>& series);
 };
 
 // ---- 7.4 Charts window ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -613,7 +617,23 @@ ChartsData chartsFromPopulation(const Population& p, uint32_t cityPopulation);
 class ChartsWindow {
  public:
   int tab = 0;                          // 0 education 1 health 2 population 3 electricity 4 garbage
-  WindowResult draw(Ui& ui, const WinEnv& E, const ChartsData& d);
+  // Body of the View Data window's charts mode inside `area` (spec 09 7.1 / 7.4).
+  WindowResult drawBody(Ui& ui, const WinEnv& E, Rect area, const ChartsData& d);
+};
+
+// ---- 7.1 View Data: one window for the ten data maps, the charts and the graphs ----------------------------------
+// 424 x 440 at (40, 34) with a close box; a strip of 12 mode buttons runs down the left edge (spec 09 7.1 [OBSERVED]).
+class ViewDataWindow {
+ public:
+  enum Mode { ModeCharts = 10, ModeGraphs = 11 };   // 0..9 = index into dataMapDefs()
+  int mode = 0;
+  MapWindow map;
+  ChartsWindow charts;
+  GraphsWindow graphs;
+  // The data layer painted over the city view while "Use As Map" is on and a data map is the mode.
+  const DataOverlay* activeOverlay() const { return mode < int(ModeCharts) ? map.activeOverlay() : nullptr; }
+  void setMode(int m, const MapSource& src);
+  WindowResult draw(Ui& ui, const WinEnv& E, const MapSource& src, const std::vector<GraphSeries>& series, const ChartsData& cd);
 };
 
 // ---- 4.4 news ticker strip ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

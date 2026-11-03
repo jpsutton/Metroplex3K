@@ -86,6 +86,22 @@ bool check(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::
   return ui.checkbox(r, label, v);
 }
 
+bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool selected) {
+  const Skin* sk = ui.skin;
+  const Image* art = sk ? sk->get("radio") : nullptr;
+  const uint32_t ink = rgb(0x31, 0x38, 0x84);
+  E.spot(name, r);
+  const bool hot = ui.hover(r);
+  const int box = 12, by = r.y + (r.h - box) / 2;
+  if (!(sk && sk->drawCheck(ui, art, r.x, by, selected, true, hot, hot && ui.in.down))) {
+    ui.fill({r.x, by, box, box}, rgb(255, 255, 255));
+    ui.frame({r.x, by, box, box}, false);
+    if (selected) ui.fill({r.x + 3, by + 3, box - 6, box - 6}, ink);
+  }
+  ui.text(r.x + box + 4, r.y + (r.h - ui.fonts->get("system9").height()) / 2, label, "system9", ink);
+  return ui.clicked(r);
+}
+
 bool colourButton(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, uint32_t col) {
   E.spot(name, r);
   bool hot = ui.hover(r), down = hot && ui.in.down;

@@ -103,19 +103,20 @@ int main(int argc, char** argv) {
   for (int x = 0; x < 128; x++) for (int z = 0; z < 128; z++) { land[size_t(x) * 128 + z] = uint8_t(128 + 127 * std::sin(x * 0.1) * std::cos(z * 0.13)); if (x > 40 && x < 90 && z > 30 && z < 100) zone[size_t(x) * 128 + z] = uint8_t((x / 8 + z / 8) % 7); }
   src.values = [&](DataLayer l) -> const std::vector<uint8_t>* { return l == DataLayer::Zones ? &zone : &land; };
   src.baseColour = [](int x, int z) { return ((x + z) % 7 < 2) ? rgb(70, 120, 200) : rgb(100, 150, 80); };
-  { MapWindow m; m.select(6, src); shot(dir, "map_landvalue", [&](Ui& ui, WinEnv& E) { m.draw(ui, E, src); }); }
-  { MapWindow m; m.select(1, src); shot(dir, "map_zones", [&](Ui& ui, WinEnv& E) { m.draw(ui, E, src); }); }
-  { MapWindow m; shot(dir, "map_plain", [&](Ui& ui, WinEnv& E) { m.draw(ui, E, src); }); }
-  Chart ch[14];
-  for (int i = 0; i < 14; i++) { ch[i] = Chart::make(0, 1000); for (int k = 0; k < 12; k++) ch[i].pushMonthly(uint32_t(500 + 400 * std::sin(k * 0.5 + i))); for (int k = 0; k < 10; k++) ch[i].pushYearly(uint32_t(300 + 60 * k + 20 * i)); for (int k = 0; k < 10; k++) ch[i].pushDecade(uint32_t(100 + 80 * k)); }
+  Chart ch[16];
+  for (int i = 0; i < 16; i++) { ch[i] = Chart::make(0, 1000); for (int k = 0; k < 12; k++) ch[i].pushMonthly(uint32_t(500 + 400 * std::sin(k * 0.5 + i))); for (int k = 0; k < 10; k++) ch[i].pushYearly(uint32_t(300 + 60 * k + 20 * i)); for (int k = 0; k < 10; k++) ch[i].pushDecade(uint32_t(100 + 80 * k)); }
   auto series = graphSeriesTemplate();
-  for (int i = 0; i < 14; i++) series[size_t(i)].chart = &ch[i];
-  { GraphsWindow g; g.enabledMask = 0x0F; shot(dir, "graphs", [&](Ui& ui, WinEnv& E) { g.draw(ui, E, series); }); }
+  for (int i = 0; i < 16; i++) series[size_t(i)].chart = &ch[i];
   Population pop; pop.newCity();
   ChartsData cd = chartsFromPopulation(pop, 80000);
   for (int i = 0; i < 10; i++) cd.electricity[i] = 100 * (i % 4 + 1);
   for (int i = 0; i < 5; i++) cd.garbage[i] = 50 * (i + 1);
-  for (int t = 0; t < 5; t++) { ChartsWindow c; c.tab = t; shot(dir, "charts" + std::to_string(t), [&](Ui& ui, WinEnv& E) { c.draw(ui, E, cd); }); }
+  // One View Data window (spec 09 7.1): data maps, charts and graphs are modes of it.
+  { ViewDataWindow v; v.setMode(6, src); shot(dir, "map_landvalue", [&](Ui& ui, WinEnv& E) { v.draw(ui, E, src, series, cd); }); }
+  { ViewDataWindow v; v.setMode(1, src); shot(dir, "map_zones", [&](Ui& ui, WinEnv& E) { v.draw(ui, E, src, series, cd); }); }
+  { ViewDataWindow v; v.setMode(0, src); shot(dir, "map_aura", [&](Ui& ui, WinEnv& E) { v.draw(ui, E, src, series, cd); }); }
+  { ViewDataWindow v; v.mode = ViewDataWindow::ModeGraphs; shot(dir, "graphs", [&](Ui& ui, WinEnv& E) { v.draw(ui, E, src, series, cd); }); }
+  for (int t = 0; t < 5; t++) { ViewDataWindow v; v.mode = ViewDataWindow::ModeCharts; v.charts.tab = t; shot(dir, "charts" + std::to_string(t), [&](Ui& ui, WinEnv& E) { v.draw(ui, E, src, series, cd); }); }
 
   // ---- ticker / message box / tip / credits
   { TickerWidget t; NewsItem a; a.number = 1; a.text = "Mayor opens new library"; a.hasLoc = true; a.r = 255; a.g = 255; a.b = 120;
