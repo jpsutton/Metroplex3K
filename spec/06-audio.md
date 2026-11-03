@@ -438,10 +438,32 @@ share of the view drops below `AmbienceStartFadeAtPercent`. [INFERRED][OPEN — 
   `UiQueryGenericWater`, `UiQueryGenericAbandoned`, `UiQueryTreeGeneric`, `UiQueryGenericLandfill`).
   The query sound ID per occupant is an occupant property (see `13-buildings-occupants.md`).
   [DATA][INFERRED]
-* **Sparse sounds.** Buildings with a `[Sparse]` ID periodically emit their sample while visible at
-  zoom ≥ `BuildingsInAmbienceMinZoom`, attenuated by `BuildingsInAmbienceAttenuation`. On each
-  scheduling tick a visible building plays with probability triggerval / `BuildingRandMultiplier`
-  (shipped 600/10000 for generic classes, 8000/10000 for landmarks). [INFERRED][OPEN]
+* **Sparse sounds.** The set of active sparse items is rebuilt on every 4th pass of the audio
+  service tick [STATIC]:
+  1. Every sparse item that was active from the previous rebuild is switched off.
+  2. Nothing more happens unless all of the following hold:
+     * zoom ≥ `BuildingsInAmbienceMinZoom` (shipped 4);
+     * the view is the normal surface view;
+     * no view overlay is active;
+     * a further world check returns false. What that check tests is [OPEN]; it is probably
+       "paused" or "scrolling".
+  3. Take the rectangle of tiles centred on the view-centre tile (cx, cz), with half-size
+     h = 3 × (6 − zoom). It runs over x from max(0, cx − h) to min(W, cx + h) − 1, and over z
+     likewise. So h = 6 at zoom 4 and h = 3 at zoom 5.
+  4. Visit the rectangle with x outer and z inner. For each tile, read the `[Sparse]` ID of its
+     occupant (attribute 0x6F, §10.4). Skip the tile if that ID is 0 or equals the previous
+     non-zero ID visited. Otherwise switch the item for that ID on at the current ambience category
+     volume and record it as active.
+
+  There is one item per ID, so a building type is heard at most once however many copies are in
+  view.
+
+  How often an active item actually sounds is [INFERRED]. Recommended: on each rebuild it plays
+  with probability triggerval / `BuildingRandMultiplier`. In the shipped files that is 600/10000
+  for generic classes and 8000/10000 for landmarks.
+
+  How `BuildingsInAmbienceAttenuation` (shipped 400) is used is [OPEN]. Recommended: subtract it
+  from the volume (out of 1024, floor 0) for items whose building is not at the view centre.
 
 ## 7. Music
 
@@ -504,6 +526,13 @@ end). [STATIC][INFERRED]
 * Panning: positioned sounds (vehicles, spatialised disasters, sparse buildings) are panned by their
   horizontal screen position relative to the view centre and attenuated by distance; the listener
   position/orientation/zoom are updated by events 3000–3002 whenever the view moves. [INFERRED]
+  The exact pan and distance law was searched for and not found [OPEN].
+  * Recommended pan: clamp((screen x − view-centre x) / (view width / 2), −1, 1), with
+    equal-power panning.
+  * Recommended volume: full volume on screen, and 300 less (out of 1024, floor 0) off screen. This
+    is the off-screen rule used for explosions (§10.5).
+  * Vehicle loops: use `VehicleMax` 240 and `VehicleMin` 100 of `[Options]` as the volume range.
+    Recommended: louder the nearer the vehicle is to the view centre.
 
 ## 9. Localised sounds
 
@@ -641,6 +670,8 @@ IDs 0x100–0x192, e.g. power plants 0x118–0x120, landmarks mostly 0x110) [DAT
 | water facility / landmark / agricultural / abandoned | 140 / 141 / 142 / 143 |
 | airport / seaport / landfill | 173 / 174 / 172 |
 | flora class | 151 |
+
+Desert and jungle are decided by a landscape code that the audio system asks the city for: code 1 gives 252, code 2 gives 253, and any other code gives 151 [STATIC]. Where the city takes this code from is [OPEN]. Recommended: the city's flora set (`11-world-terrain.md` §6.3), with Desert `0xC55A6D62` as 1, Jungle `0x79EF435A` as 2, and every other set as 0.
 
 In the subway view a subway piece answers 53; in the pipe view a pipe answers 50; nothing else
 sounds in those views. Classification of the tile content is [INFERRED] from the sound names; the
