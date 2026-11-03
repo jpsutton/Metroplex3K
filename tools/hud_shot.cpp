@@ -41,6 +41,22 @@ int main(int argc, char** argv) {
     else if (op == "win") { g.openWindow(arg); frame(4); }
     else if (op == "ctrl") in.modCtrl = arg == "1";   // ctrl:1 / ctrl:0 holds the Ctrl key (query tool)
     else if (op == "zones") { CityLayers l = g.layers(); l.zones = true; l.zonedBuildings = l.otherBuildings = arg != "only"; g.setLayers(l); frame(3); }   // zones:only = Zones layer with the buildings hidden
+    else if (op == "queryagent") {   // queryagent:TYPE = Ctrl-click the first building of that agent type (decimal) or a type range TYPE-TYPE
+      unsigned lo = 0, hi = 0; std::sscanf(arg.c_str(), "%u-%u", &lo, &hi); if (!hi) hi = lo;
+      const World& w = g.world(); bool found = false;
+      for (const auto& o : w.occupants) {
+        if (o.agentType < lo || o.agentType > hi) continue;
+        g.setView(o.x, o.z, 2); frame(3);
+        int sx, sy;
+        if (!g.tileScreenPos(o.x, o.z, sx, sy)) continue;
+        in.modCtrl = true; in.mx = sx; in.my = sy; frame(2);
+        in.pressed = in.down = true; frame(1); in.released = true; in.down = false; frame(3);
+        in.modCtrl = false; found = true;
+        std::printf("queried %u at (%d,%d)\n", o.agentType, o.x, o.z);
+        break;
+      }
+      if (!found) std::printf("no building of type %s\n", arg.c_str());
+    }
     else if (op == "dirty") g.setDirty(true);
     else if (op == "fps") g.mutableEngineOptions().showFps = true;   // engine option: frame counter overlay
     else if (op == "shot") writePng(arg, W, H, g.screen());

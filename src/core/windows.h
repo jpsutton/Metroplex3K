@@ -461,15 +461,17 @@ struct QueryInfo {
   double v[8] = {};
   uint8_t band[4] = {};
   int builtYear = 0;                 // landmarks/rewards
+  std::string builtDate;             // "Date Built" as month/day/year when the occupant saves a date
   int64_t monthlyIncome = 0;
-  int flavour[2] = {};               // flavour string ids (0 none)
+  int flavour[3] = {};               // flavour string ids (0 none)
   std::string neighbour;             // neighbour connection
   bool watered = false;              // water-serviced tile ("Watered:")
   bool underground = false;          // the panel was opened from the underground view
   ResKey picture;                    // appearance of the picture (type 0 = none: bare ground, networks, ...)
   int footprint = 1;                 // lot size, for the Building Replacement dialog
   bool canReplace = false;           // the occupant is in [ReplaceableBuildings]: shows the Replace button
-  int flavourValue[2] = {};          // made-up number shown by each flavour line
+  int flavourValue[3] = {};          // made-up number shown by each flavour line
+  unsigned redMask = 0;              // bit i: the Num row of slot v[i] is drawn red (an alert such as beds < patients)
   int landfillCapacity = 0, landfillUsage = 0;   // landfill zone rows: tons citywide, percent full
   int reasonCode = 0;                // stored per-tile reason code (spec 09 6.12.2): 1-8 abandonment, 9-18 lack of development, 0 = none stored
   bool reasonRow = false;            // show the "Reason for ..." row (empty zoned tile, abandoned building)

@@ -42,7 +42,7 @@ QueryClass classify(const std::map<uint32_t, uint32_t>& par, uint32_t t, bool& p
   if (is(14140)) return QueryClass::Museum;
   if (is(14450)) return QueryClass::Zoo;
   if (is(14430)) return QueryClass::Marina;
-  if (is(14600)) return QueryClass::Ballpark;
+  if (is(14600) || t == 14313) return QueryClass::Ballpark;   // 14313 = baseball park (spec 09 6.12.3)
   if (is(14300) || (t >= 14300 && t < 14400)) return QueryClass::Park;
   if (is(12310) || is(12350)) return QueryClass::Airport;
   if (is(12330)) return QueryClass::Seaport;
@@ -103,6 +103,188 @@ bool writePngFile(const fs::path& path, int w, int h, const std::vector<uint32_t
 }
 
 }  // namespace
+
+// Grade / band byte in the middle of band `idx` of n bands (the panel maps byte * n / 256 to the band).
+static uint8_t bandByteOf(int idx, int n) { idx = std::max(0, std::min(n - 1, idx)); return uint8_t((idx * 256 + 128) / n); }
+
+// Service, culture and transport figures of spec 09 6.12.3 [STATIC]; flavour numbers are deterministic formulas. The reference
+// point of the donuts line and the grouping of dates are [INFERRED] (see the comments).
+void Game::fillServiceValues(QueryInfo& q, const Occupant& o) {
+  City& c = sim_.city();
+  const World& w = world_;
+  if (!queryTune_.loaded) {
+    queryTune_.loaded = true;
+    IniFile ini;
+    if (haveData_ && data_.ini().load("SC3Tune.ini", ini)) {
+      queryTune_.police = us::StationParams::police(ini); queryTune_.fire = us::StationParams::fire(ini);
+      queryTune_.library = us::LibraryParams::library(ini); queryTune_.museum = us::LibraryParams::museum(ini);
+    }
+  }
+  const QueryTune& T = queryTune_;
+  const int pop = c.population();
+  const int aura = c.aura.grid.empty() ? 0 : int(c.aura.aura(o.x, o.z));   // t
+  const int cityAura = int(c.aura.cityAura);                                  // a
+  const int lv = c.landValue.lv.empty() ? 0 : c.landValue.landValueAtTile(o.x, o.z);
+  const cal::Date d = c.clock.date();                                        // date values: month, day, year [INFERRED order]
+  auto count = [&](uint32_t type) { int n = 0; for (const auto& oc : w.occupants) n += oc.agentType == type; return n; };
+  auto ordOn = [&](uint32_t id) { return c.ordinances.enacted(id); };
+  const int fundingEdu = c.budget.dept(dept::Education) ? c.budget.dept(dept::Education)->funding : 100;
+  const int cx = o.x + o.sizeX / 2, cz = o.z + o.sizeZ / 2;                  // lot centre
+  // Diamond |dx| + |dz| <= r around the lot centre, clipped to the map: calls f(x, z) and returns the tile count.
+  auto diamond = [&](int r, const std::function<void(int, int)>& f) {
+    int n = 0;
+    for (int dx = -r; dx <= r; dx++)
+      for (int dz = -(r - std::abs(dx)); dz <= r - std::abs(dx); dz++) {
+        const int x = cx + dx, z = cz + dz;
+        if (!w.inTiles(x, z)) continue;
+        n++; f(x, z);
+      }
+    return n;
+  };
+  auto grade = [&](int rating) { return bandByteOf(4 - rating, 5); };
+  auto libScore = [&](uint32_t capacity, int upkeep) {
+    const int cov = pop == 0 ? 100 : int(std::min<int64_t>(100, int64_t(capacity) * 100 / pop));
+    return upkeep > 0 ? double(fundingEdu) * cov / upkeep : 0.0;
+  };
+  auto gradeIdx = [](double s, int a, int b, int cc, int dd) { return s >= a ? 0 : s >= b ? 1 : s >= cc ? 2 : s >= dd ? 3 : 4; };
+  // Park acres (parks, recreation): weights per agent type of spec 09 6.12.3.
+  auto acres = [&] { return 1 * count(14311) + 9 * count(14312) + 16 * count(14313) + 4 * count(14314) + 4 * count(14315) + 1 * count(14316); };
+  auto parkRows = [&] {
+    const int ac = acres();
+    q.v[5] = ac;
+    // Benches in Use: S = round(R-valve supply * working-age share), J = jobs valve value [J's meaning INFERRED].
+    const double S = std::round(double(c.valves.valve(growth::kValveRes).Slast) * c.pop.workforceFraction());
+    const int J = c.valves.valve(growth::kValveJobs).V;
+    double benches = 0;
+    if (S != 0) {
+      if (J < S && ac > 0) benches = std::min(5.0, double(int(S) - J) / ac) * (o.sizeX * o.sizeZ); else benches = 1;
+      if (ordOn(0x20D07175)) benches /= 2;   // homeless-shelter ordinance halves it [INFERRED]
+    }
+    q.v[6] = int(benches);
+  };
+  switch (q.cls) {
+    case QueryClass::Hospital:
+      q.v[0] = c.pop.hospitalBeds; q.v[1] = c.pop.patients; q.v[2] = c.pop.doctors;
+      q.band[0] = grade(c.pop.healthRating);
+      if (c.pop.hospitalBeds < c.pop.patients) q.redMask |= 1u << 1;
+      break;
+    case QueryClass::School:
+      q.v[0] = c.pop.schoolDesks; q.v[1] = c.pop.schoolAgePop; q.v[2] = c.pop.teachers;
+      q.band[0] = grade(c.pop.schoolRating);
+      if (c.pop.schoolDesks < c.pop.schoolAgePop) q.redMask |= 1u << 1;
+      q.flavour[0] = 0xBF;   // Apples for the Teacher
+      q.flavourValue[0] = std::max(0, aura) / 10 + (ordOn(0xE0D07233) ? 3 : 0) + (ordOn(0x815B4CEF) ? 2 : 0);
+      break;
+    case QueryClass::College:
+      q.v[0] = c.pop.collegeDesks; q.v[1] = c.pop.collegeAgePop; q.v[2] = c.pop.professors;
+      q.band[0] = grade(c.pop.collegeRating);
+      if (c.pop.collegeDesks < c.pop.collegeAgePop) q.redMask |= 1u << 1;
+      break;
+    case QueryClass::Library: {
+      const int eq = c.pop.qEQ(20, 65);
+      const int books = eq * 19 + int(c.pop.libraryCapacity) * 10 + int(c.pop.schoolRating) * 13 - 52 + (d.day % 17);
+      q.v[0] = books;
+      q.v[1] = std::min<int64_t>(pop, int64_t(eq) * books / 303 + (d.month % 17));
+      q.band[0] = bandByteOf(gradeIdx(libScore(c.pop.libraryCapacity, T.library.upkeep), 88, 72, 64, 47), 5);
+      break;
+    }
+    case QueryClass::Museum: {
+      const uint32_t pm = c.pop.museumCapacity;
+      q.v[0] = pop < int(pm) ? double(T.museum.popServed) * pop / (double(pm) + 1) : double(T.museum.popServed);
+      q.band[0] = bandByteOf(gradeIdx(libScore(pm, T.museum.upkeep), 84, 66, 52, 40), 5);
+      break;
+    }
+    case QueryClass::Police: {
+      const int r = T.police.radius0;
+      int64_t sum = 0, cov = 0;
+      const int n = diamond(r, [&](int x, int z) { sum += c.crime.crime.empty() ? 0 : c.crime.crimeAt(x, z); cov += c.police.coverageAt(x, z); });
+      const int crimes = n == 0 ? 0 : int(sum * 10 / n + sum % 13);
+      const int denom = (T.police.max0 - T.police.min0) / 3 + T.police.min0;
+      const int R = (n == 0 || denom <= 0) ? 0 : int((cov / n) * 100 / denom);
+      const int opp = T.police.oppressionThreshold > 0 ? T.police.oppressionThreshold : 210;
+      q.v[0] = crimes;
+      q.v[1] = int(int64_t(R) * crimes / opp);
+      q.band[0] = bandByteOf(R < 50 ? 0 : R < 80 ? 1 : (R > opp && crimes != 0) ? 3 : 2, 4);
+      // Donuts: distance to a city reference point (an unidentified city object in the original; the land-value centre is used) [INFERRED].
+      int rx = 0, rz = 0; c.lvCentre(rx, rz);
+      const int dx = std::abs(o.x - rx), dz = std::abs(o.z - rz), dist = std::max(dx, dz) + std::min(dx, dz) / 2;
+      q.flavour[0] = 0x91;
+      q.flavourValue[0] = crimes <= 0 ? dist * 10 : crimes < 100 ? int(dist * (11 - 0.1 * crimes)) : dist * 100 / crimes;
+      break;
+    }
+    case QueryClass::Fire: {
+      int64_t sum = 0;
+      const int n = diamond(T.fire.radius0, [&](int x, int z) { const size_t ti = w.tIdx(x, z); if (ti < c.flammability.grid.size()) sum += c.flammability.grid[ti]; });
+      const int fires = n == 0 ? 0 : int(sum / (2 * n));
+      q.v[0] = fires;
+      q.v[1] = int(fires * (1.5 - 0.3 * (aura + 127) / 255.0));
+      // Rating: the stations' actual upkeep against the optimal monthly upkeep (shipped 30): f < 0.4 Poor, < 0.7 Fair, < 1 Good [INFERRED reading of "funding"].
+      const int stations = std::max(1, c.fire.stationCount());
+      const double f = T.fire.upkeep0 > 0 ? double(c.fire.upkeepTotal) / stations / T.fire.upkeep0 : 1.0;
+      q.band[0] = bandByteOf(f < 0.4 ? 0 : f < 0.7 ? 1 : f < 1.0 ? 2 : 3, 4);
+      q.flavour[0] = 0xA5;   // Spots on Dalmatian
+      q.flavourValue[0] = lv * 2 / 3;
+      break;
+    }
+    case QueryClass::Park: parkRows(); break;
+    case QueryClass::Zoo: {
+      parkRows();
+      const int nz = std::max(1, count(14450));
+      q.v[0] = pop * (aura + cityAura + 255) / 512.0 * 0.1 / nz;
+      q.v[1] = (aura + 128) / 4 * (1 + (ordOn(0xA2F917CF) ? 0.5 : 0.0)) * (1 + 0.25 * count(12851));
+      break;
+    }
+    case QueryClass::Ballpark: {
+      parkRows();
+      double share = 0;
+      for (int a = 6; a <= 10; a++) share += c.pop.share[a];
+      const int nb = std::max(1, count(14313));
+      q.v[0] = std::min(210.0, pop * share * (aura + 128) / 255.0 * 0.25 / nb);
+      const int wins = (lv + 128 + cityAura) / 20;
+      q.v[1] = wins; q.v[2] = 25 - wins;      // "wins - (25 - wins)"
+      q.v[3] = wins * 2000;                   // season ticket holders
+      break;
+    }
+    case QueryClass::Marina: {
+      const int nm = std::max(1, count(14430));
+      q.v[0] = std::min(400.0, pop * (aura + 128) / 255.0 * (1 + 0.5 * count(13871)) * (1 + 0.25 * count(13873)) * 0.01 / nm);
+      break;
+    }
+    case QueryClass::Airport: {
+      const int n = std::max(1, count(12310));
+      const double r = double(c.valves.valve(growth::kValveCom).Slast) / (double(n) * 4000);
+      q.band[0] = bandByteOf(r < 0.8 ? 0 : r < 1.1 ? 1 : r < 1.5 ? 2 : 3, 4);
+      q.v[1] = r <= 0 ? 98 : std::min(98.0, (cityAura + 128) / 255.0 * (1 / r) * 100);
+      break;
+    }
+    case QueryClass::Seaport: {
+      const int n = std::max(1, count(12330));
+      const double r = double(c.valves.valve(growth::kValveInd).Slast) / (double(n) * 4000);
+      q.band[0] = bandByteOf(r < 0.8 ? 0 : r < 1.1 ? 1 : r < 1.5 ? 2 : 3, 4);
+      q.flavour[0] = 0x10A;   // Barnacles Removed
+      q.flavourValue[0] = int(std::min(2e9, (1 - (cityAura + 128) / 255.0) * r * 1000000));
+      break;
+    }
+    case QueryClass::Station: {
+      const bool strike = c.traffic && c.traffic->rec().strikeState == STRIKE_STRIKING;
+      q.v[0] = strike ? 0 : 4.3 * c.trafficDensityAt(o.x, o.z);   // 4.3 x the station value at the tile [INFERRED: live density]
+      break;
+    }
+    case QueryClass::Landmark: {
+      // Flavour lines of landmarks and rewards: eggs (255 - a) / 20, pigeons N(13000), red tape = active ordinances. Which one a
+      // building shows is not traced; chosen by its id [INFERRED].
+      int active = 0;
+      for (const auto& kv : c.ordinances.catalogue()) active += c.ordinances.enacted(kv.first);
+      switch (o.occId % 3) {
+        case 0: q.flavour[0] = 0xF8; q.flavourValue[0] = (255 - cityAura) / 20; break;
+        case 1: q.flavour[0] = 0xFC; q.flavourValue[0] = count(13000); break;
+        default: q.flavour[0] = 0xFA; q.flavourValue[0] = active; break;
+      }
+      break;
+    }
+    default: break;
+  }
+}
 
 // Occupants listed in SC3CityScheme.ini [ReplaceableBuildings] are the ones the Replace button is shown for (spec 09 6.12.1, spec 24 2.4).
 bool Game::isReplaceableOccupant(uint32_t occId) {
@@ -279,32 +461,24 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
     case QueryClass::WaterTreatment:
       q.v[0] = double(c.water.stats.supply);
       break;
-    case QueryClass::Police: case QueryClass::Fire:
-      q.band[0] = clamp8((q.cls == QueryClass::Police ? c.police : c.fire).coverageAt(o->x, o->z));
-      break;
     case QueryClass::Jail:
       for (const auto& j : c.police.jails()) { q.v[0] += j.inmates; q.v[1] += j.capacity; }
       if (q.v[1] > 0) q.band[0] = clamp8(int(255 - q.v[0] * 255 / q.v[1]));
       break;
-    case QueryClass::Hospital:   // systemwide figures of the population model (spec 20 5, 17 5)
-      q.v[0] = c.pop.hospitalBeds; q.v[1] = c.pop.patients; q.v[2] = c.pop.doctors;
-      q.band[0] = gradeBand(4 - c.pop.healthRating);
-      break;
-    case QueryClass::School:
-      q.v[0] = c.pop.schoolDesks; q.v[1] = c.pop.schoolAgePop; q.v[2] = c.pop.teachers;
-      q.band[0] = gradeBand(4 - c.pop.schoolRating);
-      break;
-    case QueryClass::College:
-      q.v[0] = c.pop.collegeDesks; q.v[1] = c.pop.collegeAgePop; q.v[2] = c.pop.professors;
-      q.band[0] = gradeBand(4 - c.pop.collegeRating);
+    case QueryClass::Hospital: case QueryClass::School: case QueryClass::College: case QueryClass::Library: case QueryClass::Museum:
+    case QueryClass::Police: case QueryClass::Fire: case QueryClass::Park: case QueryClass::Zoo: case QueryClass::Ballpark:
+    case QueryClass::Marina: case QueryClass::Airport: case QueryClass::Seaport: case QueryClass::Station:
+      fillServiceValues(q, *o);   // spec 09 6.12.3
       break;
     case QueryClass::Landmark:
       // Date Built: the occupant's own build date when it saves one, else the city's founding year [INFERRED].
       q.builtYear = (o->hasDate && o->dateYear > 0) ? o->dateYear : w.info.foundingYear;
+      if (o->hasDate && o->dateYear > 0) {   // build date as month/day/year (locale format [INFERRED: US order])
+        const cal::Date bd = cal::fromJdn(cal::toJdn(1, 1, o->dateYear) + std::max(1, o->dateDay) - 1);
+        q.builtDate = std::to_string(bd.month) + "/" + std::to_string(bd.day) + "/" + std::to_string(bd.year);
+      }
+      fillServiceValues(q, *o);
       q.historical = true;
-      break;
-    case QueryClass::Station:
-      q.band[0] = 128;
       break;
     default: break;
   }

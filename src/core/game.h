@@ -501,6 +501,10 @@ class Game {
   double scrollAcc_ = 0;
   std::string cursorName_;
   void handleScrolling(uint32_t dtMs);
+  // Tunables the query panel's service figures need (SC3Tune.ini [PoliceStation] [FireStation] [Library] [Museum]).
+  struct QueryTune { bool loaded = false; us::StationParams police, fire; us::LibraryParams library, museum; };
+  QueryTune queryTune_;
+  void fillServiceValues(QueryInfo& q, const Occupant& o);   // spec 09 6.12.3
   bool isReplaceableOccupant(uint32_t occId);   // in [ReplaceableBuildings] (Replace button of the query panel)
   std::set<uint32_t> replaceableOcc_; bool replaceableLoaded_ = false;
   void buildZoneOverlay();

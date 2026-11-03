@@ -29,11 +29,12 @@ const char* const kU4[] = {"Low", "Moderate", "High", "Very high"};
 const char* const kU5[] = {"Very low", "Low", "Moderate", "High", "Very high"};
 const char* const kU6[] = {"None", "Low", "Medium", "High", "Very High", "Hazardous"};
 const char* const kCrime[] = {"None", "Low", "Medium", "High", "Very High", "Rampant"};
+const char* const kGrade[] = {"A", "B", "C", "D", "F"};
 const char* const kEff[] = {"None", "Low", "Medium", "High", "Unusable"};
 const char* const kRec[] = {"Adequate", "Inadequate"};
 const char* const kLV[] = {"Very Low", "Low", "Medium", "High", "Very High", "Astronomical"};
 
-enum Kind { Num, Band, Bool, Text, Year, Money };
+enum Kind { Num, Band, Bool, Text, Year, Money, Pair };
 struct Spec {
   Kind kind;
   uint32_t label;          // label string id
@@ -44,7 +45,8 @@ struct Spec {
   int bands;               // Band: number of bands
   const char* const* fbBands;
   bool redZero = false;    // Num: the value is drawn red when it is 0 (a utility's current capacity)
-  int redBand = -1;        // Band: this band index is drawn red ("Inadequate")
+  unsigned redMask = 0;    // Band: bit i = band index i is drawn red ("Inadequate", grade D / F, "Poor")
+  bool hideZero = false;   // Num / Money: the row is omitted when the value is 0
 };
 
 std::string fmtNum(double v) {
@@ -54,32 +56,35 @@ std::string fmtNum(double v) {
 
 const std::vector<Spec>& specsFor(QueryClass c) {
   static const std::map<QueryClass, std::vector<Spec>> t = {
-    {QueryClass::Police, {{Num, 0x88, "Number of Crimes:", 0x89, "%s/Month", 0, 0, nullptr}, {Num, 0x8A, "Number of Arrests:", 0x8B, "%s/Month", 1, 0, nullptr},
-                          {Band, 0x8C, "Performance Rating:", 0x8D, nullptr, 0, 4, kG4}}},
+    {QueryClass::Police, {{Num, 0x88, "Number of Crimes:", 0x89, "%s/Month", 0, 0, nullptr}, {Band, 0x8C, "Performance Rating:", 0x8D, nullptr, 0, 4, kG4, false, 9u},
+                          {Num, 0x8A, "Number of Arrests:", 0x8B, "%s/Month", 1, 0, nullptr}}},
     {QueryClass::Jail, {{Num, 0x93, "Inmates:", 0x94, "%s", 0, 0, nullptr}, {Num, 0x95, "Cells:", 0x96, "%s", 1, 0, nullptr},
                         {Band, 0x97, "Conditions:", 0x98, nullptr, 0, 4, kG4}}},
     {QueryClass::Fire, {{Num, 0x9C, "Number of Fires:", 0x9D, "%s/Month", 0, 0, nullptr}, {Num, 0x9E, "Number of Calls:", 0x9F, "%s/Month", 1, 0, nullptr},
-                        {Band, 0xA0, "Performance Rating:", 0xA1, nullptr, 0, 4, kG4}}},
-    {QueryClass::Hospital, {{Num, 0xA7, "Number of Beds (Systemwide):", 0xA8, "%s", 0, 0, nullptr}, {Num, 0xA9, "Number of Patients (Systemwide):", 0xAA, "%s", 1, 0, nullptr},
-                            {Num, 0xAB, "Number of Doctors (Systemwide):", 0xAC, "%s", 2, 0, nullptr}, {Band, 0xAD, "Grade (Systemwide):", 0xAE, nullptr, 0, 5, kG5}}},
+                        {Band, 0xA0, "Performance Rating:", 0xA1, nullptr, 0, 4, kG4, false, 1u}}},
+    {QueryClass::Hospital, {{Num, 0xA7, "Number of Beds (Systemwide):", 0xA8, "%s", 0, 0, nullptr}, {Num, 0xA9, "Number of Patients (Systemwide):", 0xAA, "%s", 1, 0, nullptr, false, 0, false},
+                            {Num, 0xAB, "Number of Doctors (Systemwide):", 0xAC, "%s", 2, 0, nullptr}, {Band, 0xAD, "Grade (Systemwide):", 0xAE, nullptr, 0, 5, kGrade, false, 24u}}},
     {QueryClass::School, {{Num, 0xB3, "Number of Desks (Systemwide):", 0xB4, "%s", 0, 0, nullptr}, {Num, 0xB5, "Number of Students (Systemwide):", 0xB6, "%s", 1, 0, nullptr},
-                          {Num, 0xB7, "Number of Teachers (Systemwide):", 0xB8, "%s", 2, 0, nullptr}, {Band, 0xB9, "Grade (Systemwide):", 0xBA, nullptr, 0, 5, kG5}}},
+                          {Num, 0xB7, "Number of Teachers (Systemwide):", 0xB8, "%s", 2, 0, nullptr}, {Band, 0xB9, "Grade (Systemwide):", 0xBA, nullptr, 0, 5, kGrade, false, 24u}}},
     {QueryClass::College, {{Num, 0xC8, "Capacity:", 0xC9, "%s", 0, 0, nullptr}, {Num, 0xCA, "Students in Attendance:", 0xCB, "%s", 1, 0, nullptr},
-                           {Num, 0xCC, "Number of Professors:", 0xCD, "%s", 2, 0, nullptr}, {Band, 0xCE, "Grade:", 0xCF, nullptr, 0, 5, kG5}}},
+                           {Num, 0xCC, "Number of Professors:", 0xCD, "%s", 2, 0, nullptr}, {Band, 0xCE, "Grade:", 0xCF, nullptr, 0, 5, kGrade, false, 24u}}},
     {QueryClass::Library, {{Num, 0xD4, "Books Systemwide:", 0xD5, "%s", 0, 0, nullptr}, {Num, 0xD6, "Books in Circulation:", 0xD7, "%s", 1, 0, nullptr},
-                           {Band, 0xD8, "Grade:", 0xD9, nullptr, 0, 5, kG5}}},
-    {QueryClass::Museum, {{Num, 0xDE, "Attendance:", 0xDF, "%s (last year)", 0, 0, nullptr}, {Band, 0xE4, "Grade:", 0xE5, nullptr, 0, 5, kG5}}},
-    {QueryClass::Park, {{Num, 0xEA, "Acres Systemwide:", 0xEB, "%s", 0, 0, nullptr}, {Num, 0xEC, "Benches in Use:", 0xED, "%s", 1, 0, nullptr}}},
-    {QueryClass::Zoo, {{Num, 0xEE, "Attendance:", 0xEF, "%s", 0, 0, nullptr}, {Num, 0xF0, "Manure Donated to Parks:", 0xF1, "%s Tons ", 1, 0, nullptr}}},
-    {QueryClass::Ballpark, {{Num, 0xF2, "Little Leaguers:", 0xF3, "%s", 0, 0, nullptr}, {Num, 0x110, "Win - Loss Record:", 0x111, "%d - %d", 1, 0, nullptr}}},
+                           {Band, 0xD8, "Grade:", 0xD9, nullptr, 0, 5, kGrade, false, 24u}}},
+    {QueryClass::Museum, {{Num, 0xDE, "Attendance:", 0xDF, "%s (last year)", 0, 0, nullptr}, {Band, 0xE4, "Grade:", 0xE5, nullptr, 0, 5, kGrade, false, 24u}}},
+    {QueryClass::Park, {{Num, 0xEA, "Acres Systemwide:", 0xEB, "%s", 5, 0, nullptr, false, 0, true}, {Num, 0xEC, "Benches in Use:", 0xED, "%s", 6, 0, nullptr, false, 0, true}}},
+    {QueryClass::Zoo, {{Num, 0xEA, "Acres Systemwide:", 0xEB, "%s", 5, 0, nullptr, false, 0, true}, {Num, 0xEC, "Benches in Use:", 0xED, "%s", 6, 0, nullptr, false, 0, true},
+                       {Num, 0xEE, "Attendance:", 0xEF, "%s", 0, 0, nullptr}, {Num, 0xF0, "Manure Donated to Parks:", 0xF1, "%s Tons ", 1, 0, nullptr}}},
+    {QueryClass::Ballpark, {{Num, 0xEA, "Acres Systemwide:", 0xEB, "%s", 5, 0, nullptr, false, 0, true}, {Num, 0xEC, "Benches in Use:", 0xED, "%s", 6, 0, nullptr, false, 0, true},
+                            {Num, 0xF2, "Little Leaguers:", 0xF3, "%s", 0, 0, nullptr}, {Pair, 0x110, "Win - Loss Record:", 0x111, "%d - %d", 1, 0, nullptr},
+                            {Num, 0x112, "Season Ticket Holders:", 0x113, "%s", 3, 0, nullptr}}},
     {QueryClass::Marina, {{Num, 0xF4, "Boats Berthed:", 0xF5, "%s", 0, 0, nullptr}}},
-    {QueryClass::Landmark, {{Year, 0xF6, "Date Built:", 0xF7, "%s", 0, 0, nullptr}, {Money, 0x118, "Monthly Income:", 0x119, "%s", 1, 0, nullptr}}},
+    {QueryClass::Landmark, {{Year, 0xF6, "Date Built:", 0xF7, "%s", 0, 0, nullptr}, {Money, 0x118, "Monthly Income:", 0x119, "%s", 1, 0, nullptr, false, 0, true}}},
     {QueryClass::Road, {{Band, 0x3C, "Traffic:", 0x3D, nullptr, 0, 5, kU5}}},
     {QueryClass::Rail, {{Band, 0x43, "Rail Usage:", 0x44, nullptr, 0, 5, kU5}}},
     {QueryClass::Subway, {{Band, 0x49, "Rail Usage:", 0x4A, nullptr, 0, 5, kU5}}},
-    {QueryClass::Station, {{Num, 0x37, "Passengers Per Day:", 0x38, "%s", 0, 0, nullptr}, {Band, 0x181, "Service Quality:", 0x182, nullptr, 0, 4, kG4}}},
-    {QueryClass::Airport, {{Band, 0xFE, "Air Traffic:", 0xFF, nullptr, 0, 4, kU4}, {Num, 0x103, "On Time Flights:", 0x104, "%d%%", 0, 0, nullptr}}},
-    {QueryClass::Seaport, {{Band, 0x105, "Port Traffic:", 0x106, nullptr, 0, 4, kU4}}},
+    {QueryClass::Station, {{Num, 0x37, "Passengers Per Day:", 0x38, "%s", 0, 0, nullptr}}},   // service quality (181-185) not traced
+    {QueryClass::Airport, {{Band, 0xFE, "Air Traffic:", 0xFF, nullptr, 0, 4, kU4, false, 8u}, {Num, 0x103, "On Time Flights:", 0x104, "%d%%", 1, 0, nullptr}}},
+    {QueryClass::Seaport, {{Band, 0x105, "Port Traffic:", 0x106, nullptr, 0, 4, kU4, false, 8u}}},
     // Utility "Usage" lines show a number, not a band word (spec 09 6.12); a current capacity of 0 is drawn red.
     {QueryClass::PowerPlant, {{Num, 0x198, "Maximum Power Capacity:", 0x1B7, "%s MW-h/Month", 0, 0, nullptr}, {Num, 0x56, "Current Power Capacity:", 0x57, "%s MW-h/Month", 1, 0, nullptr, true},
                               {Num, 0x58, "Usage:", 0x57, "%s MW-h/Month", 4, 0, nullptr}}},   // "Age (Max)" is the first row of the panel (buildQueryLines)
@@ -88,7 +93,7 @@ const std::vector<Spec>& specsFor(QueryClass c) {
     {QueryClass::WaterTreatment, {{Num, 0x1A2, "Maximum Treatment Capacity:", 0x1A3, "Current Treatment Capacity:", 0, 0, nullptr}, {Band, 0x1A5, "Usage:", 0x1A6, nullptr, 0, 5, kU5}}},
     {QueryClass::Garbage, {{Num, 0x1AB, "Maximum Disposal Capacity:", 0, "%s", 0, 0, nullptr}, {Num, 0x76, "Current Disposal Capacity:", 0x77, "%s Tons/Month", 1, 0, nullptr},
                            {Band, 0x78, "Usage:", 0x79, nullptr, 0, 5, kU5}}},
-        {QueryClass::Recycling, {{Band, 0x1AE, "Citywide Recycling Capacity:", 0x1AF, nullptr, 0, 2, kRec, false, 1}}},
+        {QueryClass::Recycling, {{Band, 0x1AE, "Citywide Recycling Capacity:", 0x1AF, nullptr, 0, 2, kRec, false, 2u}}},
     {QueryClass::NeighbourConn, {{Text, 0x54, "Connected To:", 0x55, nullptr, 0, 0, nullptr}}},
   };
   static const std::vector<Spec> none;
@@ -223,15 +228,22 @@ std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q) {
     Group g;
     for (const Spec& s : specsFor(q.cls)) {
       switch (s.kind) {
-        case Num: { QueryLine l{E.query(s.label, s.fbLabel), num(s.value, s.fbValue, q.v[s.slot])}; l.red = s.redZero && q.v[s.slot] <= 0; g.push_back(l); break; }
-        case Money: g.push_back({E.query(s.label, s.fbLabel), subst(E.query(s.value, s.fbValue), {E.money(q.monthlyIncome)})}); break;
-        case Year: g.push_back({E.query(s.label, s.fbLabel), subst(E.query(s.value, s.fbValue), {std::to_string(q.builtYear)})}); break;
+        case Num: {
+          if (s.hideZero && q.v[s.slot] == 0) break;
+          QueryLine l{E.query(s.label, s.fbLabel), num(s.value, s.fbValue, q.v[s.slot])};
+          l.red = (s.redZero && q.v[s.slot] <= 0) || ((q.redMask >> s.slot) & 1u);
+          g.push_back(l);
+          break;
+        }
+        case Pair: g.push_back({E.query(s.label, s.fbLabel), subst(E.query(s.value, s.fbValue), {fmtNum(q.v[s.slot]), fmtNum(q.v[s.slot + 1])})}); break;
+        case Money: if (!(s.hideZero && q.monthlyIncome == 0)) g.push_back({E.query(s.label, s.fbLabel), subst(E.query(s.value, s.fbValue), {E.money(q.monthlyIncome)})}); break;
+        case Year: g.push_back({E.query(s.label, s.fbLabel), subst(E.query(s.value, s.fbValue), {q.builtDate.empty() ? std::to_string(q.builtYear) : q.builtDate})}); break;
         case Bool: g.push_back({E.query(s.label, s.fbLabel), q.v[s.slot] > 0 ? E.query(s.value, "Yes") : E.query(s.value + 1, "No")}); break;
         case Text: g.push_back({E.query(s.label, s.fbLabel), q.neighbour.empty() ? E.query(s.value, "-") : q.neighbour}); break;
         case Band: {
           int n = s.bands, idx = std::min(n - 1, int(q.band[s.slot]) * n / 256);
           QueryLine l{E.query(s.label, s.fbLabel), band(E, s.value, idx, s.fbBands[idx])};
-          l.red = idx == s.redBand;
+          l.red = (s.redMask >> idx) & 1u;
           g.push_back(l);
           break;
         }
@@ -241,11 +253,11 @@ std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q) {
   };
   auto flavour = [&] {
     Group g;
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < 3; i++)
       if (q.flavour[i]) {
         // Flavour labels come in (label, value-template) pairs of consecutive ids; the value is a made-up number.
         std::string lab = E.query(uint32_t(q.flavour[i]), "");
-        if (!lab.empty()) g.push_back({lab, subst(E.query(uint32_t(q.flavour[i]) + 1, "%s"), {std::to_string(q.flavourValue[i])})});
+        if (!lab.empty()) g.push_back({lab, subst(E.query(uint32_t(q.flavour[i]) + 1, "%s"), {fmtNum(q.flavourValue[i])})});
       }
     return g;
   };
