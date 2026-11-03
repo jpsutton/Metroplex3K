@@ -145,6 +145,10 @@ class Game {
   void gotoScreen(Screen s) { scr_ = s; }
   void setView(int tx, int tz, int zoom);
   const Camera& camera() const { return cam_; }
+  bool startParadeNow();   // the holiday parade (petition 0x12D accepted); tools / tests
+  bool paradeRunning() const { return paradeRunning_; }
+  int paradeX() const { return paradeX_; }
+  int paradeZ() const { return paradeZ_; }
   const QueryInfo& queryInfo() const { return queryInfo_; }   // the last query (tests)
   bool panelsHidden() const { return panelsHidden_; }   // F12
   bool layersDialogOpen() const { return showLayers_; }
@@ -516,6 +520,11 @@ class Game {
   std::array<uint32_t, 12> mapRamp_{}; bool mapRampLoaded_ = false;   // map window base colours (ramp 000005E5:21 row 3)
   void updateZoneTint(bool on);
   void updatePollutedWater();
+  // Parade event (spec 26 5.7): route search, lineup and spectators; the street sim only moves the vehicles.
+  bool startParadeEvent();
+  void paradeTick();
+  bool paradeRunning_ = false; int paradeX_ = 0, paradeZ_ = 0;   // route start of the running parade
+  std::map<uint64_t, int> streetSpawners_;   // (kind, x, z) -> street-sim spawner id, kept across source syncs
   uint64_t pollutedWaterSerial_ = ~0ull;
   std::vector<uint8_t> zoneTint_;
   DataOverlay zoneOverlay_;
@@ -576,6 +585,7 @@ class Game {
     int trafficDensity(int x, int y) const override;
     int groundHeight(int x, int y) const override;
     void gameDate(int& m, int& d) const override { m = month; d = day; }
+    std::vector<std::pair<double, double>> seaRouteFrom(int portId, int x, int y) const override;
     void rebuild();
   };
   std::vector<int> streetSources_;

@@ -76,10 +76,57 @@ int Game::StreetHost::groundHeight(int x, int y) const {
   return std::max(w->altAt(x, y), w->waterAt(x, y)) * 256;
 }
 
+// Sea route of a seaport's ships (spec 26 5.4): a water path from the port's shore to a map edge. The spawner is "not ready" (retries
+// in 6 minutes) when no water edge is reachable. The path is found by breadth-first search over water tiles from the water nearest
+// the port and reduced to its turning points. [INFERRED: the original's route construction is untraced.]
+std::vector<std::pair<double, double>> Game::StreetHost::seaRouteFrom(int, int px, int py) const {
+  std::vector<std::pair<double, double>> route;
+  if (!w || !w->W) return route;
+  const int W = w->W, H = w->H;
+  auto water = [&](int x, int y) { return x >= 0 && y >= 0 && x < W && y < H && isWater(x, y); };
+  std::vector<int> prev(size_t(W) * H, -2);
+  std::vector<int> queue;
+  for (int r = 1; r <= 6 && queue.empty(); r++)   // nearest water to the port, ring by ring
+    for (int dy = -r; dy <= r; dy++)
+      for (int dx = -r; dx <= r; dx++) {
+        if (std::max(std::abs(dx), std::abs(dy)) != r || !water(px + dx, py + dy)) continue;
+        const int i = (py + dy) * W + (px + dx);
+        if (prev[size_t(i)] == -2) { prev[size_t(i)] = -1; queue.push_back(i); }
+      }
+  int goal = -1;
+  for (size_t h = 0; h < queue.size() && goal < 0; h++) {
+    const int i = queue[h], x = i % W, y = i / W;
+    if (x == 0 || y == 0 || x == W - 1 || y == H - 1) { goal = i; break; }
+    static const int d8[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+    for (auto& d : d8) {
+      const int nx = x + d[0], ny = y + d[1];
+      if (!water(nx, ny)) continue;
+      if (d[0] && d[1] && (!water(x + d[0], y) || !water(x, y + d[1]))) continue;   // no corner cutting across land
+      const int ni = ny * W + nx;
+      if (prev[size_t(ni)] != -2) continue;
+      prev[size_t(ni)] = i; queue.push_back(ni);
+    }
+  }
+  if (goal < 0) return route;
+  std::vector<int> path;
+  for (int i = goal; i >= 0; i = prev[size_t(i)]) path.push_back(i);
+  std::reverse(path.begin(), path.end());
+  int pdx = 0, pdy = 0;
+  for (size_t k = 0; k < path.size(); k++) {
+    const int x = path[k] % W, y = path[k] / W;
+    int dx = 0, dy = 0;
+    if (k + 1 < path.size()) { dx = path[k + 1] % W - x; dy = path[k + 1] / W - y; }
+    if (k == 0 || k + 1 == path.size() || dx != pdx || dy != pdy) route.push_back({x + 0.5, y + 0.5});
+    pdx = dx; pdy = dy;
+  }
+  return route;
+}
+
 void Game::setupStreetSim() {
   street_.reset();
   streetHost_.reset();
   streetSources_.clear();
+  streetSpawners_.clear();
   streetSig_ = 0; streetSigSerial_ = ~0ull;   // the first frame builds the sources
   if (!haveData_) return;   // without game data there are no vehicle/people sprites to draw
   if (!automataLoaded_) {
@@ -109,16 +156,140 @@ void Game::syncStreetSources() {
   streetHost_->rebuild();
   street_->removeBuildings(streetSources_);   // one pass; per-id removal was O(n^2), ~34 ms for 6500 sources
   streetSources_.clear();
+  // Timers (ports, airports, marinas, stations) persist across syncs so their intervals and live counts are not reset.
+  std::map<uint64_t, int> spawners;
+  auto spawner = [&](int kind, const Occupant& o) {
+    const uint64_t key = uint64_t(kind) << 48 | uint64_t(uint32_t(o.x)) << 24 | uint64_t(uint32_t(o.z));
+    auto it = streetSpawners_.find(key);
+    int id;
+    if (it != streetSpawners_.end()) { id = it->second; streetSpawners_.erase(it); }
+    else id = kind == 0 ? street_->addSeaport(o.x, o.z) : kind == 1 ? street_->addAirport(o.x, o.z) : kind == 2 ? street_->addMarina(o.x, o.z)
+            : street_->addStation(o.x, o.z, kind == 4);
+    spawners[key] = id;
+  };
   for (const Occupant& o : world_.occupants) {
     if ((o.state & ~0x200u) != 1) continue;
     const OccAttr* a = data_.occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT);
     if (!a) continue;
-    if (a->agentType == 12330) { street_->addSeaport(o.x, o.z); continue; }
-    if (a->agentType == 12310) { street_->addAirport(o.x, o.z); continue; }
-    if (a->agentType == 12230) { street_->addStation(o.x, o.z, false); continue; }
-    if (a->agentType == 12360 || a->agentType == 12361) { street_->addStation(o.x, o.z, true); continue; }
+    if (a->agentType == 14430) spawner(2, o);   // leisure boats (spec 26 5.3); the marina is also an ordinary building
+    if (a->agentType == 12330) { spawner(0, o); continue; }
+    if (a->agentType == 12310) { spawner(1, o); continue; }
+    if (a->agentType == 12230) { spawner(3, o); continue; }
+    if (a->agentType == 12360 || a->agentType == 12361) { spawner(4, o); continue; }
     if (a->pedProdKey.instance || a->vehProdKey.instance) streetSources_.push_back(street_->addBuilding(o.x, o.z, a->pedProdKey, a->vehProdKey));
   }
+  for (auto& kv : streetSpawners_) street_->removeSpawner(kv.second);   // sources that are gone
+  streetSpawners_ = std::move(spawners);
+}
+
+// ---------------------------------------------------------------- parade event (spec 26 5.7)
+
+namespace {
+struct ParadeCfg {
+  int roadTiles = 6, spectators = 3, cost = 100, minAura = 30;
+  int minCount = 8, maxCount = 10;
+  std::vector<int> lead, middle, tail;
+  std::map<int, std::pair<uint32_t, int>> blocks;   // block id -> (VATTRIB, spacing in 1/256 tiles)
+};
+std::vector<int> intList(const std::string& s) {
+  std::vector<int> v; size_t p = 0;
+  while (p < s.size()) { size_t e = s.find(',', p); if (e == std::string::npos) e = s.size(); const std::string t = s.substr(p, e - p); if (!t.empty()) v.push_back(std::atoi(t.c_str())); p = e + 1; }
+  return v;
+}
+}  // namespace
+
+// Starts the holiday parade: pays ParadeCost, searches a straight road run in a spiral from the city centre (every tile a road
+// with aura >= MinAura, at least 3 commercial tiles around the run [INFERRED reading]), builds the lineup from the country's
+// block lists and spawns the vehicles and SpectatorDensity pedestrians per route tile. Returns false when it cannot run.
+bool Game::startParadeEvent() {
+  if (!street_ || !haveData_ || !simReady_) return false;
+  IniFile ini;
+  if (!data_.ini().load("SC3DisasterLayer.ini", ini)) return false;
+  ParadeCfg cfg;
+  auto num = [&](const char* k, int def) { std::string v; return ini.get("ParadeEventTunables", k, v) ? std::atoi(v.c_str()) : def; };
+  cfg.roadTiles = num("RoadTilesRequired", 6); cfg.spectators = num("SpectatorDensity", 3); cfg.cost = num("ParadeCost", 100); cfg.minAura = num("MinAura", 30);
+  for (const auto& kv : ini.section("ParadeEventParadeBlocks")) {
+    const size_t c = kv.second.find(',');
+    if (c == std::string::npos) continue;
+    cfg.blocks[std::atoi(kv.first.c_str())] = {uint32_t(std::strtoul(kv.second.c_str(), nullptr, 0)), std::atoi(kv.second.c_str() + c + 1)};
+  }
+  // Country config by language [INFERRED: the original keys it by the user's country].
+  const std::string lang = data_.language;
+  const char* key = lang.find("UK") != std::string::npos ? "gb" : lang == "German" ? "de" : lang == "Spanish" ? "es" : lang == "Swedish" ? "se" :
+                    lang == "Dutch" ? "nl" : lang.find("Portug") != std::string::npos ? "br" : "us";
+  std::string line;
+  if (!ini.get("ParadeEventParadeConfigs", key, line) && !ini.get("ParadeEventParadeConfigs", "us", line)) return false;
+  {   // M/D:nameString:min,max:lead:middle:tail
+    std::vector<std::string> f; size_t p = 0;
+    while (p <= line.size()) { size_t e = line.find(':', p); if (e == std::string::npos) e = line.size(); f.push_back(line.substr(p, e - p)); p = e + 1; }
+    if (f.size() < 6) return false;
+    const auto mm = intList(f[2]); if (mm.size() == 2) { cfg.minCount = mm[0]; cfg.maxCount = std::max(mm[0], mm[1]); }
+    cfg.lead = intList(f[3]); cfg.middle = intList(f[4]); cfg.tail = intList(f[5]);
+  }
+  if (cfg.lead.empty() || cfg.middle.empty() || cfg.tail.empty()) return false;
+  City& c = sim_.city();
+  if (fundsRef() <= cfg.cost) return false;
+  // Route search.
+  const World& w = world_;
+  int cx = w.W / 2, cz = w.H / 2;
+  c.lvCentre(cx, cz);
+  cx = std::max(2, std::min(w.W - 3, cx)); cz = std::max(2, std::min(w.H - 3, cz));
+  auto roadOk = [&](int x, int z) { return w.inTiles(x, z) && c.hasRoadPiece(x, z) && (c.aura.grid.empty() || c.aura.aura(x, z) >= cfg.minAura); };
+  auto commercial = [&](int x, int z) { if (!w.inTiles(x, z)) return 0; const int zt = w.zone[w.tIdx(x, z)]; return (zt >= 5 && zt <= 7) ? 1 : 0; };
+  int rx0 = -1, rz0 = -1, rx1 = -1, rz1 = -1;
+  const int maxR = std::max(w.W, w.H);
+  for (int r = 0; r <= maxR && rx0 < 0; r++)
+    for (int dz = -r; dz <= r && rx0 < 0; dz++)
+      for (int dx = -r; dx <= r && rx0 < 0; dx++) {
+        if (std::max(std::abs(dx), std::abs(dz)) != r) continue;
+        const int x = cx + dx, z = cz + dz;
+        for (int axis0 = int(rng_.rand(2)), k = 0; k < 2; k++) {
+          const int axis = (axis0 + k) & 1, sx = axis == 0 ? 1 : 0, sz = axis == 0 ? 0 : 1;
+          int comm = 0; bool ok = true;
+          for (int i = 0; i < cfg.roadTiles && ok; i++) {
+            const int tx = x + sx * i, tz = z + sz * i;
+            if (!roadOk(tx, tz)) { ok = false; break; }
+            for (int a = -1; a <= 1; a++) for (int b = -1; b <= 1; b++) comm += commercial(tx + a, tz + b);
+          }
+          if (!ok || comm < 3) continue;
+          int len = cfg.roadTiles;   // extend the run while it stays a road
+          while (roadOk(x + sx * len, z + sz * len) && len < 64) len++;
+          const bool rev = rng_.rand(2) == 1;   // the direction is chosen at random
+          rx0 = rev ? x + sx * (len - 1) : x; rz0 = rev ? z + sz * (len - 1) : z;
+          rx1 = rev ? x : x + sx * (len - 1); rz1 = rev ? z : z + sz * (len - 1);
+          break;
+        }
+      }
+  if (rx0 < 0) return false;
+  // Lineup: one lead, then uniform[min, max] - 1 followers from the middle blocks except the last, from the tail blocks.
+  std::vector<StreetSim::ParadeVehicle> lineup;
+  auto add = [&](const std::vector<int>& list) {
+    const int b = list[rng_.rand(uint32_t(list.size()))];
+    auto it = cfg.blocks.find(b);
+    if (it == cfg.blocks.end()) return;
+    StreetSim::ParadeVehicle v; v.vattrib = it->second.first; v.spacingTiles = it->second.second / 256.0;
+    lineup.push_back(v);
+  };
+  add(cfg.lead);
+  const int total = cfg.minCount + int(rng_.rand(uint32_t(cfg.maxCount - cfg.minCount + 1)));
+  for (int i = 1; i < total; i++) add(i + 1 == total ? cfg.tail : cfg.middle);
+  const double ox = rx0 + 0.5, oz = rz0 + 0.5, ex = rx1 + 0.5, ez = rz1 + 0.5;
+  if (street_->startParade(ox, oz, ex, ez, lineup) == 0) return false;
+  fundsRef() -= cfg.cost;
+  const int n = std::max(std::abs(rx1 - rx0), std::abs(rz1 - rz0)) + 1;
+  const int dx = (rx1 > rx0) - (rx1 < rx0), dz = (rz1 > rz0) - (rz1 < rz0);
+  for (int i = 0; i < n; i++) street_->pointSpawnPedestrians(rx0 + dx * i, rz0 + dz * i, cfg.spectators);   // spectators along the route
+  paradeRunning_ = true; paradeX_ = rx0; paradeZ_ = rz0;
+  return true;
+}
+
+// The parade is over when its last vehicle has finished (how the original ends it is untraced [OPEN]).
+void Game::paradeTick() {
+  if (!paradeRunning_ || !street_) return;
+  if (street_->paradeVehicleCount() > 0) return;
+  paradeRunning_ = false;
+  DisasterOutput out;
+  disasters_.stop(DisasterType::Parade, out);
 }
 
 void Game::streetSimFrame(uint32_t dtMs) {
@@ -171,6 +342,7 @@ void Game::streetSimFrame(uint32_t dtMs) {
   if (!anyBlockingWindow()) {   // cars and trains keep moving while the game is paused (spec 26 [OBSERVED])
     street_->update(int64_t(dtMs) * 1000);
   }
+  paradeTick();
   for (const AutomatonSprite& s : street_->sprites()) {
     SceneSprite sp;
     sp.category = s.category; sp.spriteId = s.spriteId;

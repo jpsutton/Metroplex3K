@@ -515,6 +515,34 @@ static void testOtherAutomata() {
   CHECK(countSounds(ev, SoundEvent::Stop, 140) >= 1);
 }
 
+static void testParadeStart() {
+  AutomataData D; buildData(D);
+  TestHost H; H.density = 0; H.ped = false;
+  StreetSim sim(D, H, StreetSim::Config());
+  AutoView v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
+  sim.setView(v);
+  // Lineup of three vehicles (VATTRIB 7, speed 64000), 1.5 tiles apart, from (1.5, 3.5) to (6.5, 3.5): the followers start behind
+  // the route start and all of them finish at the route end (the parade is then over).
+  std::vector<StreetSim::ParadeVehicle> line(3);
+  for (auto& l : line) { l.vattrib = 7; l.spacingTiles = 1.5; }
+  CHECK(sim.startParade(1.5, 3.5, 6.5, 3.5, line) == 3);
+  CHECK(sim.paradeVehicleCount() == 3);
+  sim.update(1000);
+  auto sp = sim.sprites();
+  CHECK(sp.size() == 3);
+  double minX = 1e9, maxX = -1e9;
+  for (auto& s : sp) { minX = std::min(minX, s.tileX); maxX = std::max(maxX, s.tileX); CHECK(std::fabs(s.tileY - 3.5) < 0.05); }
+  CHECK(maxX > 1.4 && maxX < 1.7 && minX < -1.2);       // lead at the start, the last 3 tiles behind it
+  CHECK(sim.startParade(1, 1, 1, 1, line) == 0);          // empty route: nothing
+  for (int i = 0; i < 400 && sim.paradeVehicleCount() > 0; i++) sim.update(100000);
+  CHECK(sim.paradeVehicleCount() == 0);                   // every vehicle reached the end and was removed
+  // Spawner removal: a removed seaport spawns no more ships.
+  int port = sim.addSeaport(0, 7);
+  sim.removeSpawner(port);
+  for (int i = 0; i < 100; i++) sim.update(100000);
+  CHECK(sim.countKind(AutomatonKind::Boat) == 0);
+}
+
 static void testCallAndParade() {
   AutoView v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
   {  // model 8 runs script 2004: a Call into 2001 (Drive)
@@ -544,5 +572,6 @@ int main() {
   testExitNodeLeavesPiece();
   testOtherAutomata();
   testCallAndParade();
+  testParadeStart();
   TEST_MAIN_END();
 }

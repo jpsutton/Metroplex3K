@@ -692,6 +692,19 @@ void Game::applyCheat(const CheatResult& r) {
   }
 }
 
+// Starts the holiday parade: the disaster layer's parade event plus its vehicles (see startParadeEvent).
+bool Game::startParadeNow() {
+  if (!managersReady_) initManagers();
+  City& c = sim_.city();
+  CityDisasterWorld dw(world_, c);
+  DisasterOutput out;
+  if (!disasters_.startRandom(DisasterType::Parade, dw, inputsFor(c, true, cheats_), out)) return false;
+  applyDisasterOutput(out);
+  if (startParadeEvent()) return true;
+  DisasterOutput o2; disasters_.stop(DisasterType::Parade, o2);   // no route / no data: no parade
+  return false;
+}
+
 bool Game::scenarioActive() const { return scen_ && scen_->active(); }
 
 void Game::startScenarioHooks() {
@@ -773,10 +786,7 @@ void Game::applyPetitionEffect(const PetitionEffect& e) {
       break;
     }
     case PetitionEffect::StartParade: {   // 0x12D accepted: the holiday parade (spec 22 s5.5, 26) runs regardless of the disaster setting
-      if (!managersReady_) initManagers();
-      CityDisasterWorld dw(world_, c);
-      DisasterOutput out;
-      if (disasters_.startRandom(DisasterType::Parade, dw, inputsFor(c, true, cheats_), out)) applyDisasterOutput(out);
+      startParadeNow();
       break;
     }
     default: break;

@@ -1109,6 +1109,22 @@ struct StreetSim::Impl {
     return a;
   }
 
+  static constexpr int kParadeOwner = -77;
+  Auto* spawnParadeVehicle(uint32_t inst, double x, double y, double ex, double ey) {
+    auto vit = D.vattrib.find(inst);
+    if (vit == D.vattrib.end()) return nullptr;
+    Auto* a = create(AutomatonKind::Vehicle);
+    a->va = &vit->second; a->attribInst = inst; a->length = a->va->length; a->owner = kParadeOwner;
+    attachAnim(*a, a->va->anim);
+    a->fx = x; a->fy = y; a->x = x; a->y = y; a->tx = int(std::floor(x)); a->ty = int(std::floor(y));
+    a->dirX = ex - x; a->dirY = ey - y;
+    const double n = std::hypot(a->dirX, a->dirY); if (n > 0) { a->dirX /= n; a->dirY /= n; }
+    a->heading = heading32(a->dirX, a->dirY);
+    a->animSeq = 20;
+    a->beh = Beh::Fly; a->wps = {{ex, ey}}; a->wp = 0;
+    return a;
+  }
+
   Auto* spawnAircraft(uint32_t inst, double x, double y, double tx, double ty, bool heli, int owner, FlyEnd end, bool takeoff) {
     auto vit = D.vattrib.find(inst);
     if (vit == D.vattrib.end()) return nullptr;
@@ -1276,7 +1292,7 @@ struct StreetSim::Impl {
 
   void seaportTick(Spawner& sp) {
     if (!sp.ready) {
-      sp.route = host.seaRoute(sp.id);
+      sp.route = host.seaRouteFrom(sp.id, sp.x, sp.y);
       sp.ready = !sp.route.empty();
       if (!sp.ready) { sp.t.interval = 360000000; return; }
     }
@@ -1662,6 +1678,25 @@ static int addSpawner(StreetSim::Impl& I, int x, int y, int kind) {
 int StreetSim::addSeaport(int x, int y) { return addSpawner(*p_, x, y, 0); }
 int StreetSim::addAirport(int x, int y) { return addSpawner(*p_, x, y, 1); }
 int StreetSim::addMarina(int x, int y) { return addSpawner(*p_, x, y, 2); }
+void StreetSim::removeSpawner(int id) {
+  auto& v = p_->spawners;
+  v.erase(std::remove_if(v.begin(), v.end(), [&](const Spawner& s) { return s.id == id; }), v.end());
+}
+int StreetSim::startParade(double x0, double y0, double x1, double y1, const std::vector<ParadeVehicle>& lineup) {
+  Impl& I = *p_;
+  double dx = x1 - x0, dy = y1 - y0;
+  const double n = std::hypot(dx, dy);
+  if (n <= 0) return 0;
+  dx /= n; dy /= n;
+  int made = 0;
+  double back = 0;
+  for (const ParadeVehicle& v : lineup) {
+    if (I.spawnParadeVehicle(v.vattrib, x0 - dx * back, y0 - dy * back, x1, y1)) made++;
+    back += v.spacingTiles;
+  }
+  return made;
+}
+int StreetSim::paradeVehicleCount() const { int n = 0; for (auto& u : p_->autos) n += u->alive && u->owner == Impl::kParadeOwner; return n; }
 int StreetSim::addStation(int x, int y, bool subway) { return addSpawner(*p_, x, y, subway ? 4 : 3); }
 void StreetSim::addHelipad(int x, int y) { p_->helipads.push_back({x, y}); }
 

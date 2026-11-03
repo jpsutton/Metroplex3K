@@ -189,6 +189,8 @@ class AutomataHost {
   virtual void gameDate(int& month, int& day) const { month = 1; day = 1; }
   // Waypoints (tile coords) a seaport's ships follow; empty = no route (spawner not ready).
   virtual std::vector<std::pair<double, double>> seaRoute(int /*portId*/) const { return {}; }
+  // Same with the port's anchor tile (hosts that find the route from the map override this one).
+  virtual std::vector<std::pair<double, double>> seaRouteFrom(int portId, int /*tileX*/, int /*tileY*/) const { return seaRoute(portId); }
   // City condition codes 4 and 5, and presence of occupant 0x2AFA (ship VCLPROD index bits).
   virtual bool cityCondition(int /*code*/) const { return false; }
   virtual bool hasOccupantType2AFA() const { return false; }
@@ -252,6 +254,13 @@ class StreetSim {
   int addSeaport(int tileX, int tileY);
   int addAirport(int tileX, int tileY);
   int addMarina(int tileX, int tileY);
+  void removeSpawner(int spawnerId);   // seaport / airport / marina / station timer (its live vehicles stay until they finish)
+  // A parade (spec 26 5.7): the event layer picks the route and the lineup; the street sim only moves the vehicles. Vehicle i
+  // starts the sum of the preceding spacings (tiles) behind the route start, facing along the route, and drives to the end
+  // at its VATTRIB speed [INFERRED movement: opcode 200 is untraced]. Returns the number of vehicles created.
+  struct ParadeVehicle { uint32_t vattrib = 0; double spacingTiles = 0; };
+  int startParade(double x0, double y0, double x1, double y1, const std::vector<ParadeVehicle>& lineup);
+  int paradeVehicleCount() const;
   int addStation(int tileX, int tileY, bool subway);   // TRNPROD instance 1 (rail) / 2 (subway)
   void addHelipad(int tileX, int tileY);
   void pointSpawnPedestrians(int tileX, int tileY, int n);  // honoured only on eligible tiles

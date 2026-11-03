@@ -57,6 +57,8 @@ int main(int argc, char** argv) {
       }
       if (!found) std::printf("no building of type %s\n", arg.c_str());
     }
+    else if (op == "parade") { std::printf("parade %s\n", g.startParadeNow() ? "started" : "not started"); if (g.paradeRunning()) g.setView(g.paradeX(), g.paradeZ(), 3); frame(std::atoi(arg.c_str()) > 0 ? std::atoi(arg.c_str()) : 60); }
+    else if (op == "look") { int zm = 3; std::sscanf(arg.c_str(), "%d,%d,%d", &x, &y, &zm); g.setView(x, y, zm); frame(3); }   // look:X,Z[,ZOOM] centres the view on a tile
     else if (op == "dirty") g.setDirty(true);
     else if (op == "fps") g.mutableEngineOptions().showFps = true;   // engine option: frame counter overlay
     else if (op == "shot") writePng(arg, W, H, g.screen());
