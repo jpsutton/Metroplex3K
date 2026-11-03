@@ -6,6 +6,7 @@
 //   * unemployment (spec 20 s6) from the saved valves and cohort shares vs the saved chart sample;
 //   * pump outputs after one water update vs the outputs saved with each pump (property 8351FDF3, high u16).
 //   probe_spec_checks [GAME_DIR] [city-name-substring ...]
+#include <cstddef>
 #include <cmath>
 #include <map>
 #include <cstring>
@@ -37,7 +38,7 @@ int main(int argc, char** argv) {
         size_t i = 0, nd = 0, first = SIZE_MAX;
         for (; i < out.size() && i < rec->data.size(); i++) if (out[i] != rec->data[i]) { nd++; if (first == SIZE_MAX) first = i; }
         std::printf("   pollution record round trip: %s (size %zu vs %zu, %zu bytes differ, first at %zd)\n", out == rec->data ? "identical" : "DIFFERENT",
-                    out.size(), rec->data.size(), nd, first == SIZE_MAX ? ssize_t(-1) : ssize_t(first));
+                    out.size(), rec->data.size(), nd, first == SIZE_MAX ? std::ptrdiff_t(-1) : std::ptrdiff_t(first));
       }
     }
     for (const auto& d : c.neighbours.active)
