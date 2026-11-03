@@ -590,13 +590,32 @@ building-picker window (§6.11); choosing a building there arms a plop tool for 
 
 ## 6. Windows and dialogs
 
+### 6.0 Window placement `[OBSERVED]`
+
+Measured at 800 × 600 and 1024 × 768, using the frame from its white top-left line to its black
+bottom-right line. The position does not depend on other open windows.
+
+| Window | Size | Placement | 800 × 600 | 1024 × 768 |
+|---|---|---|---|---|
+| Budget | 500 × 480 | centred in the city-view area (client minus 96 px right panel and bottom bar) | (102, 32) | (214, 112) |
+| Business deals | 328 × 196 | centred in the client area | (236, 202) | (348, 286) |
+| Preferences | 480 × 472 | centred in the client area | (160, 64) | (272, 148) |
+| Ordinances | 384 × 354 | fixed | (8, 8) | (8, 8) |
+| Meet (advisors) | 383 × 354 | fixed | (8, 8) | (8, 8) |
+| Neighbours | 372 × 445 | fixed | (50, 50) | (50, 50) |
+| View Data (graphs / charts / data maps, §7.1) | 424 × 440 | fixed | (40, 34) | (40, 34) |
+| View City Layers | 296 × 336 | fixed | (32, 32) | (32, 32) |
+
+1280 × 800 was not measured; recommended: the same rules.
+
 ### 6.1 Budget window [STATIC]
 
 `[OBSERVED]` (shipped city, February 2067, 1024 × 768).
 
-* **Placement** `[OBSERVED]` (800 × 600, no other window open): the frame is exactly 500 × 480 px
-  with its top-left at (102, 32) of the client area. The same position is used when another window
-  is open.
+* **Placement** `[OBSERVED]`: the frame is exactly 500 × 480 px. It is centred in the city-view
+  area, which is the client area minus the right control panel (96 px wide) and the bottom bar
+  (56 px tall at 800 × 600, 64 px tall at 1024 × 768). That gives (102, 32) at 800 × 600 and
+  (214, 112) at 1024 × 768. Other open windows do not change the position. See §6.0.
 * **Layout.** A modal panel about 500 × 480 px with two tabs, **Expenditures** and **Income**.
   Top-left is a caption box (`<year> Budget` / `<Month> <year>`). The columns are Adjust,
   Yr. To Date Expense, Year End Estimate and Meet Advisor.
@@ -707,7 +726,16 @@ appear: `HOMELESS_SHELTER_PERCENT`, `EARTHQUAKE_PREP_BUILDINGS`, `TOURIST_PROMOT
 
 `[OBSERVED]` (800 × 600, new city, January 2000, population 0):
 
-* **Frame.** 384 × 354 px with its top-left at (8, 8) of the client area. There is **no close box**.
+* **Frame.** 384 × 354 px with its top-left at (8, 8) of the client area, at 800 × 600 and at
+  1024 × 768. There is **no close box**.
+* **Strings.** The title is `029541F4:76`. The header row uses `1C2` ("Ordinance") and `1C3`
+  ("Current Monthly Cost"), and the footer uses `1C4` ("Monthly Total"). The original does not
+  display `1C1` ("Review Ordinances") in this window.
+* **Fonts.** Advisor bands, the header row and the footer use the small bold dialog font in dark
+  blue; the band text is not the large title font. Ordinance names use the small **regular**
+  font. Costs are right-aligned.
+* **Cost column.** A row that is not enacted shows the cost it would have if enacted, in grey. At
+  population 0 that is −§1, not §0.
 * **Title bar.** About 30 px tall, with the title in the large title font.
 * **Header row.** "Ordinance" on the left and "Current Monthly Cost" on the right.
 * **List box.** From about (4, 62) to (372, 285) relative to the frame, with a vertical scroll bar
@@ -740,6 +768,12 @@ appear: `HOMELESS_SHELTER_PERCENT`, `EARTHQUAKE_PREP_BUILDINGS`, `TOURIST_PROMOT
 
 ### 6.4 Business deals window [STATIC]
 
+`[OBSERVED]` The window is opened by the Business Deals row button on the budget's Income tab.
+It is 328 × 196 px, centred in the client area (§6.0), with no close box and an OK button.
+Each deal row shows the building's display name from `Sc3StringsBuildings`, for example
+`A1096A4F:1F48` "Maximum Security Prison" and `A1096A4F:1F55` "Toxic Waste Conversion Plant".
+It does not show an internal name.
+
 Title `029541F4:1FE`. Lists current business deals (`1D0`) with each deal's monthly contribution
 (`13E`) and the total (`239`); a "finance briefing" (`23A`) text from the financial advisor.
 Business-deal offers arrive as petitioners (§6.6) when the triggering reward buildings become
@@ -770,8 +804,8 @@ petitioner's reaction field). [STATIC; reaction choice rule in `22`]
 
 ### 6.7 Neighbours window and neighbour deals [STATIC]
 
-`[OBSERVED]` (800 × 600): the frame is 372 × 445 px with its top-left at (50, 50) of the client
-area. It has a close box. On opening, the first neighbour (here the north-west one) is selected:
+`[OBSERVED]` (800 × 600 and 1024 × 768): the frame is 372 × 445 px with its top-left at (50, 50)
+of the client area. It has a close box. On opening, the first neighbour (here the north-west one) is selected:
 its diamond has a red outline and its name is in the City field.
 
 Opened by Review ▸ Neighbors (`630288E9`, toggle). Title `029541F4:117`; a map with up to four
@@ -1348,6 +1382,30 @@ chat client and network file-transfer dialogs; they are an optional online featu
 
 ### 7.1 Map / data-view window [STATIC]
 
+`[OBSERVED]` There is **one** View Data window for data maps, charts and graphs. It is opened by
+the control panel's Adjust & Review ▸ View Data button, or by Ctrl+M. It is 424 × 440 px at
+(40, 34) of the client area (§6.0).
+
+* **Mode strip.** A vertical strip of 12 icon buttons runs down the left edge and selects the
+  mode; the title changes with it.
+  * Ten data maps, top to bottom: Aura, Crime, Density, Power, Flammability, Land Value,
+    Pollution, Traffic and Transportation, Water Supply, Zones (titles `111`–`11C`, e.g. "Aura
+    Data Map").
+  * After a gap: Charts (`183`) and Graphs (`184`).
+* **Data map mode.**
+  * The whole city is drawn as a large diamond filling the right part of the window, with a
+    compass rose at the top left.
+  * At the bottom left is a "Use As Map" (`2D4`) toggle button.
+  * At the bottom right is a legend: a vertical gradient between the "Good" (`127`) and "Bad"
+    (`129`) labels.
+* **Charts mode.** The chart sits at the top. Below it are the two caption lines. Below those,
+  centred, is a column of five radio buttons: Education, Health, Population, Electricity,
+  Garbage. There are no tab buttons.
+* **Graphs mode.** See §7.3.
+
+The View City Layers dialog of §7.2, with its check boxes, is a different, smaller window. The
+neighbours map is not part of the View Data window.
+
 Opened by Review ▸ Map view (command `411164F1`, toggle) and by the bottom-bar "layer views"
 button (`225872FE:A7`). Title `029541F4:269` ("view city layers"). It shows a mini-map of the whole
 city (frame image `000005E5:2F`/`30`/`32`/`34`, 356×189) with a column of data-map buttons
@@ -1407,7 +1465,7 @@ layer-value → row quantisation is [OPEN] (`25-rendering.md` §9.2 suggests row
 
 ### 7.3 Graphs window [STATIC]
 
-`[OBSERVED]` At 800 × 600 the frame is 424 × 440 px with its top-left at (40, 34) of the client area. It has a close box; Esc does not close it.
+`[OBSERVED]` This is a mode of the View Data window of §7.1, not a separate window: 424 × 440 px at (40, 34), with a close box. Esc closes it. Layout: the plot area is at the top right of the icon strip. Each checked series is drawn as one line, with its name and current value at the line's right end. Below the plot is a 3-column grid of check boxes (Approval Rating, Residents, Land Value, City Size, Unemployment / Pollution, Education, Traffic, Commerce, Nat'l Pop, Water % / Crime, Health, Funds, Industry, Power %). Below that, at the bottom right, are the 1 Year / 10 Years / 100 Years radio buttons. The defaults checked are City Size, Funds and Power %. There is no separate legend column and no push buttons for the range.
 
 Title `029541F4:184` (also `160`). Series (check-box list, any combination shown at once):
 city size `161`, residents `162`, commerce `163`, industry `164`, national population `165`,
