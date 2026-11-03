@@ -1142,23 +1142,26 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     const bool surface = ground && sp->T <= 3 * Hh;
     (surface ? flat : statics).push_back(it);
     if (!cs || !fr) return;
-    // Scripted overlay (SprInstCLSID 0x7315): the base image has a hole the script's frames fill, so draw
-    // the first frame even when animation is off. These records do not use the a * AnimSetCount layout.
+    // Scripted overlays (SprInstCLSID 0x7315): the base image has holes that the scripts' frames fill, so draw the
+    // first frame even when animation is off. A record can hold several scripts for the same zoom and orientation
+    // (the water plant has two: the pond and the pad beside it), each at its own offset. These records do not use the
+    // a * AnimSetCount layout.
     if (!cs->scripts.empty()) {
       int slot = z;
       if (cs->zoomCount < 5) slot = z - (5 - cs->zoomCount);
       int orient = (cs->zoomSetCount >= 4 && cs->rotCount == 4) ? ((rot + cam.rot) & 3) : 0;
-      const CsScript* scr = cs->script(slot, orient);
-      if (!scr) return;
-      int idx = scr->start + (opt.animTick >= 0 ? opt.animTick % scr->count : 0);
-      if (idx < 0 || idx >= int(cs->frames.size())) return;
-      const CsFrame& of = cs->frames[size_t(idx)];
-      const SpriteImage* os = getSprite(of.category, of.spriteId);
-      if (!os) return;
-      Item ov = it;
-      ov.spr = os; ov.dbl = of.flags == 2; ov.pickable = false;
-      ov.ax += scr->offX; ov.ay += scr->offY;
-      statics.push_back(ov);
+      for (const CsScript& scr : cs->scripts) {
+        if (scr.zoom != slot || scr.orient != orient) continue;
+        int idx = scr.start + (opt.animTick >= 0 ? opt.animTick % scr.count : 0);
+        if (idx < 0 || idx >= int(cs->frames.size())) continue;
+        const CsFrame& of = cs->frames[size_t(idx)];
+        const SpriteImage* os = getSprite(of.category, of.spriteId);
+        if (!os) continue;
+        Item ov = it;
+        ov.spr = os; ov.dbl = of.flags == 2; ov.pickable = false;
+        ov.ax += scr.offX; ov.ay += scr.offY;
+        statics.push_back(ov);
+      }
       return;
     }
     // Animated overlay frame (spec 7): extra frame drawn over the base image.
