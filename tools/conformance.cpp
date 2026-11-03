@@ -161,6 +161,7 @@ int main(int argc, char** argv) {
   std::map<std::string, long> magicByExt;
   long magicTotal = 0, ixfOpened = 0, ixfFailed = 0;
   long strFiles = 0, strRecords = 0, strShort = 0, strBadFiles = 0;
+  std::map<std::string, long> strByFolder, occByFolder;   // breakdowns for the rows that disagree with the spec's counts
   Counter sii, siiPartial, sprites, uiImages, bmps, fonts, saves, snrFiles, snrScripts, ssc, bld, batDat, occ, cs, pak, pakEntries;
   std::map<std::string, long> spriteKinds;
   Counter scriptsParsed;
@@ -386,7 +387,7 @@ int main(int argc, char** argv) {
       uint32_t t = e.key.type;
       if (t == T_STRING && avail >= 4) {
         uint32_t len = rd32(ptr);
-        if (len <= avail - 4) { strRecords++; fileStrings++; if (declared == len) strShort++; }
+        if (len <= avail - 4) { strRecords++; fileStrings++; if (inText) { const size_t p = lrel.find("res/text/") + 9; strByFolder[lrel.substr(p, lrel.find('/', p) - p)]++; } if (declared == len) strShort++; }
         else { strBadFiles++; rep.fail("string record overruns: " + rel); }
       }
       if (t == T_SPRITE_IMAGE && inSprites) {
@@ -410,6 +411,7 @@ int main(int argc, char** argv) {
       if ((t == T_OCC_ATTR || t == T_OCC_ATTR_PORT) && !isSave) {
         OccAttr a = parseOccAttr(ptr, std::min<size_t>(avail, declared ? declared : avail));
         occ.add(a.valid);
+        { const size_t sl = lrel.rfind('/'); occByFolder[(inSprites ? "sprite archive " : "") + (sl == std::string::npos ? lrel : lrel.substr(0, sl))]++; }
       }
       if (t == T_CSATTRIB && !isSave) {
         CsAttrib c = parseCsAttrib(ptr, std::min<size_t>(avail, declared ? declared : avail));
@@ -431,6 +433,8 @@ int main(int argc, char** argv) {
   rep.row("UI images (62B9DA24)", num(uiImages.ok) + " of " + num(uiImages.total()), "729 of 729", uiImages.ok == 729 && uiImages.fail == 0);
   rep.row("Loose BMP files", num(bmps.ok) + " of " + num(bmps.total()), "677 of 677", bmps.ok == 677 && bmps.fail == 0);
   rep.row(".FBF fonts", num(fonts.ok) + " of " + num(fonts.total()), "56 of 56", fonts.ok == 56 && fonts.fail == 0);
+  for (const auto& kv : strByFolder) rep.row("  string records in text folder " + kv.first, num(kv.second), "-", true, false);
+  for (const auto& kv : occByFolder) rep.row("  TKB1 records in " + kv.first, num(kv.second), "-", true, false);
   rep.row("Occupant attribute records (TKB1)", num(occ.ok) + " of " + num(occ.total()), "1,530 of 1,530", occ.ok == 1530 && occ.fail == 0);
   rep.row("Composite sprite records (00006300)", num(cs.ok) + " of " + num(cs.total()), "1,425 of 1,425", cs.ok == 1425 && cs.fail == 0);
   rep.row("SYS.PAK: files / entries", num(pak.ok) + " / " + num(pakEntries.ok) + " of " + num(pakEntries.total()), "1 / 51 of 51",

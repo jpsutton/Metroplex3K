@@ -5,7 +5,10 @@
 //
 // Groups: l0 (runs the sibling `conformance --strict`), l1 (save round trips), l2 (network re-tiling vs stored pieces),
 // audio (every .xa decodes and is not silent, every .FSC parses), scn (every .SNR scenario loads and runs, the goals window and
-// the end screen open), l3 (480-day runs vs the observed saves in REFDIR, files named W5_<City>_sNN.sc3), shots.
+// the end screen open), l3 (480-day runs vs the observed saves in REFDIR, files named W5_<City>_sNN.sc3), terrain (REFDIR/QBS_*.sc3
+// with a sibling QBS_*.txt of key=value lines seed, difficulty, hills, water, trees, flags: our generator vs the original's terrain),
+// shots. `--skip P1,P2` ignores saves whose file name starts with a prefix (default W5_,Obs,T_,QBS_: files the player or the
+// observation runs added to the install).
 // Prints one PASS / FAIL / INFO row per check (name, found, expected) and exits 1 when any check FAILs. `--report` also writes the
 // rows as tab-separated text. `--shots OUTDIR` renders the fixed scene list of spec 28 6 at 800x600, 1024x768 and 1280x800 to PNG
 // files plus manifest.tsv (no pass/fail: compare them with screenshots of the original).
@@ -19,6 +22,7 @@
 #include <set>
 #include <sstream>
 #include "core/audio.h"
+#include "core/terrain_gen.h"
 #include "core/tiler.h"
 #include "core/world_network_map.h"
 #include "core/xa_codec.h"
@@ -35,6 +39,8 @@ namespace {
 struct Row { std::string group, name, found, expected, status; };
 std::vector<Row> g_rows;
 std::string g_group;
+std::vector<std::string> g_skip = {"W5_", "Obs", "T_", "QBS_"};
+bool skipped(const fs::path& p) { const std::string n = p.filename().string(); for (const auto& k : g_skip) if (n.compare(0, k.size(), k) == 0) return true; return false; }
 
 void row(const std::string& name, const std::string& found, const std::string& expected, bool pass) {
   g_rows.push_back({g_group, name, found, expected, pass ? "PASS" : "FAIL"});
@@ -102,7 +108,7 @@ void groupL1(const fs::path& root) {
   int total = 0, stable = 0, sameWorld = 0, identical = 0;
   for (const fs::path& p : filesWithExt(root, {".sc3", ".st3", ".sct"})) {
     Bytes file;
-    if (!readFileBytes(p, file)) continue;
+    if (skipped(p) || !readFileBytes(p, file)) continue;
     total++;
     try {
       World a = loadCity(file);
@@ -134,6 +140,7 @@ void groupL2(const fs::path& root) {
   std::vector<std::pair<long, long>> agg(4);
   int cities = 0;
   for (const fs::path& path : findCities(root, {})) {
+    if (skipped(path)) continue;
     if (!s.load(path)) { row("load " + path.filename().string(), "failed", "loads", false); continue; }
     cities++;
     const TilingRuleSet& rules = s.game.city().config().tiling;
@@ -256,6 +263,67 @@ void groupL3(const fs::path& root, const fs::path& ref) {
   }
 }
 
+// ---------------------------------------------------------------- terrain
+// Our generator against a terrain the original generated (issue #52): altitude, water surface and sea level must match exactly;
+// the flora layer is compared too and, when it differs, broken down so the cause can be found.
+void groupTerrain(const fs::path& ref) {
+  if (ref.empty() || !fs::is_directory(ref)) { info("terrain references", "no --ref directory given: terrain skipped"); return; }
+  int n = 0;
+  for (const auto& e : fs::directory_iterator(ref)) {
+    const std::string name = e.path().filename().string();
+    if (name.compare(0, 4, "QBS_") != 0 || lower(e.path().extension().string()) != ".sc3") continue;
+    fs::path txt = e.path(); txt.replace_extension(".txt");
+    Bytes param, file;
+    if (!readFileBytes(txt, param) || !readFileBytes(e.path(), file)) { row("terrain " + name, "no sibling .txt or unreadable", "seed/difficulty/hills/water/trees/flags", false); continue; }
+    std::map<std::string, long> kv;
+    { std::istringstream is(std::string(param.begin(), param.end())); std::string line;
+      while (std::getline(is, line)) { const size_t q = line.find('='); if (q != std::string::npos) kv[line.substr(0, q)] = std::strtol(line.c_str() + q + 1, nullptr, 0); } }
+    n++;
+    World ref0;
+    try { ref0 = loadCity(file); } catch (const std::exception& ex) { row("terrain " + name, std::string("load throws: ") + ex.what(), "loads", false); continue; }
+    TerrainGenOptions o;
+    o.seed = uint32_t(kv.count("seed") ? kv["seed"] : 1); o.difficulty = int(kv.count("difficulty") ? kv["difficulty"] : 1);
+    o.hills = int(kv.count("hills") ? kv["hills"] : 64); o.water = int(kv.count("water") ? kv["water"] : 64);
+    o.trees = int(kv.count("trees") ? kv["trees"] : 64); o.flags = int(kv.count("flags") ? kv["flags"] : 0x24);
+    World gen; generateTerrain(gen, ref0.W, ref0.H, o);
+    long altSame = 0, watSame = 0;
+    const size_t vn = std::min(gen.alt.size(), ref0.alt.size());
+    for (size_t i = 0; i < vn; i++) { altSame += gen.alt[i] == ref0.alt[i]; watSame += gen.water[i] == ref0.water[i]; }
+    row("terrain " + name + " altitude grid", str(altSame) + " of " + str(long(ref0.alt.size())), "all", gen.alt.size() == ref0.alt.size() && altSame == long(ref0.alt.size()));
+    row("terrain " + name + " water surface grid", str(watSame) + " of " + str(long(ref0.water.size())), "all", gen.water.size() == ref0.water.size() && watSame == long(ref0.water.size()));
+    row("terrain " + name + " sea level", str(gen.seaLevel) + " vs " + str(ref0.seaLevel), "equal", gen.seaLevel == ref0.seaLevel);
+    long same = 0, oursOnly = 0, theirsOnly = 0, kindDiff = 0;
+    std::map<std::pair<int, int>, long> confusion;
+    std::map<std::string, long> oursOnlyWhere;
+    std::vector<std::string> sample;
+    const size_t tn = std::min(gen.flora.size(), ref0.flora.size());
+    for (size_t i = 0; i < tn; i++) {
+      const int a = gen.flora[i], b = ref0.flora[i];
+      if (a == b) { same++; continue; }
+      confusion[{a, b}]++;
+      const int x = int(i) / ref0.H, z = int(i) % ref0.H;
+      if (a && !b) {
+        oursOnly++;
+        int lo = 255, hi = 0, wet = 0;
+        for (int d = 0; d < 4; d++) { const int vx = x + (d & 1), vz = z + (d >> 1); const int al = ref0.alt[ref0.vIdx(vx, vz)]; lo = std::min(lo, al); hi = std::max(hi, al); wet += ref0.water[ref0.vIdx(vx, vz)] > al; }
+        oursOnlyWhere[wet ? "a corner under water" : (hi - lo) > 3 ? "slope > 3" : (x == 0 || z == 0 || x == ref0.W - 1 || z == ref0.H - 1) ? "map edge" : "flat dry land"]++;
+      } else if (!a && b) theirsOnly++; else kindDiff++;
+      if (sample.size() < 8) sample.push_back("(" + str(x) + "," + str(z) + ") ours " + str(a) + " theirs " + str(b));
+    }
+    row("terrain " + name + " flora layer", str(same) + " of " + str(long(ref0.flora.size())) + " cells equal", "all", gen.flora.size() == ref0.flora.size() && same == long(ref0.flora.size()));
+    if (same != long(ref0.flora.size())) {
+      info("flora differences", "ours only " + str(oursOnly) + ", original only " + str(theirsOnly) + ", both but different cell " + str(kindDiff));
+      for (const auto& w : oursOnlyWhere) info("  ours-only cells on: " + w.first, str(w.second));
+      std::vector<std::pair<long, std::pair<int, int>>> top;
+      for (const auto& c : confusion) top.push_back({c.second, c.first});
+      std::sort(top.rbegin(), top.rend());
+      for (size_t i = 0; i < top.size() && i < 10; i++) info("  cell ours -> original", str(top[i].second.first) + " -> " + str(top[i].second.second) + " : " + str(top[i].first));
+      for (const auto& sm : sample) info("  sample", sm);
+    }
+  }
+  if (n == 0) info("terrain references", "no QBS_*.sc3 + QBS_*.txt in " + ref.string());
+}
+
 // ---------------------------------------------------------------- shots
 void groupShots(const fs::path& root, const fs::path& outDir) {
   std::error_code ec;
@@ -306,10 +374,11 @@ int main(int argc, char** argv) {
     if (a == "--ref") ref = next();
     else if (a == "--report") report = next();
     else if (a == "--shots") shotsDir = next();
+    else if (a == "--skip") { g_skip.clear(); std::istringstream is(next()); std::string g; while (std::getline(is, g, ',')) if (!g.empty()) g_skip.push_back(g); }
     else if (a == "--only") { std::istringstream is(next()); std::string g; while (std::getline(is, g, ',')) only.insert(g); }
     else { std::fprintf(stderr, "unknown argument %s\n", a.c_str()); return 2; }
   }
-  if (needInstall(root, "probe_verify GAME_DIR [--ref REFDIR] [--only l0,l1,l2,audio,scn,l3] [--report out.tsv] [--shots OUTDIR]")) return 2;
+  if (needInstall(root, "probe_verify GAME_DIR [--ref REFDIR] [--only l0,l1,l2,audio,scn,l3,terrain] [--skip PREFIXES] [--report out.tsv] [--shots OUTDIR]")) return 2;
   auto want = [&](const char* g) { return only.empty() || only.count(g); };
   struct G { const char* name; std::function<void()> run; };
   const G groups[] = {
@@ -319,6 +388,7 @@ int main(int argc, char** argv) {
       {"audio", [&] { groupAudio(root); }},
       {"scn", [&] { groupScenarios(root); }},
       {"l3", [&] { groupL3(root, ref); }},
+      {"terrain", [&] { groupTerrain(ref); }},
   };
   for (const G& g : groups)
     if (want(g.name)) { g_group = g.name; std::printf("== %s\n", g.name); g.run(); }

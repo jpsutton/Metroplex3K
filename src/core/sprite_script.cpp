@@ -22,7 +22,7 @@ void checkWindow(const CsScript& sc, ScriptRun& run, int dateMD) {
 void execOne(const CsScript& sc, ScriptRun& run, int64_t nowMs, int j, AnimRng& rng, int dateMD, bool freeze) {
   const int n = int(sc.ops.size());
   if (!n) return;
-  if (run.step >= n) run.step = 0;
+  if (run.step < 0 || run.step >= n) run.step = 0;   // a Goto / date-window target outside the script restarts it
   for (int guard = 0; guard < n + 1 && sc.ops[size_t(run.step)].kind == ScriptOp::Label; guard++) {
     run.step++;
     if (run.step >= n) run.step = 0;

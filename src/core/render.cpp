@@ -184,6 +184,9 @@ void Renderer::setTileTint(int x, int z, uint8_t row) {
 
 void Renderer::setWorld(const World* w, GameData* data) {
   world_ = w; data_ = data; shadeValid_ = false; itemsValid_ = false; terrainLayerValid_ = false; itemCacheValid_ = false; ++itemsGen_;
+  // Running building animations hold pointers into the mounted set's CsAttrib records, which are freed when another city's sets are
+  // mounted: drop them with the world (a stale entry with the same key crashed in stepScript after loading a second city).
+  anim_.clear(); animSelSig_ = 0; animCands_.clear();
   tint_.clear(); pollutedWater_.clear(); siteCache_.clear(); bldIniTried_ = false; bldIniOk_ = false;
   for (int i = 0; i < 5; i++) { back_[i] = Image(); backTried_[i] = false; }
   pal_ = TerrainPalettes(); palOverride_ = false;
