@@ -244,7 +244,8 @@ Leaving the current city: [STATIC]
   want to save the game?" with Yes/No/Cancel (`209E6378:C0`, `C2`, `B6`). Yes saves, No exits, and
   Cancel aborts.
 * Which UI entry points pass *ask to save* = false was not traced. [OBSERVED] Closing the window
-  shows "Now leaving" and no save prompt, even after the city has been running.
+  shows "Now leaving", and after OK the save prompt follows when a city is open. Implement *ask to
+  save* = true for window close, quit hotkeys, menu Exit, New and Load.
 
 Scenario end screens (`23-scenarios.md`): status `041F2625:4`/`5`, greeting `3`, completion `7`,
 results `25`, buttons replay `8`, another scenario `9`, main menu `A`.
