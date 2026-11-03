@@ -159,6 +159,18 @@ int main() {
   CHECK(!s.isRoadTile(15, 40) && s.isRoadTile(25, 40));
   CHECK(c.traffic->liveSurface(15, 40) == 0 && c.traffic->rec().snapSurface[size_t(15) * 96 + 40] == 0);
   CHECK(c.traffic->liveSurface(25, 40) == 90);
+  // A protected ("historical", state bit 0x200) building is refused: the quote is invalid and nothing is removed or charged.
+  {
+    const int pi = s.occupantAt(43, 31);
+    CHECK(pi >= 0);
+    w.occupants[size_t(pi)].state |= 0x200u;
+    CHECK(!c.quoteBulldoze(43, 31, 43, 31).valid);
+    const int64_t before = s.funds;
+    c.bulldoze(42, 30, 45, 33);
+    CHECK(s.occupantAt(43, 31) == pi && s.funds == before);
+    w.occupants[size_t(pi)].state &= ~0x200u;
+    CHECK(c.quoteBulldoze(43, 31, 43, 31).valid);
+  }
   CHECK(c.bulldoze(42, 30, 45, 33));   // plant
   CHECK(s.occupantAt(43, 31) < 0);
   for (int d = 0; d < 40; d++) s.tickDay();

@@ -660,6 +660,20 @@ void testQuery() {
   QueryInfo rc; rc.name = "Recycling Center"; rc.cls = QueryClass::Recycling; rc.band[0] = 200;
   for (auto& l : buildQueryLines(h.E, rc)) if (l.label == "Citywide Recycling Capacity:") CHECK(l.value == "Inadequate" && l.red);
 
+  // Reason rows after Zone Type: empty zoned tile (code 0: "Planets not aligned"), abandoned building ("Lack of chocolate sprinkles").
+  QueryInfo ez; ez.zoneCode = 15; ez.reasonRow = true;
+  auto RE = rowsOf(ez); CHECK(RE.size() == 10 && RE[3] == "Reason for Lack of Development:");
+  CHECK(has(ez, "Reason for Lack of Development:", "Planets not aligned"));
+  ez.reasonCode = 15; CHECK(has(ez, "Reason for Lack of Development:", "No water"));
+  QueryInfo ab; ab.name = "House"; ab.cls = QueryClass::Zoned; ab.zoneCode = 1; ab.status = QsAbandoned; ab.reasonRow = true;
+  auto RA = rowsOf(ab); CHECK(RA[3] == "Reason for Abandonment:" && has(ab, "Reason for Abandonment:", "Lack of chocolate sprinkles"));
+  ab.reasonCode = 4; CHECK(has(ab, "Reason for Abandonment:", "No power"));
+  QueryInfo fn; fn.name = "House"; fn.cls = QueryClass::Zoned; fn.zoneCode = 1; CHECK(rowsOf(fn).size() == 9);   // functional: no reason row
+  // Neighbour connection: "Connected To:" first, then the normal network rows.
+  QueryInfo nb; nb.name = "Road"; nb.cls = QueryClass::Road; nb.neighbour = "Berlin";
+  auto RN = rowsOf(nb); CHECK(RN.size() == 4 && RN[0] == "Connected To:" && RN[1] == "Elevation:" && RN[3] == "Traffic:");
+  CHECK(has(nb, "Connected To:", "Berlin"));
+
   // Road: Elevation | Traffic. Rail: Elevation | Rail Usage. Power line: Elevation, Powered. Landfill zone: Elevation | Capacity, Usage.
   QueryInfo road; road.name = "Road"; road.cls = QueryClass::Road; road.band[0] = 200;
   auto R4 = rowsOf(road);

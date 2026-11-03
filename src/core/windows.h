@@ -471,6 +471,8 @@ struct QueryInfo {
   bool canReplace = false;           // the occupant is in [ReplaceableBuildings]: shows the Replace button
   int flavourValue[2] = {};          // made-up number shown by each flavour line
   int landfillCapacity = 0, landfillUsage = 0;   // landfill zone rows: tons citywide, percent full
+  int reasonCode = 0;                // stored per-tile reason code (spec 09 6.12.2): 1-8 abandonment, 9-18 lack of development, 0 = none stored
+  bool reasonRow = false;            // show the "Reason for ..." row (empty zoned tile, abandoned building)
   int ageYears = -1, maxAgeYears = -1;           // "Age (Max)" of ageing utilities (-1 = not shown)
 };
 // One panel row. label and value empty = the blank row between groups. red = the value is drawn red ("No", "Hazardous").

@@ -181,6 +181,23 @@ std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q) {
     return QueryLine{E.query(8, "Land Value:"), E.query(landValueBandId(q.landValue), kLV[idx])};
   };
   auto zone = [&] { return QueryLine{E.query(0xE, "Zone Type:"), zoneName(E, q.zoneCode)}; };
+  // Reason rows (spec 09 6.12.2): strings of SEStringsUI (041F2625). Code -> value id; 1-8 abandonment, 9-18 lack of development.
+  auto reason = [&] {
+    static const struct { int code; uint32_t id; const char* fb; } rs[] = {
+        {1, 0x2CB, "Radiation levels are too high"}, {2, 0x2C3, "Land value is too low"}, {3, 0x2C7, "Lack of demand for this zone"},
+        {4, 0x2C8, "No power"}, {5, 0x2C9, "No water"}, {6, 0x2CA, "Poor transportation to other zones"}, {7, 0x2C4, "Pollution levels are too high"},
+        {8, 0x2C5, "Lack of chocolate sprinkles"}, {9, 0x2CC, "Zone is too small"}, {10, 0x2CB, "Radiation levels are too high"},
+        {11, 0x2CD, "No demand for low land value"}, {12, 0x2CE, "No demand for high land value"}, {13, 0x2C7, "Lack of demand for this zone"},
+        {14, 0x2C8, "No power"}, {15, 0x2C9, "No water"}, {16, 0x2CA, "Poor transportation to other zones"}, {17, 0x2CF, "Zone is not on a coast line"},
+        {18, 0x2D1, "Planets not aligned"}};
+    const bool abandoned = (q.status & QsAbandoned) != 0;
+    int code = q.reasonCode;
+    if (code <= 0 || code > 18) code = abandoned ? 8 : 18;   // nothing stored: "Lack of chocolate sprinkles" / "Planets not aligned"
+    const auto& r = rs[code - 1];
+    const bool aband = code <= 8;
+    return QueryLine{E.se(aband ? 0x2C1 : 0x2C2, aband ? "Reason for Abandonment:" : "Reason for Lack of Development:"), E.se(r.id, r.fb)};
+  };
+  auto neighbourRow = [&] { return QueryLine{E.query(0x54, "Connected To:"), q.neighbour}; };
   auto crime = [&] {
     int idx = q.crime <= 0 ? 0 : q.crime < 47 ? 1 : q.crime < 84 ? 2 : q.crime < 122 ? 3 : q.crime <= 150 ? 4 : 5;
     return QueryLine{E.query(0x1B, "Crime:"), E.query(crimeBandId(q.crime), kCrime[idx])};
@@ -235,25 +252,41 @@ std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q) {
 
   std::vector<Group> groups;
   switch (tg) {
-    case Target::Zoned:
-      groups.push_back({elevation(), landValue(), zone(), powered(), watered(), crime(), flammability(), airPollution(), waterPollution()});
+    case Target::Zoned: {
+      Group g{elevation(), landValue(), zone()};
+      if (q.reasonRow) g.push_back(reason());
+      g.insert(g.end(), {powered(), watered(), crime(), flammability(), airPollution(), waterPollution()});
+      groups.push_back(g);
       break;
+    }
     case Target::Flora:
       groups.push_back({elevation(), landValue(), zone(), powered(), watered(), flammability(), airPollution(), waterPollution()});
       break;
-    case Target::Wall: case Target::Bare:
-      groups.push_back({elevation(), landValue(), zone(), powered(), watered(), crime(), flammability(), airPollution(), waterPollution()});
+    case Target::Wall: case Target::Bare: {
+      Group g{elevation(), landValue(), zone()};
+      if (q.reasonRow) g.push_back(reason());
+      g.insert(g.end(), {powered(), watered(), crime(), flammability(), airPollution(), waterPollution()});
+      groups.push_back(g);
       break;
+    }
     case Target::Water:
       groups.push_back({depth(), airPollution(), waterPollution()});
       break;
-    case Target::Road: case Target::Rail:
-      groups.push_back({elevation()});
+    case Target::Road: case Target::Rail: {
+      Group g;
+      if (!q.neighbour.empty()) g.push_back(neighbourRow());   // a connection to a neighbour city (map edge piece)
+      g.push_back(elevation());
+      groups.push_back(g);
       groups.push_back(classRows());
       break;
-    case Target::PowerLine:
-      groups.push_back({elevation(), powered()});
+    }
+    case Target::PowerLine: {
+      Group g;
+      if (!q.neighbour.empty()) g.push_back(neighbourRow());
+      g.push_back(elevation()); g.push_back(powered());
+      groups.push_back(g);
       break;
+    }
     case Target::Landfill:
       groups.push_back({elevation()});
       groups.push_back({QueryLine{E.query(0x10C, "Capacity Citywide:"), num(0x10D, "%s Tons", q.landfillCapacity)},
@@ -323,23 +356,25 @@ std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q) {
 }
 
 // ---- picture ------------------------------------------------------------------------------------------------------------------------
-// The thumbnail renderer's zoom is [OPEN] (spec 09 6.12.1). The observed boxes (3x3 industry 98 x 79, coal plant 130 x 110) match
-// the building sprites of zoom slot 2, so that slot is used for every picture.
-constexpr int kQueryPictureSlot = 2;
+// The thumbnail zoom is [INFERRED] (spec 09 6.12.2): the largest zoom whose image fits in about 128 x 135 px. The observed
+// boxes (4x4 plant 130, 3x3 industry 98, 1x1 tall building 66 x 83, flora 102 x 135) agree with it. The fit allows a few pixels.
+constexpr int kQueryPictureMaxW = 132, kQueryPictureMaxH = 135;
 
 bool queryPictureSprite(GameData* gd, const ResKey& appearance, uint32_t& cat, uint32_t& id, bool& dbl) {
   if (!gd || !appearance.type) return false;
   const CsAttrib* cs = gd->csattrib(appearance);
   if (!cs || !cs->valid || cs->zoomCount <= 0) return false;
-  for (int slot = std::min(kQueryPictureSlot, cs->zoomCount - 1); slot >= 0; slot--) {
+  bool have = false;
+  for (int slot = cs->zoomCount - 1; slot >= 0; slot--) {
     const CsFrame* f = cs->frame(0, slot, 0);
     if (!f) continue;
     const SpriteImage* sp = gd->sprite(f->category, f->spriteId);
     if (!sp || sp->img.empty()) continue;
-    cat = f->category; id = f->spriteId; dbl = f->flags == 2;
-    return true;
+    const int k = f->flags == 2 ? 2 : 1;
+    cat = f->category; id = f->spriteId; dbl = k == 2; have = true;   // smallest zoom is the fallback
+    if (sp->img.w * k <= kQueryPictureMaxW && sp->img.h * k <= kQueryPictureMaxH) return true;
   }
-  return false;
+  return have;
 }
 
 QueryWindow::Layout QueryWindow::layoutFor(const WinEnv& E, const QueryInfo& q) const {

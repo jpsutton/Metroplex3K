@@ -182,6 +182,14 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
     }
     if (q.cls == QueryClass::Road || q.cls == QueryClass::Rail || q.cls == QueryClass::Subway)
       q.band[0] = uint8_t(c.trafficDensityAt(x, z));   // usage band of the panel from the live traffic load
+    // Neighbour connection: a network piece on the map edge names the neighbour city of that side (spec 09 6.12.2).
+    if (named && (q.cls == QueryClass::Road || q.cls == QueryClass::Rail || q.cls == QueryClass::PowerLine)) {
+      const int side = NeighbourDeals::edgeNeighbour(x, z, w.W, w.H);
+      if (side >= 0 && c.neighbours.neighbours[side].exists) q.neighbour = c.neighbours.neighbours[side].cityName;
+    }
+    // Empty zoned tile (not landfill): the "Reason for Lack of Development" row. The stored per-tile reason code is not kept by
+    // the growth simulation yet [OPEN], so the code-0 default shows.
+    if (q.cls == QueryClass::None && q.zoneCode != 0 && q.zoneCode != 17) q.reasonRow = true;
     if (q.cls == QueryClass::None && q.zoneCode == 17) {   // landfill zone tile: capacity and usage of the landfill store
       q.cls = QueryClass::LandfillZone; q.name = "Landfill";
       q.landfillCapacity = int(std::min<int64_t>(c.pollution.disp.store.D, 2000000000));
@@ -221,6 +229,7 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   q.cls = classify(par, o->agentType, plant);
   if (q.cls == QueryClass::WaterBuilding || q.cls == QueryClass::WaterTreatment) q.canReplace = false;   // utilities have no Replace (spec 09 6.12.2)
   if (q.status & QsDestroyed) q.cleanupCost = c.budget.specialCost(12);
+  q.reasonRow = q.cls == QueryClass::Zoned && ostate == 2;   // abandoned: "Reason for Abandonment" (stored code not kept yet [OPEN])
   q.growable = q.cls == QueryClass::Zoned && (ostate == 1 || ostate == 2);   // Make Historical: abandoned zoned buildings too
   if (q.cls == QueryClass::Zoned && ostate == 2) q.canReplace = false;           // but no Replace on an abandoned one
   q.showPower = true;

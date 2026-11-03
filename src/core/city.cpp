@@ -1114,7 +1114,7 @@ City::Quote City::quoteBulldoze(int x0, int z0, int x1, int z1) const {
     for (int z = z0; z <= z1; z++) {
       if (!inMap(x, z)) continue;
       size_t i = idx(x, z);
-      if (occ_[i] >= 0) kill.insert(occ_[i]);
+      if (occ_[i] >= 0 && !(world_->occupants[size_t(occ_[i])].state & 0x200u)) kill.insert(occ_[i]);   // the bulldozer refuses protected (historical) buildings
       if (transport_[i] || powerLine_[i]) tiles++;
       if (world_->flora[i]) q.valid = true;
     }
@@ -1545,7 +1545,7 @@ bool City::bulldoze(int x0, int z0, int x1, int z1) {
     for (int z = z0; z <= z1; z++) {
       if (!inMap(x, z)) continue;
       size_t i = idx(x, z);
-      if (occ_[i] >= 0) kill.insert(occ_[i]);
+      if (occ_[i] >= 0 && !(world_->occupants[size_t(occ_[i])].state & 0x200u)) kill.insert(occ_[i]);   // protected buildings are refused (spec 09 6.12.2)
       if (transport_[i]) netTiles[transport_[i]].push_back({x, z});
       if (powerLine_[i]) netTiles[3].push_back({x, z});
       if (world_->flora[i]) { world_->flora[i] = 0; any = true; }
