@@ -78,6 +78,7 @@ int main(int argc, char** argv) {
                    "Render caches (default on): $M3K_TERRAIN_CACHE=0 / $M3K_ITEM_CACHE=0 turn off the cached background + terrain\n"
                    "layer / the cached sprite draw list. The GPU city needs the terrain cache and turns itself off without it.\n"
                    "Sim thread (default on): $M3K_SIM_THREAD=0 runs the sim day tick on the frame thread instead of a worker thread.\n"
+                   "Terrain noise: seeded from the clock like the original; $M3K_NOISE_SEED=N pins it (reproducible captures).\n"
                    "Frame log: --frame-log FILE or $M3K_FRAMELOG=FILE writes a per-frame timing CSV and prints a summary on exit.\n";
       return 0;
     }
@@ -115,6 +116,10 @@ int main(int argc, char** argv) {
 
   std::srand(uint32_t(SDL_GetTicks()));
   Game game;
+  {   // time-seeded terrain noise like the original (spec 25 6.3); $M3K_NOISE_SEED pins it for reproducible captures
+    const char* ns = std::getenv("M3K_NOISE_SEED");
+    game.seedTerrainNoise(ns && *ns ? uint32_t(std::strtoul(ns, nullptr, 0)) : uint32_t(std::chrono::steady_clock::now().time_since_epoch().count()));
+  }
   if (!langArg.empty()) game.setLanguage(langArg);
   fs::path root = gameArg.empty() ? detectGameRoot(exeDirOf(argv[0])) : findGameRoot(gameArg);
   std::string err;

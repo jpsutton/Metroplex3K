@@ -683,6 +683,12 @@ uint32_t City::kindOf(const NetPiece& p) const {
   return 1u;
 }
 
+bool City::pieceInKind(uint32_t pieceId, NetworkKind k) const {
+  if (!cfg_.haveTiling) return k == NetworkKind::Rail ? pieceId >= 1000 : k == NetworkKind::Power ? pieceId == kFallbackPowerPiece : true;
+  const int nk = k == NetworkKind::Rail ? NK_RAIL : k == NetworkKind::Power ? NK_POWER : k == NetworkKind::Highway ? NK_HIGHWAY : NK_ROAD;
+  return cfg_.tiling.inSet(netKindToTable(nk), pieceId);
+}
+
 void City::classifyNetwork() {
   size_t N = size_t(world_->W) * world_->H;
   transport_.assign(N, 0); powerLine_.assign(N, 0); pipe_.assign(N, 0); subway_.assign(N, 0);

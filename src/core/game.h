@@ -100,6 +100,9 @@ class Game {
 
   // Startup options.
   const std::string& language() const { return data_.language; }
+  // Terrain noise tables: the original seeds them from the system time at start-up (spec 25 6.3 [STATIC]); the desktop host does
+  // the same. Headless tools and tests keep the fixed default seed so their output is reproducible.
+  void seedTerrainNoise(uint32_t seed) { renderer_.setNoiseSeed(seed); invalidateCityView(); }
   void setLanguage(const std::string& name) { languageRequest_ = name; }   // before init(); empty = from the OS locale
   void setPersistence(bool on) { persist_ = on; }        // settings / prefs file (default on)
   void setIntroEnabled(bool on) { introEnabled_ = on; }  // default on

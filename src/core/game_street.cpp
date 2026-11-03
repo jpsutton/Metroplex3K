@@ -20,7 +20,13 @@ bool Game::StreetHost::pieceAt(int x, int y, AutoNet k, PieceRef& out) const {
   if (!w || !w->inTiles(x, y) || piece.empty()) return false;
   int i = piece[w->tIdx(x, y)];
   if (i < 0) return false;
-  if (k == AutoNet::Rail && w->surface[i].pieceId < 1000) return false;   // crude: rail pieces are not distinguished here
+  // Rail vehicles use rail pieces (crossings included); road vehicles road or highway pieces; walkers anything but a bare power line.
+  const uint32_t id = w->surface[i].pieceId;
+  if (c) {
+    if (k == AutoNet::Rail && !c->pieceInKind(id, NetworkKind::Rail)) return false;
+    if (k == AutoNet::Road && !c->pieceInKind(id, NetworkKind::Road) && !c->pieceInKind(id, NetworkKind::Highway)) return false;
+    if (k == AutoNet::Walk && c->pieceInKind(id, NetworkKind::Power) && !c->pieceInKind(id, NetworkKind::Road) && !c->pieceInKind(id, NetworkKind::Rail)) return false;
+  } else if (k == AutoNet::Rail && id < 1000) return false;
   out.pieceId = w->surface[i].pieceId; out.rotation = w->surface[i].rot;
   return true;
 }
