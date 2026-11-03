@@ -731,11 +731,20 @@ Observed behaviour `[OBSERVED]`:
   the route of `12-networks.md` §6.2, stair-step included.
 * **Zone drag preview:** the rectangle is tinted translucently in the zone's colour (light green for
   residential).
-* **Query hover:** with the Query tool armed, the whole sprite of the building under the cursor gets
-  a translucent light-blue highlight, not only its footprint tiles. The following were not traced
-  statically: the colour, the blend, whether it covers only opaque pixels, how it treats child
-  sprites, how it treats empty ground and networks, and whether Dispatch uses the same highlight.
-  [OPEN]
+* **Query hover:** with the Query tool armed, the object under the cursor is tinted. [OBSERVED,
+  measured from 16-bit screen captures of the original]
+  * **Building:** the whole building sprite, including its lot, is tinted per pixel. Only opaque
+    sprite pixels change; there is no bounding box.
+  * **Anything else** (bare ground, water, road/rail pieces, trees): one tile is tinted. The flat
+    tile diamond and any flora sprite on that tile are tinted together.
+  * **Blend:** out ≈ 0.5·in + 0.5·C per channel. The fitted keep factor is 0.46–0.49 per channel,
+    with a fit error of about 2/255. C ≈ RGB (0, 130, 176), a light blue/cyan. Example: white
+    (247,247,239) → (115,186,206); dark grey (41,36,41) → (16,81,115).
+* **Occupied target (placement tool)** uses the same mechanism and blend factor, with
+  C ≈ RGB (212, 30, 33) (red). It covers every building in the planned footprint plus the
+  footprint ground tiles. [OBSERVED]
+* Dispatch tools could not be tested: they are disabled without an active emergency. It is also
+  unconfirmed whether child sprites (§7.2) are tinted with their parent. [OPEN]
 * **Occupied target:** hovering a placement tool over an existing building tints that building's
   sprite red.
 * **Cost label:** a small box with a white background and a 1-pixel black border, showing `§` and the
