@@ -371,8 +371,9 @@ The occupant manager saves occupant instances, not this subsystem. The full byte
   4 under construction, 8 destroyed (rubble), 16 fire-damaged (ashes), 32 eaten (crops; §6)
   [DATA values; meanings from `SC3BuildingLayer.ini`]. Bit 0x200 is an independent **protected**
   flag (shipped values 513, 514, 516): a zone developer never selects a lot that contains a building
-  with this flag for redevelopment or replacement, whatever its state [STATIC]. Which events set
-  the flag is `[OPEN]`. `15-sim-growth.md` §4 uses these definitions. Construction progress, age and
+  with this flag for redevelopment or replacement, whatever its state [STATIC]. The flag is set
+  and cleared by the query panel's **Make Historical** check box (`09-ui-screens.md` §6.12.2). It
+  survives state changes, and the bulldozer refuses protected buildings [STATIC][OBSERVED]. `15-sim-growth.md` §4 uses these definitions. Construction progress, age and
   condition of zoned buildings are **not** stored per occupant. Only this state word is stored.
 * **Name**: a player-given name, saved only when it differs from the type's default name.
 * **Build date** (year, day of year): saved only by classes that age, namely power plants, water

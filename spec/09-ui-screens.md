@@ -1087,9 +1087,74 @@ There is no cursor change over the panel and no open/close animation. [OBSERVED]
 Correction to the §6.12.1 controls table: utility buildings such as water towers have **no**
 Replace button. Power plants, recycling centres and civic/service buildings do.
 
-**Picture scale:** the thumbnail renderer's zoom and scale rule is [OPEN]. Recommended: render the
-occupant at zoom 2 (32 px tile width). The observed boxes (4 × 4 plant 130 px wide, 3 × 3 industry
-98 px) fit zoom 2.
+**Picture scale:** the thumbnail renderer's zoom choice is [OPEN]. Zoom is **not** fixed:
+* a 4 × 4 plant gives 130 px, which matches zoom 2;
+* a 3 × 3 industry gives 98 px, which matches zoom 2;
+* a 1 × 1 tall building gives 66 × 83, which matches zoom 3;
+* 1 × 1 flora gives 98 × 97 and 102 × 135, which match zoom 3–4.
+
+Recommended [INFERRED]: use the largest zoom whose image fits in about 128 px of width and about
+135 px of height.
+
+**Make Historical flag** [STATIC][OBSERVED]:
+* The box shows, and OK writes, bit **0x200** of the occupant state word: the "protected" flag of
+  `13-buildings-occupants.md` §3. It is not one of the two per-occupant save booleans.
+* Effects of the flag:
+  * the zone developer never picks the lot for redevelopment or replacement (`13` §3);
+  * when growth changes the building's state (occupied ↔ abandoned and so on), the bit is carried
+    over into the new state word;
+  * an abandoned protected building is skipped by the developer's abandoned-lot handling;
+  * the **bulldozer refuses it**: the hover tint is red instead of cyan, and a click does nothing
+    and charges nothing.
+* Disasters ignore the flag.
+
+**Reason rows on zoned tiles** [STATIC]: strings are in table `041F2625` (`SEStringsUI.IXF`). Labels:
+`2C1` "Reason for Abandonment:" and `2C2` "Reason for Lack of Development:". The value comes from a
+**stored per-tile reason code** that the growth simulation keeps for the zone. It is not random at
+query time. Code → (label, value):
+
+| Code | Label | Value |
+|---|---|---|
+| 1 | 2C1 | 2CB Radiation levels are too high |
+| 2 | 2C1 | 2C3 Land value is too low |
+| 3 | 2C1 | 2C7 Lack of demand for this zone |
+| 4 | 2C1 | 2C8 No power |
+| 5 | 2C1 | 2C9 No water |
+| 6 | 2C1 | 2CA Poor transportation to other zones |
+| 7 | 2C1 | 2C4 Pollution levels are too high |
+| 8 | 2C1 | 2C5 Lack of chocolate sprinkles |
+| 9 | 2C2 | 2CC Zone is too small |
+| 10 | 2C2 | 2CB Radiation levels are too high |
+| 11 | 2C2 | 2CD No demand for low land value |
+| 12 | 2C2 | 2CE No demand for high land value |
+| 13 | 2C2 | 2C7 Lack of demand for this zone |
+| 14 | 2C2 | 2C8 No power |
+| 15 | 2C2 | 2C9 No water |
+| 16 | 2C2 | 2CA Poor transportation to other zones |
+| 17 | 2C2 | 2CF Zone is not on a coast line |
+| 18 | 2C2 | 2D1 Planets not aligned |
+
+When the row is shown:
+* only on zoned tiles;
+* on an **empty** zoned tile: always shown, and code 0 shows 2C2 + 2D1;
+* on a tile with a building: only if the building is **abandoned**, and code 0 shows 2C1 + 2C5;
+* occupied (functional) buildings get no reason row.
+
+The row is placed directly after Zone Type. Which growth step writes each code is not traced; it
+belongs to `15-sim-growth.md` [OPEN]. Recommended: the developer stores the reason for its last
+refusal on the tile (codes 9–18) and the abandonment cause when it abandons (codes 1–8).
+
+**Neighbour connection** [STATIC]:
+* A network piece on the map edge that is a neighbour connection adds the line `54` "Connected
+  To:" with value `55` = the neighbour city's name. That name is taken from the neighbour on the
+  piece's side: x = 0 → side 0; y = max → side 3; x = max → side 2; otherwise (y = 0) → side 1.
+* After it come the piece's normal network lines (Elevation | Traffic or Rail Usage). Layout type
+  1.
+
+**Remaining targets** [INFERRED; not observed]:
+* Airport zone tile: the same rows as the seaport zone tile above, with Zone Type "Airport".
+* Pumping station: the same rows as the water tower.
+* Highway on-ramp: like Highway, with the piece's own name.
 
 ### 6.13 Snapshots (Unlimited edition) [STATIC]
 
