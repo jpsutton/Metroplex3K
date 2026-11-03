@@ -1152,7 +1152,9 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
       int orient = (cs->zoomSetCount >= 4 && cs->rotCount == 4) ? ((rot + cam.rot) & 3) : 0;
       for (const CsScript& scr : cs->scripts) {
         if (scr.zoom != slot || scr.orient != orient) continue;
-        int idx = scr.start + (opt.animTick >= 0 ? opt.animTick % scr.count : 0);
+        // Each frame lasts scr.ms milliseconds (the animation tick is 67 ms, so counting ticks ran 200 ms frames 3x fast).
+        const int64_t elapsedMs = opt.animTick >= 0 ? int64_t(opt.animTick) * kAnimTickMs : 0;
+        int idx = scr.start + (scr.ms > 0 ? int((elapsedMs / scr.ms) % scr.count) : 0);
         if (idx < 0 || idx >= int(cs->frames.size())) continue;
         const CsFrame& of = cs->frames[size_t(idx)];
         const SpriteImage* os = getSprite(of.category, of.spriteId);

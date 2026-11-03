@@ -86,6 +86,9 @@ struct RenderScene {
   CostLabel cost;
 };
 
+// Length of one animation tick in milliseconds (RenderOptions::animTick counts these; ~15 Hz).
+constexpr int kAnimTickMs = 67;
+
 struct RenderOptions {
   bool grid = false;
   bool objects = true;

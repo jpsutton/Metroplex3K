@@ -495,7 +495,7 @@ class Game {
   bool simDayThisFrame_ = false;   // set by tickSim; street sync skips that frame
   int animTick_ = 0;
   uint32_t animAccMs_ = 0;
-  static constexpr uint32_t kAnimPeriodMs = 67;   // ~15 Hz; matches automata::kAnimTickUs
+  static constexpr uint32_t kAnimPeriodMs = uint32_t(kAnimTickMs);   // ~15 Hz; matches automata::kAnimTickUs
   int shake_ = 0;
   int sweepMinute_ = 0;
   uint32_t newsClickX_ = 0;
