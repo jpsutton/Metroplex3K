@@ -357,7 +357,7 @@ class Renderer : public ICityRasterizer {
   void drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs = 0, int xe = 1 << 30);
   void collectTerrainTris(const Camera& cam, const RenderOptions& opt, std::vector<GpuTerrainTri>& out);
   void drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs = 0, int xe = 1 << 30);
-  void drawEdgeFaces(const Camera& cam, int y0, int y1, int xs = 0, int xe = 1 << 30);
+  void drawEdgeFaces(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs = 0, int xe = 1 << 30);
   void drawPreviews(const Camera& cam, const RenderScene& scene);
   void drawFallbackBoxes(const Camera& cam);   // data-less demo: coloured boxes instead of sprites
   void buildItems(const Camera& cam, const RenderOptions& opt, const RenderScene* scene);

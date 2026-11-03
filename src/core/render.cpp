@@ -681,7 +681,7 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, 
           if (!gentle) tintRow = 52;
         }
         bool dry[4], anyDry = false, allDry = true;
-        for (int i = 0; i < 4; i++) { dry[i] = alt[i] > wat[i]; anyDry |= dry[i]; allDry &= dry[i]; }
+        for (int i = 0; i < 4; i++) { dry[i] = opt.underground || alt[i] > wat[i]; anyDry |= dry[i]; allDry &= dry[i]; }  // underground: no water surface, no shoreline
         int tintCol[3] = {0, 0, 0};
         if (tintRow) {
           basicTint(tintRow, tintCol);
@@ -845,7 +845,7 @@ void Renderer::collectTerrainTris(const Camera& cam, const RenderOptions& opt, s
           if (!gentle) tintRow = 52;
         }
         bool dry[4], anyDry = false, allDry = true;
-        for (int i = 0; i < 4; i++) { dry[i] = alt[i] > wat[i]; anyDry |= dry[i]; allDry &= dry[i]; }
+        for (int i = 0; i < 4; i++) { dry[i] = opt.underground || alt[i] > wat[i]; anyDry |= dry[i]; allDry &= dry[i]; }  // underground: no water surface, no shoreline
         int tintCol[3] = {0, 0, 0};
         if (tintRow) basicTint(tintRow, tintCol);
         if (tintRow)
@@ -933,7 +933,7 @@ void Renderer::drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int 
       int tx0 = std::min(std::min(wx[0], wx[1]), std::min(wx[2], wx[3])), tz0 = std::min(std::min(wz[0], wz[1]), std::min(wz[2], wz[3]));
       if (!w.inTiles(tx0, tz0)) continue;
       bool dry[4], anyDry = false, allDry = true;
-      for (int i = 0; i < 4; i++) { dry[i] = alt[i] > wat[i]; anyDry |= dry[i]; allDry &= dry[i]; }
+      for (int i = 0; i < 4; i++) { dry[i] = opt.underground || alt[i] > wat[i]; anyDry |= dry[i]; allDry &= dry[i]; }
       float py[4] = {gy[0], gy[1], gy[2], gy[3]};
       if (anyDry && !allDry) {
         for (int i = 0; i < 4; i++) if (!dry[i]) py[i] = qy[i] - float(wat[i]) * A;
@@ -950,7 +950,7 @@ void Renderer::drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int 
 // Map-edge faces (spec 6.5)
 // ======================================================================================
 
-void Renderer::drawEdgeFaces(const Camera& cam, int y0, int y1, int xs, int xe) {
+void Renderer::drawEdgeFaces(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs, int xe) {
   const World& w = *world_;
   const int z = cam.zoom;
   const float Wt = 8.f * float(1 << z), Ht = Wt / 2, A = float(1 << z);
@@ -974,7 +974,7 @@ void Renderer::drawEdgeFaces(const Camera& cam, int y0, int y1, int xs, int xe) 
     float topY = std::min(s0[0], s0[1]) - 255 * A;
     if (topY > y1) return;
     int seed = seedFor(std::min(wx[0], w.W - 1), std::min(wz[0], w.H - 1));
-    bool waterPart = wat[0] > alt[0] || wat[1] > alt[1];
+    bool waterPart = !opt.underground && (wat[0] > alt[0] || wat[1] > alt[1]);  // no water surface underground
     if (waterPart) {
       float Q[4][5];
       float ymin = 1e9f;
@@ -1834,7 +1834,7 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
           std::fill(fb_.begin() + ptrdiff_t(y) * fbW_ + std::max(0, xs), fb_.begin() + ptrdiff_t(y) * fbW_ + std::min(fbW_, xe), 0xFF302820u);
         if (opt.background) drawBackground(zoom, ya, yb, xs, xe);
         drawTerrain(cam, opt, ya, yb, xs, xe);
-        if (opt.edgeFaces) drawEdgeFaces(cam, ya, yb, xs, xe);
+        if (opt.edgeFaces) drawEdgeFaces(cam, opt, ya, yb, xs, xe);
       };
       // Exposed rows span the full width; the exposed columns cover the remaining rows.
       const int ry0 = sdy > 0 ? 0 : fbH_ + sdy, ry1 = sdy > 0 ? sdy : fbH_;
@@ -1857,10 +1857,10 @@ void Renderer::render(const Camera& cam, const RenderOptions& opt, const RenderS
       if (opt.terrain) {
         if (gpuTerrain) {
           if (opt.grid) drawTerrainGrid(cam, opt, y0, y1);
-          if (opt.edgeFaces) drawEdgeFaces(cam, y0, y1);
+          if (opt.edgeFaces) drawEdgeFaces(cam, opt, y0, y1);
         } else {
           drawTerrain(cam, opt, y0, y1);
-          if (opt.edgeFaces) drawEdgeFaces(cam, y0, y1);
+          if (opt.edgeFaces) drawEdgeFaces(cam, opt, y0, y1);
         }
       }
       if (layerStore) std::memcpy(terrainLayer_.data() + rowOff, fb_.data() + rowOff, rowN * sizeof(uint32_t));
