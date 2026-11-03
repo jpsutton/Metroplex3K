@@ -10,6 +10,7 @@
 //   game_scenario.cpp scenario controller (separate TU: scenario.h clashes with news.h names)
 #pragma once
 #include <functional>
+#include <array>
 #include <map>
 #include <set>
 #include <memory>
@@ -303,6 +304,7 @@ class Game {
     int64_t funds = 0;
     Valve valveR, valveC, valveI;
     std::string neighbourName;
+    std::array<std::string, 4> neighbourNames;   // slots 0..3
   };
   HudSnap liveHud() const;
   const HudSnap& hudNow();                 // live when the sim is idle, else the last published snapshot
@@ -502,6 +504,7 @@ class Game {
   bool isReplaceableOccupant(uint32_t occId);   // in [ReplaceableBuildings] (Replace button of the query panel)
   std::set<uint32_t> replaceableOcc_; bool replaceableLoaded_ = false;
   void buildZoneOverlay();
+  std::array<uint32_t, 12> mapRamp_{}; bool mapRampLoaded_ = false;   // map window base colours (ramp 000005E5:21 row 3)
   void updateZoneTint(bool on);
   std::vector<uint8_t> zoneTint_;
   DataOverlay zoneOverlay_;

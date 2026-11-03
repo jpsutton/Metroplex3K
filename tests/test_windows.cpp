@@ -1,5 +1,6 @@
 // Headless tests for the in-game windows (windows*.cpp): drive each window with scripted Input clicks
 // (controls are found through WinEnv::spots) and assert the events and the subsystem edits.
+#include <set>
 #include <cmath>
 #include <functional>
 #include "core/windows.h"
@@ -590,6 +591,16 @@ void testPicker() {
 }
 
 // ---------------------------------------------------------------- query
+void testNeighbourTokens() {
+  TextContext tc; tc.neighbour = "Deal City";
+  tc.neighbours[0] = "A"; tc.neighbours[1] = "B"; tc.neighbours[2] = "C"; tc.neighbours[3] = "D";
+  CHECK(expandTokens("%NEIGHBOR%", tc) == "Deal City");          // the message's neighbour
+  std::set<std::string> seen;
+  for (int i = 0; i < 400; i++) seen.insert(expandTokens("%ANYNEIGHBOR%", tc));   // uniformly random slot, drawn per expansion
+  CHECK(seen.size() == 4 && seen.count("A") && seen.count("D"));
+  TextContext none; CHECK(expandTokens("%ANYNEIGHBOR%", none) == "Neighbour");    // no slot names: the fallback
+}
+
 void testQuery() {
   Harness h;
   CHECK(landValueBandId(0) == 0x1C0 && landValueBandId(40) == 9 && landValueBandId(255) == 0xD);
@@ -1106,6 +1117,7 @@ int main() {
   testScenarioGoals();
   testPicker();
   testQuery();
+  testNeighbourTokens();
   testMapWindow();
   testCityLayers();
   testDialogDrag();

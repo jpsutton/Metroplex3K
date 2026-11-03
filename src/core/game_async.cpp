@@ -23,6 +23,7 @@ Game::HudSnap Game::liveHud() const {
   const cal::Date d = const_cast<Game*>(this)->city().clock.date();
   h.month = d.month; h.day = d.day; h.clockYear = d.year;
   h.neighbourName = const_cast<Game*>(this)->city().neighbours.neighbours[0].cityName;
+  for (int i = 0; i < 4; i++) h.neighbourNames[size_t(i)] = const_cast<Game*>(this)->city().neighbours.neighbours[i].cityName;
   return h;
 }
 

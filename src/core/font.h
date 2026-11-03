@@ -38,7 +38,8 @@ class Font {
 struct TextContext {
   std::string mayor = "Mayor", city = "City";
   int population = 0, year = 2000;
-  std::string neighbour = "Neighbour";
+  std::string neighbour = "Neighbour";            // %NEIGHBOR%: the neighbour the message concerns (a deal's neighbour, or the topic's slot)
+  std::string neighbours[4];                      // names of neighbour slots 0..3 (%ANYNEIGHBOR% draws one of them at random)
 };
 std::string expandTokens(const std::string& s, const TextContext& c);
 std::string groupDigits(long long v);  // 1,234,567

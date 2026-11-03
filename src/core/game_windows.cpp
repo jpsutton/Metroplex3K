@@ -38,6 +38,7 @@ WinEnv Game::env() {
   E.tc.population = simReady_ || scr_ == Screen::InCity ? hs.pop : 0;
   E.tc.year = scr_ == Screen::InCity ? hs.clockYear : nc_year_;
   if (!hs.neighbourName.empty()) E.tc.neighbour = hs.neighbourName;
+  for (int i = 0; i < 4; i++) E.tc.neighbours[i] = hs.neighbourNames[size_t(i)];   // %ANYNEIGHBOR% draws one of the four slots
   E.currency = "$";
   E.spots = spotSink_;
   return E;
@@ -276,7 +277,9 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
         int kind = pollutionKind >= 0 ? pollutionKind : mapWin_.pollutionKind;
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
           int v = kind == 0 ? c.pollution.airAt(x, z) : kind == 1 ? c.pollution.waterAt(x, z) : c.pollution.standingGarbageAt(x, z);
-          at(x, z) = clampB(v / 128);
+          // Air / water: the cell amount against MaxAir/WaterPolluteForUI (11000), byte = min(255, v * 256 / 11000) (spec 25 9.2
+          // recommendation, [OPEN] in the original); garbage keeps its own scale.
+          at(x, z) = kind <= 1 ? clampB(v * 256 / 11000) : clampB(v / 128);
         }
         break;
       }
@@ -297,11 +300,21 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
     return buf.get();
   };
   src.baseColour = [this](int x, int z) -> uint32_t {
+    // Land and water come from row 3 of the map ramp image 000005E5:21, column k by height above the water (spec 25 9.2).
     if (!world_.inTiles(x, z)) return 0;
-    int a = world_.altAt(x, z), w = world_.waterAt(x, z);
-    if (w > a) return rgb(40, 80, 170);
-    int g = std::min(255, 90 + (a - world_.seaLevel) * 2);
-    return rgb(uint8_t(g / 2), uint8_t(g), uint8_t(g / 3));
+    if (!mapRampLoaded_) {
+      mapRampLoaded_ = true;
+      mapRamp_ = neighbourRegionDefaultRamp();
+      if (haveData_)
+        if (ResourceRef rr = data_.db().find({T_UI_IMAGE, 0x5E5, 0x21})) {
+          try {
+            Image im = decodeUiImage(rr.data, rr.available, false);
+            if (im.w >= 12 && im.h >= 4) for (int k = 0; k < 12; k++) mapRamp_[size_t(k)] = im.px[size_t(3) * im.w + k] | 0xFF000000u;
+          } catch (const FormatError&) {}
+        }
+    }
+    const int d = int(world_.altAt(x, z)) - int(world_.waterAt(x, z));
+    return mapRamp_[size_t(d <= 0 ? 0 : neighbourRegionColourIndex(d))];
   };
 }
 

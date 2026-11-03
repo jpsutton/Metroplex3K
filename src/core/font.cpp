@@ -1,4 +1,5 @@
 #include "core/font.h"
+#include <random>
 #include "core/font_builtin.h"
 
 #include <algorithm>
@@ -101,7 +102,12 @@ std::string expandTokens(const std::string& s, const TextContext& c) {
         else if (t == "CITYNAME" || t == "YOURCITY") rep = c.city.c_str();
         else if (t == "POPULATION") { tmp = groupDigits(c.population); rep = tmp.c_str(); }
         else if (t == "YEAR") { tmp = std::to_string(c.year); rep = tmp.c_str(); }
-        else if (t == "ANYNEIGHBOR" || t == "NEIGHBOR") rep = c.neighbour.c_str();
+        else if (t == "NEIGHBOR") rep = c.neighbour.c_str();
+        else if (t == "ANYNEIGHBOR") {   // uniformly random among the four slots, drawn anew for each expansion (spec 05 3.3 [STATIC])
+          static std::mt19937 rng{std::random_device{}()};
+          const std::string& n = c.neighbours[rng() % 4];
+          rep = n.empty() ? c.neighbour.c_str() : n.c_str();
+        }
         if (rep) { out += rep; i = e + 1; continue; }
       }
     }
