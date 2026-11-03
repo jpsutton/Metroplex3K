@@ -783,6 +783,9 @@ Opened by Options ▸ Preferences (`C3001401`). Title `029541F4:14E`. Groups and
 | | Auto go to disasters `21F` | check box: camera jumps to new disasters |
 
 Changing the resolution (or other restart-only settings) asks `015E410C:18` (restart now?).
+There is **no language or country control** anywhere in Preferences. The game language comes only
+from the installation/registry at start-up (`27-platform.md` §1), so switching language at run
+time is out of scope. [OBSERVED]
 Settings persist in the program configuration (`27-platform.md`).
 
 ### 6.9 City properties [STATIC]

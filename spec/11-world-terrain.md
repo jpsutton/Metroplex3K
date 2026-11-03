@@ -500,6 +500,33 @@ The terrain accepts five cheat commands with the identifiers `Load terrain`, `Sa
 shift the whole terrain up or down by 1 or 10 altitude units [INFERRED from the names]. Rendering
 of underwater areas depends on whether the water is salt (sea) or fresh [INFERRED].
 
+**Salt off** clears the sea-water flag (pollution-cell bit 30) of every tile. **Salt on**
+recomputes the flags from the current terrain [STATIC]:
+1. Clear the flag of every tile.
+2. For each map edge, count the edge vertices that are under water (altitude < water surface). The
+   edges are taken in this order:
+   * z = 0 (bit 1);
+   * x = W−1 (bit 2);
+   * z = H−1 (bit 4);
+   * x = 0 (bit 8).
+
+   An edge is a **sea edge** when count × 100 > (vertex count along the edge) × 60, i.e. more than
+   60 % of it is wet.
+3. For each sea edge and each vertex along it, walk inward perpendicular to the edge with budget
+   n = ⌊(vertex count) / 4⌋ and land counter = 5. At each vertex:
+   * stop if n = 0;
+   * if the water surface is below altitude − 1 (land), decrement the land counter;
+   * decrement n;
+   * set the sea flag for that vertex: the same four-tile marking as when a surface is written
+     with the sea flag.
+
+   Stop when the land counter reaches 0.
+
+This is the generator's step 10 (§3.4) with the coast flags derived from today's water and a
+budget of a quarter of the side instead of ⌊water × R / 256⌋. Neither command changes altitudes
+or the water surface; only the salt bit changes. The water renderer and the neighbour features
+that read it change accordingly.
+
 ### 4.9 Commit order and notifications
 
 For raise, lower and level the commit repeats the plan computation and writes as it goes [STATIC]:
