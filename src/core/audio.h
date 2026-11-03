@@ -263,6 +263,11 @@ TileSoundChoice placementSoundFor(const TileSoundContext& c);  // spec 10.4 buil
 int pickExplosionSound(int sparseId, int sizeV, AudioRng& rng);
 // Spec 6: sparse sound trigger test per scheduling tick.
 bool sparseTriggers(int triggerVal, int randMultiplier, AudioRng& rng);
+// Spec 06 s6 steps 3-4: the sparse items for the tiles around the view centre (cx, cz). Half-size 3*(6-zoom); x outer,
+// z inner; a tile is skipped when its id is 0 or equals the previous non-zero id; one item per id. `centre` is true
+// for the id of the occupant on the centre tile. `idAt(x, z)` returns the [Sparse] id of the occupant on a tile.
+struct SparseSite { int id = 0; bool centre = false; };
+std::vector<SparseSite> collectSparseSites(int cx, int cz, int zoom, int W, int H, const std::function<int(int, int)>& idAt);
 // Volume repair at start-up (spec 8): out-of-range -> music 1000, sfx 700, ambience 900.
 int repairCategoryVolume(AudioCategory c, int stored);
 
@@ -294,7 +299,13 @@ class AudioSystem {
   void notifyQuery(const TileSoundContext& c, float pan = 0.f);
   void notifyPlaced(const TileSoundContext& c, float pan = 0.f);
   void notifyExplosion(int sparseId, int sizeV, bool onScreen, float pan = 0.f);
-  bool playSparse(int sparseId, bool bypassRandom, float pan = 0.f, float attenuation = 1.f);
+  bool playSparse(int sparseId, bool bypassRandom, float pan = 0.f, float attenuation = 1.f, bool centre = false);
+  // Spec 06 s6 rebuild (every 4th audio tick): each site sounds with probability trigger / BuildingRandMultiplier,
+  // at the ambience volume less BuildingsInAmbienceAttenuation unless it is the centre building. A one-shot already
+  // sounding is left to finish; clearSparse() cuts them (view left the surface, zoom out, overlay on).
+  void rebuildSparse(const std::vector<SparseSite>& sites);
+  void clearSparse();
+  size_t sparseVoices();
 
   // Categories (spec 8).
   void setCategoryVolume(AudioCategory c, int v) { mixer_.setCategoryVolume(c, v); }
@@ -339,6 +350,7 @@ class AudioSystem {
   std::map<int, Fade> fades_;
   int zoom_ = 3;
   int64_t now_ = 0;
+  std::vector<AudioMixer::Handle> sparseH_;  // voices started by rebuildSparse
   // explosions: 4 round-robin slots
   AudioMixer::Handle expl_[4] = {0, 0, 0, 0};
   int explNext_ = 0;

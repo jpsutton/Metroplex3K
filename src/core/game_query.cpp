@@ -508,6 +508,15 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   }
 }
 
+// Spec 06 s10.4 landscape code. The source is [OPEN]; the spec recommends the flora set (11 s6.3).
+int Game::landscapeAudioCode() const {
+  switch (world_.scheme.floraSet) {
+    case 0xC55A6D62u: return 1;   // Flora_Desert
+    case 0x79EF435Au: return 2;   // Flora_Jungle
+    default: return 0;
+  }
+}
+
 // Sound classification of a tile (spec 06 s10.4). Classification of the tile content is [INFERRED] from the
 // sound names; zoned families follow the agent-type table of spec 13 s4.
 TileSoundContext Game::tileSoundContext(int x, int z) {
@@ -521,7 +530,9 @@ TileSoundContext Game::tileSoundContext(int x, int z) {
     sc.view = SoundView::Subway;
     return sc;
   }
-  // desert / jungle landscapes (sounds 252 / 253) are not identifiable from the scheme id [OPEN]
+  const int land = landscapeAudioCode();   // spec 06 s10.4 / s11: from the flora set (desert 252, jungle 253)
+  sc.desert = land == 1;
+  sc.jungle = land == 2;
   const int idx = c.occupantAt(x, z);
   if (idx >= 0 && size_t(idx) < world_.occupants.size()) {
     const Occupant& o = world_.occupants[size_t(idx)];
@@ -598,7 +609,7 @@ void Game::updateAmbience(uint32_t dtMs) {
           case TileKind::Seaport: w[Seaport] += 1; break;
           case TileKind::Airport: w[Airport] += 1; break;
           case TileKind::Landfill: w[Garbage] += 1; break;
-          case TileKind::None: case TileKind::Tree: w[Nature] += 1; break;
+          case TileKind::None: case TileKind::Tree: w[sc.desert ? Desert : sc.jungle ? Jungle : Nature] += 1; break;
           default: break;
         }
         const int oi = sc.kind == TileKind::Road || sc.kind == TileKind::None || sc.kind == TileKind::Tree ? -1 : c.occupantAt(tx, tz);
@@ -610,6 +621,37 @@ void Game::updateAmbience(uint32_t dtMs) {
   const int before = ambSel_.current();
   int sel = ambSel_.update(dt, w, speed);
   if (sel != before || audio_->ambientArea() != sel) audio_->setAmbientArea(sel);
+  if (++sparseTick_ % 4 == 0) updateSparseAmbience();
+}
+
+// Spec 06 s6: every 4th audio pass the sparse set is rebuilt, only in the plain surface view at audio zoom >=
+// BuildingsInAmbienceMinZoom. The spec's further "world check" is [OPEN] and is not applied.
+void Game::updateSparseAmbience() {
+  if (!audio_ || !world_.W || !haveData_) return;
+  const int az = cam_.zoom + 1;
+  if (ropt_.underground || ropt_.overlay || az < audio_->ini().options.get("BuildingsInAmbienceMinZoom", 4)) { audio_->clearSparse(); return; }
+  int cx, cz;
+  if (!renderer_.pickTile(cam_, W_ / 2, H_ / 2, cx, cz)) return;
+  const City& c = sim_.city();
+  auto idAt = [&](int x, int z) -> int {
+    const int i = c.occupantAt(x, z);
+    if (i < 0 || size_t(i) >= world_.occupants.size()) return 0;
+    const OccAttr* a = data_.occupant(world_.occupants[size_t(i)].occId);
+    return a ? a->sparseId : 0;
+  };
+  audio_->rebuildSparse(collectSparseSites(cx, cz, az, world_.W, world_.H, idAt));
+}
+
+// Spec 06 s10.5. Nothing plays outside the surface view. V = lot tile count x height class [OPEN, recommended].
+// On screen = the tile can be picked in the window.
+void Game::notifyBuildingDestroyed(int occIdx) {
+  if (!audio_ || !haveData_ || ropt_.underground || occIdx < 0 || size_t(occIdx) >= world_.occupants.size()) return;
+  const Occupant& o = world_.occupants[size_t(occIdx)];
+  const OccAttr* a = data_.occupant(o.occId);
+  if (!a) return;
+  const int V = int(a->sizeX * a->sizeZ * a->heightClass);
+  int sx, sy;
+  audio_->notifyExplosion(a->sparseId, V, tileScreenPos(o.x, o.z, sx, sy));
 }
 
 void Game::stopAmbience() {

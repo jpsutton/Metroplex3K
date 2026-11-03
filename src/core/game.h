@@ -278,6 +278,9 @@ class Game {
   void stopAmbience();
   void updateAmbience(uint32_t dtMs);                  // picks the ambient FSC area from the view (game_query.cpp)
   TileSoundContext tileSoundContext(int tx, int tz);   // audio classification of a tile (game_query.cpp)
+  void updateSparseAmbience();                         // spec 06 s6: building sounds around the view centre (game_query.cpp)
+  void notifyBuildingDestroyed(int occIdx);            // spec 06 s10.5 explosion sound (game_query.cpp)
+  int landscapeAudioCode() const;                      // spec 06 s10.4: 1 desert, 2 jungle, else 0 (game_query.cpp)
   // pollutionKind: 0 air, 1 water, 2 garbage; -1 = the map window's selector.
   void buildMapSource(MapSource& src, int pollutionKind = -1);
   // View City Layers: copy layers_ into the render options; refresh the data-layer overlay from live data.
@@ -405,6 +408,7 @@ class Game {
   AmbientAreaSelector ambSel_;
   bool ambCfg_ = false;
   int64_t ambAcc_ = 0;
+  int sparseTick_ = 0;
   float ambLastU_ = 0, ambLastV_ = 0;
   Sim sim_;
   std::unique_ptr<Terraformer> terra_;

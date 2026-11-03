@@ -351,6 +351,45 @@ static void testSystem() {
   CHECK(!as.setAmbientArea(1));  // no file
 }
 
+static void testSparse() {
+  // Rectangle: zoom 4 -> half-size 6, x outer / z inner, clipped to the map; ids 0 and repeats skipped, one item per id.
+  std::vector<std::pair<int, int>> visited;
+  auto idAt = [&](int x, int z) { visited.push_back({x, z}); return x == 10 && z == 10 ? 7 : x == 11 && z == 3 ? 7 : x == 12 ? 9 : 0; };
+  auto sites = collectSparseSites(10, 10, 4, 100, 100, idAt);
+  CHECK(sites.size() == 2 && sites[0].id == 7 && sites[0].centre && sites[1].id == 9 && !sites[1].centre);
+  CHECK(visited.size() == 1 + 12 * 12);   // centre probe + (cx-6 .. cx+5) x (cz-6 .. cz+5)
+  CHECK(visited[1] == std::make_pair(4, 4) && visited[2] == std::make_pair(4, 5));
+  visited.clear();
+  collectSparseSites(0, 0, 5, 100, 100, idAt);   // zoom 5: h = 3, clipped at the origin
+  CHECK(visited.size() == 1 + 3 * 3);
+  CHECK(collectSparseSites(1, 1, 4, 100, 100, [](int, int) { return 0; }).empty());
+
+  std::map<std::string, Bytes> files;
+  files["sfx/buildings/g.wav"] = wavBytes(std::vector<int16_t>(20000, 3000), 1, 22050);
+  auto loader = [files](const std::string& p, bool, Bytes& out) {
+    auto it = files.find(toLower(normalizeSoundPath(p)));
+    if (it == files.end()) return false;
+    out = it->second; return true;
+  };
+  const char* txt =
+      "[Options]\r\nBuildingRandMultiplier=10000\r\nBuildingsInAmbienceMinZoom=4\r\nBuildingsInAmbienceAttenuation=400\r\n"
+      "[Sparse]\r\n0x100=\"Always\",32,1024,1,0,0,\"Sfx\\Buildings\\g.wav\",100,10000\r\n"
+      "0x101=\"Never\",32,1024,1,0,0,\"Sfx\\Buildings\\g.wav\",100,0\r\n";
+  AudioSystem as;
+  as.init(AudioIni::parse(txt), loader, 22050);
+  as.setAudioZoom(3);
+  as.rebuildSparse({{0x100, true}});
+  CHECK(as.sparseVoices() == 0);                 // below BuildingsInAmbienceMinZoom
+  as.setAudioZoom(4);
+  as.rebuildSparse({{0x101, true}});
+  CHECK(as.sparseVoices() == 0);                 // trigger 0 never sounds
+  as.rebuildSparse({{0x100, true}, {0x100, false}});
+  CHECK(as.sparseVoices() == 2);
+  as.clearSparse();
+  CHECK(as.sparseVoices() == 0);
+  CHECK(as.mixer().voiceCount() == 0);
+}
+
 static void testVideo() {
   Bytes d;
   auto chunk = [&](const char* tag, const Bytes& body) {
@@ -455,6 +494,7 @@ int main() {
   testArea();
   testFsc();
   testSystem();
+  testSparse();
   testAsyncMusic();
   testMixerThreads();
   testVideo();

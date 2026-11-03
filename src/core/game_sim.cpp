@@ -538,7 +538,7 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
     switch (cmd.kind) {
       case DisasterCommand::DestroyOccupant: {
         int i = c.occupantIndexByUid(cmd.id);
-        if (i >= 0 && i < int(world_.occupants.size()) && (cmd.b == 0 || cmd.b == 1)) c.damageOccupant(i, 8);
+        if (i >= 0 && i < int(world_.occupants.size()) && (cmd.b == 0 || cmd.b == 1)) { notifyBuildingDestroyed(i); c.damageOccupant(i, 8); }
         break;
       }
       case DisasterCommand::IgniteOccupant: {

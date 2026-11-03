@@ -571,6 +571,23 @@ int pickExplosionSound(int s, int V, AudioRng& rng) {
   return tbl[row][rng.below(12)];
 }
 
+std::vector<SparseSite> collectSparseSites(int cx, int cz, int zoom, int W, int H, const std::function<int(int, int)>& idAt) {
+  std::vector<SparseSite> out;
+  const int h = 3 * (6 - zoom);
+  const int centreId = idAt ? idAt(cx, cz) : 0;
+  int prev = 0;
+  for (int x = std::max(0, cx - h); x < std::min(W, cx + h); x++)
+    for (int z = std::max(0, cz - h); z < std::min(H, cz + h); z++) {
+      int id = idAt ? idAt(x, z) : 0;
+      if (id == 0 || id == prev) continue;
+      prev = id;
+      bool dup = false;
+      for (const auto& s : out) if (s.id == id) { dup = true; break; }
+      if (!dup) out.push_back({id, id == centreId});
+    }
+  return out;
+}
+
 bool sparseTriggers(int trigger, int mult, AudioRng& rng) {
   if (mult <= 0) mult = 10000;
   return int(rng.below(uint32_t(mult))) < trigger;
@@ -714,21 +731,38 @@ bool AudioSystem::request(int id, SoundAction a, int param, float pan, float att
   return false;
 }
 
-bool AudioSystem::playSparse(int id, bool bypass, float pan, float att) {
+bool AudioSystem::playSparse(int id, bool bypass, float pan, float att, bool centre) {
   auto it = ini_.sparse.find(id);
   if (it == ini_.sparse.end() || it->second.samples.empty()) return false;
   const auto& d = it->second;
   const SparseSample& s = d.samples[rng_.below(uint32_t(d.samples.size()))];
+  int red = 0;
   if (!bypass) {
     if (zoom_ < ini_.options.get("BuildingsInAmbienceMinZoom", 1)) return false;
     if (!sparseTriggers(s.trigger, ini_.options.get("BuildingRandMultiplier", 10000), rng_)) return false;
-    int red = std::clamp(ini_.options.get("BuildingsInAmbienceAttenuation", 0), 0, 1024);
-    att *= float(1024 - red) / 1024.f;
+    if (!centre) red = std::clamp(ini_.options.get("BuildingsInAmbienceAttenuation", 0), 0, 1024);
   }
   VoiceParams p;
   p.category = bypass ? AudioCategory::Sfx : AudioCategory::Ambience;
-  p.volume = scaleVol(std::min(1024, d.vol * s.vol / 100), att); p.pan = pan; p.priority = d.pri;
-  return playBuf(s.file, d.absolute, p) != 0;
+  p.volume = std::max(0, scaleVol(std::min(1024, d.vol * s.vol / 100), att) - red); p.pan = pan; p.priority = d.pri;
+  auto h = playBuf(s.file, d.absolute, p);
+  if (h && !bypass) sparseH_.push_back(h);
+  return h != 0;
+}
+
+size_t AudioSystem::sparseVoices() {
+  sparseH_.erase(std::remove_if(sparseH_.begin(), sparseH_.end(), [&](AudioMixer::Handle h) { return !mixer_.isPlaying(h); }), sparseH_.end());
+  return sparseH_.size();
+}
+
+void AudioSystem::rebuildSparse(const std::vector<SparseSite>& sites) {
+  sparseVoices();   // forget finished voices
+  for (const auto& s : sites) playSparse(s.id, false, 0.f, 1.f, s.centre);
+}
+
+void AudioSystem::clearSparse() {
+  for (auto h : sparseH_) mixer_.stop(h);
+  sparseH_.clear();
 }
 
 void AudioSystem::notifyQuery(const TileSoundContext& c, float pan) {
