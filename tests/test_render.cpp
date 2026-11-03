@@ -165,12 +165,20 @@ int main() {
 
     // Opaque (no plane): pixel replaced. Moving object vs static ordering.
     SceneSprite st; st.category = 1; st.moving = false; st.x = 8 * 256; st.z = 8 * 256; st.height = 40 * 256;
-    SceneSprite mv; mv.category = 2; mv.moving = true; mv.x = 8 * 256 + 10; mv.z = 8 * 256 + 10; mv.height = 40 * 256;
+    // A mover and a static on the same tile share a depth key; the sub-tile position breaks the tie. Near the tile's
+    // near corner (large a+b) the mover is drawn after the static; near its far corner (small a+b) before it, so a
+    // car on the far lane of a road tile ends up behind the tree on that tile.
+    SceneSprite mv; mv.category = 2; mv.moving = true; mv.x = 8 * 256 + 240; mv.z = 8 * 256 + 240; mv.height = 40 * 256;
     RenderScene s2; s2.sprites = {mv, st};  // submission order must not matter
     r.render(cam, opt, &s2);
     int mx, my; r.projectSub(cam, mv.x, mv.z, mv.height, mx, my);
     uint32_t px = r.pixels()[size_t(my - 3) * r.width() + mx];
-    CHECK(px == rgba(0, 0, 255));  // moving drawn after the static whose box is behind it
+    CHECK(px == rgba(0, 0, 255));  // mover nearer than the static's centre: drawn after it
+    SceneSprite mvFar = mv; mvFar.x = 8 * 256 + 10; mvFar.z = 8 * 256 + 10;
+    RenderScene s2b; s2b.sprites = {mvFar, st};
+    r.render(cam, opt, &s2b);
+    r.projectSub(cam, mvFar.x, mvFar.z, mvFar.height, mx, my);
+    CHECK(r.pixels()[size_t(my - 3) * r.width() + mx] == rgba(255, 0, 0));  // mover behind the static's centre: drawn before it
 
     // Picking by per-pixel opacity: static scene sprite occupies its box.
     RenderScene s3; s3.sprites = {st};

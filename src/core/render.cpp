@@ -1459,7 +1459,10 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     bool haveKpos = false, haveHi = false;
     for (size_t i = 0; i < statics.size(); i++) {
       const Item& s = statics[i];
-      if (!haveKpos && s.key < mv.key) { kpos = i; haveKpos = true; }
+      // Depth keys have whole-tile granularity, and the median trees sit on the road tile itself, so a car on the far
+      // lane shares its key with the tree it should be behind. Break key ties by the actual sub-tile depth: a static
+      // whose centre is nearer the viewer than the mover is drawn after it.
+      if (!haveKpos && (s.key < mv.key || (s.key == mv.key && (int64_t(s.boxA0) + s.boxA1 + s.boxB0 + s.boxB1) / 2 > int64_t(mv.posA) + mv.posB))) { kpos = i; haveKpos = true; }
       if (s.boxA1 <= mv.posA && s.boxB1 <= mv.posB) lo = i + 1;
       if (!haveHi && s.boxA0 >= mv.posA && s.boxB0 >= mv.posB) { hi = i; haveHi = true; }
     }
