@@ -1464,6 +1464,14 @@ at a fixed position (§6.0).
 
 **Data-map mode**
 
+* Tile → diamond transform (default view rotation): tile x runs along the edge from the top corner to the
+  left corner, and z along the edge from the top corner to the right corner. With s = 376 / (2W):
+  px = 42 + (z − x + W)·s and py = 47 + (x + z)·s [OBSERVED: Berlin police and fire coverage-circle
+  centres fit station lots, mean 1.2 / 2.1 tiles; the swapped mapping is off by about 28 tiles].
+* The diamond **rotates with the city view**. After one PageUp step (90°), the content is rotated 90°
+  and the compass letters move with it: top E, left N, right S, bottom W [OBSERVED]. The transform
+  above is for the default rotation. Apply the view rotation to the map, the coverage circles,
+  click-to-centre and the compass.
 * Diamond: the whole city drawn as a square rotated 45°, with corners top (230, 47), left (42, 234),
   right (417, 234) and bottom (230, 424). That is a 376 × 377 bounding box. It has a thin light
   outline on its lower-right edges.
@@ -1476,10 +1484,53 @@ at a fixed position (§6.0).
 * Legend box: an inset frame from (287, 358) to (415, 433), with an 18 px diagonal cut at its
   top-left corner. The left and top lines are (123, 138, 255); the right and bottom are highlight
   (255, 243, 255).
-  * Gradient maps: a 32 × 66 gradient image at (292, 362). Aura matches `000005E5:09`
-    (blue → red), Density and Land Value approximately match `000005E5:0A` (blue → white). The
-    white → red gradient of Crime, Flammability, Pollution and Traffic was not found among the
-    decoded images [OPEN].
+  * **Data-map palette** `000005E5:21` (32 × 32): the map pixels are taken directly from this image, with
+    no blending [OBSERVED: every Aura-map pixel of original Berlin is an exact palette entry].
+    * Row 4 is the base: col 0 water (132, 130, 181), cols 1–11 land by height (Berlin flat land is
+      col 2, (148, 166, 132)). Row 3 is a darker copy of row 4.
+    * Row 0 is the Aura scale: 32 columns from good blue (8, 28, 255) at col 0, through grey at col 15,
+      to red-brown (181, 44, 0) at col 31. Developed tiles take column (127 − aura) >> 3, clamped to
+      0–31 [INFERRED mapping; the columns are OBSERVED].
+    * Other rows, matched to the legend swatches [INFERRED except where measured]:
+      * row 1: grey → red, 32 columns (Crime, Flammability, Pollution, Traffic);
+      * row 2: blue → light, 32 columns (Density, Land Value);
+      * row 5: Powered / Unpowered;
+      * row 6: Watered / Unwatered;
+      * row 7: Residential / Commercial / Industrial;
+      * row 8: Government / Seaports / Airports / Landfill;
+      * rows 10–11: two orange and two green triples, use unknown.
+    * Rows 12–19 are also filled: blue, cyan/green/orange, yellow, green and blue triples, and brown/grey
+      ramps. Their use is unknown.
+    * Observed per map on Berlin [OBSERVED]. **Only tiles that carry the quantity are tinted**; all other
+      tiles show the base row 4.
+      * Aura, Density, Flammability, Crime, Land Value: tiles with buildings only.
+      * Traffic: road, rail and transport tiles only.
+      * Pollution: a smooth field over all tiles.
+      * Columns seen in Berlin: Crime row 1, cols 0–9. Flammability row 1, cols 2–18, mostly 7–15.
+        Land Value row 2, cols 11–31, col 31 most frequent. Traffic row 1, col 0 most frequent, up to
+        col 17.
+    * Density map: the tint is per **building class**, not a growth or effect quantity [OBSERVED, Berlin,
+      per-agent-type mode column of row 2]. Low-density R/C/I buildings land at cols 24–28, medium at
+      cols 6–18, high at cols 0–2, and civic, utility and other non-zone buildings at col 31.
+      Per agent type:
+      * residential: 3100→27, 3300→28, 3700/3900→17, 4100→18, 4300→0, 4500→1, 4700→2;
+      * commercial: 5100/5500→25, 5700→7, 6100→8, 6300/6700→0;
+      * industrial: 8100→24, 8700→25, 8300→6, 8900→8.
+      The spread within a class suggests a per-building quantity (capacity per lot tile) with
+      column = (255 − v) >> 3 [INFERRED].
+    * The Zones map does **not** use the palette for its tiles. It uses pure colours by zone and level:
+      * residential (0, 203, 0), (0, 150, 0);
+      * commercial (0, 0, 255), (0, 0, 206), (0, 0, 148);
+      * industrial (255, 251, 0), (206, 203, 0), (148, 150, 0);
+      * government (239, 93, 0);
+      * brown (156, 101, 49), probably landfill.
+      The shade per density level is [INFERRED]. Only its legend swatches use rows 7 and 8.
+    * The Crime and Flammability coverage toggle is **on** when the window opens.
+  * Gradient legends: the map's palette row of `000005E5:21` drawn vertically, 2 px per column
+    (32 columns → 64 px), x = 292–323 and y = 363–426. Aura uses row 0, Density and Land Value use
+    row 2 (dark blue = High on top), and Crime, Flammability, Pollution and Traffic use row 1. The
+    32 × 66 images `000005E5:09`/`0A` are 11-step ramps and are **not** used in this window
+    [OBSERVED: the original legend has 32 distinct colours, equal to the palette row].
   * Gradient labels: small bold font, grey-blue (about (123, 125, 181)), left edge x ≈ 331. The top
     label's top is at y ≈ 361 and the bottom label's at y ≈ 419.
 
@@ -1515,8 +1566,11 @@ at a fixed position (§6.0).
   * a police circle at about (93, 231), diameter 67–70 px, i.e. radius ≈ 33 tiles
     (`OptimalCoverageRadius` 30);
   * a fire circle at about (99, 223), diameter 58 px, i.e. radius ≈ 28 tiles (radius 25).
-  So the radius is roughly R₀ plus half the lot plus 1 [INFERRED]. Funding scaling of R was not
-  separated.
+  The diamond edge is 264.5 px per 256 tiles, i.e. 1.033 px per tile. Radius = the station's
+  funded stamp radius R (§17 2.2): Berlin police R 32 at 103 % funding is drawn at 31.7 tiles,
+  and fire R 28 at 109 % at 27.8 tiles. The centre is the geometric centre of the lot (x0 + w/2,
+  z0 + h/2), i.e. the middle of the centre tile of a 3 × 3 lot [OBSERVED, 11 + 11 circles,
+  residual ≤ 0.3 tile].
 * Pollution: there is no compass. In its place, at the top right, is "Show:" (`2D8`) at (288, 48),
   followed by three radio buttons:
   * the radios are about 10 px, centred at x = 293 and y = 66, 81 and 95;
@@ -1563,6 +1617,7 @@ at a fixed position (§6.0).
     "% Garbage Goes To:" (`1F3`) for Garbage.
   * Below the heading is a list of 16 px colour bars, one per category present. Each bar is about
     168 px wide, filled in the slice colour, with the label in bold.
+  * The chart box background on the pie pages is plain (222, 223, 255) with no stripes.
   * The pie is on the right, centred at about (318, 117), roughly 175 × 110 px, with a dark rim
     below it. Percentages are drawn in black on the slices.
   * Electricity colours: Coal Power (132, 65, 66), Wind Power (255, 130, 0), Solar Power
