@@ -1484,6 +1484,11 @@ at a fixed position (§6.0).
 * Legend box: an inset frame from (287, 358) to (415, 433), with an 18 px diagonal cut at its
   top-left corner. The left and top lines are (123, 138, 255); the right and bottom are highlight
   (255, 243, 255).
+  * Tile tint on gradient maps (observed on Aura): the colour is a **linear RGB interpolation** between
+    three anchors of the legend image: row 0 (good/high, (0, 16, 255)), row 33 (neutral, (189, 186,
+    189)) and row 65 (bad/low, (181, 44, 0)). It is not a per-row lookup: intermediate rows of the
+    image, e.g. the cyan row 16, never appear on the map. Undeveloped land and water show the base
+    colour only. Base colours on the Aura map: land (148, 166, 132), water (132, 130, 181).
   * Gradient maps: a 32 × 66 gradient image at (292, 362). Aura matches `000005E5:09`
     (blue → red), Density and Land Value approximately match `000005E5:0A` (blue → white). The
     white → red gradient of Crime, Flammability, Pollution and Traffic was not found among the
@@ -1523,8 +1528,11 @@ at a fixed position (§6.0).
   * a police circle at about (93, 231), diameter 67–70 px, i.e. radius ≈ 33 tiles
     (`OptimalCoverageRadius` 30);
   * a fire circle at about (99, 223), diameter 58 px, i.e. radius ≈ 28 tiles (radius 25).
-  So the radius is roughly R₀ plus half the lot plus 1 [INFERRED]. Funding scaling of R was not
-  separated.
+  The diamond edge is 264.5 px per 256 tiles, i.e. 1.033 px per tile. Radius = the station's
+  funded stamp radius R (§17 2.2): Berlin police R 32 at 103 % funding is drawn at 31.7 tiles,
+  and fire R 28 at 109 % at 27.8 tiles. The centre is the geometric centre of the lot (x0 + w/2,
+  z0 + h/2), i.e. the middle of the centre tile of a 3 × 3 lot [OBSERVED, 11 + 11 circles,
+  residual ≤ 0.3 tile].
 * Pollution: there is no compass. In its place, at the top right, is "Show:" (`2D8`) at (288, 48),
   followed by three radio buttons:
   * the radios are about 10 px, centred at x = 293 and y = 66, 81 and 95;
