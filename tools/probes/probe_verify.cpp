@@ -298,6 +298,27 @@ void groupOrdW(const fs::path& root) {
           catch (const FormatError&) { what = "decode fails"; } }
         info("ordw UI image 000005E5:" + str(long(id)), what);
       }
+      // Map ramp 5E5:21: dump rows and locate the original's View Data base colours (land (148,166,132), water (132,130,181)).
+      if (ResourceRef rr = gd.db().find({T_UI_IMAGE, 0x5E5, 0x21})) {
+        try {
+          Image im = decodeUiImage(rr.data, rr.available, false);
+          const uint32_t tg[2] = {0x84A694u, 0xB58284u};   // 0xBBGGRR of (148,166,132) and (132,130,181)
+          for (int t = 0; t < 2; t++) {
+            int bd = 1 << 30, bx = 0, by = 0;
+            for (int y = 0; y < im.h; y++) for (int x = 0; x < im.w; x++) {
+              const uint32_t p = im.px[size_t(y) * im.w + x];
+              const int d = std::abs(int(p & 255) - int(tg[t] & 255)) + std::abs(int((p >> 8) & 255) - int((tg[t] >> 8) & 255)) + std::abs(int((p >> 16) & 255) - int((tg[t] >> 16) & 255));
+              if (d < bd) { bd = d; bx = x; by = y; }
+            }
+            info(std::string("ordw 5E5:21 nearest to ") + (t ? "water (132,130,181)" : "land (148,166,132)"), "column " + str(bx) + " row " + str(by) + ", L1 distance " + str(bd));
+          }
+          for (int y = 0; y < std::min(im.h, 8); y++) {
+            std::string line; char b[16];
+            for (int x = 0; x < std::min(im.w, 12); x++) { const uint32_t p = im.px[size_t(y) * im.w + x]; std::snprintf(b, sizeof b, "%02X%02X%02X ", p & 255, (p >> 8) & 255, (p >> 16) & 255); line += b; }
+            info("ordw 5E5:21 row " + str(y) + " columns 0..11 RRGGBB", line);
+          }
+        } catch (const FormatError&) {}
+      }
     }
   }
   for (const fs::path& path : findCities(root, {})) {

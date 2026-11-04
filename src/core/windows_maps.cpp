@@ -155,11 +155,17 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
         if (def && vals && vals->size() >= size_t(src.W) * src.H) {
           uint8_t val = (*vals)[size_t(x) * src.H + z];
           if (categorical(def->layer)) { if (val != 0xFF) col = MapWindow::legendColour(def->layer, val, 0); }
-          else if (def->layer == DataLayer::Aura) {   // developed tiles only, painted with the full legend ramp
+          else if (def->layer == DataLayer::Aura) {   // developed tiles only
+            // Measured: the original interpolates linearly in RGB between three anchors of the legend ramp 5E5:09, good (row 0), neutral (middle row)
+            // and bad (last row), not a per-row lookup. aura = byte - 128 in -127..127.
             if (val) {
-              const float t = float(val) / 255.f;   // 1 = good aura
-              if (auraRamp && !auraRamp->empty()) col = auraRamp->px[size_t(int((1.f - t) * float(auraRamp->h - 1))) * size_t(auraRamp->w) + size_t(auraRamp->w / 2)] | 0xFF000000u;
-              else col = lerpCol(rgb(176, 72, 48), rgb(24, 32, 255), t);
+              uint32_t good = rgb(0, 16, 255), neutral = rgb(189, 186, 189), bad = rgb(181, 44, 0);
+              if (auraRamp && !auraRamp->empty() && auraRamp->h >= 3) {
+                const size_t cx = size_t(auraRamp->w / 2), w = size_t(auraRamp->w);
+                good = auraRamp->px[cx] | 0xFF000000u; neutral = auraRamp->px[size_t(auraRamp->h / 2) * w + cx] | 0xFF000000u; bad = auraRamp->px[size_t(auraRamp->h - 1) * w + cx] | 0xFF000000u;
+              }
+              const int aura = int(val) - 128;
+              col = aura >= 0 ? lerpCol(neutral, good, std::min(1.f, float(aura) / 127.f)) : lerpCol(neutral, bad, std::min(1.f, float(-aura) / 127.f));
             }
           }
           else if (val) col = lerpCol(col, MapWindow::legendColour(def->layer, 0, float(val) / 255.f), 0.7f);   // data tints over the terrain base

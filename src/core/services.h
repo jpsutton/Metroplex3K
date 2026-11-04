@@ -107,13 +107,15 @@ class CoverageLayer {
   int coverageAt(int x, int z) const;                   // displayed byte D
   int accumulatorAt(int x, int z) const;                // A
   int stationCount() const { return int(stations_.size()); }
-  // One entry per station: centre of its box (tile units, may be x.5) and the stamp's reach in tiles (stamp radius plus the box side). The
+  // One entry per station: centre of its box (tile units, may be x.5) and the funded stamp radius R in tiles. The
   // View Data window draws these as the coverage circles of the Crime / Flammability maps.
-  struct Circle { float x, z, radius; int R, side; };   // R = the stamp radius (funding-scaled), side = longest box side in tiles
+  struct Circle { float x, z, radius; int R, side; };   // R = the stamp radius (funding-scaled), side = longest box side in tiles; radius = R
   std::vector<Circle> stationCircles() const {
     std::vector<Circle> v;
     for (const auto& st : stations_)
-      v.push_back({float(st.x0 + st.x1 + 1) / 2.f, float(st.z0 + st.z1 + 1) / 2.f, float(st.st.R) + float(std::max(st.x1 - st.x0, st.z1 - st.z0) + 1), st.st.R, std::max(st.x1 - st.x0, st.z1 - st.z0) + 1});   // measured on the original: R + the box side (3 for a station)
+      // Measured on the original: the circle is centred on the middle of the lot's centre tile (half a tile past the geometric box centre in
+      // this tile-corner space) and its radius is the funded stamp radius R.
+      v.push_back({float(st.x0 + st.x1 + 1) / 2.f + 0.5f, float(st.z0 + st.z1 + 1) / 2.f + 0.5f, float(st.st.R), st.st.R, std::max(st.x1 - st.x0, st.z1 - st.z0) + 1});
     return v;
   }
 
