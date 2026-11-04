@@ -92,6 +92,22 @@ void MapWindow::select(int index, const MapSource& src) {
 }
 
 namespace {
+// Pixel of the data-map palette 000005E5:21 (32 x 32): each row is one map's colour scale, taken without blending (spec 09 7.1.1: row 0 Aura,
+// 1 white-to-red scales, 2 Density/Land Value, 4 base land and water, 5 Power, 6 Water, 7 R/C/I, 8 Government/Seaports/Airports/Landfill).
+uint32_t palPx(const Image* pal, int row, int col, uint32_t fallback) {
+  if (!pal || pal->empty() || row < 0 || row >= pal->h || col < 0) return fallback;
+  return pal->px[size_t(row) * size_t(pal->w) + size_t(std::min(col, pal->w - 1))] | 0xFF000000u;
+}
+// Category swatch colour of the two-state and zone maps; falls back to MapWindow::legendColour without the palette.
+uint32_t categoryColour(const Image* pal, DataLayer l, int i) {
+  const uint32_t fb = MapWindow::legendColour(l, i, 0);
+  switch (l) {
+    case DataLayer::Power: return palPx(pal, 5, i, fb);
+    case DataLayer::Water: return palPx(pal, 6, i, fb);
+    case DataLayer::Zones: return i < 3 ? palPx(pal, 7, i, fb) : palPx(pal, 8, i - 3, fb);
+    default: return fb;
+  }
+}
 const uint32_t kBandBlue = rgb(123, 146, 255), kLabelInk = rgb(123, 125, 181), kInkBlue = rgb(0x31, 0x38, 0x84);
 
 // Inset legend box (spec 09 7.1.1): left/top lines (123,138,255), right/bottom highlight (255,243,255); `cut` = 18 px diagonal at the top left.
@@ -127,6 +143,7 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
   const bool pollution = def && def->layer == DataLayer::Pollution;
   const Rect mm{r.x + 42, r.y + 47, 376, 377};
   const std::vector<uint8_t>* vals = def && src.values ? src.values(def->layer) : nullptr;
+  const Image* pal = E.img(0x5E5, 0x21);   // the data-map palette
   // Tile <-> diamond transform (spec 09 7.1.1). At the default view px = (z - x + W) s, py = (x + z) s with s = mm.w / 2W: tile x runs along the
   // top-left edge, z along the top-right edge (checked against the original's coverage circles). Each view rotation step turns the whole diamond
   // 90 degrees counter-clockwise on screen (the compass letters turn the same way; observed after one PageUp).
@@ -143,7 +160,6 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
     z = int(std::floor((a + b + float(src.W)) / 2.f)); x = int(std::floor((b - a + float(src.W)) / 2.f));
   };
   if (src.W > 0 && src.H > 0) {
-    const Image* auraRamp = def && def->layer == DataLayer::Aura ? E.img(0x5E5, 0x09) : nullptr;   // legend ramp, top = good (blue), bottom = bad
     for (int py = 0; py < mm.h; py++)
       for (int px = 0; px < mm.w; px++) {
         int x, z;
@@ -154,21 +170,14 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
         uint32_t col = src.baseColour ? src.baseColour(x, z) : rgb(90, 130, 70);
         if (def && vals && vals->size() >= size_t(src.W) * src.H) {
           uint8_t val = (*vals)[size_t(x) * src.H + z];
-          if (categorical(def->layer)) { if (val != 0xFF) col = MapWindow::legendColour(def->layer, val, 0); }
-          else if (def->layer == DataLayer::Aura) {   // developed tiles only
-            // Measured: the original interpolates linearly in RGB between three anchors of the legend ramp 5E5:09, good (row 0), neutral (middle row)
-            // and bad (last row), not a per-row lookup. aura = byte - 128 in -127..127.
-            if (val) {
-              uint32_t good = rgb(0, 16, 255), neutral = rgb(189, 186, 189), bad = rgb(181, 44, 0);
-              if (auraRamp && !auraRamp->empty() && auraRamp->h >= 3) {
-                const size_t cx = size_t(auraRamp->w / 2), w = size_t(auraRamp->w);
-                good = auraRamp->px[cx] | 0xFF000000u; neutral = auraRamp->px[size_t(auraRamp->h / 2) * w + cx] | 0xFF000000u; bad = auraRamp->px[size_t(auraRamp->h - 1) * w + cx] | 0xFF000000u;
-              }
-              const int aura = int(val) - 128;
-              col = aura >= 0 ? lerpCol(neutral, good, std::min(1.f, float(aura) / 127.f)) : lerpCol(neutral, bad, std::min(1.f, float(-aura) / 127.f));
-            }
+          if (categorical(def->layer)) { if (val != 0xFF) col = categoryColour(pal, def->layer, val); }
+          else if (val) {   // developed / zoned tiles only; the colour is a palette pixel, not a blend
+            int row = 1, c = val >> 3;   // Crime, Flammability, Pollution, Traffic: grey (low) .. red (high)
+            if (def->layer == DataLayer::Aura) { row = 0; c = (127 - (int(val) - 128)) >> 3; }   // aura -127..127: column 0 = good .. 31 = bad [INFERRED quantisation]
+            else if (def->layer == DataLayer::Density || def->layer == DataLayer::LandValue) { row = 2; c = (255 - val) >> 3; }   // blue (high) .. light (low)
+            c = std::max(0, std::min(31, c));
+            col = pal ? palPx(pal, row, c, col) : lerpCol(col, MapWindow::legendColour(def->layer, 0, float(val) / 255.f), 0.7f);
           }
-          else if (val) col = lerpCol(col, MapWindow::legendColour(def->layer, 0, float(val) / 255.f), 0.7f);   // data tints over the terrain base
         }
         ui.at(mm.x + px, mm.y + py) = col;
       }
@@ -227,7 +236,7 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
     if (def->layer == DataLayer::Zones) {
       static const char* const zfb[7] = {"Residential", "Commercial", "Industrial", "Government", "Seaports", "Airports", "Landfill"};
       auto nm = [&](int i) { return E.win(def->categories[size_t(i)], zfb[i]); };
-      auto cl = [&](int i) { return legendColour(DataLayer::Zones, i, 0); };
+      auto cl = [&](int i) { return categoryColour(pal, DataLayer::Zones, i); };
       stack({r.x + 287, r.y + 54, 130, 61}, 3, r.y + 58, 17, cl, nm, true);
       insetBox(ui, std_, true);
       for (int i = 0; i < 4; i++) {
@@ -240,7 +249,7 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
       static const char* const pfb[2] = {"Powered", "Unpowered"};
       static const char* const wfb[2] = {"Watered", "Unwatered"};
       for (int i = 0; i < 2; i++) {
-        ui.fill({r.x + 292, r.y + 363 + i * 33, 32, 33}, legendColour(def->layer, i, 0));
+        ui.fill({r.x + 292, r.y + 363 + i * 33, 32, 33}, categoryColour(pal, def->layer, i));
         legendLabel(ui, lx, i ? ly1 : ly0, E.win(def->categories[size_t(i)], def->layer == DataLayer::Power ? pfb[i] : wfb[i]));
       }
     } else {
@@ -248,7 +257,7 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
       const Image* g = (def->layer == DataLayer::Aura) ? E.img(0x5E5, 0x09)
                        : (def->layer == DataLayer::Density || def->layer == DataLayer::LandValue) ? E.img(0x5E5, 0x0A) : nullptr;
       if (g && !g->empty()) ui.blit(*g, r.x + 292, r.y + 362);
-      else for (int i = 0; i < 66; i++) ui.fill({r.x + 292, r.y + 362 + i, 32, 1}, lerpCol(rgb(255, 255, 255), rgb(220, 30, 30), float(i) / 65.f));   // white -> red [OPEN: image not found]
+      else for (int i = 0; i < 66; i++) ui.fill({r.x + 292, r.y + 362 + i, 32, 1}, palPx(pal, 1, i * 31 / 65, lerpCol(rgb(255, 255, 255), rgb(220, 30, 30), float(i) / 65.f)));   // grey -> red scale: palette row 1
       auto el = endLabels(def->layer);
       legendLabel(ui, lx, ly0, E.win(def->lowId, el.first));
       legendLabel(ui, lx, ly1, E.win(def->highId, el.second));

@@ -520,7 +520,7 @@ class Game {
   bool isReplaceableOccupant(uint32_t occId);   // in [ReplaceableBuildings] (Replace button of the query panel)
   std::set<uint32_t> replaceableOcc_; bool replaceableLoaded_ = false;
   void buildZoneOverlay();
-  std::array<uint32_t, 12> mapRamp_{}; bool mapRampLoaded_ = false;   // map window base colours (ramp 000005E5:21 row 3)
+  std::array<uint32_t, 12> mapRamp_{}; bool mapRampLoaded_ = false;   // map window base colours (palette 000005E5:21 row 4)
   void updateZoneTint(bool on);
   void updatePollutedWater();
   // Parade event (spec 26 5.7): route search, lineup and spectators; the street sim only moves the vehicles.

@@ -318,7 +318,7 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
     return buf.get();
   };
   src.baseColour = [this](int x, int z) -> uint32_t {
-    // Land and water come from row 3 of the map ramp image 000005E5:21, column k by height above the water (spec 25 9.2).
+    // Land and water come from row 4 of the data-map palette 000005E5:21 (spec 09 7.1.1: the lighter copy of row 3), column 0 water, columns by height.
     if (!world_.inTiles(x, z)) return 0;
     if (!mapRampLoaded_) {
       mapRampLoaded_ = true;
@@ -327,7 +327,7 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
         if (ResourceRef rr = data_.db().find({T_UI_IMAGE, 0x5E5, 0x21})) {
           try {
             Image im = decodeUiImage(rr.data, rr.available, false);
-            if (im.w >= 12 && im.h >= 4) for (int k = 0; k < 12; k++) mapRamp_[size_t(k)] = im.px[size_t(3) * im.w + k] | 0xFF000000u;
+            if (im.w >= 12 && im.h >= 5) for (int k = 0; k < 12; k++) mapRamp_[size_t(k)] = im.px[size_t(4) * im.w + k] | 0xFF000000u;
           } catch (const FormatError&) {}
         }
     }
