@@ -1569,7 +1569,7 @@ at a fixed position (§6.0).
 
 * Plot box: inset frame (44, 50)–(400, 238). Lines are drawn from x = 44 to 300, and labels go in
   x = 300–400.
-* The background is horizontal stripes, alternating light lavender bands about 16 px tall. Tick
+* The background is horizontal stripes, alternating bands of 17 px each, (222, 223, 255) and (231, 231, 255), starting at y = 65 (period 34 px). Tick
   marks run along y ≈ 220. The current year is in grey, right-aligned at x ≈ 298, y ≈ 228.
 * Lines are 2 px wide. Each line ends at x = 300 and is joined by a short slanted connector to its
   label. Labels are stacked at a 10 px pitch, sorted by the y of the line end and pushed apart so
