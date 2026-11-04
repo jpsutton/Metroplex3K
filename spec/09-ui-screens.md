@@ -1509,6 +1509,15 @@ at a fixed position (§6.0).
       * Columns seen in Berlin: Crime row 1, cols 0–9. Flammability row 1, cols 2–18, mostly 7–15.
         Land Value row 2, cols 11–31, col 31 most frequent. Traffic row 1, col 0 most frequent, up to
         col 17.
+    * Density map: the tint is per **building class**, not a growth or effect quantity [OBSERVED, Berlin,
+      per-agent-type mode column of row 2]. Low-density R/C/I buildings land at cols 24–28, medium at
+      cols 6–18, high at cols 0–2, and civic, utility and other non-zone buildings at col 31.
+      Per agent type:
+      * residential: 3100→27, 3300→28, 3700/3900→17, 4100→18, 4300→0, 4500→1, 4700→2;
+      * commercial: 5100/5500→25, 5700→7, 6100→8, 6300/6700→0;
+      * industrial: 8100→24, 8700→25, 8300→6, 8900→8.
+      The spread within a class suggests a per-building quantity (capacity per lot tile) with
+      column = (255 − v) >> 3 [INFERRED].
     * The Zones map does **not** use the palette for its tiles. It uses pure colours by zone and level:
       * residential (0, 203, 0), (0, 150, 0);
       * commercial (0, 0, 255), (0, 0, 206), (0, 0, 148);
