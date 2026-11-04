@@ -259,25 +259,39 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
     auto at = [&](int x, int z) -> uint8_t& { return (*buf)[size_t(x) * H + z]; };
     auto clampB = [](int v) { return uint8_t(std::max(0, std::min(255, v))); };
     switch (l) {
-      case DataLayer::Zones:
+      case DataLayer::Zones:   // value = category << 2 | density level (0 light .. 2 dense), 0xFF = nothing; categories as dataMapDefs() lists them
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
-          int zt = world_.zone[size_t(x) * H + z];
-          at(x, z) = zt == 0 ? 0xFF : zt <= 4 ? 0 : zt <= 8 ? 1 : zt <= 12 ? 2 : 3;
+          const int zt = world_.zone[size_t(x) * H + z];
+          int cat = -1, lvl = 0;
+          if (zt >= 1 && zt <= 4) { cat = 0; lvl = std::min(2, zt - 1); }
+          else if (zt >= 5 && zt <= 8) { cat = 1; lvl = std::min(2, zt - 5); }
+          else if (zt >= 9 && zt <= 13) { cat = 2; lvl = std::min(2, zt - 9); }
+          else if (zt == 14) cat = 5;      // airport
+          else if (zt == 15) cat = 4;      // seaport
+          else if (zt == 17) cat = 6;      // landfill
+          else if (zt == 0 && c.occupantAt(x, z) >= 0) cat = 3;   // government / civic buildings
+          at(x, z) = cat < 0 ? 0xFF : uint8_t(cat << 2 | lvl);
         }
         break;
       case DataLayer::Aura:
         // The original tints developed tiles only (blue for good, red-brown for bad aura) and leaves the rest as terrain: 0 = no tint.
-        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = c.occupantAt(x, z) >= 0 ? std::max<uint8_t>(1, clampB(c.aura.aura(x, z) + 128)) : 0;
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = c.occupantAt(x, z) >= 0 ? uint8_t(std::max(1, std::min(254, c.aura.aura(x, z) + 128))) : 0xFF;
         break;
       case DataLayer::Crime:
-        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = clampB(c.crime.crimeAt(x, z));
+        // buildings and zoned land only; 0xFF = not tinted
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++)
+          at(x, z) = (c.occupantAt(x, z) >= 0 || world_.zone[size_t(x) * H + z] != 0) ? uint8_t(std::min(254, int(clampB(c.crime.crimeAt(x, z))))) : 0xFF;
         break;
       case DataLayer::Fire:
-        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = clampB(c.fire.coverageAt(x, z));
+        // The Flammability map shows the flammability layer (not the fire-station coverage), on building tiles only; 0xFF = not tinted
+        if (c.flammability.grid.size() != size_t(W) * H) return nullptr;
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++)
+          at(x, z) = c.occupantAt(x, z) >= 0 ? uint8_t(std::min<int>(254, c.flammability.grid[size_t(x) * H + z])) : 0xFF;
         break;
       case DataLayer::LandValue:
         if (c.landValue.lv.empty()) return nullptr;
-        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = clampB(c.landValue.landValueAtTile(x, z));
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++)   // developed tiles only; 0xFF = not tinted
+          at(x, z) = c.occupantAt(x, z) >= 0 ? uint8_t(std::min(254, int(clampB(c.landValue.landValueAtTile(x, z))))) : 0xFF;
         break;
       case DataLayer::Power:
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
@@ -310,7 +324,7 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
         if (!c.traffic) return nullptr;
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
           bool net = (c.traffic->flags(x, z) & (TF_ROAD | TF_HIGHWAY | TF_RAIL | TF_STATION | TF_XFER)) != 0;
-          at(x, z) = net ? uint8_t(c.traffic->tileValue(x, z, 0x01 | 0x02 | 0x04 | 0x10 | 0x20)) : 0xFF;
+          at(x, z) = net ? uint8_t(std::min<int>(254, c.traffic->tileValue(x, z, 0x01 | 0x02 | 0x04 | 0x10 | 0x20))) : 0xFF;
         }
         break;
       default: return nullptr;

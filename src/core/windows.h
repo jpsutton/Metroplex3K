@@ -552,7 +552,7 @@ class MapWindow {
  public:
   int selected = -1;                    // index into dataMapDefs(); -1 = plain map
   bool showInCityView = false;          // "Use As Map" (spec 09 7.1): paint the layer over the city view
-  bool coverage = false;                // police/fire coverage toggle
+  bool coverage = true;                 // police/fire coverage toggle: the original opens Crime / Flammability with it on
   int pollutionKind = 0;                // 0 air 1 water 2 garbage
   // Overlay for the main view: valid when a data map is selected and "show in city view" is on.
   const DataOverlay* activeOverlay() const { return overlayActive_ ? &overlay_ : nullptr; }

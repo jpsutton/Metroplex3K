@@ -802,7 +802,9 @@ void testViewData() {
   CHECK(w.activeOverlay() && w.activeOverlay()->row.size() == 64u * 64u);
   r = h.click("showInCity"); CHECK(!w.map.showInCityView && w.activeOverlay() == nullptr);
   h.frame(); CHECK(h.has("coverage"));
-  r = h.click("coverage"); CHECK(w.map.coverage && r.has(Act::DataMapOptionChanged));
+  CHECK(w.map.coverage);   // the original opens Crime / Flammability with the coverage toggle on
+  r = h.click("coverage"); CHECK(!w.map.coverage && r.has(Act::DataMapOptionChanged));
+  w.map.coverage = true;
   {   // coverage circles: cyan pixels appear once the toggle is on and the source lists a station
     src.circles = [](bool) { return std::vector<std::array<float, 3>>{{32.f, 32.f, 10.f}}; };
     h.frame();

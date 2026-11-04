@@ -294,6 +294,10 @@ void groupOrdW(const fs::path& root) {
         ResourceRef rr = gd.db().find({T_UI_IMAGE, 0x5E5, id});
         std::string what = "missing";
         if (rr) { try { Image im = decodeUiImage(rr.data, rr.available, true); what = str(im.w) + "x" + str(im.h);
+            if ((id == 0x09 || id == 0x0A) && im.w > 0 && im.h > 1) {   // every row of the legend gradient (middle column) as RRGGBB, to compare with the original's pixels
+              std::string all; char q[16];
+              for (int y = 0; y < im.h; y++) { const uint32_t p = im.px[size_t(y) * im.w + size_t(im.w / 2)]; std::snprintf(q, sizeof q, "%02X%02X%02X ", p & 255, (p >> 8) & 255, (p >> 16) & 255); all += q; }
+              info("ordw UI image 000005E5:" + str(long(id)) + " middle column rows 0.." + str(im.h - 1) + " RRGGBB", all); }
             if (id == 0x09 && im.w > 0 && im.h > 1) { char b[64]; for (int y : {0, im.h / 4, im.h / 2, 3 * im.h / 4, im.h - 1}) { const uint32_t p = im.px[size_t(y) * im.w + size_t(im.w / 2)]; std::snprintf(b, sizeof b, " row%d=(%u,%u,%u,a%u)", y, p & 255, (p >> 8) & 255, (p >> 16) & 255, p >> 24); what += b; } } }
           catch (const FormatError&) { what = "decode fails"; } }
         info("ordw UI image 000005E5:" + str(long(id)), what);

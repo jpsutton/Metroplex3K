@@ -108,6 +108,18 @@ uint32_t categoryColour(const Image* pal, DataLayer l, int i) {
     default: return fb;
   }
 }
+// Tint of a zone tile on the Zones map (observed on Berlin): pure colours by type and density, shade 255 / 206 / 148 from light to dense.
+uint32_t zoneTint(const Image* pal, int cat, int lvl) {
+  lvl = std::max(0, std::min(2, lvl));
+  switch (cat) {
+    case 0: { static const uint32_t c[3] = {rgb(0, 255, 0), rgb(0, 203, 0), rgb(0, 150, 0)}; return c[lvl]; }
+    case 1: { static const uint32_t c[3] = {rgb(0, 0, 255), rgb(0, 0, 206), rgb(0, 0, 148)}; return c[lvl]; }
+    case 2: { static const uint32_t c[3] = {rgb(255, 251, 0), rgb(206, 203, 0), rgb(148, 150, 0)}; return c[lvl]; }
+    case 3: return rgb(239, 93, 0);
+    case 6: return rgb(156, 101, 49);
+    default: return categoryColour(pal, DataLayer::Zones, cat);   // seaports, airports: palette row 8 [unobserved on the map]
+  }
+}
 const uint32_t kBandBlue = rgb(123, 146, 255), kLabelInk = rgb(123, 125, 181), kInkBlue = rgb(0x31, 0x38, 0x84);
 
 // Inset legend box (spec 09 7.1.1): left/top lines (123,138,255), right/bottom highlight (255,243,255); `cut` = 18 px diagonal at the top left.
@@ -170,8 +182,11 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
         uint32_t col = src.baseColour ? src.baseColour(x, z) : rgb(90, 130, 70);
         if (def && vals && vals->size() >= size_t(src.W) * src.H) {
           uint8_t val = (*vals)[size_t(x) * src.H + z];
-          if (categorical(def->layer)) { if (val != 0xFF) col = categoryColour(pal, def->layer, val); }
-          else if (val) {   // developed / zoned tiles only; the colour is a palette pixel, not a blend
+          const bool sentinel = def->layer == DataLayer::Aura || def->layer == DataLayer::Crime || def->layer == DataLayer::Fire ||
+                                def->layer == DataLayer::LandValue || def->layer == DataLayer::Traffic;   // these use 0xFF = not tinted
+          if (def->layer == DataLayer::Zones) { if (val != 0xFF) col = zoneTint(pal, val >> 2, val & 3); }   // pure colours by type and density, not the palette
+          else if (categorical(def->layer)) { if (val != 0xFF) col = categoryColour(pal, def->layer, val); }
+          else if (sentinel ? val != 0xFF : val != 0) {   // palette pixel, not a blend
             int row = 1, c = val >> 3;   // Crime, Flammability, Pollution, Traffic: grey (low) .. red (high)
             if (def->layer == DataLayer::Aura) { row = 0; c = (127 - (int(val) - 128)) >> 3; }   // aura -127..127: column 0 = good .. 31 = bad [INFERRED quantisation]
             else if (def->layer == DataLayer::Density || def->layer == DataLayer::LandValue) { row = 2; c = (255 - val) >> 3; }   // blue (high) .. light (low)
