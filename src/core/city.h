@@ -145,6 +145,7 @@ class City {
   int trafficDensityAt(int x, int z) const;     // live traffic (0..255): strongest of surface, highway and subway at the tile
   int trafficDensityAverage() const;            // mean live density over network tiles that carry any
   const us::AgentHierarchy& agentHierarchy() const { return usHier_; }
+  const AgentHierarchy& economyHierarchy() const { return ecoHier_; }   // the hierarchy the budget's placement costs use
   int occupantIndexByUid(uint32_t uid) const {   // -1 when the occupant is gone
     if (!world_ || !uid) return -1;
     for (size_t i = 0; i < world_->occupants.size(); i++) if (world_->occupants[i].uid == uid) return int(i);

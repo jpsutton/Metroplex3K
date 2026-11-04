@@ -87,7 +87,7 @@ class CityDisasterWorld : public DisasterWorld {
     const Occupant& oc = w_.occupants[i];
     o.valid = true; o.id = oc.uid; o.ax = oc.x; o.az = oc.z; o.w = oc.sizeX; o.h = oc.sizeZ;
     o.agentType = oc.agentType;
-    o.value = c_.budget.placementCost(oc.agentType, c_.agentHierarchy(), false);   // the building's price, summed into the disaster's cost [INFERRED: the original reads its cost attribute]
+    o.value = c_.budget.placementCost(oc.agentType, c_.economyHierarchy(), false);   // the building's price, summed into the disaster's cost [INFERRED: the original reads its cost attribute]
     o.burning = oc.state == 16;
     // Spec 13 §3.1a run-time class flag word; generic buildings = 0x104 (Q-BC).
     o.flags = oc.classFlags ? oc.classFlags : runtimeOccupantFlags(oc.agentType);
