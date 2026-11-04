@@ -400,7 +400,9 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     maskInit = true;
   }
   const Rect box{r.x + 44, r.y + 50, 357, 189};
-  for (int y = 0; y < box.h; y += 8) ui.fill({box.x, box.y + y, box.w, std::min(8, box.h - y)}, (y / 8) % 2 ? rgb(214, 219, 255) : rgb(231, 231, 255));   // 16 px period
+  // Stripes measured on the original: y 52..64 (222,223,255), then 17 px bands (edges 65, 82, ... 201) alternating with (231,231,255), within the plot y 52..218.
+  ui.fill({box.x, box.y, box.w, box.h}, rgb(231, 231, 255));
+  for (int y = 52; y < 218; y++) ui.fill({box.x, r.y + y, box.w, 1}, (y < 65 ? 0 : 1 + (y - 65) / 17) % 2 ? rgb(231, 231, 255) : rgb(222, 223, 255));
   sunkenLines(ui, box);
   const int x0 = r.x + 46, x1 = r.x + 300, yTop = r.y + 56, yBot = r.y + 214;
   struct Lab { std::string text; int endY; uint32_t col; int y = 0; };
