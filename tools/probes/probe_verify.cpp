@@ -330,6 +330,17 @@ void groupOrdW(const fs::path& root) {
     Session s;
     if (!s.open(root) || !s.load(path)) continue;
     const World& w = s.game.world();
+    {   // train sources (spec 26 5.1): rail end caps (agent 17002) and subway end caps (17420) among the network pieces, and the stations
+      static GameData gd2; static bool open2 = false; std::string e2;
+      if (!open2) open2 = gd2.open(root, e2);
+      if (open2) {
+        long rail = 0, sub = 0, stations = 0;
+        for (const auto& p : w.surface) if (const OccAttr* a = gd2.occupant(p.pieceId, true)) rail += a->agentType == 17002;
+        for (const auto& p : w.subway) if (const OccAttr* a = gd2.occupant(p.pieceId, true)) sub += a->agentType == 17420;
+        for (const auto& o : w.occupants) if (const OccAttr* a = gd2.occupant(o.occId)) stations += a->agentType == 12230 || a->agentType == 12360 || a->agentType == 12361;
+        info("ordw " + path.filename().string() + " train sources", "rail end caps (17002) " + str(rail) + ", subway end caps (17420) " + str(sub) + ", stations (12230/12360/12361) " + str(stations) + ", surface pieces " + str(long(w.surface.size())) + ", subway pieces " + str(long(w.subway.size())));
+      }
+    }
     long occ = long(w.occupants.size()), filler = 0, occupied = 0, footprint = 0, footprintNoFiller = 0, nonLot = 0;
     for (const auto& o : w.occupants) {
       const bool f = (o.buildingFlags & 0x100) != 0;
