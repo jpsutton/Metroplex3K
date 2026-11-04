@@ -287,13 +287,19 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
       case DataLayer::Crime:
         // buildings and zoned land only; 0xFF = not tinted
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++)
-          at(x, z) = (c.occupantAt(x, z) >= 0 || world_.zone[size_t(x) * H + z] != 0) ? uint8_t(std::min(254, int(clampB(c.crime.crimeAt(x, z))))) : 0xFF;
+          {   // a crime value of 0 is not tinted either (it shows the base)
+            const int cr = (c.occupantAt(x, z) >= 0 || world_.zone[size_t(x) * H + z] != 0) ? int(clampB(c.crime.crimeAt(x, z))) : 0;
+            at(x, z) = cr > 0 ? uint8_t(std::min(254, cr)) : 0xFF;
+          }
         break;
       case DataLayer::Fire:
         // The Flammability map shows the flammability layer (not the fire-station coverage), on building tiles only; 0xFF = not tinted
         if (c.flammability.grid.size() != size_t(W) * H) return nullptr;
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++)
-          at(x, z) = c.occupantAt(x, z) >= 0 ? uint8_t(std::min<int>(254, c.flammability.grid[size_t(x) * H + z])) : 0xFF;
+          {   // a flammability value of 0 shows the base
+            const int fl = c.occupantAt(x, z) >= 0 ? int(c.flammability.grid[size_t(x) * H + z]) : 0;
+            at(x, z) = fl > 0 ? uint8_t(std::min(254, fl)) : 0xFF;
+          }
         break;
       case DataLayer::LandValue:
         if (c.landValue.lv.empty()) return nullptr;

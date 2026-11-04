@@ -375,6 +375,11 @@ void groupOrdW(const fs::path& root) {
         if (v.empty()) { info("ordw " + n + " " + m.name + " palette columns", "layer has no data"); continue; }
         long hist[32] = {}, tinted = 0;
         for (uint8_t val : v) { if (m.sentinel ? val == 0xFF : val == 0) continue; int row, col; dataMapPaletteCell(m.l, val, row, col); hist[col]++; tinted++; }
+        if (m.l == DataLayer::Density) {   // the raw values behind the Density columns: distinct byte values with counts
+          std::map<int, long> raw; for (uint8_t val : v) if (val) raw[val]++;
+          std::string rs; for (const auto& kv : raw) rs += str(kv.first) + ":" + str(kv.second) + " ";
+          info("ordw " + n + " Density raw byte values (value:tiles)", rs);
+        }
         std::string hs; for (int c = 0; c < 32; c++) hs += str(hist[c]) + " ";
         info("ordw " + n + " " + m.name + " palette columns 0..31 (tiles per column)", "tinted " + str(tinted) + " of " + str(long(v.size())) + ": " + hs);
       }
