@@ -249,9 +249,54 @@ the disaster sound before the loop. [DATA]
 Fields: name, pri, vol, locale, type, PathsAreAbsolute, drive-by file, special-1 file, special-2 file.
 `type`: 0 = special-2 is the horn (honk) sound; 1 = special-2 is an altitude sound (aircraft);
 2 = neither. Drive-by is the looping pass-by sound positioned at the vehicle. Locale as §4.3 (used
-for region-specific sirens). Vehicles are audible from zoom `VehicleMinZoom` upward, attenuated by
-screen distance between `VehicleMinDistance` and `VehicleMaxDistance`; one honk per
-`VehicleHonkDivisor` vehicles. [DATA][INFERRED] See `26-automata.md` for which automata exist.
+for region-specific sirens). See `26-automata.md` for which automata exist. [DATA]
+
+**Vehicle voices** [STATIC unless tagged]:
+
+* Each sounding automaton has one vehicle-sound object with one voice. No limit on the number of
+  simultaneous vehicle voices was found.
+* **Gate.** A vehicle is audible only when all of these hold:
+  * audio zoom > 3 (hard-coded; no reader of `VehicleMinZoom` was found);
+  * the normal (non-overlay) view;
+  * the automaton is inside the screen.
+* **Target volume.** master − (5 − zoom) × `VehicleAttenuation`, floored at 0. When the gate fails,
+  the target volume is 0.
+* **Ramp.** The first value set is capped at 300. After that the volume moves toward the target
+  by at most 50 (of 1024) per update. When the ramped volume reaches 0, the actor is detached and
+  the voice is stopped. So a vehicle that scrolls out of view, or a zoom-out to ≤ 3, fades its
+  voice out and frees it; nothing plays off screen.
+* **Position.** The automaton's screen offset from the view centre, rotated by the view rotation
+  and divided by 10, relative to the listener. The 3-D rolloff uses minimum distance
+  `VehicleMinDistance` and a fixed maximum distance of 10000.
+* No reader was found for `VehicleMaxDistance` and `HonkMinZoom` [OPEN].
+* Which notification tells the audio system that an automaton was removed is [OPEN].
+  Recommended: treat removal like leaving the view.
+* `VehicleMax` and `VehicleMin` are not read by the audio system (no such strings in it) [OPEN
+  whether anything uses them]. They are not a voice cap.
+
+**Honks** [STATIC]:
+
+* The horn samples are hard-coded, not `AUDIO.INI` items: `sfx\vehicles\carhrn1.xa` …
+  `carhrn8.xa`. The sample is chosen as rand & 7.
+* On each vehicle update, a honk is considered with chance about 1 / `VehicleHonkDivisor`. It is
+  skipped while the single honk voice is still playing.
+* Honk volume = master − (5 − zoom) × `HonkAttenuation`. The honk plays only if that is > 300.
+
+**Traffic ambience** [STATIC]:
+
+* A dedicated FSC schedule object loaded from `traffic.fsc` in `sfx\zones\Traffic\` (§5.1).
+  It is one bed, not one voice per vehicle.
+* Let n = min(`TrafficDensityMultiplier` × traffic, 75). The bed plays only if all of these hold:
+  * n ≠ 0;
+  * traffic ≥ `TrafficDensityMin`;
+  * zoom ≥ 3;
+  * the normal view.
+  Otherwise it fades out over 2000 ms.
+* While it plays it receives:
+  * the master volume;
+  * n — the target number of playing cells [INFERRED];
+  * a level of n × 1000 / 75;
+  * a zoom value: 1000 at zoom 5, 500 at zoom 4, 0 at zoom 3 [INFERRED meaning].
 
 ### 4.8 `[Sparse]` — building sounds
 
@@ -458,12 +503,25 @@ share of the view drops below `AmbienceStartFadeAtPercent`. [INFERRED][OPEN — 
   There is one item per ID, so a building type is heard at most once however many copies are in
   view.
 
-  How often an active item actually sounds is [INFERRED]. Recommended: on each rebuild it plays
-  with probability triggerval / `BuildingRandMultiplier`. In the shipped files that is 600/10000
-  for generic classes and 8000/10000 for landmarks.
+  **Switching on and off** arms or disarms the item; it does not start or cut audio by itself
+  [INFERRED: the method bodies were not resolved]. A sample that is playing when its item is
+  switched off is allowed to finish [INFERRED].
 
-  How `BuildingsInAmbienceAttenuation` (shipped 400) is used is [OPEN]. Recommended: subtract it
-  from the volume (out of 1024, floor 0) for items whose building is not at the view centre.
+  **Per-item update, every audio tick** [STATIC]:
+  1. Free every sample voice that has stopped playing.
+  2. If the item is not armed, stop here. Also stop if today is outside the item's date window
+     (default 1/1–12/31).
+  3. For each sample i whose slot holds no voice, draw r from the audio generator. The sample
+     starts if r < triggerval[i] × `BuildingRandMultiplier`.
+
+  A sample therefore never overlaps itself, but different samples of one item can play together.
+
+  * The generator's output range, and so the exact per-tick probability, is [OPEN].
+  * The audio tick period is [OPEN]. Recommended: about 100 ms.
+
+  **Volume** = master − (5 − zoom) × `BuildingsInAmbienceAttenuation` (shipped 400). It is the same
+  for every item; there is no distance term. If the volume is ≤ 300, the sample is not started.
+  [STATIC]
 
 ## 7. Music
 
