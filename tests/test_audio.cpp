@@ -400,6 +400,34 @@ static void testSparse() {
   CHECK(as.sparseVoices() == 0 && as.mixer().voiceCount() == 0);
 }
 
+static void testVoiceLimits() {
+  std::map<std::string, Bytes> files;
+  files["sfx/long.wav"] = wavBytes(std::vector<int16_t>(200000, 3000), 1, 22050);
+  auto loader = [files](const std::string& p, bool, Bytes& out) {
+    auto it = files.find(toLower(normalizeSoundPath(p)));
+    if (it == files.end()) return false;
+    out = it->second; return true;
+  };
+  // Rapid repeats of a non-interrupting one-shot overlap at most 3 times; an interrupting one restarts.
+  const char* txt =
+      "[Options]\r\nBuildingRandMultiplier=10000\r\nBuildingsInAmbienceMinZoom=4\r\nBuildingsInAmbienceAttenuation=800\r\n"
+      "[1ShotSfx]\r\n7=\"Click\",32,1024,0,0,0,0,\"Sfx\\long.wav\"\r\n8=\"Restart\",32,1024,0,0,1,0,\"Sfx\\long.wav\"\r\n"
+      "[Sparse]\r\n0x100=\"Quiet\",32,1024,1,0,0,\"Sfx\\long.wav\",100,10000\r\n";
+  AudioSystem as;
+  as.init(AudioIni::parse(txt), loader, 22050);
+  as.setAudioZoom(4);
+  for (int i = 0; i < 8; i++) as.request(7);
+  { int16_t b[2 * 100]; for (int i = 0; i < 40; i++) as.mixAudio(b, 100); }   // the displaced voices finish their 60 ms fade
+  CHECK(as.mixer().voiceCount() == 3);
+  as.mixer().stopAll();
+  for (int i = 0; i < 8; i++) as.request(8);
+  CHECK(as.mixer().voiceCount() == 1);
+  as.mixer().stopAll();
+  // Sparse: volume = master - (5 - zoom) x BuildingsInAmbienceAttenuation, and a voice at 300 or less is never started (1024 - 800 = 224).
+  as.rebuildSparse({{0x100, true}});
+  CHECK(as.sparseVoices() == 0);
+}
+
 static void testAttached() {
   std::map<std::string, Bytes> files;
   files["sfx/v/drive.wav"] = wavBytes(std::vector<int16_t>(20000, 3000), 1, 22050);
@@ -534,6 +562,7 @@ int main() {
   testFsc();
   testSystem();
   testSparse();
+  testVoiceLimits();
   testAttached();
   testAsyncMusic();
   testMixerThreads();

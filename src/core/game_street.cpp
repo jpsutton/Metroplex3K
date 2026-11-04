@@ -366,30 +366,34 @@ void Game::streetSimFrame(uint32_t dtMs) {
   streetSounds(street_->takeSoundEvents());
 }
 
-// Vehicle sounds (spec 26 3.2, spec 06 4.7 / 8): MotionSound and SirenSound attach to the automaton when it appears, follow it (position refreshed
-// every 10 updates, panned by screen x, off screen 300/1024 quieter) and stop when it is removed. Audible only above-ground from VehicleMinZoom.
-// One voice per (automaton, sound), at most kMaxVehicleVoices at a time, so scrolling over new parts of the map never piles loops up.
+// Vehicle sounds (spec 26 3.2; gating and volume traced from the original, spec 06): MotionSound and SirenSound attach to the automaton, follow
+// it and stop when it is removed. Audible only above ground, at audio zoom 4 or 5 (the original's hard-coded "zoom > 3", not VehicleMinZoom),
+// and only while the vehicle is inside the screen: leaving the view ends its voice. Volume = 1024 - (5 - zoom) x VehicleAttenuation; panned by
+// screen x. One voice per (automaton, sound); the safety cap keeps a crowded view bounded.
 void Game::streetSounds(const std::vector<SoundEvent>& events) {
   if (!audio_) return;
-  const int minZoom = audio_->ini().options.get("VehicleMinZoom", 1);
-  if (ropt_.underground || cam_.zoom + 1 < minZoom) { audio_->detachAllSounds(); return; }
+  const int az = cam_.zoom + 1;
+  if (ropt_.underground || az <= 3) { audio_->detachAllSounds(); return; }
   constexpr size_t kMaxVehicleVoices = 24;
-  auto place = [&](const SoundEvent& e, float& pan, float& att) {
+  const float att = float(std::max(0, 1024 - (5 - az) * std::max(0, audio_->ini().options.get("VehicleAttenuation", 0)))) / 1024.f;
+  auto place = [&](const SoundEvent& e, float& pan) {
     int sx = 0, sy = 0;
     const int tx = std::max(0, std::min(world_.W - 1, int(e.tileX))), tz = std::max(0, std::min(world_.H - 1, int(e.tileY)));
     renderer_.projectSub(cam_, int32_t(e.tileX * 256.0), int32_t(e.tileY * 256.0), int32_t(world_.altAt(tx, tz)) * 256, sx, sy);
-    const bool on = sx >= 0 && sy >= 0 && sx < W_ && sy < H_;
     pan = std::max(-1.f, std::min(1.f, (float(sx) - float(W_) / 2.f) / (float(W_) / 2.f)));
-    att = on ? 1.f : float(1024 - 300) / 1024.f;
+    return sx >= 0 && sy >= 0 && sx < W_ && sy < H_;
   };
   for (const SoundEvent& e : events) {
     const uint64_t key = AudioSystem::soundKey(e.automatonId, e.soundId);
-    float pan, att;
+    float pan = 0;
     switch (e.type) {
-      case SoundEvent::Start: case SoundEvent::Siren:
-        if (audio_->attachedSounds() >= kMaxVehicleVoices) break;
-        place(e, pan, att); audio_->attachSound(key, e.soundId, pan, att); break;
-      case SoundEvent::Move: place(e, pan, att); audio_->moveSound(key, pan, att); break;
+      case SoundEvent::Start: case SoundEvent::Siren: case SoundEvent::Move: {
+        const bool on = place(e, pan);
+        if (!on) { audio_->detachSound(key); break; }   // off screen: the voice is released
+        if (audio_->hasSound(key)) { if (e.type == SoundEvent::Move) audio_->moveSound(key, pan, att); else audio_->attachSound(key, e.soundId, pan, att); }
+        else if (audio_->attachedSounds() < kMaxVehicleVoices) audio_->attachSound(key, e.soundId, pan, att);   // appeared, or came back into view
+        break;
+      }
       case SoundEvent::Stop: audio_->detachSound(key); break;
     }
   }

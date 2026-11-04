@@ -658,6 +658,15 @@ bool AudioSystem::zoomOut() { if (zoom_ <= 1) return false; request(2); zoom_--;
 
 static int scaleVol(int vol, float att) { return int(std::lround(float(vol) * std::clamp(att, 0.f, 1.f))); }
 
+// Remembers a voice of item `id`; at most `cap` voices of one id sound at once, the oldest is stopped for a new one. The original keeps one sample
+// handle per item and its overlap rule was not traced [OPEN]; the cap (2-3 recommended) keeps rapid repeats from stacking up.
+void AudioSystem::trackVoice(int id, AudioMixer::Handle h, size_t cap) {
+  auto& v = active_[id];
+  v.erase(std::remove_if(v.begin(), v.end(), [&](AudioMixer::Handle x) { return !mixer_.isPlaying(x); }), v.end());
+  while (v.size() >= cap) { mixer_.fadeOut(v.front(), 60); v.erase(v.begin()); }
+  v.push_back(h);
+}
+
 bool AudioSystem::request(int id, SoundAction a, int param, float pan, float att) {
   if (!ini_.hasSound(id)) return false;
   if (id == 1 && zoom_ >= 5) return false;
@@ -669,7 +678,7 @@ bool AudioSystem::request(int id, SoundAction a, int param, float pan, float att
       if (d.interrupt) stopId(id);
       VoiceParams p; p.volume = scaleVol(d.vol, att); p.pan = pan; p.priority = d.pri;
       auto h = playBuf(d.file, d.absolute, p);
-      if (h) active_[id].push_back(h);
+      if (h) trackVoice(id, h, 3);
     } else if (a == SoundAction::Stop) stopId(id);
     return true;
   }
@@ -703,7 +712,7 @@ bool AudioSystem::request(int id, SoundAction a, int param, float pan, float att
     if (a == SoundAction::Play) {
       VoiceParams p; p.volume = scaleVol(d.vol, att); p.pan = d.spatialScheme == 0 ? pan : 0.f; p.priority = d.pri;
       auto h = playBuf(d.file, d.absolute, p);
-      if (h) active_[id].push_back(h);
+      if (h) trackVoice(id, h, 3);
       if (d.fadingId) request(d.fadingId, SoundAction::Play);
     } else if (a == SoundAction::Stop) {
       stopId(id);
@@ -721,7 +730,7 @@ bool AudioSystem::request(int id, SoundAction a, int param, float pan, float att
     if (a == SoundAction::Play) {
       VoiceParams p; p.volume = scaleVol(d.vol, att); p.pan = pan; p.priority = d.pri; p.loop = true;
       auto h = playBuf(d.driveBy, d.absolute, p);
-      if (h) active_[id].push_back(h);
+      if (h) trackVoice(id, h, 1);
     } else if (a == SoundAction::Stop) stopId(id);
     return true;
   }
@@ -737,11 +746,14 @@ bool AudioSystem::playSparse(int id, bool bypass, float pan, float att, bool cen
   if (it == ini_.sparse.end() || it->second.samples.empty()) return false;
   const auto& d = it->second;
   const SparseSample& s = d.samples[rng_.below(uint32_t(d.samples.size()))];
+  (void)centre;
   int red = 0;
   if (!bypass) {
     if (zoom_ < ini_.options.get("BuildingsInAmbienceMinZoom", 1)) return false;
     if (!sparseTriggers(s.trigger, ini_.options.get("BuildingRandMultiplier", 10000), rng_)) return false;
-    if (!centre) red = std::clamp(ini_.options.get("BuildingsInAmbienceAttenuation", 0), 0, 1024);
+    // Traced from the original: volume = master - (5 - zoom) x BuildingsInAmbienceAttenuation, and a voice at 300 or less is never started.
+    red = std::max(0, 5 - zoom_) * std::clamp(ini_.options.get("BuildingsInAmbienceAttenuation", 0), 0, 1024);
+    if (1024 - red <= 300) return false;
   }
   VoiceParams p;
   p.category = bypass ? AudioCategory::Sfx : AudioCategory::Ambience;
@@ -802,6 +814,8 @@ void AudioSystem::attachSound(uint64_t key, int id, float pan, float att) {
   }
   attached_[key] = a;
 }
+
+bool AudioSystem::hasSound(uint64_t key) const { return attached_.count(key) != 0; }
 
 void AudioSystem::moveSound(uint64_t key, float pan, float att) {
   auto it = attached_.find(key);

@@ -316,6 +316,7 @@ class AudioSystem {
   void detachSound(uint64_t key);
   void detachAllSounds();
   size_t attachedSounds() const { return attached_.size(); }
+  bool hasSound(uint64_t key) const;
 
   // Categories (spec 8).
   void setCategoryVolume(AudioCategory c, int v) { mixer_.setCategoryVolume(c, v); }
@@ -351,6 +352,7 @@ class AudioSystem {
   std::shared_ptr<const PcmBuffer> load(const std::string& path, bool absolute);
   AudioMixer::Handle playBuf(const std::string& path, bool absolute, const VoiceParams& p, double* lenOutFrames = nullptr);
   void stopId(int id);
+  void trackVoice(int id, AudioMixer::Handle h, size_t cap);
   std::string cacheKey(const std::string& path, bool absolute) const;
   void startMusicVoice(std::shared_ptr<const PcmBuffer> pcm);
   void collectMusicLoads();
