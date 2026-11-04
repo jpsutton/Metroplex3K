@@ -1484,11 +1484,21 @@ at a fixed position (§6.0).
 * Legend box: an inset frame from (287, 358) to (415, 433), with an 18 px diagonal cut at its
   top-left corner. The left and top lines are (123, 138, 255); the right and bottom are highlight
   (255, 243, 255).
-  * Tile tint on gradient maps (observed on Aura): the colour is a **linear RGB interpolation** between
-    three anchors of the legend image: row 0 (good/high, (0, 16, 255)), row 33 (neutral, (189, 186,
-    189)) and row 65 (bad/low, (181, 44, 0)). It is not a per-row lookup: intermediate rows of the
-    image, e.g. the cyan row 16, never appear on the map. Undeveloped land and water show the base
-    colour only. Base colours on the Aura map: land (148, 166, 132), water (132, 130, 181).
+  * **Data-map palette** `000005E5:21` (32 × 32): the map pixels are taken directly from this image, with
+    no blending [OBSERVED: every Aura-map pixel of original Berlin is an exact palette entry].
+    * Row 4 is the base: col 0 water (132, 130, 181), cols 1–11 land by height (Berlin flat land is
+      col 2, (148, 166, 132)). Row 3 is a darker copy of row 4.
+    * Row 0 is the Aura scale: 32 columns from good blue (8, 28, 255) at col 0, through grey at col 15,
+      to red-brown (181, 44, 0) at col 31. Developed tiles take column (127 − aura) >> 3, clamped to
+      0–31 [INFERRED mapping; the columns are OBSERVED].
+    * Other rows, matched to the legend swatches [INFERRED except where measured]:
+      * row 1: grey → red, 32 columns (Crime, Flammability, Pollution, Traffic);
+      * row 2: blue → light, 32 columns (Density, Land Value);
+      * row 5: Powered / Unpowered;
+      * row 6: Watered / Unwatered;
+      * row 7: Residential / Commercial / Industrial;
+      * row 8: Government / Seaports / Airports / Landfill;
+      * rows 10–11: two orange and two green triples, use unknown.
   * Gradient maps: a 32 × 66 gradient image at (292, 362). Aura matches `000005E5:09`
     (blue → red), Density and Land Value approximately match `000005E5:0A` (blue → white). The
     white → red gradient of Crime, Flammability, Pollution and Traffic was not found among the
