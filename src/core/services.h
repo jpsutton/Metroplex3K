@@ -107,6 +107,15 @@ class CoverageLayer {
   int coverageAt(int x, int z) const;                   // displayed byte D
   int accumulatorAt(int x, int z) const;                // A
   int stationCount() const { return int(stations_.size()); }
+  // One entry per station: centre of its box (tile units, may be x.5) and the stamp's reach in tiles (stamp radius plus half the box). The
+  // View Data window draws these as the coverage circles of the Crime / Flammability maps.
+  struct Circle { float x, z, radius; };
+  std::vector<Circle> stationCircles() const {
+    std::vector<Circle> v;
+    for (const auto& st : stations_)
+      v.push_back({float(st.x0 + st.x1 + 1) / 2.f, float(st.z0 + st.z1 + 1) / 2.f, float(st.st.R) + float(std::max(st.x1 - st.x0, st.z1 - st.z0) + 1) / 2.f});
+    return v;
+  }
 
   // Sweep state / record (34 bytes, no header).
   uint8_t phase = 0;

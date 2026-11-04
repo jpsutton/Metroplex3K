@@ -807,7 +807,7 @@ void Game::presentPetitions() {
     if (std::find(petShown_.begin(), petShown_.end(), p.id) != petShown_.end()) continue;
     WinEnv E = env();
     petView_ = std::make_unique<PetitionerView>(makePetitionerView(E, petitioners_.config, p, &E.tc));
-    petViewId_ = p.id;
+    petViewId_ = p.id; petDlg_.impact = false; petDlg_.inMeet = false;
     petShown_.push_back(p.id);
     break;
   }

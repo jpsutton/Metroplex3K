@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <array>
 #include <map>
 #include <string>
 #include <utility>
@@ -321,6 +322,7 @@ PetitionerView makePetitionerView(const WinEnv& E, const PetitionerConfig& cfg, 
 class PetitionerDialog {
  public:
   bool impact = false;        // impact-analysis page showing the advisor/council responses
+  bool inMeet = false;        // opened from the Meet window's list: the page replaces the list inside that frame, at (8, 8) (spec 09 6.5)
   // Events: AnswerPetition(id, accepted) / DismissPetitioner(id); for deal offers: AcceptDeal /
   // DeclineDeal(id = pending index).
   WindowResult draw(Ui& ui, const WinEnv& E, const PetitionerView& v);
@@ -542,6 +544,8 @@ struct MapSource {
   // Per-layer tile values (W*H, index x*H+z, spec 25 9.2 layout); nullptr = layer unavailable.
   std::function<const std::vector<uint8_t>*(DataLayer)> values;
   std::function<uint32_t(int x, int z)> baseColour;     // terrain mini-map colour (optional)
+  // Station coverage circles (x, z, radius in tiles) of the police (Crime map) or fire (Flammability map) layer; optional.
+  std::function<std::vector<std::array<float, 3>>(bool police)> circles;
 };
 
 class MapWindow {

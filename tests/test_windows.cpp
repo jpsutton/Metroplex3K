@@ -337,6 +337,11 @@ void testNeighbours() {
   CHECK(r.has(Act::DeclineDeal) && r.close);
   r = h.click("deal.dismiss");
   CHECK(r.has(Act::DeclineDeal));
+  // Opened from the Meet list the page sits inside the Meet frame at (8, 8); a popup stays centred.
+  pd.inMeet = true; h.frame();
+  CHECK(!h.ui.windowRects.empty() && h.ui.windowRects[0].x == 8 && h.ui.windowRects[0].y == 8 && h.ui.windowRects[0].w == 384);
+  pd.inMeet = false; h.frame();
+  CHECK(h.ui.windowRects[0].x == (h.W - 384) / 2);
 }
 
 // ---------------------------------------------------------------- advisors / petitioners
@@ -798,6 +803,16 @@ void testViewData() {
   r = h.click("showInCity"); CHECK(!w.map.showInCityView && w.activeOverlay() == nullptr);
   h.frame(); CHECK(h.has("coverage"));
   r = h.click("coverage"); CHECK(w.map.coverage && r.has(Act::DataMapOptionChanged));
+  {   // coverage circles: cyan pixels appear once the toggle is on and the source lists a station
+    src.circles = [](bool) { return std::vector<std::array<float, 3>>{{32.f, 32.f, 10.f}}; };
+    h.frame();
+    size_t cyan = 0; for (uint32_t px : h.fb) cyan += px == rgb(0, 255, 255);
+    CHECK(cyan > 20);
+    w.map.coverage = false; h.frame();
+    size_t none = 0; for (uint32_t px : h.fb) none += px == rgb(0, 255, 255);
+    CHECK(none == 0);
+    w.map.coverage = true;
+  }
   r = h.click("mode.8"); CHECK(w.activeOverlay() == nullptr && !h.has("coverage"));
   r = h.click("mode.7"); h.frame(); CHECK(h.has("pollution.2"));
   r = h.click("pollution.1"); CHECK(w.map.pollutionKind == 1 && r.has(Act::DataMapOptionChanged));

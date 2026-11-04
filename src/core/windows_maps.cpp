@@ -151,6 +151,21 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
       R.add(Act::CenterView, 0, x, z);
     }
   }
+  // Coverage circles (Crime: police stations, Flammability: fire stations): cyan outlines. A tile-space circle is a circle on the diamond, scaled by sqrt(2)
+  // times the half-tile step.
+  if (coverage && def && def->toggleId && src.circles && src.W > 0 && src.H > 0) {
+    const float sx = float(mm.w) / float(2 * src.W), sy = float(mm.h) / float(2 * src.H);
+    for (const auto& c : src.circles(def->layer == DataLayer::Crime)) {
+      const float cx = float(mm.x) + (c[0] - c[1] + float(src.W)) * sx, cy = float(mm.y) + (c[0] + c[1]) * sy;
+      const float rad = c[2] * 1.41421356f * sx;
+      const int n = std::max(24, int(rad * 6.28f));
+      for (int k = 0; k < n; k++) {
+        const float a = 6.2831853f * float(k) / float(n);
+        const int px = int(cx + std::cos(a) * rad), py = int(cy + std::sin(a) * rad);
+        if (px >= mm.x && py >= mm.y && px < mm.x + mm.w && py < mm.y + mm.h) ui.at(px, py) = rgb(0, 255, 255);
+      }
+    }
+  }
   if (!pollution) compassRose(ui, E, r.x + 63 + 30, r.y + 60 + 30, viewRotation);
   // "Use As Map": L-shaped blue panel, round toggle (42DEC7D2:02) and the label
   ui.fill({r.x + 59, r.y + 341, 29, 30}, kBandBlue);

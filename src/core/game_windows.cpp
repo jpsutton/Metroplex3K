@@ -245,6 +245,11 @@ void Game::buildPickerEntries(PickerCategory c) {
 
 void Game::buildMapSource(MapSource& src, int pollutionKind) {
   src.W = world_.W; src.H = world_.H;
+  src.circles = [this](bool police) {
+    std::vector<std::array<float, 3>> v;
+    for (const auto& c : (police ? sim_.city().police : sim_.city().fire).stationCircles()) v.push_back({c.x, c.z, c.radius});
+    return v;
+  };
   auto buf = std::make_shared<std::vector<uint8_t>>();
   src.values = [this, buf, pollutionKind](DataLayer l) -> const std::vector<uint8_t>* {
     City& c = sim_.city();
@@ -570,7 +575,7 @@ void Game::handleWindowResult(const WindowResult& r) {
         if (p) {
           WinEnv E = env();
           petView_ = std::make_unique<PetitionerView>(makePetitionerView(E, petitioners_.config, *p, &E.tc));
-          petViewId_ = e.id; petDlg_.impact = false;
+          petViewId_ = e.id; petDlg_.impact = false; petDlg_.inMeet = true;   // from the Meet list: shown inside that frame
         }
         break;
       }
@@ -608,7 +613,7 @@ void Game::handleWindowResult(const WindowResult& r) {
         for (size_t i = 0; i < pend.size(); i++)
           if (pend[i].neighbourIndex == e.id) {
             petView_ = std::make_unique<PetitionerView>(makeDealOfferView(env(), pend[i], i));
-            petDlg_.impact = false;
+            petDlg_.impact = false; petDlg_.inMeet = false;
             break;
           }
         break;

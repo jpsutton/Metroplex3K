@@ -256,7 +256,7 @@ PetitionerView makePetitionerView(const WinEnv& E, const PetitionerConfig& cfg, 
 // impact buttons (no reference screenshot) sit at the bottom of the message box when the petition has them.
 WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerView& v) {
   WindowResult R;
-  Rect r = centered(ui, 384, 354);
+  Rect r = inMeet ? placedAt(ui, 8, 8, 384, 354) : centered(ui, 384, 354);
   if (frame(ui, E, r, v.heading.empty() ? E.win(0x2DD, "Petitioner") : v.heading)) { R.close = true; R.add(Act::Close); }
   std::string t = v.tag.empty() ? "pet" : v.tag;
   if (sysButton(ui, E, t + ".back", 1, r.x + 328, r.y + 7)) { R.close = true; R.add(Act::Close); }
