@@ -347,6 +347,7 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
           const int oi = c.occupantAt(x, z);
           if (oi < 0 || size_t(oi) >= world_.occupants.size()) { at(x, z) = 0; continue; }   // bare land shows the base
           const int t = int(world_.occupants[size_t(oi)].agentType);
+          if (t == 1000 || t == 12850) { at(x, z) = 0; continue; }   // agent 1000 (mostly) and landfills are not tinted on the Density map
           int col = 31;
           if ((t >= 3000 && t < 5000) || (t >= 5000 && t < 8000) || (t >= 8000 && t < 9300)) {   // zoned family: the nearest listed type of the same group
             const int lo = t < 5000 ? 3000 : t < 8000 ? 5000 : 8000, hi = t < 5000 ? 5000 : t < 8000 ? 8000 : 9300;
