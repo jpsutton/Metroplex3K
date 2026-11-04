@@ -405,16 +405,16 @@ void Game::drawWindows(uint32_t dtMs) {
     MapSource src; buildMapSource(src);
     std::vector<GraphSeries> series;
     ChartsData cd;
+    // The charts the series point at must outlive viewData_.draw below, so they live at this scope, not inside the graphs branch.
+    Chart conv[4], wc[5], trafficChart, lvChart, auraC;
     if (viewData_.mode == int(ViewDataWindow::ModeGraphs)) {
       series = graphSeriesTemplate();
-      Chart conv[4];
       auto cv = [](const us::Chart& u, Chart& c) {
         std::copy(u.monthly, u.monthly + 12, c.monthly); std::copy(u.yearly, u.yearly + 10, c.yearly);
         std::copy(u.decade, u.decade + 10, c.decade); c.max = u.max;
       };
       cv(city.pollution.chart, conv[0]); cv(city.crime.chart, conv[1]); cv(city.power.chart, conv[2]); cv(city.water.chart, conv[3]);
       // World layer charts (spec 10 6.13): city size, commerce, industry, unemployment, national population.
-      Chart wc[5];
       for (int k = 0; k < 5; k++) {
         const auto& w = city.valves.world.charts[k].w;
         for (int i = 0; i < 12; i++) wc[k].monthly[i] = w[size_t(i)];
@@ -423,7 +423,6 @@ void Game::drawWindows(uint32_t dtMs) {
       }
       // Traffic (0x166) = the traffic record's road-traffic history with its graph scale; land value (0x16F) = the land-value
       // record's final 132 bytes (spec 10 s6.12/s6.13): 12 monthly, 10 yearly, 10 decade samples, then the scale.
-      Chart trafficChart, lvChart;
       auto fill32 = [](Chart& ch, const uint32_t* h, uint32_t mx) {
         for (int i = 0; i < 12; i++) ch.monthly[i] = h[i];
         for (int i = 0; i < 10; i++) { ch.yearly[i] = h[12 + i]; ch.decade[i] = h[22 + i]; }
@@ -431,7 +430,6 @@ void Game::drawWindows(uint32_t dtMs) {
       };
       if (city.traffic) fill32(trafficChart, city.traffic->rec().history, city.traffic->rec().graphMax);
       fill32(lvChart, city.landValue.history.data(), city.landValue.tail);
-      Chart auraC;
       cv(city.aura.chart, auraC);
       if (series.size() >= 16) {   // order of graphSeriesTemplate()
         series[0].chart = &auraC;               // Approval Rating
