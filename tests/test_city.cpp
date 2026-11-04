@@ -64,7 +64,9 @@ int main() {
   CHECK(sounds.back() == 38);
   CHECK(w.zone[w.tIdx(20, 42)] == 1);
   // power plant (no game data: plopAgent) + power line to the road
+  const int64_t fp0 = c.footprintTiles();
   CHECK(c.plopAgent(900, 12111, 4, 4, 42, 30, 100));
+  CHECK(c.footprintTiles() == fp0 + 16);   // W for the world-based ordinance costs = the sum of occupant footprint tiles
   // line crosses the road at z=40 (roads do not conduct, lines may cross them) and touches the zones
   CHECK(s.buildNetwork(NetworkKind::Power, line(44, 34, 44, 43)));
   CHECK(s.buildNetwork(NetworkKind::Power, line(41, 38, 43, 38)));

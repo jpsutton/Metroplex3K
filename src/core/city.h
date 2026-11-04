@@ -230,6 +230,9 @@ class City {
   // Taxes: all three groups follow `rate` (the simplified UI has one slider).
   void setTaxRate(int rate);
 
+  // Sum of every occupant's footprint tiles, filler lots included: the quantity W behind the world-based ordinance costs (spec 19 s9.5
+  // [INFERRED]; Berlin 25,598 gives Power Conservation 11, Smoke Detectors 27, Earthquake 29 as in the original).
+  int64_t footprintTiles() const;
   void flush() { if (world_) flush(*world_); }
 
   // ---- persistence ----

@@ -166,7 +166,7 @@ void Game::buildBudgetView(BudgetView& v) {
   in.population = uint32_t(std::max(0, c.population()));
   in.avgLV = c.config().synthetic ? 128 : c.landValue.cityAverage();
   in.zoneTotals[0] = int32_t(c.valves.resUnits); in.zoneTotals[1] = int32_t(c.valves.comUnits); in.zoneTotals[2] = int32_t(c.valves.indUnits);
-  OrdinanceMoneyInput om; om.population = in.population;
+  OrdinanceMoneyInput om; om.population = in.population; om.world = c.footprintTiles();
   Ordinances::Money m = c.ordinances.monthlyMoney(om);
   in.ordIncome = m.income; in.ordCost = m.cost;
   NeighbourDeals::Money dm = c.neighbours.monthlyMoney();
@@ -457,7 +457,6 @@ void Game::drawWindows(uint32_t dtMs) {
     }
     viewData_.map.viewRotation = cam_.rot;
     viewData_.graphs.year = city.clock.date().year;
-    if (series.size() >= 16) series[3].live = std::max(0, city.population());   // City Size prints the live city size
     finish(viewData_.draw(ui_, E, src, series, cd), showMap_);
   }
   if (showLayers_) finish(layersDlg_.draw(ui_, E, ropt_.grid), showLayers_);
@@ -487,7 +486,7 @@ void Game::drawWindows(uint32_t dtMs) {
     finish(budgetWin_.draw(ui_, E, city.budget, v), showBudget_);
   }
   if (showOrd_) {
-    OrdinanceMoneyInput money; money.population = uint32_t(std::max(0, city.population()));
+    OrdinanceMoneyInput money; money.population = uint32_t(std::max(0, city.population())); money.world = city.footprintTiles();
     finish(ordWin_.draw(ui_, E, city.ordinances, money), showOrd_);
   }
   if (showDeals_) {
@@ -509,7 +508,7 @@ void Game::drawWindows(uint32_t dtMs) {
   }
   if (showAdv_) {
     advWin_.ordinances = &city.ordinances;
-    advWin_.money.population = uint32_t(std::max(0, city.population()));
+    advWin_.money.population = uint32_t(std::max(0, city.population())); advWin_.money.world = city.footprintTiles();
     finish(advWin_.draw(ui_, E, advisors_, petitioners_), showAdv_);
   }
   if (showProps_) {

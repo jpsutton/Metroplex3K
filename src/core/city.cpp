@@ -2221,6 +2221,7 @@ void City::monthlyBudget() {
   in.zoneTotals[0] = int32_t(valves.resUnits); in.zoneTotals[1] = int32_t(valves.comUnits); in.zoneTotals[2] = int32_t(valves.indUnits);
   OrdinanceMoneyInput om;
   om.population = in.population;
+  om.world = footprintTiles();
   Ordinances::Money om2 = ordinances.monthlyMoney(om);
   in.ordIncome = om2.income; in.ordCost = om2.cost;
   NeighbourDeals::Money dm = neighbours.monthlyMoney();
@@ -2492,6 +2493,12 @@ void City::loadRecords() {
       }
     }
   }
+}
+
+int64_t City::footprintTiles() const {
+  int64_t n = 0;
+  if (world_) for (const auto& o : world_->occupants) n += int64_t(o.sizeX) * o.sizeZ;
+  return n;
 }
 
 void City::flush(World& w) {
