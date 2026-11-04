@@ -791,6 +791,12 @@ building (`13-buildings-occupants.md`).
 * There is one row per pending petition, at a 14 px pitch; the first row's text top is at y = 167.
 * Each row has a small solid right-pointing triangle, drawn about 4 px wide at x ≈ 23 and not a
   font glyph, followed by the petition title in the small bold font (dark navy) from x ≈ 34.
+* Order: ascending petition ID. The ID is the instance of the petition's heading string in group
+  `C26DD29B`. In Berlin: 0x34 Lower Commercial Taxes, 0x3B Holiday To Honor Mayor, 0x5B Lower
+  Industrial Taxes, 0x5F Sims Demand Tax Relief. The petition manager hands the rows over in
+  insertion order, which is the save-record order; the list control re-orders them by ID
+  [STATIC for the IDs and insertion order; the control's sort is INFERRED, matching 4 of 4].
+  Petitions that are already answered are not listed.
 * A single click selects the row: a (0, 0, 255) bar 13 px tall from x ≈ 28 to the right edge, with
   white text.
 * A double click opens that petitioner's page inside the same window frame. The page shows the
