@@ -112,7 +112,10 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
     ui.fill(lr, kLav); sunkenLines(ui, lr);
     auto has = [&](uint32_t t, uint32_t i) { return E.has(t, i); };
     int k = 0;
-    for (const PendingPetition* p : pm.presentable()) {
+    // Ascending petition id: the original's list control orders its rows by the id of the heading string (spec 09 6.5, 4/4 on Berlin).
+    auto pending = pm.presentable();
+    std::stable_sort(pending.begin(), pending.end(), [](const PendingPetition* a, const PendingPetition* b) { return a->id < b->id; });
+    for (const PendingPetition* p : pending) {
       if (k >= (lr.h - 3) / 14) break;
       uint32_t tbl = pm.config.tableFor(PetitionText::Heading, p->id, has);
       std::string h = tbl ? E.text(tbl, p->id, hexName("Petition ", p->id)) : hexName("Petition ", p->id);

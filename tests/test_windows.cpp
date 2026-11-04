@@ -348,13 +348,15 @@ void testAdvisors() {
   am.list(kAdvBudget).raise(0x101, 0, 5, false, false);     // news topic
   am.list(kAdvBudget).raise(0x102, 0, 5, true, false);      // briefing (persistent)
   pm.request(0x55, 0, 10, true);
+  pm.request(0x34, 0, 10, true);
   Ordinances ords; ords.newCity(); ords.makeAllAvailable();
   AdvisorWindow w;
   w.ordinances = &ords;
   h.drawFn = [&] { return w.draw(h.ui, h.E, am, pm); };
   h.frame();
   CHECK(h.inked() > 1000);
-  CHECK(h.has("advisor.1") && h.has("advisor.7") && h.has("petition.85"));
+  CHECK(h.has("advisor.1") && h.has("advisor.7") && h.has("petition.85") && h.has("petition.52"));
+  { Rect a, b; CHECK(h.find("petition.52", a) && h.find("petition.85", b) && a.y < b.y); }   // rows ascend by petition id (0x34 before 0x55) whatever the record order
   CHECK(AdvisorWindow::advisorIndex(kAdvBudget) == 2);
   CHECK(AdvisorWindow::advisorIndex(0x1234) == 0);
   CHECK(AdvisorWindow::portraitInstance(2, 3) == 0x203);

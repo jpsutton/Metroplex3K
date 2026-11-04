@@ -400,7 +400,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     maskInit = true;
   }
   const Rect box{r.x + 44, r.y + 50, 357, 189};
-  for (int y = 0; y < box.h; y += 16) ui.fill({box.x, box.y + y, box.w, std::min(16, box.h - y)}, (y / 16) % 2 ? rgb(214, 219, 255) : rgb(231, 231, 255));
+  for (int y = 0; y < box.h; y += 8) ui.fill({box.x, box.y + y, box.w, std::min(8, box.h - y)}, (y / 8) % 2 ? rgb(214, 219, 255) : rgb(231, 231, 255));   // 16 px period
   sunkenLines(ui, box);
   const int x0 = r.x + 46, x1 = r.x + 300, yTop = r.y + 56, yBot = r.y + 214;
   struct Lab { std::string text; int endY; uint32_t col; int y = 0; };
@@ -442,8 +442,10 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     ui.text(r.x + 306, l.y, l.text, "system9", l.col);
   }
   // ticks along y ~ 220 and the current year in grey
+  ui.fill({r.x + 300, box.y + 1, 1, box.h - 2}, rgb(123, 138, 255));   // divider between the lines and their labels
+  ui.fill({r.x + 44, r.y + 218, 256, 1}, rgb(128, 128, 128));         // axis line along the ticks
   if (nPts > 1) for (int k = 0; k < nPts; k++) ui.fill({x0 + k * (x1 - x0) / (nPts - 1), r.y + 219, 1, 4}, rgb(128, 128, 128));
-  if (year) rightText(ui, r.x + 298, r.y + 224, std::to_string(year), "system9", rgb(128, 128, 128));
+  if (year) rightText(ui, r.x + 299, r.y + 221, std::to_string(year), "system9", rgb(128, 128, 128));
   // check-box grid: three columns of 5, 6 and 5
   static const int colSize[3] = {5, 6, 5}, colX[3] = {58, 178, 298};
   size_t idx = 0;
