@@ -336,10 +336,27 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
         }
         break;
       }
-      case DataLayer::Density:
-        if (c.valves.effectMap.size() != size_t(W) * H) return nullptr;
-        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = c.valves.effectMap[size_t(x) * H + z];
+      case DataLayer::Density: {
+        // The original colours each building by its type's density class, not by a simulation layer (observed on Berlin: the most frequent
+        // palette-row-2 column per agent type, 53-95 % of the buildings of a type). Residential 3100/3300 low, 3700-4100 medium, 4300-4700 high;
+        // commercial 5100/5500 low, 5700/6100 medium, 6300/6700 high; industrial 8100/8700 low, 8300/8900 medium; everything else lightest.
+        static const std::pair<int, int> kCol[] = {{3100, 27}, {3300, 28}, {3700, 17}, {3900, 17}, {4100, 18}, {4300, 0}, {4500, 1}, {4700, 2},
+                                                   {5100, 25}, {5500, 25}, {5700, 7}, {6100, 8}, {6300, 0}, {6700, 0},
+                                                   {8100, 24}, {8300, 6}, {8700, 25}, {8900, 8}};
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
+          const int oi = c.occupantAt(x, z);
+          if (oi < 0 || size_t(oi) >= world_.occupants.size()) { at(x, z) = 0; continue; }   // bare land shows the base
+          const int t = int(world_.occupants[size_t(oi)].agentType);
+          int col = 31;
+          if ((t >= 3000 && t < 5000) || (t >= 5000 && t < 8000) || (t >= 8000 && t < 9300)) {   // zoned family: the nearest listed type of the same group
+            const int lo = t < 5000 ? 3000 : t < 8000 ? 5000 : 8000, hi = t < 5000 ? 5000 : t < 8000 ? 8000 : 9300;
+            int best = 1 << 30;
+            for (const auto& e : kCol) if (e.first >= lo && e.first < hi && std::abs(e.first - t) < best) { best = std::abs(e.first - t); col = e.second; }
+          }
+          at(x, z) = uint8_t(std::max(1, 255 - col * 8));   // column = (255 - value) >> 3
+        }
         break;
+      }
       case DataLayer::Traffic:   // spec 18 s7.1: the snapshot tile value over road, rail, station and highway (no subway);
                                  // tiles without a requested network keep their terrain colour
         if (!c.traffic) return nullptr;
