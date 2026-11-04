@@ -1563,6 +1563,7 @@ at a fixed position (§6.0).
     "% Garbage Goes To:" (`1F3`) for Garbage.
   * Below the heading is a list of 16 px colour bars, one per category present. Each bar is about
     168 px wide, filled in the slice colour, with the label in bold.
+  * The chart box background on the pie pages is plain (222, 223, 255) with no stripes.
   * The pie is on the right, centred at about (318, 117), roughly 175 × 110 px, with a dark rim
     below it. Percentages are drawn in black on the slices.
   * Electricity colours: Coal Power (132, 65, 66), Wind Power (255, 130, 0), Solar Power
