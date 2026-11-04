@@ -303,6 +303,26 @@ void groupOrdW(const fs::path& root) {
     info("ordw " + n, "pop " + str(s.game.sim().population()) + ", occupants " + str(occ) + ", filler " + str(filler) + ", occupied " + str(occupied) +
          ", non-filler " + str(occ - filler) + ", footprint tiles " + str(footprint) + ", non-filler footprint " + str(footprintNoFiller) +
          ", zoned tiles " + str(zoned) + ", 1x1 non-filler " + str(nonLot) + ", surface pieces " + str(long(w.surface.size())));
+    if (n.compare(0, 6, "Berlin") == 0) {   // coverage circle centres of the original's View Data window (window-relative pixels, 256 tiles per edge)
+      static const float pol[10][2] = {{182, 172}, {220, 154}, {194, 236}, {240, 218}, {224, 328}, {144, 198}, {182, 304}, {326, 238}, {156, 260}, {262, 290}};
+      static const float fir[10][2] = {{136, 230}, {186, 264}, {166, 316}, {312, 188}, {214, 130}, {162, 200}, {254, 216}, {214, 298}, {206, 342}, {182, 142}};
+      for (int layer = 0; layer < 2; layer++) {
+        const auto circles = (layer == 0 ? s.game.city().police : s.game.city().fire).stationCircles();
+        for (int swap = 0; swap < 2; swap++) {
+          int hit1 = 0, hit2 = 0; double sum = 0;
+          for (int k = 0; k < 10; k++) {
+            const float u = (layer == 0 ? pol : fir)[k][0] - 230.f, v = (layer == 0 ? pol : fir)[k][1] - 47.f;
+            float x = (u / 0.734f + v / 0.730f) / 2.f, z = (v / 0.730f - u / 0.734f) / 2.f;
+            if (swap) std::swap(x, z);
+            double best = 1e9;
+            for (const auto& c : circles) best = std::min(best, std::hypot(double(c.x - x), double(c.z - z)));
+            hit1 += best <= 2.0; hit2 += best <= 4.0; sum += best;
+          }
+          info(std::string("ordw ") + n + (layer == 0 ? " police" : " fire") + " circle centres, mapping " + (swap ? "(b) x/z swapped" : "(a)"),
+               str(hit1) + "/10 within 2 tiles, " + str(hit2) + "/10 within 4, mean distance " + std::to_string(std::lround(sum * 10.0) / 100.0).substr(0, 5) + " tiles, stations " + str(long(circles.size())));
+        }
+      }
+    }
     const auto& wc = s.game.city().valves.world.charts;
     for (int k = 0; k < 5; k++) {
       std::string line;

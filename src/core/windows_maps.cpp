@@ -577,7 +577,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
   ui.fill({box.x + 1, box.y + 1, box.w - 2, box.h - 2}, lavLight);
   for (int row = 0; row < 155; row++)
     ui.fill({plot.x + 1, r.y + 51 + row, plot.w - 1, 1}, bandIndex(row) % 2 ? lavDark : lavLight);
-  if (!agePage) for (int y = 0; y < box.h - 2; y += 17) ui.fill({box.x + 1, box.y + 1 + y, box.w - 2, std::min(17, box.h - 2 - y)}, (y / 17) % 2 ? lavDark : lavLight);
+  if (!agePage) ui.fill({box.x + 1, box.y + 1, box.w - 2, box.h - 2}, lavDark);   // the pie pages have a plain (222,223,255) background
   std::string cap1, cap2;
   if (agePage) {
     const uint32_t axis = rgb(0x18, 0x20, 0x6B);
