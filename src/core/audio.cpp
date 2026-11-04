@@ -793,20 +793,29 @@ void AudioSystem::clearSparse() {
 }
 
 // ================================================================ attached sounds
+namespace {
+constexpr int kRampStep = 50, kRampTickMs = 100;   // volume units per update, and the assumed update period (spec 06 4.7; the tick is [OPEN])
+int rampMs(int from, int to) { return std::max(kRampTickMs, (std::abs(to - from) + kRampStep - 1) / kRampStep * kRampTickMs); }
+}  // namespace
+
 void AudioSystem::attachSound(uint64_t key, int id, float pan, float att) {
   detachSound(key);
   if (!ini_.hasSound(id)) return;
   Attached a; a.soundId = id;
   if (auto it = ini_.actors.find(id); it != ini_.actors.end()) {
     const auto& d = it->second;
-    VoiceParams p; p.volume = scaleVol(d.vol, att); p.pan = pan; p.priority = d.pri; p.loop = true;
-    a.baseVol = d.vol;
+    const int target = scaleVol(d.vol, att), first = std::min(target, 300);
+    VoiceParams p; p.volume = first; p.pan = pan; p.priority = d.pri; p.loop = true;
+    a.baseVol = d.vol; a.cur = target;
     a.h = playBuf(d.driveBy, d.absolute, p);
+    if (a.h && target > first) mixer_.setVolume(a.h, target, rampMs(first, target));
   } else if (auto it2 = ini_.oneShots.find(id); it2 != ini_.oneShots.end()) {
     const auto& d = it2->second;
-    VoiceParams p; p.volume = scaleVol(d.vol, att); p.pan = pan; p.priority = d.pri;
-    a.baseVol = d.vol;
+    const int target = scaleVol(d.vol, att), first = std::min(target, 300);
+    VoiceParams p; p.volume = first; p.pan = pan; p.priority = d.pri;
+    a.baseVol = d.vol; a.cur = target;
     a.h = playBuf(d.file, d.absolute, p);
+    if (a.h && target > first) mixer_.setVolume(a.h, target, rampMs(first, target));
   } else if (ini_.fading.count(id)) {   // a shared loop: it plays while at least one object holds it
     if (attachedFadeRefs_[id]++ == 0) request(id, SoundAction::Play, 0, pan, att);
   } else {
@@ -820,8 +829,10 @@ bool AudioSystem::hasSound(uint64_t key) const { return attached_.count(key) != 
 void AudioSystem::moveSound(uint64_t key, float pan, float att) {
   auto it = attached_.find(key);
   if (it == attached_.end() || !it->second.h) return;
-  mixer_.setVolume(it->second.h, scaleVol(it->second.baseVol, att), 150);
-  mixer_.setPan(it->second.h, pan);
+  Attached& a = it->second;
+  const int target = scaleVol(a.baseVol, att);
+  if (target != a.cur) { mixer_.setVolume(a.h, target, rampMs(a.cur, target)); a.cur = target; }
+  mixer_.setPan(a.h, pan);
 }
 
 void AudioSystem::detachSound(uint64_t key) {
@@ -829,7 +840,7 @@ void AudioSystem::detachSound(uint64_t key) {
   if (it == attached_.end()) return;
   const Attached a = it->second;
   attached_.erase(it);
-  if (a.h) mixer_.fadeOut(a.h, 150);
+  if (a.h) mixer_.fadeOut(a.h, rampMs(a.cur, 0));
   else if (auto r = attachedFadeRefs_.find(a.soundId); r != attachedFadeRefs_.end()) {
     if (--r->second <= 0) { attachedFadeRefs_.erase(r); request(a.soundId, SoundAction::Stop); }
   }

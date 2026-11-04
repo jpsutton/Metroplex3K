@@ -445,15 +445,15 @@ static void testAttached() {
   as.attachSound(b, 130, 0.5f, 1.f);
   CHECK(as.attachedSounds() == 2);
   int16_t buf[2 * 100];
-  for (int i = 0; i < 40; i++) as.mixAudio(buf, 100);   // the first voice's fade-out
+  for (int i = 0; i < 500; i++) as.mixAudio(buf, 100);   // the first voice's fade-out (1024 at 50 per 100 ms: about 2.1 s)
   CHECK(as.mixer().voiceCount() == 2);
   as.moveSound(a, 1.f, 0.5f);
   as.detachSound(b);
   CHECK(as.attachedSounds() == 1);
-  for (int i = 0; i < 40; i++) as.mixAudio(buf, 100);
+  for (int i = 0; i < 500; i++) as.mixAudio(buf, 100);
   CHECK(as.mixer().voiceCount() == 1);
   as.detachAllSounds();
-  for (int i = 0; i < 40; i++) as.mixAudio(buf, 100);
+  for (int i = 0; i < 500; i++) as.mixAudio(buf, 100);
   CHECK(as.attachedSounds() == 0 && as.mixer().voiceCount() == 0);
 }
 

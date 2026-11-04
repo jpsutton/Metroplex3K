@@ -367,7 +367,7 @@ class AudioSystem {
   int zoom_ = 3;
   int64_t now_ = 0;
   std::map<int, AudioMixer::Handle> sparseH_;  // one voice per [Sparse] id started by rebuildSparse
-  struct Attached { int soundId = 0, baseVol = 0; AudioMixer::Handle h = 0; };
+  struct Attached { int soundId = 0, baseVol = 0, cur = 0; AudioMixer::Handle h = 0; };   // cur = the volume the ramp has reached (0..1024)
   std::map<uint64_t, Attached> attached_;
   std::map<int, int> attachedFadeRefs_;      // [Fading] ids: how many attached objects hold the loop
   // explosions: 4 round-robin slots

@@ -373,7 +373,7 @@ void Game::streetSimFrame(uint32_t dtMs) {
 void Game::streetSounds(const std::vector<SoundEvent>& events) {
   if (!audio_) return;
   const int az = cam_.zoom + 1;
-  if (ropt_.underground || az <= 3) { audio_->detachAllSounds(); return; }
+  if (ropt_.underground || ropt_.overlay || az <= 3) { audio_->detachAllSounds(); return; }   // gate: above ground, normal (non-overlay) view, audio zoom > 3
   constexpr size_t kMaxVehicleVoices = 24;
   const float att = float(std::max(0, 1024 - (5 - az) * std::max(0, audio_->ini().options.get("VehicleAttenuation", 0)))) / 1024.f;
   auto place = [&](const SoundEvent& e, float& pan) {
