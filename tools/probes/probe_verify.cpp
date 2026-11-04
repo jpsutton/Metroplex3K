@@ -309,17 +309,17 @@ void groupOrdW(const fs::path& root) {
       for (int layer = 0; layer < 2; layer++) {
         const auto circles = (layer == 0 ? s.game.city().police : s.game.city().fire).stationCircles();
         for (int swap = 0; swap < 2; swap++) {
-          int hit1 = 0, hit2 = 0; double sum = 0;
+          int hit1 = 0, hit2 = 0; double sum = 0, sdx = 0, sdz = 0;
           for (int k = 0; k < 10; k++) {
             const float u = (layer == 0 ? pol : fir)[k][0] - 230.f, v = (layer == 0 ? pol : fir)[k][1] - 47.f;
             float x = (u / 0.734f + v / 0.730f) / 2.f, z = (v / 0.730f - u / 0.734f) / 2.f;
             if (swap) std::swap(x, z);
-            double best = 1e9;
-            for (const auto& c : circles) best = std::min(best, std::hypot(double(c.x - x), double(c.z - z)));
-            hit1 += best <= 2.0; hit2 += best <= 4.0; sum += best;
+            double best = 1e9, bdx = 0, bdz = 0;
+            for (const auto& c : circles) { const double d = std::hypot(double(c.x - x), double(c.z - z)); if (d < best) { best = d; bdx = double(x - c.x); bdz = double(z - c.z); } }
+            hit1 += best <= 2.0; hit2 += best <= 4.0; sum += best; sdx += bdx; sdz += bdz;   // dx, dz = observed circle centre - our station centre
           }
           info(std::string("ordw ") + n + (layer == 0 ? " police" : " fire") + " circle centres, mapping " + (swap ? "(b) x/z swapped" : "(a)"),
-               str(hit1) + "/10 within 2 tiles, " + str(hit2) + "/10 within 4, mean distance " + std::to_string(std::lround(sum * 10.0) / 100.0).substr(0, 5) + " tiles, stations " + str(long(circles.size())));
+               str(hit1) + "/10 within 2 tiles, " + str(hit2) + "/10 within 4, mean distance " + std::to_string(std::lround(sum * 10.0) / 100.0).substr(0, 5) + " tiles, signed mean dx " + std::to_string(std::lround(sdx * 10.0) / 100.0).substr(0, 5) + " dz " + std::to_string(std::lround(sdz * 10.0) / 100.0).substr(0, 5) + " (tiles, x/z of the mapping), stations " + str(long(circles.size())));
         }
       }
     }

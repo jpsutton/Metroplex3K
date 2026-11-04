@@ -127,39 +127,60 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
   const bool pollution = def && def->layer == DataLayer::Pollution;
   const Rect mm{r.x + 42, r.y + 47, 376, 377};
   const std::vector<uint8_t>* vals = def && src.values ? src.values(def->layer) : nullptr;
+  // Tile <-> diamond transform (spec 09 7.1.1). At the default view px = (z - x + W) s, py = (x + z) s with s = mm.w / 2W: tile x runs along the
+  // top-left edge, z along the top-right edge (checked against the original's coverage circles). Each view rotation step turns the whole diamond
+  // 90 degrees counter-clockwise on screen (the compass letters turn the same way; observed after one PageUp).
+  const int rot = viewRotation & 3;
+  const float sc = src.W > 0 ? float(mm.w) / float(2 * src.W) : 1.f;
+  auto toPixel = [&](float x, float z, float& px, float& py) {
+    float a = z - x, b = x + z - float(src.W);
+    for (int k = 0; k < rot; k++) { const float t = a; a = b; b = -t; }   // counter-clockwise quarter turn (y down)
+    px = (a + float(src.W)) * sc; py = (b + float(src.W)) * sc;
+  };
+  auto toTile = [&](int px, int py, int& x, int& z) {
+    float a = float(px) / sc - float(src.W), b = float(py) / sc - float(src.W);
+    for (int k = 0; k < rot; k++) { const float t = a; a = -b; b = t; }   // undo: clockwise quarter turn
+    z = int(std::floor((a + b + float(src.W)) / 2.f)); x = int(std::floor((b - a + float(src.W)) / 2.f));
+  };
   if (src.W > 0 && src.H > 0) {
+    const Image* auraRamp = def && def->layer == DataLayer::Aura ? E.img(0x5E5, 0x09) : nullptr;   // legend ramp, top = good (blue), bottom = bad
     for (int py = 0; py < mm.h; py++)
       for (int px = 0; px < mm.w; px++) {
-        int a = px * 2 * src.W / mm.w - src.W;
-        int b = py * 2 * src.H / mm.h;
-        // Observed orientation (checked against the original's coverage circles): px = (z - x + W) s, py = (x + z) s, i.e. tile x runs along the
-        // top-left edge of the diamond and z along the top-right edge.
-        int z = (a + b) / 2, x = (b - a) / 2;
-        if (a + b < 0 || b - a < 0 || x < 0 || z < 0 || x >= src.W || z >= src.H) continue;
+        int x, z;
+        toTile(px, py, x, z);
+        if (x < 0 || z < 0 || x >= src.W || z >= src.H) continue;
+        float u = (float(px) + 0.5f) / sc - float(src.W), v = (float(py) + 0.5f) / sc - float(src.W);
+        if (std::fabs(u) + std::fabs(v) > float(src.W)) continue;   // outside the diamond
         uint32_t col = src.baseColour ? src.baseColour(x, z) : rgb(90, 130, 70);
         if (def && vals && vals->size() >= size_t(src.W) * src.H) {
-          uint8_t v = (*vals)[size_t(x) * src.H + z];
-          if (categorical(def->layer)) { if (v != 0xFF) col = MapWindow::legendColour(def->layer, v, 0); }
-          else if (def->layer == DataLayer::Aura) { if (v) col = lerpCol(col, lerpCol(rgb(176, 72, 48), rgb(40, 80, 230), float(v) / 255.f), 0.75f); }   // developed tiles only
-          else if (v) col = lerpCol(col, MapWindow::legendColour(def->layer, 0, float(v) / 255.f), 0.7f);   // data tints over the terrain base
+          uint8_t val = (*vals)[size_t(x) * src.H + z];
+          if (categorical(def->layer)) { if (val != 0xFF) col = MapWindow::legendColour(def->layer, val, 0); }
+          else if (def->layer == DataLayer::Aura) {   // developed tiles only, painted with the full legend ramp
+            if (val) {
+              const float t = float(val) / 255.f;   // 1 = good aura
+              if (auraRamp && !auraRamp->empty()) col = auraRamp->px[size_t(int((1.f - t) * float(auraRamp->h - 1))) * size_t(auraRamp->w) + size_t(auraRamp->w / 2)] | 0xFF000000u;
+              else col = lerpCol(rgb(176, 72, 48), rgb(24, 32, 255), t);
+            }
+          }
+          else if (val) col = lerpCol(col, MapWindow::legendColour(def->layer, 0, float(val) / 255.f), 0.7f);   // data tints over the terrain base
         }
         ui.at(mm.x + px, mm.y + py) = col;
       }
     E.spot("minimap", mm);
     if (ui.clicked(mm)) {
-      int px = ui.in.mx - mm.x, py = ui.in.my - mm.y;
-      int a = px * 2 * src.W / mm.w - src.W, b = py * 2 * src.H / mm.h;
-      int z = std::max(0, std::min(src.H - 1, (a + b) / 2)), x = std::max(0, std::min(src.W - 1, (b - a) / 2));
-      R.add(Act::CenterView, 0, x, z);
+      int x, z;
+      toTile(ui.in.mx - mm.x, ui.in.my - mm.y, x, z);
+      R.add(Act::CenterView, 0, std::max(0, std::min(src.W - 1, x)), std::max(0, std::min(src.H - 1, z)));
     }
   }
   // Coverage circles (Crime: police stations, Flammability: fire stations): cyan outlines. A tile-space circle is a circle on the diamond, scaled by sqrt(2)
   // times the half-tile step.
   if (coverage && def && def->toggleId && src.circles && src.W > 0 && src.H > 0) {
-    const float sx = float(mm.w) / float(2 * src.W), sy = float(mm.h) / float(2 * src.H);
     for (const auto& c : src.circles(def->layer == DataLayer::Crime)) {
-      const float cx = float(mm.x) + (c[1] - c[0] + float(src.W)) * sx, cy = float(mm.y) + (c[0] + c[1]) * sy;
-      const float rad = c[2] * 1.41421356f * sx;
+      float fx, fy;
+      toPixel(c[0], c[1], fx, fy);
+      const float cx = float(mm.x) + fx, cy = float(mm.y) + fy;
+      const float rad = c[2] * 1.41421356f * sc;
       const int n = std::max(24, int(rad * 6.28f));
       for (int k = 0; k < n; k++) {
         const float a = 6.2831853f * float(k) / float(n);

@@ -826,6 +826,13 @@ void testViewData() {
     auto* e = r.find(Act::CenterView);
     CHECK(e && std::abs(int(e->a) - 5) <= 2 && std::abs(int(e->b) - 50) <= 2);
   }
+  {   // one view-rotation step turns the diamond a quarter turn counter-clockwise: tile (5,50) moves to about (162, 56)
+    w.map.viewRotation = 1;
+    r = h.click("minimap", 162, 56);
+    auto* e = r.find(Act::CenterView);
+    CHECK(e && std::abs(int(e->a) - 5) <= 2 && std::abs(int(e->b) - 50) <= 2);
+    w.map.viewRotation = 0;
+  }
   // The overlay only follows data-map modes.
   w.setMode(ViewDataWindow::ModeCharts, src); CHECK(w.activeOverlay() == nullptr);
   // Charts mode: five radio buttons, no tabs.
