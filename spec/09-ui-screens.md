@@ -791,6 +791,12 @@ building (`13-buildings-occupants.md`).
 * There is one row per pending petition, at a 14 px pitch; the first row's text top is at y = 167.
 * Each row has a small solid right-pointing triangle, drawn about 4 px wide at x ≈ 23 and not a
   font glyph, followed by the petition title in the small bold font (dark navy) from x ≈ 34.
+* Order: ascending petition ID. The ID is the instance of the petition's heading string in group
+  `C26DD29B`. In Berlin: 0x34 Lower Commercial Taxes, 0x3B Holiday To Honor Mayor, 0x5B Lower
+  Industrial Taxes, 0x5F Sims Demand Tax Relief. The petition manager hands the rows over in
+  insertion order, which is the save-record order; the list control re-orders them by ID
+  [STATIC for the IDs and insertion order; the control's sort is INFERRED, matching 4 of 4].
+  Petitions that are already answered are not listed.
 * A single click selects the row: a (0, 0, 255) bar 13 px tall from x ≈ 28 to the right edge, with
   white text.
 * A double click opens that petitioner's page inside the same window frame. The page shows the
@@ -1502,7 +1508,15 @@ at a fixed position (§6.0).
   toggle (a radio-style ⊙ about 20 px across, centred at (308, 69)) and the two-line label
   "Police Station Coverage" (`2A1`) or "Fire Station Coverage" (`2A5`), in the small bold font,
   grey-blue, at x ≈ 323 with lines at y ≈ 58 and 72. While the toggle is on, coverage circles are
-  drawn in cyan on the map.
+  drawn on the map as 1 px outlines in (0, 203, 255), one per station. They are true circles on screen;
+  the map is a rotated square, so the circles are not foreshortened. The toggle was on when the
+  window opened. Measured in Berlin (256 × 256 tiles; the diamond's side is 266 px, so 1.039 px per
+  tile), window-relative:
+  * a police circle at about (93, 231), diameter 67–70 px, i.e. radius ≈ 33 tiles
+    (`OptimalCoverageRadius` 30);
+  * a fire circle at about (99, 223), diameter 58 px, i.e. radius ≈ 28 tiles (radius 25).
+  So the radius is roughly R₀ plus half the lot plus 1 [INFERRED]. Funding scaling of R was not
+  separated.
 * Pollution: there is no compass. In its place, at the top right, is "Show:" (`2D8`) at (288, 48),
   followed by three radio buttons:
   * the radios are about 10 px, centred at x = 293 and y = 66, 81 and 95;
@@ -1556,14 +1570,21 @@ at a fixed position (§6.0).
     MW-h" (`289`).
   * Garbage colours: Landfill (247, 56, 231), Recycling (57, 69, 247). Caption: "Total Garbage
     Produced Annually = 937,319 Tons" (`1F8`).
-* Which stripe tile (`000005E5:31`/`33`/`35`) each page uses was not identified [OPEN]. All three
-  bar pages look the same.
+* Stripe tiles: the 32 × 153 tiles `000005E5:31`/`33`/`35` hold only the **Workforce band**. Each
+  is two pinks, (238, 214, 222) and (230, 198, 197), in horizontal bands. The tile is repeated
+  horizontally over x = 197–314 with its row 0 at y = 51, the plot top.
+  * Health uses `31` (15 px bands, first edge at row 3).
+  * Education uses `33` (17 px bands).
+  * Population uses `35` (12 px bands, first edge at row 9).
+  * The bands line up with the y-axis gridlines of each page.
+  * Outside the band the plot is the same band pattern in lavender, (231, 231, 255) and
+    (222, 223, 255), with the same edges. It is drawn procedurally; no image is involved.
 
 **Graphs mode**
 
 * Plot box: inset frame (44, 50)–(400, 238). Lines are drawn from x = 44 to 300, and labels go in
   x = 300–400.
-* The background is horizontal stripes, alternating light lavender bands about 16 px tall. Tick
+* The background is horizontal stripes, alternating bands of 17 px each, (222, 223, 255) and (231, 231, 255), starting at y = 65 (period 34 px). Tick
   marks run along y ≈ 220. The current year is in grey, right-aligned at x ≈ 298, y ≈ 228.
 * Lines are 2 px wide. Each line ends at x = 300 and is joined by a short slanted connector to its
   label. Labels are stacked at a 10 px pitch, sorted by the y of the line end and pushed apart so

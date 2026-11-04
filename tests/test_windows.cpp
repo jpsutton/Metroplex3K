@@ -806,10 +806,10 @@ void testViewData() {
   {   // coverage circles: cyan pixels appear once the toggle is on and the source lists a station
     src.circles = [](bool) { return std::vector<std::array<float, 3>>{{32.f, 32.f, 10.f}}; };
     h.frame();
-    size_t cyan = 0; for (uint32_t px : h.fb) cyan += px == rgb(0, 255, 255);
+    size_t cyan = 0; for (uint32_t px : h.fb) cyan += px == rgb(0, 203, 255);
     CHECK(cyan > 20);
     w.map.coverage = false; h.frame();
-    size_t none = 0; for (uint32_t px : h.fb) none += px == rgb(0, 255, 255);
+    size_t none = 0; for (uint32_t px : h.fb) none += px == rgb(0, 203, 255);
     CHECK(none == 0);
     w.map.coverage = true;
   }

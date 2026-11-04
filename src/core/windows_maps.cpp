@@ -162,7 +162,7 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
       for (int k = 0; k < n; k++) {
         const float a = 6.2831853f * float(k) / float(n);
         const int px = int(cx + std::cos(a) * rad), py = int(cy + std::sin(a) * rad);
-        if (px >= mm.x && py >= mm.y && px < mm.x + mm.w && py < mm.y + mm.h) ui.at(px, py) = rgb(0, 255, 255);
+        if (px >= mm.x && py >= mm.y && px < mm.x + mm.w && py < mm.y + mm.h) ui.at(px, py) = rgb(0, 203, 255);
       }
     }
   }
@@ -566,16 +566,30 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
   const Rect box{r.x + 52, r.y + 50, 357, 189}, plot{r.x + 144, r.y + 52, 264, 153};
   sunkenLines(ui, box);
   const bool agePage = tab <= 2;
-  // Lavender stripes over the whole chart box (the stripe tile of each page is not identified [OPEN]).
-  for (int y = 0; y < box.h - 2; y += 17)
-    ui.fill({box.x + 1, box.y + 1 + y, box.w - 2, std::min(17, box.h - 2 - y)}, (y / 17) % 2 ? rgb(214, 219, 255) : rgb(231, 231, 255));
+  // Stripe bands (spec 09 7.1.1): each page has its band period and the row of the first edge, counted from the plot top (y = 51); the Workforce
+  // band draws them from the page's pink tile (5E5:31 Health 15 px, 33 Education 17 px, 35 Population 12 px), the rest of the plot draws the
+  // same bands in lavender. The pie pages keep the Education pattern.
+  struct Band { int period, edge1; uint32_t tile; };
+  static const Band kBand[5] = {{17, 17, 0x33}, {15, 3, 0x31}, {12, 9, 0x35}, {17, 17, 0x33}, {17, 17, 0x33}};
+  const Band bd = kBand[tab % 5];
+  auto bandIndex = [&](int row) { return row < bd.edge1 ? 0 : 1 + (row - bd.edge1) / bd.period; };
+  const uint32_t lavLight = rgb(231, 231, 255), lavDark = rgb(222, 223, 255);
+  ui.fill({box.x + 1, box.y + 1, box.w - 2, box.h - 2}, lavLight);
+  for (int row = 0; row < 155; row++)
+    ui.fill({plot.x + 1, r.y + 51 + row, plot.w - 1, 1}, bandIndex(row) % 2 ? lavDark : lavLight);
+  if (!agePage) for (int y = 0; y < box.h - 2; y += 17) ui.fill({box.x + 1, box.y + 1 + y, box.w - 2, std::min(17, box.h - 2 - y)}, (y / 17) % 2 ? lavDark : lavLight);
   std::string cap1, cap2;
   if (agePage) {
     const uint32_t axis = rgb(0x18, 0x20, 0x6B);
-    if (tab == 0) {   // Workforce band, pink stripes over about age 22..67
-      for (int y = 0; y < plot.h; y += 17)
-        ui.fill({r.x + 197, plot.y + y, 119, std::min(17, plot.h - y)}, (y / 17) % 2 ? rgb(247, 223, 222) : rgb(231, 199, 198));
-      ui.textCentered({r.x + 197, plot.y + 1, 119, 12}, E.win(0x1E5, "Workforce"), "system9", rgb(230, 130, 0));
+    {   // Workforce band over about age 22..67: the page's 32 x 153 pink tile repeated over x 197..314, row 0 at y 51
+      const Image* tile = E.img(0x5E5, bd.tile);
+      for (int row = 0; row < 153; row++)
+        for (int x = 197; x <= 314; x++) {
+          uint32_t col = bandIndex(row) % 2 ? rgb(230, 198, 197) : rgb(238, 214, 222);
+          if (tile && !tile->empty() && row < tile->h) { const uint32_t px = tile->px[size_t(row) * tile->w + size_t((x - 197) % tile->w)]; if (px >> 24) col = px | 0xFF000000u; }
+          ui.at(r.x + x, r.y + 51 + row) = col;
+        }
+      ui.textCentered({r.x + 197, plot.y + 1, 118, 12}, E.win(0x1E5, "Workforce"), "system9", rgb(230, 130, 0));
     }
     ui.fill({plot.x, plot.y, 1, plot.h + 1}, axis); ui.fill({plot.x, plot.y + plot.h, plot.w, 1}, axis);
     const std::vector<float>& src = tab == 0 ? d.eq : tab == 1 ? d.lifeExpectancy : d.population;
