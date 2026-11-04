@@ -1508,7 +1508,15 @@ at a fixed position (§6.0).
   toggle (a radio-style ⊙ about 20 px across, centred at (308, 69)) and the two-line label
   "Police Station Coverage" (`2A1`) or "Fire Station Coverage" (`2A5`), in the small bold font,
   grey-blue, at x ≈ 323 with lines at y ≈ 58 and 72. While the toggle is on, coverage circles are
-  drawn in cyan on the map.
+  drawn on the map as 1 px outlines in (0, 203, 255), one per station. They are true circles on screen;
+  the map is a rotated square, so the circles are not foreshortened. The toggle was on when the
+  window opened. Measured in Berlin (256 × 256 tiles; the diamond's side is 266 px, so 1.039 px per
+  tile), window-relative:
+  * a police circle at about (93, 231), diameter 67–70 px, i.e. radius ≈ 33 tiles
+    (`OptimalCoverageRadius` 30);
+  * a fire circle at about (99, 223), diameter 58 px, i.e. radius ≈ 28 tiles (radius 25).
+  So the radius is roughly R₀ plus half the lot plus 1 [INFERRED]. Funding scaling of R was not
+  separated.
 * Pollution: there is no compass. In its place, at the top right, is "Show:" (`2D8`) at (288, 48),
   followed by three radio buttons:
   * the radios are about 10 px, centred at x = 293 and y = 66, 81 and 95;
@@ -1562,8 +1570,15 @@ at a fixed position (§6.0).
     MW-h" (`289`).
   * Garbage colours: Landfill (247, 56, 231), Recycling (57, 69, 247). Caption: "Total Garbage
     Produced Annually = 937,319 Tons" (`1F8`).
-* Which stripe tile (`000005E5:31`/`33`/`35`) each page uses was not identified [OPEN]. All three
-  bar pages look the same.
+* Stripe tiles: the 32 × 153 tiles `000005E5:31`/`33`/`35` hold only the **Workforce band**. Each
+  is two pinks, (238, 214, 222) and (230, 198, 197), in horizontal bands. The tile is repeated
+  horizontally over x = 197–314 with its row 0 at y = 51, the plot top.
+  * Health uses `31` (15 px bands, first edge at row 3).
+  * Education uses `33` (17 px bands).
+  * Population uses `35` (12 px bands, first edge at row 9).
+  * The bands line up with the y-axis gridlines of each page.
+  * Outside the band the plot is the same band pattern in lavender, (231, 231, 255) and
+    (222, 223, 255), with the same edges. It is drawn procedurally; no image is involved.
 
 **Graphs mode**
 
