@@ -132,7 +132,9 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
       for (int px = 0; px < mm.w; px++) {
         int a = px * 2 * src.W / mm.w - src.W;
         int b = py * 2 * src.H / mm.h;
-        int x = (a + b) / 2, z = (b - a) / 2;
+        // Observed orientation (checked against the original's coverage circles): px = (z - x + W) s, py = (x + z) s, i.e. tile x runs along the
+        // top-left edge of the diamond and z along the top-right edge.
+        int z = (a + b) / 2, x = (b - a) / 2;
         if (a + b < 0 || b - a < 0 || x < 0 || z < 0 || x >= src.W || z >= src.H) continue;
         uint32_t col = src.baseColour ? src.baseColour(x, z) : rgb(90, 130, 70);
         if (def && vals && vals->size() >= size_t(src.W) * src.H) {
@@ -147,7 +149,7 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
     if (ui.clicked(mm)) {
       int px = ui.in.mx - mm.x, py = ui.in.my - mm.y;
       int a = px * 2 * src.W / mm.w - src.W, b = py * 2 * src.H / mm.h;
-      int x = std::max(0, std::min(src.W - 1, (a + b) / 2)), z = std::max(0, std::min(src.H - 1, (b - a) / 2));
+      int z = std::max(0, std::min(src.H - 1, (a + b) / 2)), x = std::max(0, std::min(src.W - 1, (b - a) / 2));
       R.add(Act::CenterView, 0, x, z);
     }
   }
@@ -156,7 +158,7 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
   if (coverage && def && def->toggleId && src.circles && src.W > 0 && src.H > 0) {
     const float sx = float(mm.w) / float(2 * src.W), sy = float(mm.h) / float(2 * src.H);
     for (const auto& c : src.circles(def->layer == DataLayer::Crime)) {
-      const float cx = float(mm.x) + (c[0] - c[1] + float(src.W)) * sx, cy = float(mm.y) + (c[0] + c[1]) * sy;
+      const float cx = float(mm.x) + (c[1] - c[0] + float(src.W)) * sx, cy = float(mm.y) + (c[0] + c[1]) * sy;
       const float rad = c[2] * 1.41421356f * sx;
       const int n = std::max(24, int(rad * 6.28f));
       for (int k = 0; k < n; k++) {

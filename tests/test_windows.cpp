@@ -821,6 +821,11 @@ void testViewData() {
   r = h.click("minimap");
   CHECK(r.has(Act::CenterView));
   { auto* e = r.find(Act::CenterView); CHECK(e->a >= 0 && e->a < 64 && e->b >= 0 && e->b < 64); CHECK(std::abs(int(e->a) - 32) < 8 && std::abs(int(e->b) - 32) < 8); }
+  {   // orientation: tile (x 5, z 50) sits at px = (z - x + W) s, py = (x + z) s of the diamond (top-right half for z > x)
+    r = h.click("minimap", 320, 162);
+    auto* e = r.find(Act::CenterView);
+    CHECK(e && std::abs(int(e->a) - 5) <= 2 && std::abs(int(e->b) - 50) <= 2);
+  }
   // The overlay only follows data-map modes.
   w.setMode(ViewDataWindow::ModeCharts, src); CHECK(w.activeOverlay() == nullptr);
   // Charts mode: five radio buttons, no tabs.
