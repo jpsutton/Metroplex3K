@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <algorithm>
+#include <iterator>
 #include <cmath>
 #include <cstdlib>
 #include <sstream>
@@ -746,23 +747,82 @@ bool AudioSystem::playSparse(int id, bool bypass, float pan, float att, bool cen
   p.category = bypass ? AudioCategory::Sfx : AudioCategory::Ambience;
   p.volume = std::max(0, scaleVol(std::min(1024, d.vol * s.vol / 100), att) - red); p.pan = pan; p.priority = d.pri;
   auto h = playBuf(s.file, d.absolute, p);
-  if (h && !bypass) sparseH_.push_back(h);
+  if (h && !bypass) sparseH_[id] = h;
   return h != 0;
 }
 
 size_t AudioSystem::sparseVoices() {
-  sparseH_.erase(std::remove_if(sparseH_.begin(), sparseH_.end(), [&](AudioMixer::Handle h) { return !mixer_.isPlaying(h); }), sparseH_.end());
+  for (auto it = sparseH_.begin(); it != sparseH_.end();) it = mixer_.isPlaying(it->second) ? std::next(it) : sparseH_.erase(it);
   return sparseH_.size();
 }
 
+// Spec 06 s6: the active set is rebuilt; what is no longer in it is switched off (faded out), what is still in it is left alone, so a building
+// type is heard at most once at a time and sounds from places scrolled away from do not pile up. Items not sounding roll their trigger.
 void AudioSystem::rebuildSparse(const std::vector<SparseSite>& sites) {
   sparseVoices();   // forget finished voices
-  for (const auto& s : sites) playSparse(s.id, false, 0.f, 1.f, s.centre);
+  const int outro = ini_.options.get("FreshnessOutroDurationMsec", 500);
+  for (auto it = sparseH_.begin(); it != sparseH_.end();) {
+    bool keep = false;
+    for (const auto& s : sites) if (s.id == it->first) { keep = true; break; }
+    if (keep) { ++it; continue; }
+    mixer_.fadeOut(it->second, outro);
+    it = sparseH_.erase(it);
+  }
+  for (const auto& s : sites) {
+    if (sparseH_.count(s.id)) continue;   // still sounding
+    playSparse(s.id, false, 0.f, 1.f, s.centre);
+  }
 }
 
 void AudioSystem::clearSparse() {
-  for (auto h : sparseH_) mixer_.stop(h);
+  const int outro = ini_.options.get("FreshnessOutroDurationMsec", 500);
+  for (auto& kv : sparseH_) mixer_.fadeOut(kv.second, outro);
   sparseH_.clear();
+}
+
+// ================================================================ attached sounds
+void AudioSystem::attachSound(uint64_t key, int id, float pan, float att) {
+  detachSound(key);
+  if (!ini_.hasSound(id)) return;
+  Attached a; a.soundId = id;
+  if (auto it = ini_.actors.find(id); it != ini_.actors.end()) {
+    const auto& d = it->second;
+    VoiceParams p; p.volume = scaleVol(d.vol, att); p.pan = pan; p.priority = d.pri; p.loop = true;
+    a.baseVol = d.vol;
+    a.h = playBuf(d.driveBy, d.absolute, p);
+  } else if (auto it2 = ini_.oneShots.find(id); it2 != ini_.oneShots.end()) {
+    const auto& d = it2->second;
+    VoiceParams p; p.volume = scaleVol(d.vol, att); p.pan = pan; p.priority = d.pri;
+    a.baseVol = d.vol;
+    a.h = playBuf(d.file, d.absolute, p);
+  } else if (ini_.fading.count(id)) {   // a shared loop: it plays while at least one object holds it
+    if (attachedFadeRefs_[id]++ == 0) request(id, SoundAction::Play, 0, pan, att);
+  } else {
+    request(id, SoundAction::Play, 0, pan, att);   // sparse / disaster ids: fire and forget
+  }
+  attached_[key] = a;
+}
+
+void AudioSystem::moveSound(uint64_t key, float pan, float att) {
+  auto it = attached_.find(key);
+  if (it == attached_.end() || !it->second.h) return;
+  mixer_.setVolume(it->second.h, scaleVol(it->second.baseVol, att), 150);
+  mixer_.setPan(it->second.h, pan);
+}
+
+void AudioSystem::detachSound(uint64_t key) {
+  auto it = attached_.find(key);
+  if (it == attached_.end()) return;
+  const Attached a = it->second;
+  attached_.erase(it);
+  if (a.h) mixer_.fadeOut(a.h, 150);
+  else if (auto r = attachedFadeRefs_.find(a.soundId); r != attachedFadeRefs_.end()) {
+    if (--r->second <= 0) { attachedFadeRefs_.erase(r); request(a.soundId, SoundAction::Stop); }
+  }
+}
+
+void AudioSystem::detachAllSounds() {
+  while (!attached_.empty()) detachSound(attached_.begin()->first);
 }
 
 void AudioSystem::notifyQuery(const TileSoundContext& c, float pan) {

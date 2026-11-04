@@ -307,6 +307,16 @@ class AudioSystem {
   void clearSparse();
   size_t sparseVoices();
 
+  // Sounds attached to a moving object (a vehicle, train, boat, aircraft; spec 26 3.2: MotionSound / SirenSound start when the object appears,
+  // follow it and stop when it is removed). One voice per (object key, sound id): attaching again restarts it instead of stacking a second
+  // one; moveSound re-pans / re-attenuates it; detachSound ends it with a short fade; detachAllSounds ends every one (new city, view change).
+  static uint64_t soundKey(int objectId, int soundId) { return uint64_t(uint32_t(objectId)) << 32 | uint32_t(soundId); }
+  void attachSound(uint64_t key, int soundId, float pan = 0.f, float attenuation = 1.f);
+  void moveSound(uint64_t key, float pan, float attenuation);
+  void detachSound(uint64_t key);
+  void detachAllSounds();
+  size_t attachedSounds() const { return attached_.size(); }
+
   // Categories (spec 8).
   void setCategoryVolume(AudioCategory c, int v) { mixer_.setCategoryVolume(c, v); }
   void setCategoryEnabled(AudioCategory c, bool on) { mixer_.setCategoryEnabled(c, on); }
@@ -354,7 +364,10 @@ class AudioSystem {
   std::map<int, Fade> fades_;
   int zoom_ = 3;
   int64_t now_ = 0;
-  std::vector<AudioMixer::Handle> sparseH_;  // voices started by rebuildSparse
+  std::map<int, AudioMixer::Handle> sparseH_;  // one voice per [Sparse] id started by rebuildSparse
+  struct Attached { int soundId = 0, baseVol = 0; AudioMixer::Handle h = 0; };
+  std::map<uint64_t, Attached> attached_;
+  std::map<int, int> attachedFadeRefs_;      // [Fading] ids: how many attached objects hold the loop
   // explosions: 4 round-robin slots
   AudioMixer::Handle expl_[4] = {0, 0, 0, 0};
   int explNext_ = 0;

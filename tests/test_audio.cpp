@@ -367,7 +367,7 @@ static void testSparse() {
   CHECK(collectSparseSites(1, 1, 4, 100, 100, [](int, int) { return 0; }).empty());
 
   std::map<std::string, Bytes> files;
-  files["sfx/buildings/g.wav"] = wavBytes(std::vector<int16_t>(20000, 3000), 1, 22050);
+  files["sfx/buildings/g.wav"] = wavBytes(std::vector<int16_t>(200000, 3000), 1, 22050);
   auto loader = [files](const std::string& p, bool, Bytes& out) {
     auto it = files.find(toLower(normalizeSoundPath(p)));
     if (it == files.end()) return false;
@@ -376,7 +376,8 @@ static void testSparse() {
   const char* txt =
       "[Options]\r\nBuildingRandMultiplier=10000\r\nBuildingsInAmbienceMinZoom=4\r\nBuildingsInAmbienceAttenuation=400\r\n"
       "[Sparse]\r\n0x100=\"Always\",32,1024,1,0,0,\"Sfx\\Buildings\\g.wav\",100,10000\r\n"
-      "0x101=\"Never\",32,1024,1,0,0,\"Sfx\\Buildings\\g.wav\",100,0\r\n";
+      "0x101=\"Never\",32,1024,1,0,0,\"Sfx\\Buildings\\g.wav\",100,0\r\n"
+      "0x102=\"Always2\",32,1024,1,0,0,\"Sfx\\Buildings\\g.wav\",100,10000\r\n";
   AudioSystem as;
   as.init(AudioIni::parse(txt), loader, 22050);
   as.setAudioZoom(3);
@@ -385,11 +386,47 @@ static void testSparse() {
   as.setAudioZoom(4);
   as.rebuildSparse({{0x101, true}});
   CHECK(as.sparseVoices() == 0);                 // trigger 0 never sounds
-  as.rebuildSparse({{0x100, true}, {0x100, false}});
+  as.rebuildSparse({{0x100, true}, {0x102, false}});
   CHECK(as.sparseVoices() == 2);
+  as.rebuildSparse({{0x100, true}, {0x102, false}});   // rebuilt again while both still sound: nothing is stacked on top
+  CHECK(as.sparseVoices() == 2 && as.mixer().voiceCount() == 2);
+  int16_t buf[2 * 100];
+  as.rebuildSparse({{0x100, true}});             // scrolled away from 0x102: it is switched off (faded out)
+  CHECK(as.sparseVoices() == 1);
+  for (int i = 0; i < 200; i++) as.mixAudio(buf, 100);   // let the 500 ms outro finish
+  CHECK(as.mixer().voiceCount() == 1);
   as.clearSparse();
-  CHECK(as.sparseVoices() == 0);
-  CHECK(as.mixer().voiceCount() == 0);
+  for (int i = 0; i < 200; i++) as.mixAudio(buf, 100);
+  CHECK(as.sparseVoices() == 0 && as.mixer().voiceCount() == 0);
+}
+
+static void testAttached() {
+  std::map<std::string, Bytes> files;
+  files["sfx/v/drive.wav"] = wavBytes(std::vector<int16_t>(20000, 3000), 1, 22050);
+  auto loader = [files](const std::string& p, bool, Bytes& out) {
+    auto it = files.find(toLower(normalizeSoundPath(p)));
+    if (it == files.end()) return false;
+    out = it->second; return true;
+  };
+  const char* txt = "[Actor]\r\n130=\"Car\",32,1024,0,0,0,\"Sfx\\V\\drive.wav\",\"\",\"\"\r\n";
+  AudioSystem as;
+  as.init(AudioIni::parse(txt), loader, 22050);
+  const uint64_t a = AudioSystem::soundKey(1, 130), b = AudioSystem::soundKey(2, 130);
+  as.attachSound(a, 130, -0.5f, 1.f);
+  as.attachSound(a, 130, 0.f, 1.f);              // attaching again restarts the voice, it does not stack a second loop
+  as.attachSound(b, 130, 0.5f, 1.f);
+  CHECK(as.attachedSounds() == 2);
+  int16_t buf[2 * 100];
+  for (int i = 0; i < 40; i++) as.mixAudio(buf, 100);   // the first voice's fade-out
+  CHECK(as.mixer().voiceCount() == 2);
+  as.moveSound(a, 1.f, 0.5f);
+  as.detachSound(b);
+  CHECK(as.attachedSounds() == 1);
+  for (int i = 0; i < 40; i++) as.mixAudio(buf, 100);
+  CHECK(as.mixer().voiceCount() == 1);
+  as.detachAllSounds();
+  for (int i = 0; i < 40; i++) as.mixAudio(buf, 100);
+  CHECK(as.attachedSounds() == 0 && as.mixer().voiceCount() == 0);
 }
 
 static void testVideo() {
@@ -497,6 +534,7 @@ int main() {
   testFsc();
   testSystem();
   testSparse();
+  testAttached();
   testAsyncMusic();
   testMixerThreads();
   testVideo();
