@@ -1464,6 +1464,10 @@ at a fixed position (§6.0).
 
 **Data-map mode**
 
+* Tile → diamond transform (default view rotation): tile x runs along the edge from the top corner to the
+  left corner, and z along the edge from the top corner to the right corner. With s = 376 / (2W):
+  px = 42 + (z − x + W)·s and py = 47 + (x + z)·s [OBSERVED: Berlin police and fire coverage-circle
+  centres fit station lots, mean 1.2 / 2.1 tiles; the swapped mapping is off by about 28 tiles].
 * Diamond: the whole city drawn as a square rotated 45°, with corners top (230, 47), left (42, 234),
   right (417, 234) and bottom (230, 424). That is a 376 × 377 bounding box. It has a thin light
   outline on its lower-right edges.
