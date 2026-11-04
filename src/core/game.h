@@ -296,7 +296,8 @@ class Game {
   // sim glue (game_sim.cpp)
   void initManagers();
   void dailyHook();
-  void weeklyHook();
+  void weekNotification();   // Monday: raises the advisors' and petitioner manager's evaluation flag (spec 22 3.6)
+  void dayNotification();    // every day: runs the evaluation when the flag is up (so on Tuesday)
   void monthlyHook(int month, int year);
   void fillAdvisorInputs(AdvisorInputs& in);
   void presentPetitions();
@@ -557,6 +558,7 @@ class Game {
   uint32_t newsClickX_ = 0;
   bool introLoadedAudio_ = false;
   int lastWeekDay_ = -1;
+  bool petWeekFlag_ = false;   // petitioner manager's "needs update" flag (not saved)
   int autoNameCounter_ = 0;
 
   // simulation glue

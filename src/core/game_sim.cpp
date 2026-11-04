@@ -166,6 +166,7 @@ void Game::initManagers() {
   managersReady_ = true;
   lastMonth_ = city().clock.date().month;
   lastWeekDay_ = -1;
+  petWeekFlag_ = false;
   // Spec 14 §6.1 / Q-BE [STATIC]: monthly DM is a dedicated schedule entry before the shared pass.
   // City::wire leaves it unwired (Game owns DisasterManager); plug it in here so runMonth order is
   // DM → neighbours → … rather than neighbours/4–16 then a post-hoc monthlyTick.
@@ -490,27 +491,40 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   }
 }
 
-void Game::weeklyHook() {
-  if (!managersReady_) return;
-  AdvisorInputs ai;
-  fillAdvisorInputs(ai);
+// Spec 22 3.6 [STATIC cadence]: the advisors and the petitioner manager listen to the calendar's week and day notifications. The week
+// notification (Monday) only raises a flag; every day notification, which the calendar sends before the week one on the same date, runs one
+// evaluation when the flag is up and clears it. So the evaluation happens once per game week, on Tuesday, and nothing is pending after a load.
+void Game::weekNotification() {
   advisors_.calendarWeek();
-  AdvisorOutputs out;
-  advisors_.calendarDay(ai, rng_, out);
-  PetitionerInputs pi;
-  pi.population = ai.population; pi.year = ai.year;
-  petitioners_.weeklyCycle(pi, rng_);
-  {  // spec 19 section 11: low-treasury business-deal offers, raised as advisor petitions
-    City& c = city();
-    BusinessDeals::Inputs bi;
-    bi.funds = sim_.funds; bi.population = uint32_t(std::max<int64_t>(0, ai.population)); bi.currentYear = ai.year;
-    bi.cityHasBusiness = [this](uint32_t type) {
-      for (const auto& o : world_.occupants) if (o.agentType == type) return true;
-      return false;
-    };
-    if (cheats_.active("let's make a deal")) {   // spec 27 s5.3: every eligible deal, all pending together
-      for (size_t i : c.business.eligibleDeals(bi)) petitioners_.request(c.business.defs[i].messageId, 0, 48);
-    } else if (auto offer = c.evaluateBusinessDeals(bi)) petitioners_.request(c.business.defs[*offer].messageId, 0, 48);
+  petWeekFlag_ = true;
+}
+
+void Game::dayNotification() {
+  if (!managersReady_) return;
+  const bool petFlag = petWeekFlag_;
+  petWeekFlag_ = false;
+  if (advisors_.clock.needsUpdate || petFlag) {
+    AdvisorInputs ai;
+    fillAdvisorInputs(ai);
+    AdvisorOutputs out;
+    advisors_.calendarDay(ai, rng_, out);   // advisors first (registration order), then the petitioner manager
+    if (petFlag) {
+      PetitionerInputs pi;
+      pi.population = ai.population; pi.year = ai.year;
+      petitioners_.weeklyCycle(pi, rng_);
+      {  // spec 19 section 11: low-treasury business-deal offers, raised as advisor petitions
+        City& c = city();
+        BusinessDeals::Inputs bi;
+        bi.funds = sim_.funds; bi.population = uint32_t(std::max<int64_t>(0, ai.population)); bi.currentYear = ai.year;
+        bi.cityHasBusiness = [this](uint32_t type) {
+          for (const auto& o : world_.occupants) if (o.agentType == type) return true;
+          return false;
+        };
+        if (cheats_.active("let's make a deal")) {   // spec 27 s5.3: every eligible deal, all pending together
+          for (size_t i : c.business.eligibleDeals(bi)) petitioners_.request(c.business.defs[i].messageId, 0, 48);
+        } else if (auto offer = c.evaluateBusinessDeals(bi)) petitioners_.request(c.business.defs[*offer].messageId, 0, 48);
+      }
+    }
   }
   presentPetitions();
 }
@@ -842,7 +856,8 @@ void Game::dayPostStep() {
     }
   }
   int wd = cal::weekday(city().clock.jdn());
-  if (wd == 1 && lastWeekDay_ != int(city().clock.jdn())) { lastWeekDay_ = int(city().clock.jdn()); weeklyHook(); }
+  dayNotification();   // day listeners are notified before the week ones on the same date
+  if (wd == 1 && lastWeekDay_ != int(city().clock.jdn())) { lastWeekDay_ = int(city().clock.jdn()); weekNotification(); }
 }
 
 void Game::tickSim(uint32_t dtMs) {
