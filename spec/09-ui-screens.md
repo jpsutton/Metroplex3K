@@ -1517,10 +1517,11 @@ at a fixed position (§6.0).
       * brown (156, 101, 49), probably landfill.
       The shade per density level is [INFERRED]. Only its legend swatches use rows 7 and 8.
     * The Crime and Flammability coverage toggle is **on** when the window opens.
-  * Gradient maps: a 32 × 66 gradient image at (292, 362). Aura matches `000005E5:09`
-    (blue → red), Density and Land Value approximately match `000005E5:0A` (blue → white). The
-    white → red gradient of Crime, Flammability, Pollution and Traffic was not found among the
-    decoded images [OPEN].
+  * Gradient legends: the map's palette row of `000005E5:21` drawn vertically, 2 px per column
+    (32 columns → 64 px), x = 292–323 and y = 363–426. Aura uses row 0, Density and Land Value use
+    row 2 (dark blue = High on top), and Crime, Flammability, Pollution and Traffic use row 1. The
+    32 × 66 images `000005E5:09`/`0A` are 11-step ramps and are **not** used in this window
+    [OBSERVED: the original legend has 32 distinct colours, equal to the palette row].
   * Gradient labels: small bold font, grey-blue (about (123, 125, 181)), left edge x ≈ 331. The top
     label's top is at y ≈ 361 and the bottom label's at y ≈ 419.
 
