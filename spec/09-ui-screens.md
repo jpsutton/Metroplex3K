@@ -1468,6 +1468,10 @@ at a fixed position (§6.0).
   left corner, and z along the edge from the top corner to the right corner. With s = 376 / (2W):
   px = 42 + (z − x + W)·s and py = 47 + (x + z)·s [OBSERVED: Berlin police and fire coverage-circle
   centres fit station lots, mean 1.2 / 2.1 tiles; the swapped mapping is off by about 28 tiles].
+* The diamond **rotates with the city view**. After one PageUp step (90°), the content is rotated 90°
+  and the compass letters move with it: top E, left N, right S, bottom W [OBSERVED]. The transform
+  above is for the default rotation. Apply the view rotation to the map, the coverage circles,
+  click-to-centre and the compass.
 * Diamond: the whole city drawn as a square rotated 45°, with corners top (230, 47), left (42, 234),
   right (417, 234) and bottom (230, 424). That is a 376 × 377 bounding box. It has a thin light
   outline on its lower-right edges.
