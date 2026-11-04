@@ -250,6 +250,8 @@ class Game {
   void initAudio();
   void openPicker(uint32_t category);
   void sound(int id) { if (audio_) audio_->request(id); }
+  // Looping disaster sounds (fire, riot): start on the first call, SetLevel to `pct`, stop when `on` is false (SoundLoop command).
+  void soundLoop(int id, bool on, int pct);
   int64_t& fundsRef() { return scr_ == Screen::TerrainEdit ? edFunds_ : sim_.funds; }
   void closeModelessWindows();
   void enterCity();
@@ -411,6 +413,7 @@ class Game {
   bool ambCfg_ = false;
   int64_t ambAcc_ = 0;
   int sparseTick_ = 0;
+  std::set<int> disasterLoops_;   // looping disaster sounds currently started
   float ambLastU_ = 0, ambLastV_ = 0;
   Sim sim_;
   std::unique_ptr<Terraformer> terra_;

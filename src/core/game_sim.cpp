@@ -87,6 +87,7 @@ class CityDisasterWorld : public DisasterWorld {
     const Occupant& oc = w_.occupants[i];
     o.valid = true; o.id = oc.uid; o.ax = oc.x; o.az = oc.z; o.w = oc.sizeX; o.h = oc.sizeZ;
     o.agentType = oc.agentType;
+    o.value = c_.budget.placementCost(oc.agentType, c_.agentHierarchy(), false);   // the building's price, summed into the disaster's cost [INFERRED: the original reads its cost attribute]
     o.burning = oc.state == 16;
     // Spec 13 §3.1a run-time class flag word; generic buildings = 0x104 (Q-BC).
     o.flags = oc.classFlags ? oc.classFlags : runtimeOccupantFlags(oc.agentType);
@@ -514,6 +515,14 @@ void Game::weeklyHook() {
   presentPetitions();
 }
 
+void Game::soundLoop(int id, bool on, int pct) {
+  if (!audio_ || id <= 0) return;
+  if (on) {
+    if (disasterLoops_.insert(id).second) audio_->request(id, SoundAction::Play);
+    audio_->request(id, SoundAction::SetLevel, std::max(0, std::min(100, pct)));
+  } else if (disasterLoops_.erase(id)) audio_->request(id, SoundAction::Stop);
+}
+
 void Game::applyDisasterOutput(DisasterOutput& out) {
   City& c = city();
   // The sprite automata that would carry out saucer bombs, crop circles, locust bites and falling debris are not
@@ -573,6 +582,14 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
         }
         break;
       case DisasterCommand::MarkRadiation: c.markRadiation(cmd.x, cmd.z); break;
+      case DisasterCommand::SoundLoop: soundLoop(cmd.a, cmd.b != 0, int(cmd.value)); break;
+      // Visual only (no state of the city changes; the destruction they accompany arrives as DestroyOccupant / MarkAbandoned): effect sprites
+      // (splash, fire intensity, crop circle, tornado, toxic cloud and rain), the saucers' exit and the rioter crowd automaton [#35: nothing is drawn].
+      case DisasterCommand::SetFireIntensity: case DisasterCommand::Splash: case DisasterCommand::CropCircle: case DisasterCommand::UfoLeave:
+      case DisasterCommand::TornadoTouchdown: case DisasterCommand::ToxicPuffs: case DisasterCommand::ToxicRain: case DisasterCommand::SpawnRioters:
+      // Dispatch bookkeeping of DispatchTracker, which the game does not use: the dispatch tools stamp the coverage layers directly (CoverageLayer::dispatch).
+      case DisasterCommand::StampCoverage: case DisasterCommand::SpawnUnit: case DisasterCommand::RemoveUnit:
+        break;
       case DisasterCommand::VortexSpawn: {   // the vortex object is not drawn; it still scours the coast once and lasts its duration
         CityDisasterWorld dw(world_, c);
         DisasterOutput extra;

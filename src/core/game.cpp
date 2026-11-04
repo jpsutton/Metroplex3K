@@ -351,7 +351,7 @@ void Game::initAudio() {
     audio_.swap(a);
     if (audioUnlock) audioUnlock();
   };   // the old system (now in `a`) is destroyed here, after the unlock
-  swapAudio(nullptr); ambCfg_ = false; ambSel_.reset(-1);
+  swapAudio(nullptr); ambCfg_ = false; ambSel_.reset(-1); disasterLoops_.clear();
   if (!haveData_) return;
   fs::path dir = resolveCI(data_.appsDir(), "Res/Sound");
   if (dir.empty()) return;
