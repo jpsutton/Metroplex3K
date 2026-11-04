@@ -1499,6 +1499,24 @@ at a fixed position (§6.0).
       * row 7: Residential / Commercial / Industrial;
       * row 8: Government / Seaports / Airports / Landfill;
       * rows 10–11: two orange and two green triples, use unknown.
+    * Rows 12–19 are also filled: blue, cyan/green/orange, yellow, green and blue triples, and brown/grey
+      ramps. Their use is unknown.
+    * Observed per map on Berlin [OBSERVED]. **Only tiles that carry the quantity are tinted**; all other
+      tiles show the base row 4.
+      * Aura, Density, Flammability, Crime, Land Value: tiles with buildings only.
+      * Traffic: road, rail and transport tiles only.
+      * Pollution: a smooth field over all tiles.
+      * Columns seen in Berlin: Crime row 1, cols 0–9. Flammability row 1, cols 2–18, mostly 7–15.
+        Land Value row 2, cols 11–31, col 31 most frequent. Traffic row 1, col 0 most frequent, up to
+        col 17.
+    * The Zones map does **not** use the palette for its tiles. It uses pure colours by zone and level:
+      * residential (0, 203, 0), (0, 150, 0);
+      * commercial (0, 0, 255), (0, 0, 206), (0, 0, 148);
+      * industrial (255, 251, 0), (206, 203, 0), (148, 150, 0);
+      * government (239, 93, 0);
+      * brown (156, 101, 49), probably landfill.
+      The shade per density level is [INFERRED]. Only its legend swatches use rows 7 and 8.
+    * The Crime and Flammability coverage toggle is **on** when the window opens.
   * Gradient maps: a 32 × 66 gradient image at (292, 362). Aura matches `000005E5:09`
     (blue → red), Density and Land Value approximately match `000005E5:0A` (blue → white). The
     white → red gradient of Crime, Flammability, Pollution and Traffic was not found among the
