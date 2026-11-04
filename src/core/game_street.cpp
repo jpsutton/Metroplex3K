@@ -158,24 +158,34 @@ void Game::syncStreetSources() {
   streetSources_.clear();
   // Timers (ports, airports, marinas, stations) persist across syncs so their intervals and live counts are not reset.
   std::map<uint64_t, int> spawners;
-  auto spawner = [&](int kind, const Occupant& o) {
-    const uint64_t key = uint64_t(kind) << 48 | uint64_t(uint32_t(o.x)) << 24 | uint64_t(uint32_t(o.z));
+  auto spawner = [&](int kind, int sx, int sz) {
+    const uint64_t key = uint64_t(kind) << 48 | uint64_t(uint32_t(sx)) << 24 | uint64_t(uint32_t(sz));
     auto it = streetSpawners_.find(key);
     int id;
     if (it != streetSpawners_.end()) { id = it->second; streetSpawners_.erase(it); }
-    else id = kind == 0 ? street_->addSeaport(o.x, o.z) : kind == 1 ? street_->addAirport(o.x, o.z) : kind == 2 ? street_->addMarina(o.x, o.z)
-            : street_->addStation(o.x, o.z, kind == 4);
+    else id = kind == 0 ? street_->addSeaport(sx, sz) : kind == 1 ? street_->addAirport(sx, sz) : kind == 2 ? street_->addMarina(sx, sz)
+            : street_->addStation(sx, sz, kind == 4);
     spawners[key] = id;
   };
+  // Spec 26 5.1: trains spawn from rail end caps (agent 17002, TRNPROD 1) and subway end caps (17420, TRNPROD 2); stations are not train sources.
+  // An end cap is a network piece whose occupant record has that agent type.
+  for (const NetPiece& p : world_.surface) {
+    const OccAttr* a = data_.occupant(p.pieceId, true);
+    if (a && a->agentType == 17002) spawner(3, p.x, p.z);
+  }
+  for (const NetPiece& p : world_.subway) {
+    const OccAttr* a = data_.occupant(p.pieceId, true);
+    if (a && a->agentType == 17420) spawner(4, p.x, p.z);
+  }
   for (const Occupant& o : world_.occupants) {
     if ((o.state & ~0x200u) != 1) continue;
     const OccAttr* a = data_.occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT);
     if (!a) continue;
-    if (a->agentType == 14430) spawner(2, o);   // leisure boats (spec 26 5.3); the marina is also an ordinary building
-    if (a->agentType == 12330) { spawner(0, o); continue; }
-    if (a->agentType == 12310) { spawner(1, o); continue; }
-    if (a->agentType == 12230) { spawner(3, o); continue; }
-    if (a->agentType == 12360 || a->agentType == 12361) { spawner(4, o); continue; }
+    if (a->agentType == 14430) spawner(2, o.x, o.z);   // leisure boats (spec 26 5.3); the marina is also an ordinary building
+    if (a->agentType == 12330) spawner(0, o.x, o.z);   // seaport ships (5.4)
+    if (a->agentType == 12310) spawner(1, o.x, o.z);   // airport aircraft
+    // Every building with a pedestrian table (stations and ports included) gets a pedestrian manager; its vehicle table only weights the road
+    // vehicle mix of its 32 x 32 cell (addBuilding), buildings are not vehicle spawn points.
     if (a->pedProdKey.instance || a->vehProdKey.instance) streetSources_.push_back(street_->addBuilding(o.x, o.z, a->pedProdKey, a->vehProdKey));
   }
   for (auto& kv : streetSpawners_) street_->removeSpawner(kv.second);   // sources that are gone
