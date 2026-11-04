@@ -621,6 +621,11 @@ void Game::updateAmbience(uint32_t dtMs) {
   const int before = ambSel_.current();
   int sel = ambSel_.update(dt, w, speed);
   if (sel != before || audio_->ambientArea() != sel) audio_->setAmbientArea(sel);
+  {   // volume fades from full to AmbienceMinimumFadedVolume when the area's share of the view drops below AmbienceStartFadeAtPercent
+    float total = 0; for (float f : w) total += f;
+    const float share = sel >= 0 && size_t(sel) < w.size() && total > 0 ? 100.f * w[size_t(sel)] / total : 100.f;
+    audio_->setAmbientLevel(ambienceFadeVolume(share, opt.get("AmbienceStartFadeAtPercent", 0), opt.get("AmbienceMinimumFadedVolume", 1024)));
+  }
   if (++sparseTick_ % 4 == 0) updateSparseAmbience();
 }
 

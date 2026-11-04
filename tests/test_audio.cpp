@@ -348,6 +348,8 @@ static void testSystem() {
   CHECK(as.setAmbientArea(0));
   as.update(310);
   CHECK(as.mixer().voiceCount() >= 1);
+  as.setAmbientLevel(300); CHECK(as.ambientLevel() == 300);   // spec 06 5.3 fade-out of a bed whose share of the view is small
+  as.setAmbientLevel(5000); CHECK(as.ambientLevel() == 1024);
   CHECK(!as.setAmbientArea(1));  // no file
 }
 

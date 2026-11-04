@@ -867,6 +867,15 @@ bool AudioSystem::setAmbientArea(int index) {
   return true;
 }
 
+void AudioSystem::setAmbientLevel(int scale) {
+  scale = std::max(0, std::min(1024, scale));
+  if (scale == ambScale_) return;
+  ambScale_ = scale;
+  if (ambArea_ < 0) return;
+  for (size_t i = 0; i < cellH_.size() && i < sched_.cells.size(); i++)
+    if (cellH_[i]) mixer_.setVolume(cellH_[i], std::min(1024, sched_.vol * sched_.cells[i].vol / 1024) * ambScale_ / 1024, 200);
+}
+
 void AudioSystem::update(int64_t dt) {
   now_ += dt;
   if (!musicLoads_.empty()) collectMusicLoads();
@@ -902,7 +911,7 @@ void AudioSystem::update(int64_t dt) {
       if (!a.start) { if (cellH_[size_t(a.cell)]) mixer_.fadeOut(cellH_[size_t(a.cell)], c.fout); continue; }
       VoiceParams p;
       p.category = AudioCategory::Ambience;
-      p.volume = std::min(1024, sched_.vol * c.vol / 1024);
+      p.volume = std::min(1024, sched_.vol * c.vol / 1024) * ambScale_ / 1024;
       p.pan = std::clamp((float(c.lr) - 512.f) / 512.f, -1.f, 1.f);
       p.priority = sched_.pri;
       p.loop = c.loop != 0;

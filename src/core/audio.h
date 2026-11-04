@@ -327,6 +327,10 @@ class AudioSystem {
   // Ambient area (FSC schedule). index into ambientAreas(); -1 = none.
   bool setAmbientArea(int index);
   int ambientArea() const { return ambArea_; }
+  // Spec 06 s5.3: the bed's volume scale (0..1024) once the area's share of the view drops below AmbienceStartFadeAtPercent; applies to the voices
+  // playing now and to the ones started later.
+  void setAmbientLevel(int scale1024);
+  int ambientLevel() const { return ambScale_; }
 
   // Advance logic by dtMs (music timers, ambient scheduler, fading loop cleanup).
   void update(int64_t dtMs);
@@ -367,6 +371,7 @@ class AudioSystem {
   std::map<std::string, std::future<std::shared_ptr<const PcmBuffer>>> musicLoads_;  // in-flight decodes
   // ambient
   int ambArea_ = -1;
+  int ambScale_ = 1024;
   FscSchedule sched_;
   FscScheduler sch_;
   int64_t ambStart_ = 0;
