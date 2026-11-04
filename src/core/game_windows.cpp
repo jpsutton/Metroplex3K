@@ -243,6 +243,13 @@ void Game::buildPickerEntries(PickerCategory c) {
   }
 }
 
+std::vector<uint8_t> Game::dataMapValues(DataLayer l) {
+  MapSource src;
+  buildMapSource(src);
+  const std::vector<uint8_t>* v = src.values ? src.values(l) : nullptr;
+  return v ? *v : std::vector<uint8_t>();
+}
+
 void Game::buildMapSource(MapSource& src, int pollutionKind) {
   src.W = world_.W; src.H = world_.H;
   src.circles = [this](bool police) {
@@ -295,7 +302,15 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
         break;
       case DataLayer::Power:
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
-          bool any = c.isPowerLine(x, z) || world_.zone[size_t(x) * H + z] != 0 || c.occupantAt(x, z) >= 0;
+          // Only what consumes power is tinted: landfill zones and landfills do not, nor does an occupant whose record says 0 consumption.
+          const int zt = world_.zone[size_t(x) * H + z], oi = c.occupantAt(x, z);
+          bool consumer = zt != 0 && zt != 17;
+          if (oi >= 0 && size_t(oi) < world_.occupants.size()) {
+            const Occupant& o = world_.occupants[size_t(oi)];
+            consumer = o.agentType != 12850;
+            if (consumer && haveData_) if (const OccAttr* a = data_.occupant(o.occId)) if (a->powerAttr == 0) consumer = false;
+          }
+          const bool any = c.isPowerLine(x, z) || consumer;
           at(x, z) = !any ? 0xFF : c.powered(x, z) ? 0 : 1;
         }
         break;

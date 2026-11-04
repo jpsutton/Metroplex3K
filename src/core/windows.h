@@ -548,6 +548,9 @@ struct MapSource {
   std::function<std::vector<std::array<float, 3>>(bool police)> circles;
 };
 
+// Palette (5E5:21) row and column the View Data map paints a continuous layer's value with (spec 09 7.1.1); also used by the verification harness.
+void dataMapPaletteCell(DataLayer l, uint8_t value, int& row, int& col);
+
 class MapWindow {
  public:
   int selected = -1;                    // index into dataMapDefs(); -1 = plain map

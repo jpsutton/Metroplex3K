@@ -95,6 +95,8 @@ class Game {
   std::function<void()> audioLock, audioUnlock;
   Sim& sim() { return sim_; }
   City& city() { return sim_.city(); }
+  // The per-tile values of a View Data map layer (empty when the layer has none); verification harness.
+  std::vector<uint8_t> dataMapValues(DataLayer l);
   Renderer& renderer() { return renderer_; }
   ICityRasterizer& cityRasterizer() { return renderer_; }
 

@@ -146,6 +146,13 @@ void roundToggle(Ui& ui, int cx, int cy, bool on) {
 void legendLabel(Ui& ui, int x, int y, const std::string& t) { ui.text(x, y, t, "main10", kLabelInk); }
 }  // namespace
 
+void dataMapPaletteCell(DataLayer l, uint8_t val, int& row, int& col) {
+  row = 1; col = val >> 3;   // Crime, Flammability, Pollution, Traffic: grey (low) .. red (high)
+  if (l == DataLayer::Aura) { row = 0; col = (127 - (int(val) - 128)) >> 3; }   // aura -127..127: column 0 = good .. 31 = bad [INFERRED quantisation]
+  else if (l == DataLayer::Density || l == DataLayer::LandValue) { row = 2; col = (255 - val) >> 3; }   // blue (high) .. light (low)
+  col = std::max(0, std::min(31, col));
+}
+
 // Data-map mode of the View Data window (spec 09 7.1.1 [OBSERVED], coordinates relative to the window): the whole city as a diamond with
 // corners (230,47) (42,234) (417,234) (230,424), compass at (63,60) (not on Pollution), "Use As Map" panel at the bottom left, the legend
 // box at the bottom right, the coverage / pollution-kind controls in an inset at the top right.
@@ -187,10 +194,8 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
           if (def->layer == DataLayer::Zones) { if (val != 0xFF) col = zoneTint(pal, val >> 2, val & 3); }   // pure colours by type and density, not the palette
           else if (categorical(def->layer)) { if (val != 0xFF) col = categoryColour(pal, def->layer, val); }
           else if (sentinel ? val != 0xFF : val != 0) {   // palette pixel, not a blend
-            int row = 1, c = val >> 3;   // Crime, Flammability, Pollution, Traffic: grey (low) .. red (high)
-            if (def->layer == DataLayer::Aura) { row = 0; c = (127 - (int(val) - 128)) >> 3; }   // aura -127..127: column 0 = good .. 31 = bad [INFERRED quantisation]
-            else if (def->layer == DataLayer::Density || def->layer == DataLayer::LandValue) { row = 2; c = (255 - val) >> 3; }   // blue (high) .. light (low)
-            c = std::max(0, std::min(31, c));
+            int row, c;
+            dataMapPaletteCell(def->layer, val, row, c);
             col = pal ? palPx(pal, row, c, col) : lerpCol(col, MapWindow::legendColour(def->layer, 0, float(val) / 255.f), 0.7f);
           }
         }
@@ -269,10 +274,10 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
       }
     } else {
       insetBox(ui, std_, true);
-      const Image* g = (def->layer == DataLayer::Aura) ? E.img(0x5E5, 0x09)
-                       : (def->layer == DataLayer::Density || def->layer == DataLayer::LandValue) ? E.img(0x5E5, 0x0A) : nullptr;
-      if (g && !g->empty()) ui.blit(*g, r.x + 292, r.y + 362);
-      else for (int i = 0; i < 66; i++) ui.fill({r.x + 292, r.y + 362 + i, 32, 1}, palPx(pal, 1, i * 31 / 65, lerpCol(rgb(255, 255, 255), rgb(220, 30, 30), float(i) / 65.f)));   // grey -> red scale: palette row 1
+      // The legend is the map's palette row drawn vertically, 2 px per column from y = 363 (32 columns over 64 px), x 292..323 [OBSERVED]; the
+      // images 5E5:09 / 0A are 11-step ramps and are not used here.
+      const int lrow = def->layer == DataLayer::Aura ? 0 : (def->layer == DataLayer::Density || def->layer == DataLayer::LandValue) ? 2 : 1;
+      for (int col = 0; col < 32; col++) ui.fill({r.x + 292, r.y + 363 + 2 * col, 32, 2}, palPx(pal, lrow, col, lerpCol(rgb(255, 255, 255), rgb(220, 30, 30), float(col) / 31.f)));
       auto el = endLabels(def->layer);
       legendLabel(ui, lx, ly0, E.win(def->lowId, el.first));
       legendLabel(ui, lx, ly1, E.win(def->highId, el.second));

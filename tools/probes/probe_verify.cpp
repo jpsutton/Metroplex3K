@@ -367,6 +367,18 @@ void groupOrdW(const fs::path& root) {
         }
       }
     }
+    if (n.compare(0, 6, "Berlin") == 0) {   // palette-column histograms of our View Data maps, to compare with the original's (Crime cols 0-9, Land Value cols 11-31 peaking at 31)
+      static const struct { DataLayer l; const char* name; bool sentinel; } maps[] = {{DataLayer::Aura, "Aura", true}, {DataLayer::Crime, "Crime", true}, {DataLayer::Density, "Density", false},
+        {DataLayer::Fire, "Flammability", true}, {DataLayer::LandValue, "Land Value", true}, {DataLayer::Pollution, "Pollution", false}, {DataLayer::Traffic, "Traffic", true}};
+      for (const auto& m : maps) {
+        const std::vector<uint8_t> v = s.game.dataMapValues(m.l);
+        if (v.empty()) { info("ordw " + n + " " + m.name + " palette columns", "layer has no data"); continue; }
+        long hist[32] = {}, tinted = 0;
+        for (uint8_t val : v) { if (m.sentinel ? val == 0xFF : val == 0) continue; int row, col; dataMapPaletteCell(m.l, val, row, col); hist[col]++; tinted++; }
+        std::string hs; for (int c = 0; c < 32; c++) hs += str(hist[c]) + " ";
+        info("ordw " + n + " " + m.name + " palette columns 0..31 (tiles per column)", "tinted " + str(tinted) + " of " + str(long(v.size())) + ": " + hs);
+      }
+    }
     if (n.compare(0, 6, "Berlin") == 0) {   // aura over developed tiles (what the View Data Aura map paints) and the legend ramp image
       std::map<int, long> hist; long cnt = 0; double sum = 0; int mn = 255, mx = 0;
       const City& c = s.game.city();
