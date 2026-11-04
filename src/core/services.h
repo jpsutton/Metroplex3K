@@ -109,11 +109,11 @@ class CoverageLayer {
   int stationCount() const { return int(stations_.size()); }
   // One entry per station: centre of its box (tile units, may be x.5) and the stamp's reach in tiles (stamp radius plus the box side). The
   // View Data window draws these as the coverage circles of the Crime / Flammability maps.
-  struct Circle { float x, z, radius; };
+  struct Circle { float x, z, radius; int R, side; };   // R = the stamp radius (funding-scaled), side = longest box side in tiles
   std::vector<Circle> stationCircles() const {
     std::vector<Circle> v;
     for (const auto& st : stations_)
-      v.push_back({float(st.x0 + st.x1 + 1) / 2.f, float(st.z0 + st.z1 + 1) / 2.f, float(st.st.R) + float(std::max(st.x1 - st.x0, st.z1 - st.z0) + 1)});   // measured on the original: R + the box side (3 for a station)
+      v.push_back({float(st.x0 + st.x1 + 1) / 2.f, float(st.z0 + st.z1 + 1) / 2.f, float(st.st.R) + float(std::max(st.x1 - st.x0, st.z1 - st.z0) + 1), st.st.R, std::max(st.x1 - st.x0, st.z1 - st.z0) + 1});   // measured on the original: R + the box side (3 for a station)
     return v;
   }
 

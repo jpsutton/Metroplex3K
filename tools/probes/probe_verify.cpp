@@ -22,6 +22,8 @@
 #include <set>
 #include <sstream>
 #include "core/audio.h"
+#include "core/gamedata.h"
+#include "core/image.h"
 #include "core/terrain_gen.h"
 #include "core/tiler.h"
 #include "core/world_network_map.h"
@@ -285,6 +287,19 @@ void groupL3(const fs::path& root, const fs::path& ref) {
 // Evidence for the open quantity W behind the world-based ordinance costs (spec 19 s9.5: Berlin fits W in [25200, 25892], a new city 0) and the
 // raw world-layer history charts (spec 10 s6.13). Informational: prints candidate counts per shipped city and the five world charts' words.
 void groupOrdW(const fs::path& root) {
+  {   // the View Data window's UI images: do they decode, and what does the Aura legend ramp 5E5:09 hold
+    GameData gd; std::string err;
+    if (gd.open(root, err)) {
+      for (uint32_t id : {0x01u, 0x03u, 0x04u, 0x07u, 0x09u, 0x0Au, 0x0Bu, 0x0Cu, 0x0Du, 0x0Fu, 0x10u, 0x11u, 0x15u, 0x17u, 0x19u, 0x31u, 0x33u, 0x35u}) {
+        ResourceRef rr = gd.db().find({T_UI_IMAGE, 0x5E5, id});
+        std::string what = "missing";
+        if (rr) { try { Image im = decodeUiImage(rr.data, rr.available, true); what = str(im.w) + "x" + str(im.h);
+            if (id == 0x09 && im.w > 0 && im.h > 1) { char b[64]; for (int y : {0, im.h / 4, im.h / 2, 3 * im.h / 4, im.h - 1}) { const uint32_t p = im.px[size_t(y) * im.w + size_t(im.w / 2)]; std::snprintf(b, sizeof b, " row%d=(%u,%u,%u,a%u)", y, p & 255, (p >> 8) & 255, (p >> 16) & 255, p >> 24); what += b; } } }
+          catch (const FormatError&) { what = "decode fails"; } }
+        info("ordw UI image 000005E5:" + str(long(id)), what);
+      }
+    }
+  }
   for (const fs::path& path : findCities(root, {})) {
     if (skipped(path)) continue;
     Session s;
@@ -304,13 +319,17 @@ void groupOrdW(const fs::path& root) {
          ", non-filler " + str(occ - filler) + ", footprint tiles " + str(footprint) + ", non-filler footprint " + str(footprintNoFiller) +
          ", zoned tiles " + str(zoned) + ", 1x1 non-filler " + str(nonLot) + ", surface pieces " + str(long(w.surface.size())));
     if (n.compare(0, 6, "Berlin") == 0) {   // coverage circle centres of the original's View Data window (window-relative pixels, 256 tiles per edge)
-      static const float pol[10][2] = {{182, 172}, {220, 154}, {194, 236}, {240, 218}, {224, 328}, {144, 198}, {182, 304}, {326, 238}, {156, 260}, {262, 290}};
-      static const float fir[10][2] = {{136, 230}, {186, 264}, {166, 316}, {312, 188}, {214, 130}, {162, 200}, {254, 216}, {214, 298}, {206, 342}, {182, 142}};
+      // Least-squares refined centres of the original's rings (police r = 31.4 tiles, fire r = 27.6 tiles).
+      static const float pol[11][2] = {{91.9f, 231.1f}, {183.0f, 174.0f}, {219.0f, 153.0f}, {194.0f, 237.3f}, {239.0f, 220.0f}, {224.2f, 330.1f}, {145.0f, 197.8f}, {183.0f, 302.8f}, {326.0f, 238.0f}, {156.3f, 260.2f}, {263.0f, 291.0f}};
+      static const float fir[11][2] = {{135.0f, 230.0f}, {186.2f, 264.8f}, {165.9f, 316.1f}, {312.0f, 190.0f}, {216.0f, 129.0f}, {99.0f, 223.0f}, {163.0f, 199.0f}, {256.0f, 215.0f}, {214.9f, 295.8f}, {207.0f, 342.0f}, {184.0f, 142.0f}};
       for (int layer = 0; layer < 2; layer++) {
-        const auto circles = (layer == 0 ? s.game.city().police : s.game.city().fire).stationCircles();
+        const auto& cov = layer == 0 ? s.game.city().police : s.game.city().fire;
+        const auto circles = cov.stationCircles();
+        { std::string rs; for (const auto& c : circles) rs += "R" + str(c.R) + "/side" + str(c.side) + " ";
+          info(std::string("ordw ") + n + (layer == 0 ? " police" : " fire") + " funding " + str(cov.funding()) + "%, stamp R / box side per station", rs); }
         for (int swap = 0; swap < 2; swap++) {
           int hit1 = 0, hit2 = 0; double sum = 0, sdx = 0, sdz = 0;
-          for (int k = 0; k < 10; k++) {
+          for (int k = 0; k < 11; k++) {
             const float u = (layer == 0 ? pol : fir)[k][0] - 230.f, v = (layer == 0 ? pol : fir)[k][1] - 47.f;
             float x = (u / 0.734f + v / 0.730f) / 2.f, z = (v / 0.730f - u / 0.734f) / 2.f;
             if (swap) std::swap(x, z);
@@ -319,9 +338,16 @@ void groupOrdW(const fs::path& root) {
             hit1 += best <= 2.0; hit2 += best <= 4.0; sum += best; sdx += bdx; sdz += bdz;   // dx, dz = observed circle centre - our station centre
           }
           info(std::string("ordw ") + n + (layer == 0 ? " police" : " fire") + " circle centres, mapping " + (swap ? "(b) x/z swapped" : "(a)"),
-               str(hit1) + "/10 within 2 tiles, " + str(hit2) + "/10 within 4, mean distance " + std::to_string(std::lround(sum * 10.0) / 100.0).substr(0, 5) + " tiles, signed mean dx " + std::to_string(std::lround(sdx * 10.0) / 100.0).substr(0, 5) + " dz " + std::to_string(std::lround(sdz * 10.0) / 100.0).substr(0, 5) + " (tiles, x/z of the mapping), stations " + str(long(circles.size())));
+               str(hit1) + "/11 within 2 tiles, " + str(hit2) + "/11 within 4, mean distance " + std::to_string(std::lround(sum * 100.0 / 11.0) / 100.0).substr(0, 5) + " tiles, signed mean dx " + std::to_string(std::lround(sdx * 100.0 / 11.0) / 100.0).substr(0, 5) + " dz " + std::to_string(std::lround(sdz * 100.0 / 11.0) / 100.0).substr(0, 5) + " (tiles, x/z of the mapping), stations " + str(long(circles.size())));
         }
       }
+    }
+    if (n.compare(0, 6, "Berlin") == 0) {   // aura over developed tiles (what the View Data Aura map paints) and the legend ramp image
+      std::map<int, long> hist; long cnt = 0; double sum = 0; int mn = 255, mx = 0;
+      const City& c = s.game.city();
+      for (int x = 0; x < w.W; x++) for (int z = 0; z < w.H; z++) if (c.occupantAt(x, z) >= 0) { const int a = c.aura.aura(x, z); hist[a / 16]++; cnt++; sum += a; mn = std::min(mn, a + 128); mx = std::max(mx, a + 128); }
+      std::string hs; for (const auto& kv : hist) hs += str(kv.first * 16) + ":" + str(kv.second) + " ";
+      info("ordw " + n + " aura over developed tiles", "n " + str(cnt) + ", mean " + std::to_string(cnt ? sum / double(cnt) : 0.0).substr(0, 6) + ", byte range " + str(mn) + ".." + str(mx) + ", histogram (aura/16 : tiles) " + hs);
     }
     const auto& wc = s.game.city().valves.world.charts;
     for (int k = 0; k < 5; k++) {
