@@ -529,8 +529,9 @@ February 2067), and in a new city with population 0. In the new city every cost 
   Gambling 756, Industrial Waste Disposal 38 and Industrial Pollutant Fee 18.
 * **World-based cost ordinances** show ⌊W / D⌋ + 1, where W is **not** the population. Power
   Conservation shows 11 (D 2364), Smoke Detectors 27 (D 959) and Earthquake Retro-Fitting 29
-  (D 900). All three fit one W between 25,200 and 25,892 for Berlin, and W = 0 in a new city. What W
-  counts is [OPEN]; it is probably a count of buildings or developed tiles.
+  (D 900). All three fit one W between 25,200 and 25,892 for Berlin, and W = 0 in a new city. W is the total footprint in tiles of all occupants, filler included
+  [INFERRED]. For Berlin that is 25,598, and it reproduces all three costs exactly: 11, 27 and 29. Every other
+  candidate count misses: zoned tiles 24,555, non-filler footprint 18,783, surface pieces 19,220.
 
 Values in the "Year", "Str" and "D" columns are the shipped data [DATA]; the "Money" column is
 hard-coded per ordinance ID [STATIC]. Effect-key placement: `*OrdEffect` keys live in
