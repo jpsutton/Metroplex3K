@@ -518,6 +518,20 @@ subsystem applies the effect.
 | `0x62F6E82B` | `0xC28D0B6E` | 0 | 163 | 9999 | free | farmers' market (`FarmersMarketOrdEffect`) |
 | `0xC2F90EB1` | `0x022E288E` | 1930 | 164 | 16521 | cost | water meters → water demand |
 
+`[OBSERVED]` Monthly costs shown in the Ordinances window for shipped Berlin (population 794,278,
+February 2067), and in a new city with population 0. In the new city every cost ordinance shows
+−§1 and every income ordinance §0.
+
+* **Cost ordinances** show ⌊population / D⌋ + 1, which is the same as ⌈population / D⌉ for these
+  values. Water Conservation shows 193 (794,278 / 4125 = 192.6), Stairwell Lighting 93, Crossing
+  Guards 396, Public Smoking Ban 483 and Carpool Incentive 519.
+* **Income ordinances** show ⌊population / D⌋ with no +1. Parking Fines shows +512, Legalized
+  Gambling 756, Industrial Waste Disposal 38 and Industrial Pollutant Fee 18.
+* **World-based cost ordinances** show ⌊W / D⌋ + 1, where W is **not** the population. Power
+  Conservation shows 11 (D 2364), Smoke Detectors 27 (D 959) and Earthquake Retro-Fitting 29
+  (D 900). All three fit one W between 25,200 and 25,892 for Berlin, and W = 0 in a new city. What W
+  counts is [OPEN]; it is probably a count of buildings or developed tiles.
+
 Values in the "Year", "Str" and "D" columns are the shipped data [DATA]; the "Money" column is
 hard-coded per ordinance ID [STATIC]. Effect-key placement: `*OrdEffect` keys live in
 `SC3Tune.ini [IndustrialZoneDeveloper]`/`[FlammabilityLayer]`, `SC3Pollution.ini`,

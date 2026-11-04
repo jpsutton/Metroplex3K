@@ -281,6 +281,37 @@ void groupL3(const fs::path& root, const fs::path& ref) {
   }
 }
 
+// ---------------------------------------------------------------- ordw
+// Evidence for the open quantity W behind the world-based ordinance costs (spec 19 s9.5: Berlin fits W in [25200, 25892], a new city 0) and the
+// raw world-layer history charts (spec 10 s6.13). Informational: prints candidate counts per shipped city and the five world charts' words.
+void groupOrdW(const fs::path& root) {
+  for (const fs::path& path : findCities(root, {})) {
+    if (skipped(path)) continue;
+    Session s;
+    if (!s.open(root) || !s.load(path)) continue;
+    const World& w = s.game.world();
+    long occ = long(w.occupants.size()), filler = 0, occupied = 0, footprint = 0, footprintNoFiller = 0, nonLot = 0;
+    for (const auto& o : w.occupants) {
+      const bool f = (o.buildingFlags & 0x100) != 0;
+      filler += f; occupied += (o.state & 0xFF) == 1;
+      footprint += long(o.sizeX) * o.sizeZ;
+      if (!f) footprintNoFiller += long(o.sizeX) * o.sizeZ;
+      nonLot += !f && o.sizeX * o.sizeZ == 1;
+    }
+    long zoned = 0; for (uint8_t z : w.zone) zoned += z != 0;
+    const std::string n = path.filename().string();
+    info("ordw " + n, "pop " + str(s.game.sim().population()) + ", occupants " + str(occ) + ", filler " + str(filler) + ", occupied " + str(occupied) +
+         ", non-filler " + str(occ - filler) + ", footprint tiles " + str(footprint) + ", non-filler footprint " + str(footprintNoFiller) +
+         ", zoned tiles " + str(zoned) + ", 1x1 non-filler " + str(nonLot) + ", surface pieces " + str(long(w.surface.size())));
+    const auto& wc = s.game.city().valves.world.charts;
+    for (int k = 0; k < 5; k++) {
+      std::string line;
+      for (int i = 0; i < 33; i++) line += (i ? " " : "") + str(long(wc[size_t(k)].w[size_t(i)]));
+      info("ordw " + n + " world chart " + str(k), line);
+    }
+  }
+}
+
 // ---------------------------------------------------------------- terrain
 // Our generator against a terrain the original generated (issue #52): altitude, water surface and sea level must match exactly;
 // the flora layer is compared too and, when it differs, broken down so the cause can be found.
@@ -396,7 +427,7 @@ int main(int argc, char** argv) {
     else if (a == "--only") { std::istringstream is(next()); std::string g; while (std::getline(is, g, ',')) only.insert(g); }
     else { std::fprintf(stderr, "unknown argument %s\n", a.c_str()); return 2; }
   }
-  if (needInstall(root, "probe_verify GAME_DIR [--ref REFDIR] [--only l0,l1,l2,audio,scn,l3,terrain] [--skip PREFIXES] [--report out.tsv] [--shots OUTDIR]")) return 2;
+  if (needInstall(root, "probe_verify GAME_DIR [--ref REFDIR] [--only l0,l1,l2,audio,scn,l3,terrain,ordw] [--skip PREFIXES] [--report out.tsv] [--shots OUTDIR]")) return 2;
   auto want = [&](const char* g) { return only.empty() || only.count(g); };
   struct G { const char* name; std::function<void()> run; };
   const G groups[] = {
@@ -407,6 +438,7 @@ int main(int argc, char** argv) {
       {"scn", [&] { groupScenarios(root); }},
       {"l3", [&] { groupL3(root, ref); }},
       {"terrain", [&] { groupTerrain(ref); }},
+      {"ordw", [&] { groupOrdW(root); }},
   };
   for (const G& g : groups)
     if (want(g.name)) { g_group = g.name; std::printf("== %s\n", g.name); g.run(); }

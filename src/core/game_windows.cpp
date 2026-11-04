@@ -261,7 +261,8 @@ void Game::buildMapSource(MapSource& src, int pollutionKind) {
         }
         break;
       case DataLayer::Aura:
-        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = clampB(c.aura.aura(x, z) + 128);
+        // The original tints developed tiles only (blue for good, red-brown for bad aura) and leaves the rest as terrain: 0 = no tint.
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = c.occupantAt(x, z) >= 0 ? std::max<uint8_t>(1, clampB(c.aura.aura(x, z) + 128)) : 0;
         break;
       case DataLayer::Crime:
         for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = clampB(c.crime.crimeAt(x, z));

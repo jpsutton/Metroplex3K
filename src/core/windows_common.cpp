@@ -115,6 +115,22 @@ void compassRose(Ui& ui, const WinEnv& E, int kx, int ky, int rot) {
     }
   }
 
+// Text rotated 90 degrees counter-clockwise (reads bottom to top), box top-left (x, y), box size (font height) x (text width).
+void verticalText(Ui& ui, int x, int y, const std::string& s, const char* font, uint32_t col) {
+  const Font& f = ui.fonts->get(font);
+  const int w = f.measure(s), h = f.height();
+  if (w <= 0 || h <= 0) return;
+  std::vector<uint32_t> tmp(size_t(w) * size_t(h), 0xFFFFFFFFu);
+  f.draw(tmp, w, h, 0, 0, s, col | 0xFF000000u);
+  for (int sy = 0; sy < h; sy++)
+    for (int sx = 0; sx < w; sx++) {
+      const uint32_t p = tmp[size_t(sy) * size_t(w) + size_t(sx)];
+      if (p == 0xFFFFFFFFu) continue;
+      const int dx = x + sy, dy = y + (w - 1 - sx);
+      if (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) ui.at(dx, dy) = p | 0xFF000000u;
+    }
+}
+
 bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool selected, const char* font) {
   const Skin* sk = ui.skin;
   const Image* art = sk ? sk->get("radio") : nullptr;

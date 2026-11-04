@@ -138,6 +138,7 @@ WindowResult MapWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const MapSourc
         if (def && vals && vals->size() >= size_t(src.W) * src.H) {
           uint8_t v = (*vals)[size_t(x) * src.H + z];
           if (categorical(def->layer)) { if (v != 0xFF) col = MapWindow::legendColour(def->layer, v, 0); }
+          else if (def->layer == DataLayer::Aura) { if (v) col = lerpCol(col, lerpCol(rgb(176, 72, 48), rgb(40, 80, 230), float(v) / 255.f), 0.75f); }   // developed tiles only
           else if (v) col = lerpCol(col, MapWindow::legendColour(def->layer, 0, float(v) / 255.f), 0.7f);   // data tints over the terrain base
         }
         ui.at(mm.x + px, mm.y + py) = col;
@@ -492,115 +493,143 @@ ChartsData chartsFromPopulation(const Population& p, uint32_t cityPop) {
 }
 
 namespace {
-void barChart(Ui& ui, Rect r, const std::vector<float>& v, uint32_t col, float maxV = 0) {
-  ui.fill(r, rgb(255, 255, 255)); ui.frame(r, false);
-  if (v.empty()) return;
-  float mx = maxV;
-  if (mx <= 0) for (float f : v) mx = std::max(mx, f);
-  if (mx <= 0) mx = 1;
-  int n = int(v.size());
-  for (int i = 0; i < n; i++) {
-    int x0 = r.x + 2 + i * (r.w - 4) / n, x1 = r.x + 2 + (i + 1) * (r.w - 4) / n;
-    int h = int(std::max(0.f, std::min(1.f, v[size_t(i)] / mx)) * float(r.h - 6));
-    ui.fill({x0, r.y + r.h - 3 - h, std::max(1, x1 - x0 - (n < 20 ? 6 : 0)), h}, col);
-  }
-}
-}  // namespace
-
-namespace {
 std::string capText(const WinEnv& E, uint32_t id, const char* fb, const std::string& val) {
   std::string t = E.win(id, fb);
   if (t.find("%s") != std::string::npos || t.find("%d") != std::string::npos) return subst(t, {val});
   return val.empty() ? t : t + " " + val;
 }
+std::string whole(double v) { return std::to_string(int64_t(std::llround(v))); }
+
+struct PieSlice { std::string label; double value; uint32_t col; };
+
+// 3-D pie (spec 09 7.1.1 charts pages): an ellipse of about 175 x 110 centred at c with a dark rim below it; slices run clockwise from the top
+// and their percentages are drawn in black.
+void pieChart(Ui& ui, int cx, int cy, const std::vector<PieSlice>& sl) {
+  double total = 0; for (const auto& s : sl) total += s.value;
+  if (total <= 0) return;
+  const int rx = 87, ry = 48, rim = 12;
+  std::vector<double> cum;   // cumulative fraction at the end of each slice
+  double acc = 0; for (const auto& s : sl) { acc += s.value / total; cum.push_back(acc); }
+  auto colourAt = [&](double frac) { for (size_t i = 0; i < sl.size(); i++) if (frac < cum[i] + 1e-9) return sl[i].col; return sl.back().col; };
+  const double kPi = 3.14159265358979;
+  for (int dy = ry + rim; dy >= -ry; dy--)   // rim first (lower), then the top face over it
+    for (int dx = -rx; dx <= rx; dx++) {
+      const double fx = double(dx) / rx;
+      const double topY = double(dy) / ry;
+      const bool top = fx * fx + topY * topY <= 1.0;
+      const double rimY = double(dy - rim) / ry;
+      const bool inRim = !top && fx * fx + rimY * rimY <= 1.0 && dy > 0;
+      if (!top && !inRim) continue;
+      const double ang = std::atan2(fx, -topY);   // 0 at the top, clockwise
+      double frac = ang / (2 * kPi); if (frac < 0) frac += 1;
+      uint32_t col = colourAt(frac);
+      if (inRim) col = lerpCol(col, rgb(0, 0, 0), 0.45f);
+      else if (fx * fx + topY * topY > 0.94) col = lerpCol(col, rgb(0, 0, 0), 0.35f);   // dark rim line on the top face edge
+      ui.fill({cx + dx, cy + dy, 1, 1}, col);
+    }
+  acc = 0;
+  for (size_t i = 0; i < sl.size(); i++) {
+    const double f = sl[i].value / total, mid = (acc + f / 2) * 2 * kPi;
+    acc += f;
+    if (f < 0.04) continue;
+    const std::string t = std::to_string(int(std::lround(f * 100))) + "%";
+    const int px = cx + int(std::sin(mid) * rx * 0.62), py = cy - int(std::cos(mid) * ry * 0.62);
+    ui.text(px - ui.textWidth(t, "main10") / 2, py - 6, t, "main10", 0);
+  }
+}
 }  // namespace
 
-// Charts mode (spec 09 7.1.1 [OBSERVED], coordinates relative to the window). Chart box (52,50)-(408,238), plot x 144..408 y 52..205 on stripe tiles
-// 000005E5:31/33/35, 15 five-year bars (7 px wide, pitch 13 from x = 149) on the age pages; captions centred at x 225 (y 249 / 265); the five page
-// radios centred at x ~197 (y = 314 + 20 i).
+// Charts mode (spec 09 7.1.1 [OBSERVED], coordinates relative to the window). Chart box (52,50)-(408,238), plot x 144..408 y 52..205, 15 five-year
+// bars (7 px wide, pitch 13 from x = 149) on the age pages (Education, Health, Population), 3-D pies on Electricity and Garbage; captions centred at
+// x 225 (y 249 / 265); the five page radios centred at x ~197 (y = 314 + 20 i).
 WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const ChartsData& d) {
   WindowResult R;
   const Rect box{r.x + 52, r.y + 50, 357, 189}, plot{r.x + 144, r.y + 52, 264, 153};
   sunkenLines(ui, box);
-  ui.fill({box.x + 1, box.y + 1, box.w - 2, box.h - 2}, rgb(222, 223, 255));
-  {
-    static const uint32_t tile[3] = {0x31, 0x33, 0x35};
-    const Image* im = E.img(0x5E5, tile[tab % 3]);
-    if (im && !im->empty()) { for (int x = plot.x; x < plot.x + plot.w; x += im->w) ui.blit(*im, x, plot.y, 0, std::min(im->w, plot.x + plot.w - x)); }
-    else for (int y = 0; y < plot.h; y += 17) ui.fill({plot.x, plot.y + y, plot.w, std::min(17, plot.h - y)}, (y / 17) % 2 ? rgb(247, 223, 222) : rgb(231, 199, 198));
-  }
-  const uint32_t axis = rgb(0x18, 0x20, 0x6B);
-  ui.fill({plot.x, plot.y, 1, plot.h + 1}, axis); ui.fill({plot.x, plot.y + plot.h, plot.w, 1}, axis);
   const bool agePage = tab <= 2;
-  auto f1 = [](double v) { char b[32]; std::snprintf(b, sizeof b, "%.1f", v); return std::string(b); };
+  // Lavender stripes over the whole chart box (the stripe tile of each page is not identified [OPEN]).
+  for (int y = 0; y < box.h - 2; y += 17)
+    ui.fill({box.x + 1, box.y + 1 + y, box.w - 2, std::min(17, box.h - 2 - y)}, (y / 17) % 2 ? rgb(214, 219, 255) : rgb(231, 231, 255));
   std::string cap1, cap2;
   if (agePage) {
+    const uint32_t axis = rgb(0x18, 0x20, 0x6B);
+    if (tab == 0) {   // Workforce band, pink stripes over about age 22..67
+      for (int y = 0; y < plot.h; y += 17)
+        ui.fill({r.x + 197, plot.y + y, 119, std::min(17, plot.h - y)}, (y / 17) % 2 ? rgb(247, 223, 222) : rgb(231, 199, 198));
+      ui.textCentered({r.x + 197, plot.y + 1, 119, 12}, E.win(0x1E5, "Workforce"), "system9", rgb(230, 130, 0));
+    }
+    ui.fill({plot.x, plot.y, 1, plot.h + 1}, axis); ui.fill({plot.x, plot.y + plot.h, plot.w, 1}, axis);
     const std::vector<float>& src = tab == 0 ? d.eq : tab == 1 ? d.lifeExpectancy : d.population;
-    float axisMax = 140.f;
-    if (tab == 2) { float m = 0; for (float f : src) m = std::max(m, f); axisMax = std::max(1.f, std::ceil(m / 7.f / 10.f) * 70.f); }
-    // y labels, 0..axisMax in 7 steps, right-aligned at x 138
-    for (int i = 0; i <= 7; i++) {
-      const int cy = plot.y + plot.h - int(20.5f * float(i) + 0.5f);
-      rightText(ui, r.x + 138, cy - 5, tab == 2 ? groupDigits(int64_t(axisMax * float(i) / 7.f)) : std::to_string(20 * i), "system9", kInkBlue);
+    // y axis: Education 0..140 step 20, Health 0..90 step 10, Population 0..10 step 5 (thousand people per year of age); labels right-aligned at x 138
+    const int step = tab == 0 ? 20 : tab == 1 ? 10 : 5, top = tab == 0 ? 140 : tab == 1 ? 90 : 10;
+    for (int v = 0; v <= top; v += step) {
+      const int cy = plot.y + plot.h - int(142.f * float(v) / float(top) + 0.5f);
+      rightText(ui, r.x + 138, cy - 5, std::to_string(v), "system9", kInkBlue);
     }
     for (int n = 10; n <= 90; n += 10) {   // x labels, 26 px per 10 years, "10" at x ~ 164
       const std::string t = std::to_string(n);
       ui.text(r.x + 138 + 26 * n / 10 - ui.textWidth(t, "system9") / 2, r.y + 210, t, "system9", kInkBlue);
     }
     ui.textCentered({r.x + 176, r.y + 220, 200, 12}, E.win(0x1E6, "Resident Age"), "system9", kInkBlue);
-    {   // vertical axis caption (the original writes it rotated; here two horizontal lines)
-      std::string t = E.win(tab == 0 ? 0x1E4u : tab == 1 ? 0x1E0u : 0x1E1u, tab == 0 ? "Education Quotient" : tab == 1 ? "Life Expectancy" : "Population");
-      const size_t sp = t.find(' ');
-      const std::string a = sp == std::string::npos ? t : t.substr(0, sp), b = sp == std::string::npos ? "" : t.substr(sp + 1);
-      ui.textCentered({r.x + 56, r.y + 158, 62, 12}, a, "system9", kInkBlue);
-      if (!b.empty()) ui.textCentered({r.x + 56, r.y + 171, 62, 12}, b, "system9", kInkBlue);
-    }
-    if (tab == 0) {   // workforce band over about age 22..67
-      for (int y = plot.y; y < plot.y + plot.h; y++)
-        for (int x = r.x + 197; x < r.x + 316; x++) ui.at(x, y) = lerpCol(ui.at(x, y), rgb(231, 199, 198), 0.5f);
-      ui.textCentered({r.x + 197, plot.y + 1, 119, 12}, E.win(0x1E5, "Workforce"), "system9", rgb(230, 130, 0));
+    {   // vertical axis caption, rotated: Education Quotient on two lines, Health and Population on one
+      const std::string t = E.win(tab == 0 ? 0x1E4u : tab == 1 ? 0x1E0u : 0x1E1u, tab == 0 ? "Education Quotient" : tab == 1 ? "Health" : "Population");
+      const size_t sp = tab == 0 ? t.find(' ') : std::string::npos;
+      const int hgt = ui.fonts->get("system9").height();
+      auto put = [&](const std::string& s, int x) { verticalText(ui, x, r.y + 170 - ui.textWidth(s, "system9") / 2, s, "system9", kInkBlue); };
+      if (sp == std::string::npos) put(t, r.x + 80 - hgt / 2);
+      else { put(t.substr(0, sp), r.x + 68); put(t.substr(sp + 1), r.x + 68 + hgt + 2); }
     }
     for (int i = 0; i < 15; i++) {   // one bar per 5-year bucket, ages 0-4 .. 70-74
       float sum = 0; int n = 0;
       for (int a = i * 5; a < i * 5 + 5 && a < int(src.size()); a++) { sum += src[size_t(a)]; n++; }
-      const float v = n ? sum / float(n) : 0.f;
-      const int h = std::max(0, std::min(plot.h - 4, int(v * 142.f / axisMax)));
+      float v = n ? sum / float(n) : 0.f;
+      if (tab == 2) v /= 1000.f;
+      const int h = std::max(0, std::min(plot.h - 4, int(v * 142.f / float(top))));
       const int bx = r.x + 149 + 13 * i;
       if (h > 0) {
         ui.fill({bx, plot.y + plot.h - h, 7, h}, rgb(0, 211, 140));
         ui.fill({bx - 1, plot.y + plot.h - h, 1, h}, rgb(173, 178, 222)); ui.fill({bx + 7, plot.y + plot.h - h, 1, h}, rgb(173, 178, 222));
       }
     }
-    if (tab == 0) { cap1 = capText(E, 0x1E2, "Population EQ %s", f1(d.populationEQ)); cap2 = capText(E, 0x1E3, "Workforce EQ %s", f1(d.workforceEQ)); }
-    else if (tab == 1) { cap1 = capText(E, 0x1F9, "Population life expectancy %s", f1(d.populationLE)); cap2 = capText(E, 0x1FA, "Workforce life expectancy %s", f1(d.workforceLE)); }
-    else { cap1 = capText(E, 0x1FC, "Total population %s", groupDigits(d.totalPopulation)); cap2 = capText(E, 0x1FD, "Workforce %s%%", std::to_string(d.workforcePercent)); }
+    if (tab == 0) { cap1 = capText(E, 0x1E2, "Population EQ = %s", whole(d.populationEQ)); cap2 = capText(E, 0x1E3, "Workforce EQ = %s", whole(d.workforceEQ)); }
+    else if (tab == 1) { cap1 = capText(E, 0x1F9, "Population Life Expectancy = %s Years", whole(d.populationLE)); cap2 = capText(E, 0x1FA, "Workforce Life Expectancy = %s Years", whole(d.workforceLE)); }
+    else { cap1 = capText(E, 0x1FC, "Total Population = %s", groupDigits(d.totalPopulation)); cap2 = capText(E, 0x1FD, "Workforce = %s%% of Population", std::to_string(d.workforcePercent)); }
   } else {
     const bool el = tab == 3;
-    std::vector<float> v;
-    std::vector<std::pair<uint32_t, const char*>> labels;
+    // Colours of the categories seen in the original (spec 09 7.1.1); the others are not observed and are mine.
+    struct Cat { uint32_t id; const char* fb; uint32_t col; double v; };
+    std::vector<Cat> cats;
     double total = 0;
     if (el) {
-      static const std::pair<uint32_t, const char*> L[10] = {{0x1E8, "Coal"}, {0x1E9, "Oil"}, {0x1EA, "Gas"}, {0x1EB, "Wind"}, {0x1EC, "Solar"},
-                                                             {0x1ED, "Nuclear"}, {0x1EE, "Microwave"}, {0x1EF, "Fusion"}, {0x1F0, "Waste-to-energy"}, {0x1F1, "Neighbor deals"}};
-      for (int i = 0; i < 10; i++) { v.push_back(float(d.electricity[i])); labels.push_back(L[i]); total += d.electricity[i]; }
+      const Cat L[10] = {{0x1E8, "Coal Power", rgb(132, 65, 66), d.electricity[0]}, {0x1E9, "Oil Power", rgb(90, 60, 110), d.electricity[1]},
+                         {0x1EA, "Gas Power", rgb(200, 200, 255), d.electricity[2]}, {0x1EB, "Wind Power", rgb(255, 130, 0), d.electricity[3]},
+                         {0x1EC, "Solar Power", rgb(0, 255, 0), d.electricity[4]}, {0x1ED, "Nuclear Power", rgb(255, 255, 0), d.electricity[5]},
+                         {0x1EE, "Microwave Power", rgb(255, 0, 255), d.electricity[6]}, {0x1EF, "Fusion Power", rgb(0, 255, 255), d.electricity[7]},
+                         {0x1F0, "Waste-to-Energy", rgb(120, 200, 80), d.electricity[8]}, {0x1F1, "Neighbor Deals", rgb(180, 180, 180), d.electricity[9]}};
+      for (const Cat& c : L) { cats.push_back(c); total += c.v; }
     } else {
-      static const std::pair<uint32_t, const char*> L[5] = {{0x1F4, "Landfill"}, {0x1F1, "Neighbor deals"}, {0x1F5, "Incinerators"}, {0x1F6, "Recycling"}, {0x1F7, "Streets"}};
-      for (int i = 0; i < 5; i++) { v.push_back(float(d.garbage[i])); labels.push_back(L[i]); total += d.garbage[i]; }
+      const Cat L[5] = {{0x1F4, "Landfill", rgb(247, 56, 231), d.garbage[0]}, {0x1F1, "Neighbor Deals", rgb(150, 150, 150), d.garbage[1]},
+                        {0x1F5, "Incinerators", rgb(230, 110, 40), d.garbage[2]}, {0x1F6, "Recycling", rgb(57, 69, 247), d.garbage[3]},
+                        {0x1F7, "Collecting in Streets", rgb(110, 110, 60), d.garbage[4]}};
+      for (const Cat& c : L) { cats.push_back(c); total += c.v; }
     }
-    float mx = 0; for (float f : v) mx = std::max(mx, f);
-    if (mx <= 0) mx = 1;
-    const int n = int(v.size()), pitch = (plot.w - 8) / n;
-    for (int i = 0; i < n; i++) {
-      const int h = int(v[size_t(i)] / mx * float(plot.h - 8));
-      const int bx = plot.x + 6 + i * pitch, bw = std::max(3, pitch - 6);
-      if (h > 0) ui.fill({bx, plot.y + plot.h - h, bw, h}, el ? rgb(0xC0, 0xA0, 0x00) : rgb(0x80, 0x60, 0x40));
-      ui.text(bx - 2, plot.y + plot.h + 3 + (i % 2) * 11, E.win(labels[size_t(i)].first, labels[size_t(i)].second), "system9", kInkBlue);
+    // heading at the top left of the box, then one colour bar per category present
+    ui.text(box.x + 6, box.y + 4, E.win(el ? 0x28A : 0x1F3, el ? "Annually Averaged" : "% Garbage Goes To:"), "main10", kInkBlue);
+    std::vector<PieSlice> slices;
+    int by = box.y + 22;
+    for (const Cat& c : cats) {
+      if (c.v <= 0) continue;
+      ui.fill({box.x + 6, by, 168, 16}, c.col);
+      const uint32_t lum = ((c.col & 255) * 30 + ((c.col >> 8) & 255) * 59 + ((c.col >> 16) & 255) * 11) / 100;
+      ui.text(box.x + 10, by + 2, E.win(c.id, c.fb), "main10", lum > 140 ? rgb(0, 0, 0) : rgb(255, 255, 255));
+      by += 18;
+      slices.push_back({"", c.v, c.col});
     }
-    cap1 = capText(E, el ? 0x28A : 0x1F3, el ? "Annual average production" : "Garbage by destination", "");
-    cap2 = capText(E, el ? 0x289 : 0x1F8, el ? "Total %s (MW-h per year)" : "Total %s (tons per year)", groupDigits(int64_t(total)));
+    pieChart(ui, r.x + 318, r.y + 117, slices);
+    cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(int64_t(total)));
   }
   ui.textCentered({r.x + 55, r.y + 249, 340, 14}, cap1, "main10", kInkBlue);
-  ui.textCentered({r.x + 55, r.y + 265, 340, 14}, cap2, "main10", rgb(230, 130, 0));
+  if (!cap2.empty()) ui.textCentered({r.x + 55, r.y + 265, 340, 14}, cap2, "main10", rgb(230, 130, 0));
   static const uint32_t tid[5] = {0x1DD, 0x1E0, 0x1E1, 0x1DE, 0x1DF};
   static const char* const tfb[5] = {"Education", "Health", "Population", "Electricity", "Garbage"};
   for (int i = 0; i < 5; i++)

@@ -143,6 +143,7 @@ bool frame(Ui& ui, const WinEnv& E, Rect r, const std::string& title);
 bool button(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool enabled = true, bool toggled = false);
 bool check(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool& v);
 // Coloured-caption button (message box).
+void verticalText(Ui& ui, int x, int y, const std::string& s, const char* font, uint32_t col);   // rotated 90 deg, reads bottom to top
 void compassRose(Ui& ui, const WinEnv& E, int cx, int cy, int rotation);   // disc centre; letters follow the view rotation
 bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool selected, const char* font = "system9");   // radio button with caption; true when clicked
 bool colourButton(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, uint32_t col);
