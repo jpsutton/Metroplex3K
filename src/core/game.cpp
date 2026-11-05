@@ -1045,16 +1045,11 @@ void Game::drawHud() {
     bool hc = false;
     skin_.imageButtonCells(ui_, skin_.get("help"), 4, {place.p3x, place.p3y, 40, 39}, tip(0x3C, "Query"), false, true, hc, Ui::kTipAbove);
     if (hc) setTool(ToolKind::Query);   // already armed: stays armed (does not toggle)
-    // Engine options (Metroplex3K only). They take the slot of the original's "Visit SimCity Exchange" button (an on-line service that is gone; spec 09
-    // 4.3): x = client width - 194, y = bar top - 24, 33 x 30, drawn in that button's own frame with a slimmer cog.
-    bool ec = false;
-    const Rect sx{W_ - 194, H_ - bh - 24, 33, 30};
-    if (skin_.get("cog")) {
-      if (ui_.hover(sx)) uiHit_ = true;
-      skin_.imageButtonCells(ui_, skin_.get("cog"), 4, sx, "M3K Options", false, true, ec, Ui::kTipAbove);
-      if (ec) openWindow("engine");
-    } else {
-      // Without that strip: same chrome as "?", with a cog. Prefer just right of help; when the RCI indicator leaves no room, tuck it above.
+    // Engine options (Metroplex3K only). With the original's exchange-button strip they take that button's slot and are drawn after the RCI
+    // indicator below (the indicator's background image carries the exchange glyph in that corner, spec 09 4.3); without it, same chrome as "?"
+    // with a cog: just right of help, or tucked above when the RCI indicator leaves no room.
+    if (!skin_.get("cog")) {
+      bool ec = false;
       Rect eb{place.p3x + 38, place.p3y, 40, 39};
       if (eb.x + eb.w > navX - RciGeometry::imgW - 2) eb = {place.p3x + 18, place.p3y - 36, 40, 39};
       if (skin_.imageButtonCells(ui_, skin_.get("engine"), 4, eb, "M3K Options", false, true, ec, Ui::kTipAbove)) {
@@ -1110,6 +1105,15 @@ void Game::drawHud() {
     ui_.fill({cx, H_ - bh + 15, 10, 1}, ui_.panelDark);
     if (hgt >= 0) ui_.fill({cx, H_ - bh + 15 - hgt, 10, hgt}, cols[i]); else ui_.fill({cx, H_ - bh + 16, 10, -hgt}, cols[i]);
     ui_.text(cx, H_ - bh + 8, nm[i]);
+  }
+  // M3K Options in the slot of the original's "Visit SimCity Exchange" button (x = W - 194, y = bar top - 24, 33 x 30; an on-line service that is gone,
+  // spec 09 4.3). Drawn after the RCI indicator, whose background image holds that button's normal-state picture in the same corner.
+  if (skinBar && skin_.get("cog")) {
+    const Rect sx{W_ - 194, H_ - bh - 24, 33, 30};
+    if (ui_.hover(sx)) uiHit_ = true;
+    bool ec = false;
+    skin_.imageButtonCells(ui_, skin_.get("cog"), 4, sx, "M3K Options", false, true, ec, Ui::kTipAbove);
+    if (ec) openWindow("engine");
   }
   // News ticker: the bar's text line when the skin gives one, else a strip above the bar.
   if (skinBar) drawTicker(place.textLine);
