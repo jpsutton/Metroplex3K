@@ -284,6 +284,31 @@ static int countSounds(const std::vector<SoundEvent>& v, SoundEvent::Type t, int
   int n = 0; for (auto& e : v) n += e.type == t && e.soundId == sid; return n;
 }
 
+// Vehicles on a graded path use the slope frames 32..47 (spec 26 3.6): class = clamp(trunc(grade) + 2, 0, 4), four slots
+// per class, indexed by the nearest road diagonal of the (view-rotated, +16) heading.
+static void testSlopeSprites() {
+  struct Case { int dh; int base; };   // path height change over a 256-unit run, expected class base slot
+  const Case cases[] = {{-512, 36}, {-256, 44}, {0, -1}, {256, 40}, {512, 32}};
+  for (const Case& c : cases) {
+    AutomataData D; buildData(D);
+    for (uint32_t inst : {0x1000u, 0x2000u}) D.addRecord({kVPathType, kVPathGroup, inst}, vpath({{0, 0, 128}, {256, c.dh, 128}}, 0));
+    TestHost H;
+    StreetSim::Config cfg;
+    StreetSim sim(D, H, cfg);
+    AutoView v; v.x0 = 0; v.y0 = 0; v.x1 = 7; v.y1 = 7; v.zoom = 4;
+    sim.setView(v);
+    auto sp = sim.sprites();
+    CHECK(!sp.empty());
+    for (auto& s : sp) {
+      const int o = (s.frameIndex % 144) - 96;   // zoom slot 2 of 3 at view zoom 4
+      CHECK(s.heading32 == 0);
+      CHECK(o == (c.base < 0 ? 16 : c.base + 2));   // flat: heading + 16; slope: diagonal (16 + 4) >> 3 = 2
+    }
+    v.rotation = 1; sim.setView(v);
+    for (auto& s : sim.sprites()) CHECK((s.frameIndex % 144) - 96 == (c.base < 0 ? 24 : c.base + 3));   // (24 + 4) >> 3 = 3
+  }
+}
+
 static void testRoadTraffic() {
   AutomataData D; buildData(D);
   CHECK(D.loadErrors == 0);
@@ -566,6 +591,7 @@ static void testCallAndParade() {
 int main() {
   testParsers();
   testRoadTraffic();
+  testSlopeSprites();
   testScriptsAndMix();
   testBulkRemoveBuildings();
   testPeds();

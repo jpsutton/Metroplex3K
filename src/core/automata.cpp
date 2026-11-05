@@ -583,6 +583,7 @@ struct Auto {
   // output pose
   double x = 0, y = 0, h = 0;
   int heading = 0;
+  int gradeClass = 2;   // sprite slope class 0 steep down .. 2 level .. 4 steep up
   // followers
   int leader = 0;
   double followOffset = 0, travelled = 0;
@@ -712,6 +713,18 @@ struct StreetSim::Impl {
     a.y = double(a.ty) + p.b / 256.0;
     a.h = p.h + host.groundHeight(a.tx, a.ty);
     a.heading = heading32v;
+    a.gradeClass = (a.vpath && (a.kind == AutomatonKind::Vehicle || a.kind == AutomatonKind::Train)) ? pathGradeClass(*a.vpath) : 2;
+  }
+
+  // Sprite grade class 0..4 of a vehicle path (spec 26 3.6): clamp(trunc(g) + 2, 0, 4) with g the stored path grade
+  // (height change over horizontal length, along travel); curves and turns stay level (2).
+  static int pathGradeClass(const VPath& v) {
+    if (v.pts.size() < 2) return 2;
+    const Pt& e0 = v.pts[v.pts.size() - 2];
+    const Pt& e1 = v.pts.back();
+    const int d = (heading32(e1.a - e0.a, e1.b - e0.b) - v.heading0 + 32) & 31;
+    if (d > 2 && d < 30) return 2;
+    return std::max(0, std::min(4, int(v.grade) + 2));
   }
 
   Auto* create(AutomatonKind k) {
@@ -1756,6 +1769,13 @@ std::vector<AutomatonSprite> StreetSim::sprites() const {
     if (s.rotCount > 0) {
       int quarter = a.kind == AutomatonKind::Pedestrian ? 0 : 16;
       o = (((a.heading + I.view.rotation * 8 + quarter) & 31) * s.rotCount) / 32;
+      // Slope frames (spec 26 3.6): a vehicle on a graded path uses slots 32..47, four per grade class, indexed by the
+      // nearest road diagonal of the heading.
+      if (a.gradeClass != 2 && quarter && s.rotCount == 32 && s.zoomSetCount >= 48) {
+        static const int base[5] = {36, 44, 0, 40, 32};
+        const int h = (a.heading + I.view.rotation * 8 + quarter) & 31;
+        o = base[a.gradeClass] + (((h + 4) & 31) >> 3);
+      }
     }
     int frameVal = 0;
     if (a.anim) {
