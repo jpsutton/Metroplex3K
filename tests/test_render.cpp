@@ -61,17 +61,23 @@ int main() {
       }
   }
 
-  // ---- surface pieces register to the highest corner; bridge agents keep the stored y (spec 25 5.1) ----
+  // ---- surface pieces: sprite at the front corner, vehicle paths at the highest corner; bridge agents keep stored y ----
   {
     World w; w.init(8, 8);
     for (int x = 0; x <= 8; x++) for (int z = 0; z <= 8; z++) w.alt[size_t(w.vIdx(x, z))] = uint8_t(32);
-    w.alt[size_t(w.vIdx(3, 4))] = 33; w.alt[size_t(w.vIdx(4, 4))] = 33;   // tile (3,3): z+1 edge one step higher
-    NetPiece slope; slope.x = 3; slope.z = 3; slope.y = 32;              // stored y = lowest corner
-    CHECK(w.surfaceDrawY(slope, 16000) == 33 && w.surfaceDrawY(slope, 0) == 33);
-    slope.y = 33; CHECK(w.surfaceDrawY(slope, 16000) == 33);
-    slope.y = 37; CHECK(w.surfaceDrawY(slope, 16000) == 37);             // raised piece keeps its y
-    slope.y = 30; CHECK(w.surfaceDrawY(slope, 16003) == 30 && w.surfaceDrawY(slope, 16011) == 30);
-    NetPiece edge; edge.x = 8; edge.z = 8; edge.y = 5; CHECK(w.surfaceDrawY(edge, 16000) == 5);   // off the tile grid: stored y
+    w.alt[size_t(w.vIdx(3, 4))] = 33; w.alt[size_t(w.vIdx(4, 4))] = 33; w.alt[size_t(w.vIdx(4, 3))] = 35;   // tile (3,3)
+    NetPiece p; p.x = 3; p.z = 3; p.y = 32;
+    // front corner per view rotation: (x+1,z+1) (x+1,z) (x,z) (x,z+1)
+    CHECK(w.surfaceDrawY(p, 16000, 0) == 33 && w.surfaceDrawY(p, 16000, 1) == 35 && w.surfaceDrawY(p, 16000, 2) == 32 &&
+          w.surfaceDrawY(p, 16000, 3) == 33 && w.surfaceDrawY(p, 0, 0) == 33);
+    p.y = 37; CHECK(w.surfaceDrawY(p, 16000, 0) == 33);                   // stored y is not used for terrain-bound pieces
+    CHECK(w.surfaceTopY(p, 16000) == 37);                                 // path base: highest corner, raised y kept
+    p.y = 32; CHECK(w.surfaceTopY(p, 16000) == 35 && w.surfaceTopY(p, 0) == 35);
+    p.y = 30;
+    for (int r = 0; r < 4; r++) CHECK(w.surfaceDrawY(p, 16003, r) == 30 && w.surfaceDrawY(p, 16011, r) == 30 && w.surfaceDrawY(p, 17003, r) == 30);
+    CHECK(w.surfaceTopY(p, 16003) == 30 && w.surfaceTopY(p, 17204) == 30);
+    NetPiece edge; edge.x = 8; edge.z = 8; edge.y = 5;                    // off the tile grid: stored y
+    CHECK(w.surfaceDrawY(edge, 16000, 0) == 5 && w.surfaceTopY(edge, 16000) == 5);
   }
 
   // ---- far-zoom adjustment (spec 6.2) ----

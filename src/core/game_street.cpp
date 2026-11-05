@@ -71,10 +71,10 @@ int Game::StreetHost::groundHeight(int x, int y) const {
   x = std::clamp(x, 0, w->W - 1); y = std::clamp(y, 0, w->H - 1);
   if (!piece.empty()) {
     int i = piece[w->tIdx(x, y)];
-    if (i >= 0) {   // vehicle paths are relative to the piece's registration height (highest corner), like the sprite
+    if (i >= 0) {   // vehicle paths run from the highest corner down (h = 0 at the high end), unlike the sprite's front corner
       const NetPiece& np = w->surface[size_t(i)];
       const OccAttr* oa = data ? data->occupant(np.pieceId, true, false) : nullptr;
-      return w->surfaceDrawY(np, oa ? oa->agentType : 0) * 256;
+      return w->surfaceTopY(np, oa ? oa->agentType : 0) * 256;
     }
   }
   return std::max(w->altAt(x, y), w->waterAt(x, y)) * 256;

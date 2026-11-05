@@ -1365,11 +1365,11 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     animCands = cachedAnim_;
   } else {
     const bool net = true;
-    // Surface pieces on the terrain are registered to their tile's highest corner (World::surfaceDrawY, spec 25 5.1).
+    // Surface pieces on the terrain are registered to their tile's front corner (World::surfaceDrawY, spec 25 5.1).
     auto surfaceY = [&](const NetPiece& np) {
       if (!data_) return np.y;
       const OccAttr* oa = data_->occupant(np.pieceId, net, false);
-      return w.surfaceDrawY(np, oa ? oa->agentType : 0);
+      return w.surfaceDrawY(np, oa ? oa->agentType : 0, cam.rot);
     };
     auto addNets = [&](const std::vector<NetPiece>& v, bool filter, bool onTerrain) {
       for (const auto& np : v)
