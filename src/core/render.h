@@ -316,6 +316,7 @@ class Renderer : public ICityRasterizer {
     bool dbl = false;
     int m2 = 32;
     bool moving = false, pickable = true, groundLevel = false;
+    bool deck = false;   // bridge deck / incline piece: movers overlapping its tile draw over it (spec 25 5.2)
     bool tinted = false; uint8_t tintR = 0, tintG = 0, tintB = 0;   // scene tint for this frame (applySceneTints)
     int32_t boxA0 = 0, boxA1 = 0, boxB0 = 0, boxB1 = 0;  // static boxes (view, 1/256)
     int32_t posA = 0, posB = 0;                           // moving objects

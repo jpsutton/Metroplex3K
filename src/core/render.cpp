@@ -1298,6 +1298,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     return cs->frame(anim, slot, orient);
   };
 
+  bool curDeck = false;   // set by addOccupant for the piece being added
   auto addStatic = [&](const ResKey& appearance, bool useOwn, int footprint, int x, int zz, int y, int rot, int sizeX, int sizeZ, bool ground) {
     const CsAttrib* cs = data_ ? data_->csattrib(appearance) : nullptr;
     const SpriteImage* sp = nullptr;
@@ -1320,7 +1321,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     int sc = dbl ? 2 : 1;
     // Cull box is stored, not tested here: the list is cached across camera moves and culled per frame.
     it.cAx = it.ax; it.cAy = it.ay; it.cL = sp->L * sc; it.cT = sp->T * sc; it.cW = sp->img.w * sc; it.cH = sp->img.h * sc;
-    it.spr = sp; it.dbl = dbl; it.groundLevel = ground;
+    it.spr = sp; it.dbl = dbl; it.groundLevel = ground; it.deck = curDeck;
     if (ground) { it.key += 1; it.pickKey -= 1; }
     it.cat = fr ? fr->category : 0; it.id = fr ? fr->spriteId : 0;
     // Animatable building (sprite scripts and/or attached child sprites): recorded before the early cull, because
@@ -1352,6 +1353,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     if (!data_) return;
     const OccAttr* oa = data_->occupant(occId, net, port);
     if (!oa) return;
+    curDeck = net && World::isBridgeAgent(oa->agentType);
     addStatic(oa->appearance, ownFlag(), std::max(sizeX, sizeZ), x, zz, y, rot, sizeX, sizeZ, ground);
   };
 
@@ -1489,10 +1491,15 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
   std::vector<size_t> pos(movers.size());
   auto movePos = [&](size_t m) {
     const Item& mv = movers[m];
-    size_t lo = 0, hi = statics.size(), kpos = statics.size();
+    size_t lo = 0, hi = statics.size(), kpos = statics.size(), deckLo = 0;
     bool haveKpos = false, haveHi = false;
+    // A mover draws over every bridge deck piece whose tile its box touches (spec 25 5.2: in the original a mover of a
+    // higher layer draws over each static whose box it overlaps; only decks are modelled so far, the layers of the
+    // other pieces are untraced). The box is centred on the anchor with a half size from the sprite width, at least 100.
+    const int32_t half = std::max<int32_t>(100, int32_t(mv.spr ? mv.spr->img.w * (mv.dbl ? 2 : 1) * 64 / Wh : 0));
     for (size_t i = 0; i < statics.size(); i++) {
       const Item& s = statics[i];
+      if (s.deck && mv.posA + half >= s.boxA0 && mv.posA - half <= s.boxA1 && mv.posB + half >= s.boxB0 && mv.posB - half <= s.boxB1) deckLo = i + 1;
       // Depth keys have whole-tile granularity, and the median trees sit on the road tile itself, so a car on the far
       // lane shares its key with the tree it should be behind. Break key ties by the actual sub-tile depth: a static
       // whose centre is nearer the viewer than the mover is drawn after it.
@@ -1506,7 +1513,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
       if (s.boxA1 <= mv.posA && s.boxB1 <= mv.posB) lo = i + 1;
       if (!haveHi && s.boxA0 >= mv.posA && s.boxB0 >= mv.posB) { hi = i; haveHi = true; }
     }
-    pos[m] = lo <= hi ? std::max(lo, std::min(kpos, hi)) : kpos;
+    pos[m] = std::max(lo <= hi ? std::max(lo, std::min(kpos, hi)) : kpos, deckLo);
   };
   // Each mover's position is independent of the others (read-only statics), so split them over the pool.
   if (movers.size() * statics.size() >= 200000) {
