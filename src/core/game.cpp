@@ -1045,16 +1045,24 @@ void Game::drawHud() {
     bool hc = false;
     skin_.imageButtonCells(ui_, skin_.get("help"), 4, {place.p3x, place.p3y, 40, 39}, tip(0x3C, "Query"), false, true, hc, Ui::kTipAbove);
     if (hc) setTool(ToolKind::Query);   // already armed: stays armed (does not toggle)
-    // Engine options (Metroplex3K only): same chrome as "?", with a cog. Prefer just right of help; when the RCI
-    // indicator leaves no room (typical at 1024-wide), tuck it above and a few pixels right of help.
-    Rect eb{place.p3x + 38, place.p3y, 40, 39};
-    if (eb.x + eb.w > navX - RciGeometry::imgW - 2) eb = {place.p3x + 18, place.p3y - 36, 40, 39};
+    // Engine options (Metroplex3K only). They take the slot of the original's "Visit SimCity Exchange" button (an on-line service that is gone; spec 09
+    // 4.3): x = client width - 194, y = bar top - 24, 33 x 30, drawn in that button's own frame with a slimmer cog.
     bool ec = false;
-    if (skin_.imageButtonCells(ui_, skin_.get("engine"), 4, eb, "M3K Options", false, true, ec, Ui::kTipAbove)) {
+    const Rect sx{W_ - 194, H_ - bh - 24, 33, 30};
+    if (skin_.get("cog")) {
+      if (ui_.hover(sx)) uiHit_ = true;
+      skin_.imageButtonCells(ui_, skin_.get("cog"), 4, sx, "M3K Options", false, true, ec, Ui::kTipAbove);
       if (ec) openWindow("engine");
     } else {
-      if (ui_.hover(eb)) { uiHit_ = true; ui_.setTip("M3K Options", eb, Ui::kTipAbove); }
-      if (ui_.button({eb.x + 2, eb.y + 8, 36, 22}, "M3K", true, false)) openWindow("engine");
+      // Without that strip: same chrome as "?", with a cog. Prefer just right of help; when the RCI indicator leaves no room, tuck it above.
+      Rect eb{place.p3x + 38, place.p3y, 40, 39};
+      if (eb.x + eb.w > navX - RciGeometry::imgW - 2) eb = {place.p3x + 18, place.p3y - 36, 40, 39};
+      if (skin_.imageButtonCells(ui_, skin_.get("engine"), 4, eb, "M3K Options", false, true, ec, Ui::kTipAbove)) {
+        if (ec) openWindow("engine");
+      } else {
+        if (ui_.hover(eb)) { uiHit_ = true; ui_.setTip("M3K Options", eb, Ui::kTipAbove); }
+        if (ui_.button({eb.x + 2, eb.y + 8, 36, 22}, "M3K", true, false)) openWindow("engine");
+      }
     }
   } else {
     if (ui_.button({fbx, H_ - bh + 3, 44, 24}, paused_ ? "Run" : "Pause")) { setPaused(!paused_); sound(paused_ ? 24 : 23); }

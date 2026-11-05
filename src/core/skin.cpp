@@ -184,6 +184,72 @@ const Image* Skin::get(const std::string& name) const {
   return it == names_.end() ? nullptr : fetch(it->second.first, it->second.second);
 }
 
+// Paints an analytic gear (trapezoid teeth on a round body, hollow hub, 4x4 supersampling) into cell `cell` of a 4-cell strip: dark outline, yellow
+// body shaded top-left to bottom-right, a thin highlight on the upper rim; the disabled cell is the same gear in dull greys and the pressed cell moves
+// it one pixel down and right. (cx, cy) is the gear centre inside the cell, x0..x1 the cell's columns, (fr, fg, fb) the button face (hub hole).
+static void paintCog(Image& im, int cell, int x0, int x1, int cx, int cy, double kTip, double kRoot, double kHub, int fr, int fg, int fb) {
+  const int ch = im.h;
+  auto at = [&](int x, int y) -> uint32_t& { return im.px[size_t(y) * im.w + x]; };
+  const bool active = cell != CELL_DISABLED;
+  const bool pressed = cell == CELL_PRESSED;
+  const double gx = cx + (pressed ? 1 : 0) + 0.5, gy = cy + (pressed ? 1 : 0) + 0.5;
+  constexpr int kTeeth = 8, kSS = 4;
+  constexpr double kPi = 3.14159265358979323846;
+  // Gear radius at angle phi: flat tip over 34% of the tooth pitch, flanks over the next 20%, flat root between teeth.
+  auto gearR = [&](double phi) {
+    double u = std::fmod(phi / (2 * kPi) * kTeeth, 1.0);
+    if (u < 0) u += 1.0;
+    const double t = std::abs(u - 0.5);   // 0 at the tooth centre, 0.5 at the gap centre
+    if (t < 0.17) return kTip;
+    if (t < 0.31) return kTip + (kRoot - kTip) * (t - 0.17) / 0.14;
+    return kRoot;
+  };
+  // Coverage in [0,1] of the gear grown by `grow` pixels, over the pixel at (px, py).
+  auto cover = [&](int px, int py, double grow, bool hubHole) {
+    int hit = 0;
+    for (int sy = 0; sy < kSS; sy++)
+      for (int sx = 0; sx < kSS; sx++) {
+        const double dx = px + (sx + 0.5) / kSS - gx, dy = py + (sy + 0.5) / kSS - gy;
+        const double d = std::sqrt(dx * dx + dy * dy);
+        if (hubHole ? d < kHub + grow : d < gearR(std::atan2(dy, dx)) + grow) hit++;
+      }
+    return double(hit) / (kSS * kSS);
+  };
+  auto mixPx = [&](uint32_t& dst, int r, int g, int b, double w) {
+    if (w <= 0) return;
+    const int dr = int(dst & 255), dg = int((dst >> 8) & 255), db = int((dst >> 16) & 255);
+    const int nr = int(std::lround(dr + (r - dr) * w)), ng = int(std::lround(dg + (g - dg) * w)), nb = int(std::lround(db + (b - db) * w));
+    dst = (dst & 0xFF000000u) | uint32_t(nb) << 16 | uint32_t(ng) << 8 | uint32_t(nr);
+  };
+  const int reach = int(kTip) + 3;
+  for (int y = int(gy) - reach; y <= int(gy) + reach; y++)
+    for (int x = int(gx) - reach; x <= int(gx) + reach; x++) {
+      if (x < x0 || x >= x1 || y < 0 || y >= ch) continue;
+      uint32_t& px = at(x, y);
+      if ((px >> 24) < 128) continue;
+      const double covOut = cover(x, y, 1.0, false), covBody = cover(x, y, 0.0, false);
+      if (covOut <= 0) continue;
+      // Outline first (soft where the body does not reach), then the shaded body on top.
+      if (active) mixPx(px, 14, 14, 20, covOut); else mixPx(px, 20, 20, 26, covOut);
+      if (covBody > 0) {
+        const double dx = x + 0.5 - gx, dy = y + 0.5 - gy;
+        double shade = std::clamp((dx + dy) / (2.0 * kTip) + 0.5, 0.0, 1.0);   // 0 top-left .. 1 bottom-right
+        int r, g, b;
+        if (active) { r = int(255 - 30 * shade); g = int(236 - 78 * shade); b = int(96 - 84 * shade); }
+        else { r = int(92 - 28 * shade); g = int(92 - 28 * shade); b = int(100 - 28 * shade); }
+        // Thin highlight just inside the upper-left rim.
+        const double d = std::sqrt(dx * dx + dy * dy), rim = gearR(std::atan2(dy, dx));
+        if (active && d > rim - 1.6 && dx + dy < 0) { r = std::min(255, r + 18); g = std::min(255, g + 16); b = std::min(255, b + 40); }
+        mixPx(px, r, g, b, covBody);
+      }
+      // Hub: dark ring with the button face showing through the hole.
+      const double hubOut = cover(x, y, 1.0, true), hubIn = cover(x, y, 0.0, true);
+      if (hubOut > 0) { if (active) mixPx(px, 14, 14, 20, hubOut); else mixPx(px, 20, 20, 26, hubOut); }
+      if (hubIn > 0) mixPx(px, fr, fg, fb, hubIn);
+    }
+  
+}
+
 // Build a 4-cell "engine" (options) strip from the help "?" button: keep the chrome, replace the glyph with a cog.
 void Skin::buildEngineButton() {
   const Image* help = get("help");
@@ -258,68 +324,31 @@ void Skin::buildEngineButton() {
         const int dist = std::abs(r - fr) + std::abs(g - fg) + std::abs(b - fb);
         if (yellow || dark || dist > 55) at(x, y) = (p & 0xFF000000u) | (face & 0x00FFFFFFu);
       }
-    // Cog: an analytic gear (trapezoid teeth on a round body, hollow hub) rendered with 4x4 supersampling, so the
-    // edges are smooth. Dark outline, yellow body shaded top-left to bottom-right, a thin highlight on the upper rim.
-    // The disabled cell is the same gear in dull greys; the pressed cell moves it one pixel down and right.
-    const bool active = cell != CELL_DISABLED;
-    const bool pressed = cell == CELL_PRESSED;
-    const double gx = cx + (pressed ? 1 : 0) + 0.5, gy = cy + (pressed ? 1 : 0) + 0.5;
-    constexpr int kTeeth = 8, kSS = 4;
-    constexpr double kTip = 8.8, kRoot = 6.5, kHub = 2.2, kPi = 3.14159265358979323846;
-    // Gear radius at angle phi: flat tip over 34% of the tooth pitch, flanks over the next 20%, flat root between teeth.
-    auto gearR = [&](double phi) {
-      double u = std::fmod(phi / (2 * kPi) * kTeeth, 1.0);
-      if (u < 0) u += 1.0;
-      const double t = std::abs(u - 0.5);   // 0 at the tooth centre, 0.5 at the gap centre
-      if (t < 0.17) return kTip;
-      if (t < 0.31) return kTip + (kRoot - kTip) * (t - 0.17) / 0.14;
-      return kRoot;
-    };
-    // Coverage in [0,1] of the gear grown by `grow` pixels, over the pixel at (px, py).
-    auto cover = [&](int px, int py, double grow, bool hubHole) {
-      int hit = 0;
-      for (int sy = 0; sy < kSS; sy++)
-        for (int sx = 0; sx < kSS; sx++) {
-          const double dx = px + (sx + 0.5) / kSS - gx, dy = py + (sy + 0.5) / kSS - gy;
-          const double d = std::sqrt(dx * dx + dy * dy);
-          if (hubHole ? d < kHub + grow : d < gearR(std::atan2(dy, dx)) + grow) hit++;
-        }
-      return double(hit) / (kSS * kSS);
-    };
-    auto mixPx = [&](uint32_t& dst, int r, int g, int b, double w) {
-      if (w <= 0) return;
-      const int dr = int(dst & 255), dg = int((dst >> 8) & 255), db = int((dst >> 16) & 255);
-      const int nr = int(std::lround(dr + (r - dr) * w)), ng = int(std::lround(dg + (g - dg) * w)), nb = int(std::lround(db + (b - db) * w));
-      dst = (dst & 0xFF000000u) | uint32_t(nb) << 16 | uint32_t(ng) << 8 | uint32_t(nr);
-    };
-    const int reach = int(kTip) + 3;
-    for (int y = int(gy) - reach; y <= int(gy) + reach; y++)
-      for (int x = int(gx) - reach; x <= int(gx) + reach; x++) {
-        if (x < x0 || x >= x1 || y < 0 || y >= ch) continue;
-        uint32_t& px = at(x, y);
-        if ((px >> 24) < 128) continue;
-        const double covOut = cover(x, y, 1.0, false), covBody = cover(x, y, 0.0, false);
-        if (covOut <= 0) continue;
-        // Outline first (soft where the body does not reach), then the shaded body on top.
-        if (active) mixPx(px, 14, 14, 20, covOut); else mixPx(px, 20, 20, 26, covOut);
-        if (covBody > 0) {
-          const double dx = x + 0.5 - gx, dy = y + 0.5 - gy;
-          double shade = std::clamp((dx + dy) / (2.0 * kTip) + 0.5, 0.0, 1.0);   // 0 top-left .. 1 bottom-right
-          int r, g, b;
-          if (active) { r = int(255 - 30 * shade); g = int(236 - 78 * shade); b = int(96 - 84 * shade); }
-          else { r = int(92 - 28 * shade); g = int(92 - 28 * shade); b = int(100 - 28 * shade); }
-          // Thin highlight just inside the upper-left rim.
-          const double d = std::sqrt(dx * dx + dy * dy), rim = gearR(std::atan2(dy, dx));
-          if (active && d > rim - 1.6 && dx + dy < 0) { r = std::min(255, r + 18); g = std::min(255, g + 16); b = std::min(255, b + 40); }
-          mixPx(px, r, g, b, covBody);
-        }
-        // Hub: dark ring with the button face showing through the hole.
-        const double hubOut = cover(x, y, 1.0, true), hubIn = cover(x, y, 0.0, true);
-        if (hubOut > 0) { if (active) mixPx(px, 14, 14, 20, hubOut); else mixPx(px, 20, 20, 26, hubOut); }
-        if (hubIn > 0) mixPx(px, fr, fg, fb, hubIn);
-      }
+    paintCog(im, cell, x0, x1, cx, cy, 8.8, 6.5, 2.2, fr, fg, fb);
   }
   extras_["engine"] = std::move(im);
+}
+
+// Build the 4-cell "cog" strip for the slot of the original's "Visit SimCity Exchange" button (spec 09 4.3): the original's frame ring (3 px) of
+// strip 02F78C6D:52FB06F0 (four 33 x 30 cells) is kept, the glyph interior is painted with the tile's light blue and a slimmer gear is drawn on it.
+void Skin::buildCogButton() {
+  const Image* ex = get("exchange");
+  if (!ex || ex->w < 8 || ex->h < 12 || ex->w % 4 != 0) return;
+  Image im = *ex;
+  const int cells = 4, cw = im.w / cells, ch = im.h, ring = 3;
+  auto at = [&](int x, int y) -> uint32_t& { return im.px[size_t(y) * im.w + x]; };
+  for (int cell = 0; cell < cells; cell++) {
+    const int x0 = cell * cw, x1 = x0 + cw;
+    // The tile face: the median of the four interior corners just inside the ring (clear of the globe and the monitor).
+    uint32_t c4[4] = {at(x0 + ring + 1, ring + 1), at(x1 - ring - 2, ring + 1), at(x0 + ring + 1, ch - ring - 2), at(x1 - ring - 2, ch - ring - 2)};
+    std::sort(c4, c4 + 4);
+    const uint32_t face = (c4[1] & 0x00FFFFFFu) | 0xFF000000u;
+    for (int y = ring; y < ch - ring; y++)
+      for (int x = x0 + ring; x < x1 - ring; x++)
+        if ((at(x, y) >> 24) >= 128) at(x, y) = face;
+    paintCog(im, cell, x0, x1, x0 + cw / 2 - 1, ch / 2 - 1, 7.2, 5.3, 1.8, int(face & 255), int((face >> 8) & 255), int((face >> 16) & 255));
+  }
+  extras_["cog"] = std::move(im);
 }
 
 bool Skin::load(ResourceDb& db, int screenH, int screenW) {
@@ -347,7 +376,9 @@ bool Skin::load(ResourceDb& db, int screenH, int screenW) {
   bind("rci", UiBig, 0x42FB77F6);
   for (uint32_t k = 0; k < 6; k++) bind("speed." + std::to_string(k), UiBig, 0x52FB06E4 + k);
   bind("help", UiBig, 0x52FB06EA);
+  bind("exchange", UiBig, 0x52FB06F0);   // the original's "Visit SimCity Exchange" button strip (spec 09 4.3)
   buildEngineButton();   // Metroplex3K options: same chrome as "help", cog instead of "?"
+  buildCogButton();      // the same options button in the exchange button's slot: its chrome, a slimmer cog
   // Navigator panel pieces (bottom-right): top-left, top-right, bottom (160 wide), layers strip, 4 zoom/rotate strips.
   bind("nav.tl", UiBig, 0x22F96E32); bind("nav.tr", UiBig, 0x22F96E33); bind("nav.bot", UiBig, 0x22F96E34);
   bind("nav.layers", UiBig, 0x22F96E35);   // 22F96E31 is the lattice (grid) strip
