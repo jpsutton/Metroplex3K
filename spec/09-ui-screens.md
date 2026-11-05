@@ -1813,6 +1813,9 @@ means a build tool is still armed.
   * Clicking "?" again while armed leaves Query armed; it does not toggle off.
   * Esc leaves Query and returns to no tool (map click recentres). A right click on the map does
     **not** leave Query.
+* A right click on the map does not cancel the Road or bulldozer tool either: after a right click,
+  a left click still builds or demolishes. Only Esc, or a click on a fly-out root button, returns to
+  no tool.
 * Root buttons:
   * Clicking a root button that opens a fly-out sets the tool to none at once. Observed for
     Landscape, Zone, Transportation, Utilities, Civic, Emergency, Review and Options, with Query,
