@@ -168,15 +168,15 @@ The slot within a zoom set is
   | 4 | steep uphill | same pattern → 32–35 |
 
   On a slope the heading snaps to the nearest of the four road diagonals.
-* gradeClass = clamp(trunc(g) + 2, 0, 4). g is the stored grade of the current path:
+* gradeClass = clamp(round(g) + 2, 0, 4), with thresholds at |g| = 0.5 and 1.5. g is the stored grade of the current path:
   * a VPATHATT path stores g = (h_last − h_first) / √(Δa² + Δb²), in raw path units;
   * a straight segment stores g = Δh / horizontal distance.
 
   So a 1-step slope gives g ≈ ±1 and a 2-step slope g ≈ ±2. Turns and curves force class 2. The
   class is recomputed after every movement step (STRTSIM FUN_10019660; slot lookup FUN_10005072).
-* The exact float constant in the class computation was not read [OPEN]. The mapping
-  trunc(g) + 2 fits the path data: slope piece 11201 has Δh = −256 over 255 units, so class 1 when
-  driving downhill.
+* Rounding is [OBSERVED]: a train in Berlin on rail piece 46 (g = ±1.698) showed the steep frame
+  (slot 38). On piece 16008 (g ±1.016) it showed the gentle frame (slot 46). The float constant
+  itself was not read.
 * Which sign is uphill is [INFERRED] from the sprite extents. On heading-diagonal 0 (facing up the
   screen), class-4 frames are tall and class-0 frames are short.
 
