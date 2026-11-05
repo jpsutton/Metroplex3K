@@ -1001,9 +1001,10 @@ void Game::drawHud() {
       if (ui_.clicked(cr)) setSpeedBtn(i + 1);
     }
     // Help ("?") button, 4-cell strip at P3.
-    // The green "?" arms the query tool (spec 09 7a.4 [OBSERVED]).
+    // The green "?" arms the query tool (spec 09 7a.4 [OBSERVED]). The button does not stay down while the tool is armed: it pops back up at once
+    // and the query cursor alone shows the mode (observed in the original), so it is never drawn as toggled.
     bool hc = false;
-    skin_.imageButtonCells(ui_, skin_.get("help"), 4, {place.p3x, place.p3y, 40, 39}, tip(0x3C, "Query"), tool_ == ToolKind::Query, true, hc);
+    skin_.imageButtonCells(ui_, skin_.get("help"), 4, {place.p3x, place.p3y, 40, 39}, tip(0x3C, "Query"), false, true, hc);
     if (hc) setTool(ToolKind::Query);
     // Engine options (Metroplex3K only): same chrome as "?", with a cog. Prefer just right of help; when the RCI
     // indicator leaves no room (typical at 1024-wide), tuck it above and a few pixels right of help.
