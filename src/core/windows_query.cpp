@@ -357,6 +357,9 @@ std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q) {
   if (tg != Target::Service && q.fundingCost >= 0)
     groups.push_back({QueryLine{E.query(0x86, "Funding Cost:"), subst(E.query(0x87, "%s/Month"), {E.money(q.fundingCost)})}});
 
+  // Engine option, not in the original: the world tile that was queried, to pin down per-map rendering problems.
+  if (q.showCoords) groups.push_back({QueryLine{"Tile (x, z):", std::to_string(q.x) + ", " + std::to_string(q.z)}});
+
   // Groups are separated by one blank row.
   std::vector<QueryLine> L;
   for (const Group& g : groups) {

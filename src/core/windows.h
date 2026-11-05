@@ -359,6 +359,7 @@ class PreferencesDialog {
 // Opened from the HUD button right of the help "?" button. Drawn with the original dialog art when the skin has it.
 struct EngineOptions {
   bool showFps = false;   // frame counter + frame-time sparkline in the upper-left corner
+  bool showTileCoords = false;   // Query panel gets a "Tile:" row with the grid coordinate (for bug reports)
   bool vsync = true;      // host present path; matches OwnPrefs "vsync" key
   static EngineOptions fromPreferences(const Preferences& p);
   void toPreferences(Preferences& p) const;
@@ -492,6 +493,7 @@ struct QueryInfo {
   int reasonCode = 0;                // stored per-tile reason code (spec 09 6.12.2): 1-8 abandonment, 9-18 lack of development, 0 = none stored
   bool reasonRow = false;            // show the "Reason for ..." row (empty zoned tile, abandoned building)
   int ageYears = -1, maxAgeYears = -1;           // "Age (Max)" of ageing utilities (-1 = not shown)
+  bool showCoords = false;           // engine option (not in the original): append a "Tile: x, z" row
 };
 // One panel row. label and value empty = the blank row between groups. red = the value is drawn red ("No", "Hazardous").
 struct QueryLine { std::string label, value; bool red = false; };

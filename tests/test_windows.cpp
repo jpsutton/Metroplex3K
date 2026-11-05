@@ -642,6 +642,13 @@ void testQuery() {
   CHECK(has(bare, "Elevation:", "12 Meters"));
   // "No" in Powered / Watered is red; "Yes" is not.
   for (auto& l : buildQueryLines(h.E, bare)) if (l.label == "Powered:" || l.label == "Watered:") CHECK(l.value == "No" && l.red);
+  {  // engine option: grid coordinate row, last, off by default
+    QueryInfo c = bare; c.x = 12; c.z = 227;
+    for (auto& l : buildQueryLines(h.E, c)) CHECK(l.label != "Tile (x, z):");
+    c.showCoords = true;
+    auto cl = buildQueryLines(h.E, c);
+    CHECK(!cl.empty() && cl.back().label == "Tile (x, z):" && cl.back().value == "12, 227");
+  }
   bare.powered = true; bare.watered = true;
   for (auto& l : buildQueryLines(h.E, bare)) if (l.label == "Powered:" || l.label == "Watered:") CHECK(l.value == "Yes" && !l.red);
 
@@ -1135,10 +1142,14 @@ void testEngineOptions() {
   CHECK(s.vsync);   // default on
   r = h.click("vsync");
   CHECK(!s.vsync && r.has(Act::PrefsChanged) && r.find(Act::PrefsChanged)->text == "vsync");
+  r = h.click("showTileCoords");
+  CHECK(s.showTileCoords && r.has(Act::PrefsChanged) && r.find(Act::PrefsChanged)->text == "showTileCoords");
   r = h.click("ok"); CHECK(r.close && r.has(Act::Done));
   CHECK(h.key(K_ESC).close);
   // Round trip through the preferences file.
   Preferences p; s.toPreferences(p);
+  CHECK(p.get("engine.showTileCoords") == "1" && EngineOptions::fromPreferences(p).showTileCoords);
+  CHECK(!EngineOptions::fromPreferences(Preferences()).showTileCoords);
   CHECK(p.get("engine.showFps") == "1" && EngineOptions::fromPreferences(p).showFps);
   CHECK(p.get("vsync") == "0" && !EngineOptions::fromPreferences(p).vsync);
   CHECK(!EngineOptions::fromPreferences(Preferences()).showFps);

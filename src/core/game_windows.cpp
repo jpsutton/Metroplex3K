@@ -436,6 +436,7 @@ void Game::refreshLayerOverlay() {
 void Game::drawQueryPopup() {
   if (!showQuery_) return;
   WinEnv E = env();
+  queryInfo_.showCoords = engineOpts_.showTileCoords;
   WindowResult r = queryWin_.draw(ui_, E, queryInfo_);
   Rect qr = queryWin_.rect; if (qr.w <= 0) qr = {0, 0, 330, 280};
   uiHit_ = true;   // the query panel is modal: map clicks are ignored until it is closed (spec 09 7a.4)
