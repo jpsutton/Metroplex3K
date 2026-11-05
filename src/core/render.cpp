@@ -1365,15 +1365,26 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     animCands = cachedAnim_;
   } else {
     const bool net = true;
-    auto addNets = [&](const std::vector<NetPiece>& v, bool filter) {
+    // Surface pieces lying on the terrain are registered to their tile's highest corner, not to the stored y, which
+    // is the lowest corner in about half of all slope pieces (spec 25 5.1, observed against the original). Bridge
+    // decks, inclines and towers keep the stored y.
+    auto surfaceY = [&](const NetPiece& np) {
+      if (!data_) return np.y;
+      const OccAttr* oa = data_->occupant(np.pieceId, net, false);
+      if (oa) switch (oa->agentType) { case 16003: case 16004: case 16011: case 17003: case 17204: return np.y; default: break; }
+      if (!w.inTiles(np.x, np.z)) return np.y;
+      const int top = std::max(std::max(w.altAt(np.x, np.z), w.altAt(np.x + 1, np.z)), std::max(w.altAt(np.x, np.z + 1), w.altAt(np.x + 1, np.z + 1)));
+      return std::max(np.y, top);
+    };
+    auto addNets = [&](const std::vector<NetPiece>& v, bool filter, bool onTerrain) {
       for (const auto& np : v)
-        if (!filter || !opt.showNet || opt.showNet(np)) addOccupant(np.pieceId, net, false, np.x, np.z, np.y, np.rot, 1, 1, true);
+        if (!filter || !opt.showNet || opt.showNet(np)) addOccupant(np.pieceId, net, false, np.x, np.z, onTerrain ? surfaceY(np) : np.y, np.rot, 1, 1, true);
     };
     if (opt.underground) {
-      if (opt.pipes) addNets(w.pipes, false);
-      if (opt.subways) addNets(w.subway, false);
+      if (opt.pipes) addNets(w.pipes, false, false);
+      if (opt.subways) addNets(w.subway, false, false);
     } else {
-      addNets(w.surface, true);
+      addNets(w.surface, true, true);
       for (const auto& o : w.occupants) {
         if (opt.showOccupant && !opt.showOccupant(o)) continue;
         bool port = o.keyType == T_OCC_ATTR_PORT;
