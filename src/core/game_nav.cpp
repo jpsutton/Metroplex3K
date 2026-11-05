@@ -58,8 +58,8 @@ void Game::drawNavigator(int barH) {
     const int by1 = nav.y + 6, by2 = nav.y + 34, bw = 34, gap = 2, x0 = nav.x + 6, bw2 = 46;
     if (ui_.button({x0, by1, bw, 24}, "+")) zoomBy(1);
     if (ui_.button({x0 + (bw + gap), by1, bw, 24}, "-")) zoomBy(-1);
-    if (ui_.button({x0 + 2 * (bw + gap), by1, bw, 24}, "<")) rot(1);
-    if (ui_.button({x0 + 3 * (bw + gap), by1, bw, 24}, ">")) rot(-1);
+    if (ui_.button({x0 + 2 * (bw + gap), by1, bw, 24}, "<")) rot(-1);
+    if (ui_.button({x0 + 3 * (bw + gap), by1, bw, 24}, ">")) rot(1);
     if (ui_.button({x0, by2, bw2, 24}, "Grid", true, ropt_.grid)) ropt_.grid = !ropt_.grid;
     if (ui_.button({x0 + bw2 + gap, by2, bw2, 24}, "Query", true, tool_ == ToolKind::Query)) setTool(ToolKind::Query);
     if (ui_.button({x0 + 2 * (bw2 + gap), by2, bw2 - 4, 24}, "Map")) openWindow("map");
@@ -142,8 +142,8 @@ void Game::drawNavigator(int barH) {
   cellBtn("nav.btn.0", {14, 100, 26, 29}, tip(0xA, "Zoom in"), [&] { zoomBy(1); });
   cellBtn("nav.btn.1", {120, 100, 26, 29}, tip(0xB, "Zoom out"), [&] { zoomBy(-1); });
   // Clockwise = the map turns clockwise as seen: the bottom corner goes to the left corner (lower rotation index; spec 08 5.4).
-  cellBtn("nav.btn.2", {34, 120, 26, 29}, tip(0xC, "Rotate counter-clockwise"), [&] { rot(1); });
-  cellBtn("nav.btn.3", {100, 120, 26, 29}, tip(0xD, "Rotate clockwise"), [&] { rot(-1); });
+  cellBtn("nav.btn.2", {34, 120, 26, 29}, tip(0xD, "Rotate Clockwise"), [&] { rot(-1); });   // left button: clockwise, like PageDown (observed)
+  cellBtn("nav.btn.3", {100, 120, 26, 29}, tip(0xC, "Rotate Counterclockwise"), [&] { rot(1); });   // right button: counter-clockwise, like PageUp
   cellBtn("nav.layers", {114, 6, 36, 35}, tip(0xA7, "Layer views"), [&] { if (showLayers_) showLayers_ = false; else openWindow("layers"); }, Ui::kTipLeft);
 }
 
