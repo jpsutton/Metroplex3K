@@ -407,7 +407,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   E.spot("grid", grid);
   { bool c = false;
     std::string tip = E.gui(0x74, "Grid");
-    if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::UiBig, 0x22F96E31), 4, grid, tip, gridOn, true, c))) c = ui.button(grid, "#", true, gridOn);
+    if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::UiBig, 0x22F96E31), 4, grid, tip, gridOn, true, c, Ui::kTipLeft))) c = ui.button(grid, "#", true, gridOn);
     if (c) R.add(Act::ToggleGrid); }
   Rect done{r.x + 246, r.y + 296, 42, 32};
   E.spot("ok", done);
@@ -751,9 +751,9 @@ WindowResult ViewDataWindow::draw(Ui& ui, const WinEnv& E, const MapSource& src,
     const std::string tip = i == 10 ? E.win(0x183, "Charts") : i == 11 ? E.win(0x184, "Graphs") : E.win(dataMapDefs()[size_t(i)].titleId, "Data Map");
     E.spot("mode." + std::to_string(i), b);
     bool c = false;
-    if (!(ui.skin && ui.skin->imageButtonCells(ui, E.img(0x5E5, img[i]), 4, b, tip, mode == i, true, c))) {
+    if (!(ui.skin && ui.skin->imageButtonCells(ui, E.img(0x5E5, img[i]), 4, b, tip, mode == i, true, c, Ui::kTipBelow))) {
       c = ui.button(b, cap[i], true, mode == i);
-      if (ui.hover(b)) ui.tooltip = tip;
+      if (ui.hover(b)) ui.setTip(tip, b, Ui::kTipBelow);
     }
     if (c) { setMode(i, src); R.add(Act::SelectDataMap, 0, i < 10 ? int(dataMapDefs()[size_t(i)].layer) : -1); }
   }

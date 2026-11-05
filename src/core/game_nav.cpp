@@ -130,10 +130,10 @@ void Game::drawNavigator(int barH) {
   }
 
   // Buttons: 4-cell strips (26x29 cells) centred on the observed button centres.
-  auto cellBtn = [&](const char* art, int cx, int cy, int cw, int ch, const std::string& tip, const std::function<void()>& fn) {
+  auto cellBtn = [&](const char* art, int cx, int cy, int cw, int ch, const std::string& tip, const std::function<void()>& fn, int tipPlace = Ui::kTipAbove) {
     const Image* s = skin_.get(art); if (!s) return;
     bool clicked = false;
-    skin_.imageButtonCells(ui_, s, 4, {ox + cx - cw / 2, oy + cy - ch / 2, cw, ch}, tip, false, true, clicked);
+    skin_.imageButtonCells(ui_, s, 4, {ox + cx - cw / 2, oy + cy - ch / 2, cw, ch}, tip, false, true, clicked, tipPlace);
     if (clicked) fn();
   };
   auto tip = [&](uint32_t id, const char* fb) { std::string t = str(0x225872FE, id); return t.empty() ? std::string(fb) : t; };
@@ -142,7 +142,7 @@ void Game::drawNavigator(int barH) {
   // Clockwise = the map turns clockwise as seen: the bottom corner goes to the left corner (lower rotation index; spec 08 5.4).
   cellBtn("nav.btn.2", 47, 133, 26, 29, tip(0xC, "Rotate counter-clockwise"), [&] { rot(1); });
   cellBtn("nav.btn.3", 112, 133, 26, 29, tip(0xD, "Rotate clockwise"), [&] { rot(-1); });
-  cellBtn("nav.layers", 131, 24, 36, 35, tip(0xA7, "Layer views"), [&] { if (showLayers_) showLayers_ = false; else openWindow("layers"); });
+  cellBtn("nav.layers", 131, 24, 36, 35, tip(0xA7, "Layer views"), [&] { if (showLayers_) showLayers_ = false; else openWindow("layers"); }, Ui::kTipLeft);
 }
 
 }  // namespace m3k

@@ -127,7 +127,7 @@ class Skin {
   // Image button from an n-cell strip, centred in r (or exact when sizes match). Handles hover/press/
   // toggle via ui.in, sets ui.tooltip, and reports click. Returns false if strip null (nothing drawn).
   bool imageButtonCells(Ui& ui, const Image* strip, int cells, Rect r, const std::string& tip, bool toggled,
-                        bool enabled, bool& clicked) const;
+                        bool enabled, bool& clicked, int tipPlace = 0) const;   // tipPlace: Ui::kTip* (tooltip anchored to the button)
   // Draw one cell of a strip 1:1 at (x,y).
   static bool drawCell(Ui& ui, const Image* strip, int cells, int cell, int x, int y);
   // Copy one cell out of a strip. false on bad args.

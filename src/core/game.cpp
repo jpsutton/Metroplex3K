@@ -726,27 +726,30 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
   // Over any HUD element, window or dialog the cursor is the normal desktop arrow; tool cursors only apply on the map.
   if ((uiHit_ && !panning_) || scr_ != Screen::InCity) cursorName_.clear();
   if (ui_.tooltip.empty()) {
-    tipKey_.clear();   // the pointer left the button: the next hover places a new tip
+    tipKey_.clear(); tipSuppressKey_.clear();   // the pointer left the button: the next hover shows a tip again
   } else {
-    int tw = ui_.textWidth(ui_.tooltip);
-    // Observed in the original: the tip appears as soon as the pointer is over a button and stays where it first appeared while the pointer moves
-    // across that button; it is placed once per hover (keyed by its text, kind and button) and not re-placed from the pointer every frame.
-    // Placement (spec 09 7a.1): left of a column button (right edge 5 px from it, centred on the pointer at entry), above and to the left of the
-    // "?" button; elsewhere just below and right of the pointer at entry.
-    const std::string key = ui_.tooltip + "|" + std::to_string(ui_.tooltipPlace) + "|" + std::to_string(ui_.tooltipRect.x) + "," + std::to_string(ui_.tooltipRect.y);
+    // Observed in the original (spec 08 3.3a): the tip is anchored to the BUTTON rect, not the pointer, and does not move while the pointer moves over
+    // the button. 1 px black border, fill (255,255,224), black 8 pt system-font text, 16 px high, width = text + 6 (border and 2 px padding each side),
+    // one line. Placement, 2 px from the button: left (centred vertically), above or below (centred horizontally); a box crossing the right client edge
+    // is shifted left to end 2 px inside it. It shows at once, vanishes on mouse-down and stays away until the pointer leaves the button, and a tip for
+    // the next button replaces it immediately.
+    const char* font = "system9";
+    const int tw = ui_.textWidth(ui_.tooltip, font);
+    const Rect a = ui_.tooltipRect;
+    const std::string key = ui_.tooltip + "|" + std::to_string(ui_.tooltipPlace) + "|" + std::to_string(a.x) + "," + std::to_string(a.y);
     if (key != tipKey_) {
       tipKey_ = key;
-      Rect r{std::min(in.mx + 12, w - tw - 8), in.my + 18, tw + 8, 18};
-      if (ui_.tooltipPlace == 1) r = {ui_.tooltipRect.x - 5 - (tw + 8), in.my - 8, tw + 8, 16};
-      else if (ui_.tooltipPlace == 2) r = {ui_.tooltipRect.x - (tw + 8), ui_.tooltipRect.y - 18, tw + 8, 16};
-      if (ui_.tooltipPlace) { r.x = std::max(0, r.x); r.y = std::max(0, r.y); }
+      Rect r = tooltipBox(ui_.tooltipPlace, a, tw, w, in.mx, in.my);
       tipRect_ = r;
     }
-    const Rect r = tipRect_;
-    ui_.fill(r, rgb(255, 255, 200));
-    ui_.fill({r.x, r.y, r.w, 1}, 0xFF000000u); ui_.fill({r.x, r.y + r.h - 1, r.w, 1}, 0xFF000000u);
-    ui_.fill({r.x, r.y, 1, r.h}, 0xFF000000u); ui_.fill({r.x + r.w - 1, r.y, 1, r.h}, 0xFF000000u);
-    ui_.text(r.x + 4, r.y + (r.h - ui_.fonts->get("main10").height()) / 2, ui_.tooltip, "main10", 0);
+    if (in.pressed) tipSuppressKey_ = key;
+    if (key != tipSuppressKey_) {
+      const Rect r = tipRect_;
+      ui_.fill(r, rgb(255, 255, 224));
+      ui_.fill({r.x, r.y, r.w, 1}, 0xFF000000u); ui_.fill({r.x, r.y + r.h - 1, r.w, 1}, 0xFF000000u);
+      ui_.fill({r.x, r.y, 1, r.h}, 0xFF000000u); ui_.fill({r.x + r.w - 1, r.y, 1, r.h}, 0xFF000000u);
+      ui_.text(r.x + 3, r.y + (r.h - ui_.fonts->get(font).height()) / 2, ui_.tooltip, font, 0);
+    }
   }
   drawFpsCounter(dtMs);
   const auto pe0 = PhaseClock::now();
@@ -847,7 +850,7 @@ bool Game::drawSkinnedToolMenu() {
       std::string t;
       if (auto ii = menu_.items.find(b.item); ii != menu_.items.end()) t = str(ii->second.nameTable, ii->second.nameId);
       if (t.empty() && b.sub) t = menuTitle(b.sub);
-      ui_.tooltip = t; ui_.tooltipPlace = 1; ui_.tooltipRect = rr;
+      ui_.setTip(t, rr, Ui::kTipLeft);
     }
     if (ui_.clicked(rr)) {
       // Observed in the original: pressing a root button that opens a panel returns the cursor at once to the default (centre) mode, whatever
@@ -880,8 +883,7 @@ bool Game::drawSkinnedToolMenu() {
     if (tip.empty() && b.sub) tip = menuTitle(b.sub);   // a button with a fly-out is named after the fly-out
     const Image* strip = skin_.toolStrip(b.id);
     bool clicked = false;
-    if (strip && skin_.imageButtonCells(ui_, strip, 4, r, tip, openFly_ == b.sub && b.sub, true, clicked)) {
-      if (ui_.hover(r)) { ui_.tooltipPlace = 1; ui_.tooltipRect = r; }
+    if (strip && skin_.imageButtonCells(ui_, strip, 4, r, tip, openFly_ == b.sub && b.sub, true, clicked, Ui::kTipLeft)) {
       if (clicked) {
         if (b.sub) openFly_ = (openFly_ == b.sub) ? 0 : b.sub;
         else { execute(b.item); if (tool_ != ToolKind::Unavailable) openRoot_ = 0; }
@@ -1025,8 +1027,8 @@ void Game::drawHud() {
     const Image* ra = ui_.hover(rr) ? skin_.get("run.hover") : !paused_ ? skin_.get("run") : skin_.get("run.off");
     if (pa) ui_.blit(*pa, pr.x, pr.y);
     if (ra) ui_.blit(*ra, rr.x, rr.y);
-    if (ui_.hover(pr)) ui_.tooltip = tip(0x64, "Pause");
-    if (ui_.hover(rr)) ui_.tooltip = tip(0x65, "Run");
+    if (ui_.hover(pr)) ui_.setTip(tip(0x64, "Pause"), pr, Ui::kTipAbove);
+    if (ui_.hover(rr)) ui_.setTip(tip(0x65, "Run"), rr, Ui::kTipAbove);
     if (ui_.clicked(pr) && !paused_) { setPaused(true); sound(24); }
     if (ui_.clicked(rr) && paused_) { setPaused(false); sound(23); }
     int sp = std::max(1, std::min(4, speed_));
@@ -1034,25 +1036,24 @@ void Game::drawHud() {
     static const char* spTip[4] = {"Turtle", "Llama", "Cheetah", "African Swallow"};
     for (int i = 0; i < 4; i++) {
       Rect cr{place.p4x + 3 + i * 11, place.p4y + 4, 10, 12};
-      if (ui_.hover(cr)) ui_.tooltip = tip(0x66 + i, spTip[i]);
+      if (ui_.hover(cr)) ui_.setTip(tip(0x66 + i, spTip[i]), cr, Ui::kTipAbove);
       if (ui_.clicked(cr)) setSpeedBtn(i + 1);
     }
     // Help ("?") button, 4-cell strip at P3.
     // The green "?" arms the query tool (spec 09 7a.4 [OBSERVED]). The button does not stay down while the tool is armed: it pops back up at once
     // and the query cursor alone shows the mode (observed in the original), so it is never drawn as toggled.
     bool hc = false;
-    skin_.imageButtonCells(ui_, skin_.get("help"), 4, {place.p3x, place.p3y, 40, 39}, tip(0x3C, "Query"), false, true, hc);
-    if (ui_.hover({place.p3x, place.p3y, 40, 39})) { ui_.tooltipPlace = 2; ui_.tooltipRect = {place.p3x, place.p3y, 40, 39}; }
+    skin_.imageButtonCells(ui_, skin_.get("help"), 4, {place.p3x, place.p3y, 40, 39}, tip(0x3C, "Query"), false, true, hc, Ui::kTipAbove);
     if (hc) setTool(ToolKind::Query);   // already armed: stays armed (does not toggle)
     // Engine options (Metroplex3K only): same chrome as "?", with a cog. Prefer just right of help; when the RCI
     // indicator leaves no room (typical at 1024-wide), tuck it above and a few pixels right of help.
     Rect eb{place.p3x + 38, place.p3y, 40, 39};
     if (eb.x + eb.w > navX - RciGeometry::imgW - 2) eb = {place.p3x + 18, place.p3y - 36, 40, 39};
     bool ec = false;
-    if (skin_.imageButtonCells(ui_, skin_.get("engine"), 4, eb, "M3K Options", false, true, ec)) {
+    if (skin_.imageButtonCells(ui_, skin_.get("engine"), 4, eb, "M3K Options", false, true, ec, Ui::kTipAbove)) {
       if (ec) openWindow("engine");
     } else {
-      if (ui_.hover(eb)) { uiHit_ = true; ui_.tooltip = "M3K Options"; }
+      if (ui_.hover(eb)) { uiHit_ = true; ui_.setTip("M3K Options", eb, Ui::kTipAbove); }
       if (ui_.button({eb.x + 2, eb.y + 8, 36, 22}, "M3K", true, false)) openWindow("engine");
     }
   } else {

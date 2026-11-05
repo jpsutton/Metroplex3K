@@ -40,6 +40,10 @@ struct Input {
 };
 enum Key { K_ENTER, K_ESC, K_BACKSPACE, K_UP, K_DOWN, K_PAGEUP, K_PAGEDOWN, K_TAB, K_LEFT, K_RIGHT };
 
+// Tooltip box (spec 08 3.3a [OBSERVED]): 16 px high, text width + 6 wide, 2 px from the anchor button; left = vertically centred, above / below =
+// horizontally centred; a box crossing the right client edge is shifted left to end 2 px inside it. `pointer` is used only for kTipPointer.
+Rect tooltipBox(int place, Rect anchor, int textWidth, int clientW, int pointerX, int pointerY);
+
 class Ui {
  public:
   std::vector<uint32_t>* fb = nullptr;   // optional owning vector (packed); pixels aliases its data when set
@@ -55,10 +59,14 @@ class Ui {
   uint32_t panelLight = rgb(0xF0, 0xF4, 0xFA);
   const Skin* skin = nullptr;   // original UI art for dialogs and controls; null = flat fallback look
   std::string tooltip;
-  // Where the tooltip goes: 0 below-right of the pointer (default); 1 left of `tooltipRect`, vertically centred on the pointer (tool column);
-  // 2 above and to the left of `tooltipRect` (the "?" button). Cleared every frame with the text.
-  int tooltipPlace = 0;
+  // Where the tooltip goes (spec 08 3.3a, observed): anchored to the button rect `tooltipRect`, 2 px away: kTipLeft = left of it, vertically
+  // centred (tool column, layer views, grid); kTipAbove = above it, horizontally centred (bottom bar, zoom and rotate buttons); kTipBelow = below
+  // it, horizontally centred (View Data mode strip). kTipPointer (default) = below and right of the pointer where it entered, for controls the
+  // original's measurements do not cover. Cleared every frame with the text.
+  enum { kTipPointer = 0, kTipLeft = 1, kTipAbove = 2, kTipBelow = 3 };
+  int tooltipPlace = kTipPointer;
   Rect tooltipRect;
+  void setTip(const std::string& text, Rect anchor, int place) { tooltip = text; tooltipRect = anchor; tooltipPlace = place; }
   int focusId = 0;       // text box with keyboard focus
   int activeId = 0;      // widget being dragged
 

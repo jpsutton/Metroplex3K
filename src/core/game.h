@@ -521,6 +521,7 @@ class Game {
   std::string cursorName_;
   std::string tipKey_;   // identity of the tooltip placed for the current hover (text, kind, button)
   Rect tipRect_;         // where it was placed
+  std::string tipSuppressKey_;   // a tip a click removed stays away until the pointer leaves its button
   void handleScrolling(uint32_t dtMs);
   // Tunables the query panel's service figures need (SC3Tune.ini [PoliceStation] [FireStation] [Library] [Museum]).
   struct QueryTune { bool loaded = false; us::StationParams police, fire; us::LibraryParams library, museum; };

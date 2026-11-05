@@ -506,7 +506,7 @@ bool Skin::drawCell(Ui& ui, const Image* s, int cells, int cell, int x, int y) {
 }
 
 bool Skin::imageButtonCells(Ui& ui, const Image* s, int cells, Rect r, const std::string& tip, bool toggled,
-                            bool enabled, bool& clicked) const {
+                            bool enabled, bool& clicked, int tipPlace) const {
   clicked = false;
   if (!s || s->empty() || cells <= 0) return false;
   int cw = s->w / cells;
@@ -514,7 +514,7 @@ bool Skin::imageButtonCells(Ui& ui, const Image* s, int cells, Rect r, const std
   int cell = cell4For(enabled, down, toggled, hot);
   if (cell >= cells) cell = std::min(1, cells - 1);
   ui.blit(*s, r.x + (r.w - cw) / 2, r.y + (r.h - s->h) / 2, cell * cw, cw);
-  if (hot) ui.tooltip = tip;
+  if (hot && !tip.empty()) ui.setTip(tip, r, tipPlace);
   clicked = enabled && ui.clicked(r);
   return true;
 }

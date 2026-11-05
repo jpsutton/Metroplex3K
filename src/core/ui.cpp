@@ -5,6 +5,20 @@
 
 namespace m3k {
 
+Rect tooltipBox(int place, Rect a, int textWidth, int clientW, int px, int py) {
+  const int bw = textWidth + 6, bh = 16;
+  Rect r{0, 0, bw, bh};
+  switch (place) {
+    case Ui::kTipLeft: r.x = a.x - 2 - bw; r.y = a.y + (a.h - bh) / 2; break;
+    case Ui::kTipAbove: r.x = a.x + (a.w - bw) / 2; r.y = a.y - 2 - bh; break;   // C division (truncating) matches the measurements
+    case Ui::kTipBelow: r.x = a.x + (a.w - bw) / 2; r.y = a.y + a.h + 2; break;
+    default: r.x = px + 12; r.y = py + 18; break;
+  }
+  if (r.x + r.w > clientW - 2) r.x = clientW - 2 - r.w;
+  r.x = std::max(0, r.x); r.y = std::max(0, r.y);
+  return r;
+}
+
 void Ui::begin(uint32_t* px, int w, int h, const Input& i, int pitchPx) {
   fb = nullptr; pixels = px; W = w; H = h; pitch = pitchPx > 0 ? pitchPx : w; in = i;
   tooltip.clear(); tooltipPlace = 0; idCounter_ = 0; windowRects.clear();
