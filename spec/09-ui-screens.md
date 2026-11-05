@@ -367,6 +367,15 @@ terrain grid toggle `A5`. Sounds: zoom in 1 `UiZoomIn`, zoom out 2 `UiZoomOut`, 
 `UiRotate`. Zoom has 5 levels and rotation 4 orientations (`25-rendering.md`). "Centre" arms a
 one-shot pointer: the next click on the map scrolls that point to the screen centre.
 
+`[OBSERVED]` Navigator button rects (client pixels at 1024 × 768; at 800 × 600 subtract (224, 168)):
+* Zoom In (878, 704) and Zoom Out (984, 704), each 26 × 29.
+* The **left** rotate button (898, 724) is **Rotate Clockwise** (`D`). It turns the map clockwise as
+  seen, like PageDown: the minimap N marker moves from the top corner to the right corner.
+* The **right** rotate button (964, 724) is **Rotate Counterclockwise** (`C`), like PageUp.
+* Both rotate buttons are 26 × 29.
+* Layer Views (978, 610), 36 × 35.
+* Visit SimCity Exchange (830, 680), 33 × 30.
+
 ### 4.4 News ticker [STATIC]
 
 A one-line horizontally scrolling strip. Items scroll right-to-left by 2 pixels per step, a step
