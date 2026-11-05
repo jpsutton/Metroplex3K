@@ -87,15 +87,13 @@ struct World {
   uint8_t waterAt(int x, int z) const { return water[vIdx(x, z)]; }
   bool inTiles(int x, int z) const { return x >= 0 && z >= 0 && x < W && z < H; }
 
-  // Altitude a terrain-bound surface network piece's SPRITE is registered to (spec 25 5.1): the tile's front corner,
-  // the one nearest the viewer (world corner that maps to view vertex (umax, vmax): rot 0 (x+1,z+1), 1 (x+1,z),
-  // 2 (x,z), 3 (x,z+1); rotations 1-3 inferred). Bridge decks, inclines and towers (agents 16003/16004/16011/17003/
-  // 17204) keep the stored y. agentType 0 = unknown (treated as terrain-bound).
+  // Altitude a terrain-bound surface network piece's SPRITE is registered to (spec 25 5.1): the altitude at world
+  // corner (x+1, z+1) in every view rotation (measured from sprite extents at all four rotations). Bridge decks,
+  // inclines and towers (agents 16003/16004/16011/17003/17204) keep the stored y. agentType 0 = unknown (terrain-bound).
   static bool isBridgeAgent(uint32_t a) { return a == 16003 || a == 16004 || a == 16011 || a == 17003 || a == 17204; }
-  int surfaceDrawY(const NetPiece& np, uint32_t agentType, int viewRot) const {
+  int surfaceDrawY(const NetPiece& np, uint32_t agentType) const {
     if (isBridgeAgent(agentType) || !inTiles(np.x, np.z)) return np.y;
-    static const int cx[4] = {1, 1, 0, 0}, cz[4] = {1, 0, 0, 1};
-    return altAt(np.x + cx[viewRot & 3], np.z + cz[viewRot & 3]);
+    return altAt(np.x + 1, np.z + 1);
   }
   // Base altitude of vehicle paths on a surface piece: the tile's highest corner (path heights run 0 at the high end
   // and drop to -256 / -512 at the low end), so it differs from the sprite's front-corner base on purpose. Bridge
