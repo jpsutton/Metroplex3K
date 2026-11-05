@@ -221,6 +221,21 @@ Each frame is composed back to front in this order: [STATIC partial, INFERRED or
 4. **Overlays.** Data-map tinting, selection highlights, placement previews and the cursor (§9).
 5. **UI windows** on top (`08-ui-framework.md`).
 
+**Draw height of network pieces** [OBSERVED: Berlin, tiles (132,137) and (132,138)]:
+* A network piece that lies on the terrain (road, rail, power line and the like, on flat or
+  sloped ground) is anchored at the **highest** of its tile's four corner altitudes.
+* Its sprite registration point (L, T) assumes that height. Slope sprites are drawn for the
+  slope shape and registered to the top of the slope.
+* Do not use the stored piece altitude for this. The save stores the minimum corner for about
+  half of the sloped pieces and the maximum for the rest (Berlin: 91 vs 90 sloped road pieces).
+  Using it puts those pieces 1–2 altitude steps too low, so they look detached from their
+  neighbours.
+* Pieces whose stored altitude is above every corner (bridge decks, inclines, elevated pieces,
+  agent types 16003, 16004, 16011, 17003, 17204 and others) are drawn at their stored altitude.
+* Verified: pieces 11201 (rot 2) and 31 (rot 2) drawn at their tile's maximum corner (33 and 35)
+  join the curve and the bridge incline exactly as in the original. Drawn at the stored y (32 and
+  33) they sit 8 and 16 px too low at zoom 3.
+
 ### 5.2 Depth key
 
 Each object that occupies tiles is entered into a per-frame draw list. Its depth key is computed from
