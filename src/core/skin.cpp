@@ -335,18 +335,30 @@ void Skin::buildCogButton() {
   const Image* ex = get("exchange");
   if (!ex || ex->w < 8 || ex->h < 12 || ex->w % 4 != 0) return;
   Image im = *ex;
-  const int cells = 4, cw = im.w / cells, ch = im.h, ring = 3;
-  auto at = [&](int x, int y) -> uint32_t& { return im.px[size_t(y) * im.w + x]; };
+  const int cells = 4, cw = im.w / cells, ch = im.h;
+  const Image src = *ex;   // the untouched strip: the tile references are read from it while `im` is repainted
+  auto sp = [&](int cell, int x, int y) -> uint32_t { return src.px[size_t(y) * src.w + size_t(cell * cw + x)]; };
+  auto mix = [](uint32_t a, uint32_t b, double t) {
+    auto ch8 = [&](int sh) { return uint32_t(std::lround(double((a >> sh) & 255) * (1 - t) + double((b >> sh) & 255) * t)); };
+    return 0xFF000000u | ch8(16) << 16 | ch8(8) << 8 | ch8(0);
+  };
+  auto smooth = [](double v) { v = std::clamp(v, 0.0, 1.0); return v * v * (3 - 2 * v); };
+  // The glyph (globe, monitor, cable) sits on a light tile that shades to dark blue at the right and bottom (observed: white top-left, dark rim). It
+  // is erased by repainting the area it covers (x 5..26, y 5..22 of the cell) from the tile's own pixels next to it: the left column (x 4) per row,
+  // blended toward the right rim (x 28) per row and toward the bottom rim (y 26) per column. The pressed cell keeps its own frame (the inset ring)
+  // but takes the tile from the normal cell, whose interior is the same light tile; the other cells use their own.
   for (int cell = 0; cell < cells; cell++) {
-    const int x0 = cell * cw, x1 = x0 + cw;
-    // The tile face: the median of the four interior corners just inside the ring (clear of the globe and the monitor).
-    uint32_t c4[4] = {at(x0 + ring + 1, ring + 1), at(x1 - ring - 2, ring + 1), at(x0 + ring + 1, ch - ring - 2), at(x1 - ring - 2, ch - ring - 2)};
-    std::sort(c4, c4 + 4);
-    const uint32_t face = (c4[1] & 0x00FFFFFFu) | 0xFF000000u;
-    for (int y = ring; y < ch - ring; y++)
-      for (int x = x0 + ring; x < x1 - ring; x++)
-        if ((at(x, y) >> 24) >= 128) at(x, y) = face;
-    paintCog(im, cell, x0, x1, x0 + cw / 2 - 1, ch / 2 - 1, 7.2, 5.3, 1.8, int(face & 255), int((face >> 8) & 255), int((face >> 16) & 255));
+    const int ref = cell == CELL_PRESSED ? int(CELL_NORMAL) : cell;
+    for (int y = 5; y <= 22 && y < ch; y++)
+      for (int x = 5; x <= 26 && x < cw; x++) {
+        const uint32_t left = sp(ref, 4, y), right = sp(ref, std::min(28, cw - 1), y), bottom = sp(ref, x, std::min(26, ch - 1));
+        uint32_t c = mix(left, right, smooth((double(x) - 18.0) / 10.0));
+        c = mix(c, bottom, std::clamp((double(y) - 16.0) / 12.0, 0.0, 1.0) * 0.6);
+        if ((im.px[size_t(y) * im.w + size_t(cell * cw + x)] >> 24) >= 128) im.px[size_t(y) * im.w + size_t(cell * cw + x)] = c;
+      }
+    // The gear, centred in the tile; its hub shows the tile colour there.
+    const uint32_t hub = im.px[size_t(ch / 2) * im.w + size_t(cell * cw + cw / 2)];   // the repainted tile colour at the centre: the hub hole shows it
+    paintCog(im, cell, cell * cw, (cell + 1) * cw, cell * cw + cw / 2 - 1, ch / 2 - 1, 7.2, 5.3, 1.8, int(hub & 255), int((hub >> 8) & 255), int((hub >> 16) & 255));
   }
   extras_["cog"] = std::move(im);
 }
