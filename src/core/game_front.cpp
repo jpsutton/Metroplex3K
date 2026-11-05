@@ -281,8 +281,8 @@ void Game::askSaveBeforeLeave(int action) {
   if (!(world_.W && simReady_)) { doLeave(action); return; }
   auto cap = [&](uint32_t t, uint32_t i, const char* d) { std::string s = str(t, i); return s.empty() ? std::string(d) : s; };
   if (action == kLeaveQuit) msgBox_.open(cap(0x225872FE, 0x55, "Exit"), cap(0x015E410C, 0x1F, "Do you want to save the game?"), 4);
-  else if (action == kLeaveNew) msgBox_.open(cap(0x015E410C, 6, "Save"), cap(0x015E410C, 0x12, "Do you want to save your city?"), 4);
-  else msgBox_.open(cap(0x015E410C, 6, "Save"), cap(0x029541F4, 0x250, "Would you like to save this city?"), 4);
+  else if (action == kLeaveNew) { msgBox_.open(cap(0x015E410C, 6, "Save"), cap(0x015E410C, 0x12, "Do you want to save your city?"), 3); msgBox_.closeCancels = true; }
+  else { msgBox_.open(cap(0x015E410C, 6, "Save"), cap(0x029541F4, 0x250, "Would you like to save this city?"), 3); msgBox_.closeCancels = true; }
   msgBoxPurpose_ = 2; msgBoxAction_ = action;
 }
 

@@ -386,7 +386,7 @@ std::vector<MsgButton> MessageBox::buttonsFor(int style) {
 }
 
 void MessageBox::open(const std::string& title, const std::string& message, int style, int icon) {
-  title_ = title; message_ = message; style_ = std::max(0, std::min(5, style)); icon_ = icon; active = true;
+  title_ = title; message_ = message; style_ = std::max(0, std::min(5, style)); icon_ = icon; active = true; closeCancels = false;
 }
 
 std::string msgButtonCaption(const WinEnv& E, MsgButton b) {
@@ -477,7 +477,8 @@ WindowResult MessageBox::draw(Ui& ui, const WinEnv& E) {
   if (ui.in.key[K_ESC] || closeClicked) idx = int(bs.size()) - 1;
   if (idx >= 0) {
     active = false;
-    R.add(Act::MessageResult, 0, int64_t(bs[size_t(idx)]));
+    const MsgButton res = (closeCancels && (ui.in.key[K_ESC] || closeClicked)) ? MsgButton::Cancel : bs[size_t(idx)];
+    R.add(Act::MessageResult, 0, int64_t(res));
     R.close = true;
   }
   return R;

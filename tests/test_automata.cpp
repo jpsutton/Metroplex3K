@@ -288,7 +288,7 @@ static int countSounds(const std::vector<SoundEvent>& v, SoundEvent::Type t, int
 // per class, indexed by the nearest road diagonal of the (view-rotated, +16) heading.
 static void testSlopeSprites() {
   struct Case { int dh; int base; };   // path height change over a 256-unit run, expected class base slot
-  const Case cases[] = {{-512, 36}, {-256, 44}, {0, -1}, {256, 40}, {512, 32}};
+  const Case cases[] = {{-512, 36}, {-433, 36}, {-256, 44}, {-100, -1}, {0, -1}, {100, -1}, {256, 40}, {433, 32}, {512, 32}};
   for (const Case& c : cases) {
     AutomataData D; buildData(D);
     for (uint32_t inst : {0x1000u, 0x2000u}) D.addRecord({kVPathType, kVPathGroup, inst}, vpath({{0, 0, 128}, {256, c.dh, 128}}, 0));

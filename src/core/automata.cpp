@@ -716,15 +716,16 @@ struct StreetSim::Impl {
     a.gradeClass = (a.vpath && (a.kind == AutomatonKind::Vehicle || a.kind == AutomatonKind::Train)) ? pathGradeClass(*a.vpath) : 2;
   }
 
-  // Sprite grade class 0..4 of a vehicle path (spec 26 3.6): clamp(trunc(g) + 2, 0, 4) with g the stored path grade
-  // (height change over horizontal length, along travel); curves and turns stay level (2).
+  // Sprite grade class 0..4 of a vehicle path (spec 26 3.6): clamp(round(g) + 2, 0, 4) with g the stored path grade
+  // (height change over horizontal length, along travel); curves and turns stay level (2). Rounding, not truncation,
+  // matches the original on the 2-step rail slope (g = 1.698 shows the steep frames).
   static int pathGradeClass(const VPath& v) {
     if (v.pts.size() < 2) return 2;
     const Pt& e0 = v.pts[v.pts.size() - 2];
     const Pt& e1 = v.pts.back();
     const int d = (heading32(e1.a - e0.a, e1.b - e0.b) - v.heading0 + 32) & 31;
     if (d > 2 && d < 30) return 2;
-    return std::max(0, std::min(4, int(v.grade) + 2));
+    return std::max(0, std::min(4, int(std::lround(v.grade)) + 2));
   }
 
   Auto* create(AutomatonKind k) {

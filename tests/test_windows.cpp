@@ -1042,6 +1042,13 @@ void testMessageBox() {
   m.open("T", "msg", 4);
   r = h.key(K_ESC); CHECK(r.has(Act::MessageResult) && r.find(Act::MessageResult)->a == int64_t(MsgButton::Cancel));
   CHECK(msgButtonCaption(h.E, MsgButton::Retry) == "Retry");
+  // Yes/No prompt whose close box and Esc abort (save before New / Load): no Cancel button, Cancel result.
+  m.open("T", "msg", 3); m.closeCancels = true;
+  r = h.key(K_ESC); CHECK(r.has(Act::MessageResult) && r.find(Act::MessageResult)->a == int64_t(MsgButton::Cancel));
+  m.open("T", "msg", 3); m.closeCancels = true;
+  r = h.click("close"); CHECK(r.has(Act::MessageResult) && r.find(Act::MessageResult)->a == int64_t(MsgButton::Cancel));
+  m.open("T", "msg", 3); CHECK(!m.closeCancels);
+  r = h.key(K_ESC); CHECK(r.has(Act::MessageResult) && r.find(Act::MessageResult)->a == int64_t(MsgButton::No));
 }
 
 void testTipAndCredits() {
