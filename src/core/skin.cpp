@@ -344,7 +344,8 @@ void Skin::buildCogButton() {
   // its own (one step brighter) tile.
   for (int cell = 0; cell < cells; cell++) {
     const int ref = cell == CELL_PRESSED ? int(CELL_NORMAL) : cell;
-    const uint32_t topLeft = sp(ref, 5, 5), rest = sp(ref, 15, 5);
+    // Hover (observed): FFFFFF only in the top-left block, FFFAFF (the normal cell's top-left colour) elsewhere; its own (15,5) is FFFFFF.
+    const uint32_t topLeft = sp(ref, 5, 5), rest = cell == CELL_HOVER ? sp(CELL_NORMAL, 5, 5) : sp(ref, 15, 5);
     for (int y = 5; y <= 22 && y < ch; y++)
       for (int x = 5; x <= 25 && x < cw; x++) {
         const uint32_t c = (x <= 12 && y <= 13) ? topLeft : rest;
