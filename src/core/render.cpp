@@ -1353,7 +1353,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     if (!data_) return;
     const OccAttr* oa = data_->occupant(occId, net, port);
     if (!oa) return;
-    curDeck = net && World::isBridgeAgent(oa->agentType);
+    curDeck = net && World::isDeckAgent(oa->agentType);
     addStatic(oa->appearance, ownFlag(), std::max(sizeX, sizeZ), x, zz, y, rot, sizeX, sizeZ, ground);
   };
 

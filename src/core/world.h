@@ -99,13 +99,20 @@ struct World {
     return altAt(np.x + cx[np.rot & 3], np.z + cz[np.rot & 3]);
   }
   // Base altitude of vehicle paths on a surface piece: the tile's highest corner (path heights run 0 at the high end
-  // and drop to -256 / -512 at the low end), so it differs from the sprite's front-corner base on purpose. Bridge
-  // agents keep the stored y.
+  // and drop to -256 / -512 at the low end), so it differs from the sprite's registration-corner base on purpose.
+  // Highway bridges (17204) use the bridge level, the water surface at the tile, when the stored y is above it (span
+  // pieces already sit there, land-side inclines store the ground; with the stored y both joints came out 2 steps too
+  // high, [INFERRED] from 2 Berlin sites). The other bridge agents keep the stored y.
   int surfaceTopY(const NetPiece& np, uint32_t agentType) const {
-    if (isBridgeAgent(agentType) || !inTiles(np.x, np.z)) return np.y;
+    if (!inTiles(np.x, np.z)) return np.y;
+    if (agentType == 17204) { const int wl = waterAt(np.x, np.z); return wl > 0 && np.y > wl ? wl : np.y; }
+    if (isBridgeAgent(agentType)) return np.y;
     const int top = std::max(std::max(altAt(np.x, np.z), altAt(np.x + 1, np.z)), std::max(altAt(np.x, np.z + 1), altAt(np.x + 1, np.z + 1)));
     return std::max(np.y, top);
   }
+  // Pieces that cars and trains drive on above the ground: a mover draws over their tile (spec 25 5.2). The original
+  // has no such list (every static whose box a higher-layer mover overlaps), this is the part modelled so far.
+  static bool isDeckAgent(uint32_t a) { return isBridgeAgent(a) || a == 16001 || a == 17202 || a == 17004; }
   // Deep-water table for seaport pier (spec 15 §5.5 / Q-AX): W×W u16, index z·W+x.
   // Built on first use from per-vertex classification; not saved. Call invalidateDeepWater() after
   // terrain/water/sea-level edits.

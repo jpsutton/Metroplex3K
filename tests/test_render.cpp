@@ -78,6 +78,15 @@ int main() {
     p.y = 30;
     for (int r = 0; r < 4; r++) { p.rot = r; CHECK(w.surfaceDrawY(p, 16003) == 30 && w.surfaceDrawY(p, 16011) == 30 && w.surfaceDrawY(p, 17003) == 30); }
     CHECK(w.surfaceTopY(p, 16003) == 30 && w.surfaceTopY(p, 17204) == 30);
+    {  // highway bridge 17204: vehicle base = water level when the stored y is above it
+      p.y = 32;
+      CHECK(w.surfaceTopY(p, 17204) == 32);                               // no water here: stored y
+      w.water[size_t(w.vIdx(3, 3))] = 30;
+      CHECK(w.surfaceTopY(p, 17204) == 30 && w.surfaceTopY(p, 16003) == 32);
+      p.y = 30; CHECK(w.surfaceTopY(p, 17204) == 30);
+      p.y = 28; CHECK(w.surfaceTopY(p, 17204) == 28);                     // below the water: stored y
+      CHECK(World::isDeckAgent(16001) && World::isDeckAgent(17202) && World::isDeckAgent(16011) && !World::isDeckAgent(16000) && !World::isDeckAgent(17000));
+    }
     NetPiece edge; edge.x = 8; edge.z = 8; edge.y = 5;                    // off the tile grid: stored y
     CHECK(w.surfaceDrawY(edge, 16000) == 5 && w.surfaceTopY(edge, 16000) == 5);
   }
