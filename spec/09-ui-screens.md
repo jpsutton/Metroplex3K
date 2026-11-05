@@ -1791,8 +1791,39 @@ Other behaviour:
 * Items whose button carries a small grid badge open a picker dialog or a fly-out (`08` §7).
 * A second-level column stays open after a dialog launched from it has closed. Clicking its root
   button again closes it.
-* Tooltips appear on hover after a short delay, as small pale-yellow boxes to the left of the
-  item.
+* Tooltips: small pale-yellow boxes with a black border.
+  * Column buttons: the box is to the left of the button, vertically centred on the pointer. The
+    Query button's box is above and to the left.
+  * Timing (1024 × 768, under Wine): the tip was visible within 0.1 s of the pointer entering,
+    including after 5 s away from any button. It was still visible after 6 s of hovering
+    [OBSERVED]. This differs from the 750 ms / 2250 ms timing of `08` §3.3, so these buttons
+    probably use the immediate and manual placement flags [INFERRED].
+* Root-button tooltip strings (`225872FE`): Landscape `1`, Zone `2`, Build Transportation `3`,
+  Build Utilities `4`, Place Civic/Special Bldgs `5`, Emergency `56`, Meet `6`, Adjust & Review
+  `7`, Change Settings & Exit `8`. Query "?" is `3C`.
+  Transportation sub-items: Road `22`, Highway `9A`, Bus Stop `25`, Rail `26`, Subway `28`,
+  Subway to Rail Connection `2A`, Demolish `1B` [OBSERVED].
+
+**Tool mode and the control buttons** [OBSERVED, Craterville, 1024 × 768]. The tool was detected
+by a map click: a Query panel means Query is armed, a recentre means no tool, and no effect
+means a build tool is still armed.
+* Query "?":
+  * A click arms Query. The button is not drawn latched; it looks the same as before.
+  * Query stays armed after each query; you close the panel with its OK button.
+  * Clicking "?" again while armed leaves Query armed; it does not toggle off.
+  * Esc leaves Query and returns to no tool (map click recentres). A right click on the map does
+    **not** leave Query.
+* Root buttons:
+  * Clicking a root button that opens a fly-out sets the tool to none at once. Observed for
+    Landscape, Zone, Transportation, Utilities, Civic, Emergency, Review and Options, with Query,
+    Road or the bulldozer armed.
+  * Clicking an open root button again (closing its fly-out) also leaves the tool at none.
+  * Meet (opens the Meet window, no fly-out) does **not** change the tool: Query and Road stay
+    armed after Meet is opened and closed.
+* Sub-items: choosing one (e.g. Road) arms its tool. The fly-out stays open, also after clicks on
+  the map.
+* Drawing: the sub-item button is not drawn latched. While its fly-out is open, the root button
+  is drawn joined to the fly-out band.
 
 ### 7a.2 Building pickers and year gating
 
