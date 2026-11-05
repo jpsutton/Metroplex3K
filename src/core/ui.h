@@ -40,7 +40,7 @@ struct Input {
 };
 enum Key { K_ENTER, K_ESC, K_BACKSPACE, K_UP, K_DOWN, K_PAGEUP, K_PAGEDOWN, K_TAB, K_LEFT, K_RIGHT };
 
-// Tooltip box (spec 08 3.3a [OBSERVED]): 16 px high, text width + 6 wide, 2 px from the anchor button; left = vertically centred, above / below =
+// Tooltip box (spec 08 3.3a [OBSERVED]): 16 px high, 5 more than our advance-width text measure (the original's ink width + 6), 2 px from the anchor button; left = vertically centred, above / below =
 // horizontally centred; a box crossing the right client edge is shifted left to end 2 px inside it. `pointer` is used only for kTipPointer.
 Rect tooltipBox(int place, Rect anchor, int textWidth, int clientW, int pointerX, int pointerY);
 

@@ -6,7 +6,7 @@
 namespace m3k {
 
 Rect tooltipBox(int place, Rect a, int textWidth, int clientW, int px, int py) {
-  const int bw = textWidth + 6, bh = 16;
+  const int bw = textWidth + 5, bh = 16;   // our font's advance width includes one blank column the original's box does not count
   Rect r{0, 0, bw, bh};
   switch (place) {
     case Ui::kTipLeft: r.x = a.x - 2 - bw; r.y = a.y + (a.h - bh) / 2; break;

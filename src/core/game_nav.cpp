@@ -1,7 +1,7 @@
 // Navigator panel (bottom-right): mini-map diamond, zoom / rotate / layers buttons.
 // Geometry measured from the original at 800x600 (panel 160x164 anchored to the window's bottom-right corner):
 // diamond centre (79,81) panel-relative, 128 px wide and tall; zoom-in (26,112), zoom-out (133,112),
-// rotate-left (47,133), rotate-right (112,133), layers (131,24) button centres [OBSERVED].
+// rotate-left (47,133), rotate-right (112,133), layers (131,24) button centres [OBSERVED at 800x600]; the button rects below were re-measured at 1024x768.
 #include <algorithm>
 #include "core/game.h"
 #include "core/overview.h"
@@ -130,19 +130,21 @@ void Game::drawNavigator(int barH) {
   }
 
   // Buttons: 4-cell strips (26x29 cells) centred on the observed button centres.
-  auto cellBtn = [&](const char* art, int cx, int cy, int cw, int ch, const std::string& tip, const std::function<void()>& fn, int tipPlace = Ui::kTipAbove) {
+  // Button rects measured on the original at 1024 x 768 (panel-relative; the panel is 160 x 164 at the window's bottom-right corner): zoom in
+  // (14,100), zoom out (120,100), the left rotate button (34,120), the right one (100,120), all 26 x 29; layer views (114,6) 36 x 35.
+  auto cellBtn = [&](const char* art, Rect rel, const std::string& tip, const std::function<void()>& fn, int tipPlace = Ui::kTipAbove) {
     const Image* s = skin_.get(art); if (!s) return;
     bool clicked = false;
-    skin_.imageButtonCells(ui_, s, 4, {ox + cx - cw / 2, oy + cy - ch / 2, cw, ch}, tip, false, true, clicked, tipPlace);
+    skin_.imageButtonCells(ui_, s, 4, {ox + rel.x, oy + rel.y, rel.w, rel.h}, tip, false, true, clicked, tipPlace);
     if (clicked) fn();
   };
   auto tip = [&](uint32_t id, const char* fb) { std::string t = str(0x225872FE, id); return t.empty() ? std::string(fb) : t; };
-  cellBtn("nav.btn.0", 26, 112, 26, 29, tip(0xA, "Zoom in"), [&] { zoomBy(1); });
-  cellBtn("nav.btn.1", 133, 112, 26, 29, tip(0xB, "Zoom out"), [&] { zoomBy(-1); });
+  cellBtn("nav.btn.0", {14, 100, 26, 29}, tip(0xA, "Zoom in"), [&] { zoomBy(1); });
+  cellBtn("nav.btn.1", {120, 100, 26, 29}, tip(0xB, "Zoom out"), [&] { zoomBy(-1); });
   // Clockwise = the map turns clockwise as seen: the bottom corner goes to the left corner (lower rotation index; spec 08 5.4).
-  cellBtn("nav.btn.2", 47, 133, 26, 29, tip(0xC, "Rotate counter-clockwise"), [&] { rot(1); });
-  cellBtn("nav.btn.3", 112, 133, 26, 29, tip(0xD, "Rotate clockwise"), [&] { rot(-1); });
-  cellBtn("nav.layers", 131, 24, 36, 35, tip(0xA7, "Layer views"), [&] { if (showLayers_) showLayers_ = false; else openWindow("layers"); }, Ui::kTipLeft);
+  cellBtn("nav.btn.2", {34, 120, 26, 29}, tip(0xC, "Rotate counter-clockwise"), [&] { rot(1); });
+  cellBtn("nav.btn.3", {100, 120, 26, 29}, tip(0xD, "Rotate clockwise"), [&] { rot(-1); });
+  cellBtn("nav.layers", {114, 6, 36, 35}, tip(0xA7, "Layer views"), [&] { if (showLayers_) showLayers_ = false; else openWindow("layers"); }, Ui::kTipLeft);
 }
 
 }  // namespace m3k
