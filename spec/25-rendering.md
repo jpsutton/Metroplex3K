@@ -224,19 +224,21 @@ Each frame is composed back to front in this order: [STATIC partial, INFERRED or
 **Draw height of network pieces** [OBSERVED: Berlin road (132,137)/(132,138) and rail ramp
 (147–149,74), view rotation 0]:
 * A network piece lying on the terrain (road, rail, power line and the like, on flat or sloped
-  ground) is registered at the altitude of the **world corner (x+1, z+1)** of its tile, in every
-  view rotation. The screen x anchor stays the usual left vertex (u_max, v_min).
-* At view rotation 0 that corner is the front (bottom) corner of the diamond. At the other
-  rotations it is a different screen corner; the rule is fixed in world coordinates and does
-  not depend on the view.
-* Evidence: for each piece the registration height H was solved from every orientation's sprite
-  T, and H is the same at all four camera rotations:
-  * road 11201 (piece rot 2, corners (x,z) (x+1,z) (x,z+1) (x+1,z+1) = 32 32 33 33) → H = 33;
-  * road 31 (33 33 35 35) → H = 35;
-  * rail 46 (rot 0, 35 33 35 33) → H = 33;
-  * rail 16008 (33 32 33 32) → H = 32.
-  All of them equal alt(x+1, z+1). Rendering at rotation 0 reproduces the original at both Berlin
-  sites.
+  ground) is registered at the altitude of one fixed corner **in the piece's own frame**: corner
+  (1, 0) of the unrotated piece, turned with the piece rotation r. It does not depend on the view
+  rotation. The screen x anchor stays the left vertex (u_max, v_min).
+  * World corner by piece rotation: r = 0 → (x+1, z); r = 1 → (x, z) [INFERRED];
+    r = 2 → (x, z+1); r = 3 → (x+1, z+1) [INFERRED].
+* Evidence:
+  * Solving H from sprite T over the sloped terrain-bound pieces of 8 shipped cities gives this
+    corner for 877 of 1,108 rot-0 pieces and 809 of 1,017 rot-2 pieces. In the remaining cases the
+    sprite top is not the tile's top corner, so the method does not apply. H is the same at all
+    four camera rotations.
+  * Covered: road 11201/31 (slope along z), road 11202/32 and rail 46/16008 (slope along x).
+  * Rotations 1 and 3 are too rare to confirm (38 and 7 pieces).
+  * Rendering Berlin (132,137), (142,135), (147,125) and (148,74) with this rule gives continuous
+    ramps.
+  * The earlier "world corner (x+1, z+1)" rule held only for some piece families.
 * The stored piece altitude is not used for terrain-bound pieces. The save stores either the
   lowest or the highest corner (Berlin roads: 91 vs 90).
 * Pieces whose stored altitude is above every corner keep it. These are bridge decks, inclines and
@@ -263,7 +265,7 @@ footprint size s whose view-space anchor tile is (p, q), the box spans [(p − s
 the first axis and [q·256, (q + s)·256] on the second. Objects with the "inset" flag have the box
 shrunk by 100 units on every side. [STATIC] A moving object is drawn after every static object whose
 box lies entirely behind it on both axes, and before any static object in front. The tie-break
-rule is [OPEN].
+rule is given below.
 
 For picking (§3) a finer key is used: 0x40000000 − 0x4000·(u + v) − 0x40·h; the smaller value is
 nearer. [STATIC]
@@ -966,4 +968,4 @@ world or view coordinates is [INFERRED: world tile coordinates].
 * None for the view update rate: it is unthrottled in the original; 60 Hz is recommended (§10).
 * The meaning of each SprInstCLSID and of LayerFlags; whether the 2× magnification uses any filtering.
 * Edge-scroll rectangle sizes.
-* The tie-break rule for ordering moving objects against static objects.
+* Which layer and flags cars and trains pass to the sprite manager (§5.2).
