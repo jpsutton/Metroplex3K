@@ -71,7 +71,11 @@ int Game::StreetHost::groundHeight(int x, int y) const {
   x = std::clamp(x, 0, w->W - 1); y = std::clamp(y, 0, w->H - 1);
   if (!piece.empty()) {
     int i = piece[w->tIdx(x, y)];
-    if (i >= 0) return w->surface[size_t(i)].y * 256;
+    if (i >= 0) {   // vehicle paths are relative to the piece's registration height (highest corner), like the sprite
+      const NetPiece& np = w->surface[size_t(i)];
+      const OccAttr* oa = data ? data->occupant(np.pieceId, true, false) : nullptr;
+      return w->surfaceDrawY(np, oa ? oa->agentType : 0) * 256;
+    }
   }
   return std::max(w->altAt(x, y), w->waterAt(x, y)) * 256;
 }
@@ -144,7 +148,7 @@ void Game::setupStreetSim() {
     automataLoaded_ = true;
   }
   streetHost_ = std::make_unique<StreetHost>();
-  streetHost_->w = asyncSim_ ? &renderWorld_ : &world_; streetHost_->c = &city();
+  streetHost_->w = asyncSim_ ? &renderWorld_ : &world_; streetHost_->c = &city(); streetHost_->data = haveData_ ? &data_ : nullptr;
   streetHost_->rebuild();
   streetCacheDirty_ = true;
   StreetSim::Config cfg;

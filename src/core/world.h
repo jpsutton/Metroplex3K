@@ -87,6 +87,16 @@ struct World {
   uint8_t waterAt(int x, int z) const { return water[vIdx(x, z)]; }
   bool inTiles(int x, int z) const { return x >= 0 && z >= 0 && x < W && z < H; }
 
+  // Altitude a surface network piece is registered to (spec 25 5.1): pieces lying on the terrain use the highest of
+  // their tile's four corners (the stored y is the lowest corner in about half of all slope pieces), while bridge
+  // decks, inclines and towers (agents 16003/16004/16011/17003/17204) keep the stored y. Sprites and vehicle paths
+  // both measure from this height. agentType 0 = unknown (treated as terrain-bound).
+  int surfaceDrawY(const NetPiece& np, uint32_t agentType) const {
+    switch (agentType) { case 16003: case 16004: case 16011: case 17003: case 17204: return np.y; default: break; }
+    if (!inTiles(np.x, np.z)) return np.y;
+    const int top = std::max(std::max(altAt(np.x, np.z), altAt(np.x + 1, np.z)), std::max(altAt(np.x, np.z + 1), altAt(np.x + 1, np.z + 1)));
+    return std::max(np.y, top);
+  }
   // Deep-water table for seaport pier (spec 15 §5.5 / Q-AX): W×W u16, index z·W+x.
   // Built on first use from per-vertex classification; not saved. Call invalidateDeepWater() after
   // terrain/water/sea-level edits.

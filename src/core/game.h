@@ -584,7 +584,7 @@ class Game {
   AutomataData automata_;
   bool automataLoaded_ = false;
   struct StreetHost : public AutomataHost {
-    World* w = nullptr; City* c = nullptr; int month = 1, day = 1;
+    World* w = nullptr; City* c = nullptr; GameData* data = nullptr; int month = 1, day = 1;
     std::vector<int32_t> piece;   // tile -> index into w->surface or -1
     // Async sim: per-tile copies of the City answers, refreshed while the sim is idle (empty = ask the City).
     std::vector<uint8_t> roadPieceCache, densityCache;

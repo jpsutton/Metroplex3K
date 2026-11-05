@@ -61,6 +61,19 @@ int main() {
       }
   }
 
+  // ---- surface pieces register to the highest corner; bridge agents keep the stored y (spec 25 5.1) ----
+  {
+    World w; w.init(8, 8);
+    for (int x = 0; x <= 8; x++) for (int z = 0; z <= 8; z++) w.alt[size_t(w.vIdx(x, z))] = uint8_t(32);
+    w.alt[size_t(w.vIdx(3, 4))] = 33; w.alt[size_t(w.vIdx(4, 4))] = 33;   // tile (3,3): z+1 edge one step higher
+    NetPiece slope; slope.x = 3; slope.z = 3; slope.y = 32;              // stored y = lowest corner
+    CHECK(w.surfaceDrawY(slope, 16000) == 33 && w.surfaceDrawY(slope, 0) == 33);
+    slope.y = 33; CHECK(w.surfaceDrawY(slope, 16000) == 33);
+    slope.y = 37; CHECK(w.surfaceDrawY(slope, 16000) == 37);             // raised piece keeps its y
+    slope.y = 30; CHECK(w.surfaceDrawY(slope, 16003) == 30 && w.surfaceDrawY(slope, 16011) == 30);
+    NetPiece edge; edge.x = 8; edge.z = 8; edge.y = 5; CHECK(w.surfaceDrawY(edge, 16000) == 5);   // off the tile grid: stored y
+  }
+
   // ---- far-zoom adjustment (spec 6.2) ----
   {
     int r = 0, g = 0, b = 0;
