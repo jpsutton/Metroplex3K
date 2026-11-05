@@ -815,9 +815,25 @@ bool Game::drawSkinnedToolMenu() {
   }
   skin_.drawRootPanel(ui_, ox, oy, hover, selected);
   if (ui_.hover(col)) uiHit_ = true;
+  // Tooltip of a menu: the title of its panel (the root buttons carry no item of their own).
+  auto menuTitle = [&](uint32_t subId) {
+    auto d = menu_.menus.find(subId);
+    if (d == menu_.menus.end()) return std::string();
+    std::string t = str(d->second.titleTable, d->second.titleId);
+    return t.empty() ? d->second.fallbackTitle : t;
+  };
   for (int n = 1; n <= int(rb.size()) && n <= 9; n++) {
     const MenuButton& b = menu_.buttons[rb[n - 1]];
-    if (ui_.clicked(skin_.rootButtonRect(n, ox, oy))) {
+    const Rect rr = skin_.rootButtonRect(n, ox, oy);
+    if (ui_.hover(rr)) {
+      std::string t = b.sub ? menuTitle(b.sub) : std::string();
+      if (t.empty()) if (auto ii = menu_.items.find(b.item); ii != menu_.items.end()) t = str(ii->second.nameTable, ii->second.nameId);
+      ui_.tooltip = t;
+    }
+    if (ui_.clicked(rr)) {
+      // Observed in the original: pressing a root button that opens a panel returns the cursor at once to the default (centre) mode, whatever
+      // tool was armed; the tool column never keeps a tool "pressed".
+      if (b.sub && tool_ != ToolKind::None) setTool(ToolKind::None);
       // Root buttons without a submenu (Meet, item 0x10001006) run their own item directly.
       if (!b.sub) { openRoot_ = 0; openFly_ = 0; if (b.item) execute(b.item); continue; }
       auto sub = menu_.menus.find(b.sub);
@@ -842,6 +858,7 @@ bool Game::drawSkinnedToolMenu() {
     Rect r = skin_.subButtonRect(sel, k, ox, oy);
     auto ii = menu_.items.find(b.item);
     std::string tip = ii != menu_.items.end() ? str(ii->second.nameTable, ii->second.nameId) : std::string();
+    if (tip.empty() && b.sub) tip = menuTitle(b.sub);   // a button with a fly-out is named after the fly-out
     const Image* strip = skin_.toolStrip(b.id);
     bool clicked = false;
     if (strip && skin_.imageButtonCells(ui_, strip, 4, r, tip, openFly_ == b.sub && b.sub, true, clicked)) {
