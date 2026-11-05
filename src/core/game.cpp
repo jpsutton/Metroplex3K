@@ -728,8 +728,15 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
   if (!ui_.tooltip.empty()) {
     int tw = ui_.textWidth(ui_.tooltip);
     Rect r{std::min(in.mx + 12, w - tw - 8), in.my + 18, tw + 8, 18};
-    ui_.fill(r, rgb(255, 255, 200)); ui_.frame(r, true);
-    ui_.text(r.x + 4, r.y + 2, ui_.tooltip);
+    // Observed on the tool column (spec 09 7a.1): pale yellow, black border, ~16 px tall, shown at once and kept while the pointer stays; left of a
+    // column button (right edge 5 px from it, centred on the pointer), above and to the left of the "?" button.
+    if (ui_.tooltipPlace == 1) r = {ui_.tooltipRect.x - 5 - (tw + 8), in.my - 8, tw + 8, 16};
+    else if (ui_.tooltipPlace == 2) r = {ui_.tooltipRect.x - (tw + 8), ui_.tooltipRect.y - 18, tw + 8, 16};
+    if (ui_.tooltipPlace) { r.x = std::max(0, r.x); r.y = std::max(0, r.y); }
+    ui_.fill(r, rgb(255, 255, 200));
+    ui_.fill({r.x, r.y, r.w, 1}, 0xFF000000u); ui_.fill({r.x, r.y + r.h - 1, r.w, 1}, 0xFF000000u);
+    ui_.fill({r.x, r.y, 1, r.h}, 0xFF000000u); ui_.fill({r.x + r.w - 1, r.y, 1, r.h}, 0xFF000000u);
+    ui_.text(r.x + 4, r.y + (r.h - ui_.fonts->get("main10").height()) / 2, ui_.tooltip, "main10", 0);
   }
   drawFpsCounter(dtMs);
   const auto pe0 = PhaseClock::now();
@@ -826,9 +833,11 @@ bool Game::drawSkinnedToolMenu() {
     const MenuButton& b = menu_.buttons[rb[n - 1]];
     const Rect rr = skin_.rootButtonRect(n, ox, oy);
     if (ui_.hover(rr)) {
-      std::string t = b.sub ? menuTitle(b.sub) : std::string();
-      if (t.empty()) if (auto ii = menu_.items.find(b.item); ii != menu_.items.end()) t = str(ii->second.nameTable, ii->second.nameId);
-      ui_.tooltip = t;
+      // The button's own name (MenuItem.INI nameTable / nameID: "Build Transportation", "Adjust & Review", ...), not the panel title.
+      std::string t;
+      if (auto ii = menu_.items.find(b.item); ii != menu_.items.end()) t = str(ii->second.nameTable, ii->second.nameId);
+      if (t.empty() && b.sub) t = menuTitle(b.sub);
+      ui_.tooltip = t; ui_.tooltipPlace = 1; ui_.tooltipRect = rr;
     }
     if (ui_.clicked(rr)) {
       // Observed in the original: pressing a root button that opens a panel returns the cursor at once to the default (centre) mode, whatever
@@ -862,6 +871,7 @@ bool Game::drawSkinnedToolMenu() {
     const Image* strip = skin_.toolStrip(b.id);
     bool clicked = false;
     if (strip && skin_.imageButtonCells(ui_, strip, 4, r, tip, openFly_ == b.sub && b.sub, true, clicked)) {
+      if (ui_.hover(r)) { ui_.tooltipPlace = 1; ui_.tooltipRect = r; }
       if (clicked) {
         if (b.sub) openFly_ = (openFly_ == b.sub) ? 0 : b.sub;
         else { execute(b.item); if (tool_ != ToolKind::Unavailable) openRoot_ = 0; }
@@ -1022,7 +1032,8 @@ void Game::drawHud() {
     // and the query cursor alone shows the mode (observed in the original), so it is never drawn as toggled.
     bool hc = false;
     skin_.imageButtonCells(ui_, skin_.get("help"), 4, {place.p3x, place.p3y, 40, 39}, tip(0x3C, "Query"), false, true, hc);
-    if (hc) setTool(ToolKind::Query);
+    if (ui_.hover({place.p3x, place.p3y, 40, 39})) { ui_.tooltipPlace = 2; ui_.tooltipRect = {place.p3x, place.p3y, 40, 39}; }
+    if (hc) setTool(ToolKind::Query);   // already armed: stays armed (does not toggle)
     // Engine options (Metroplex3K only): same chrome as "?", with a cog. Prefer just right of help; when the RCI
     // indicator leaves no room (typical at 1024-wide), tuck it above and a few pixels right of help.
     Rect eb{place.p3x + 38, place.p3y, 40, 39};
@@ -1486,7 +1497,7 @@ void Game::handleMap() {
   // Right button: cancel tool, else pan by dragging.
   if (in.rightPressed && !uiHit_) {
     if (dragging_) dragging_ = false;
-    else if (tool_ != ToolKind::None) setTool(ToolKind::None);
+    else if (tool_ != ToolKind::None && tool_ != ToolKind::Query) setTool(ToolKind::None);   // a right click does not leave Query (observed); Esc does
   }
   updateHover(tx, tz, onTile);
   if (onTile && in.pressed) {

@@ -7,7 +7,7 @@ namespace m3k {
 
 void Ui::begin(uint32_t* px, int w, int h, const Input& i, int pitchPx) {
   fb = nullptr; pixels = px; W = w; H = h; pitch = pitchPx > 0 ? pitchPx : w; in = i;
-  tooltip.clear(); idCounter_ = 0; windowRects.clear();
+  tooltip.clear(); tooltipPlace = 0; idCounter_ = 0; windowRects.clear();
   // Windows not drawn last frame were closed: forget their offsets so they reopen at home.
   for (auto it = winOffsets_.begin(); it != winOffsets_.end();) {
     if (!it->second.seen) it = winOffsets_.erase(it);

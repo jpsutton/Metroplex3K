@@ -55,6 +55,10 @@ class Ui {
   uint32_t panelLight = rgb(0xF0, 0xF4, 0xFA);
   const Skin* skin = nullptr;   // original UI art for dialogs and controls; null = flat fallback look
   std::string tooltip;
+  // Where the tooltip goes: 0 below-right of the pointer (default); 1 left of `tooltipRect`, vertically centred on the pointer (tool column);
+  // 2 above and to the left of `tooltipRect` (the "?" button). Cleared every frame with the text.
+  int tooltipPlace = 0;
+  Rect tooltipRect;
   int focusId = 0;       // text box with keyboard focus
   int activeId = 0;      // widget being dragged
 
