@@ -235,6 +235,9 @@ Each frame is composed back to front in this order: [STATIC partial, INFERRED or
 * Verified: pieces 11201 (rot 2) and 31 (rot 2) drawn at their tile's maximum corner (33 and 35)
   join the curve and the bridge incline exactly as in the original. Drawn at the stored y (32 and
   33) they sit 8 and 16 px too low at zoom 3.
+* Vehicle paths use the same base. VPATHATT heights on slope pieces are 0 at the high edge and −256
+  per step at the low edge (piece 11201: 0 / −256, piece 31: 0 / −512). So an automaton's height is
+  the max-corner altitude × 256 plus the path h [DATA].
 
 ### 5.2 Depth key
 
