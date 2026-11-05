@@ -337,6 +337,7 @@ class Renderer : public ICityRasterizer {
     int orient = 0;
     Item base;                     // origin-relative geometry of the building's own sprite
     int tileX = 0, tileZ = 0, alt = 0;
+    int occRot = 0, sizeX = 1, sizeZ = 1;   // occupant rotation and placed footprint (child offsets turn with it)
   };
   struct AnimChild { const CsAttrib* cs = nullptr; CsChild geo; std::vector<const CsScript*> scripts; std::vector<ScriptRun> runs; AnimRng rng; int j = 0; };
   struct AnimInst {

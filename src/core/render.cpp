@@ -1154,7 +1154,16 @@ void Renderer::emitChild(const AnimCand& c, const AnimChild& ch, const ScriptRun
   if (!resolveFrame(ch.cs, run.frame, run.alpha, os, pl, dbl)) return;
   const World& w = *world_;
   const int Wh = 4 << curZoom_, Hh = 2 << curZoom_, A = 1 << curZoom_;
-  const int32_t X = c.tileX * 256 + ch.geo.dx, Z = c.tileZ * 256 + ch.geo.dy, height = c.alt * 256 + ch.geo.dz;
+  // The offset is given in the building's own (unrotated) frame; the sprite drawn for a placed rotation r is the
+  // orient (r + cam) one, so the point turns with the occupant inside its footprint [INFERRED: no shipped child-bearing
+  // occupant has r != 0]. Same convention as worldToViewSub on the unrotated footprint.
+  int32_t ox = ch.geo.dx, oz = ch.geo.dy;
+  if (c.occRot) {
+    const bool odd = c.occRot & 1;
+    const int usx = odd ? c.sizeZ : c.sizeX, usz = odd ? c.sizeX : c.sizeZ;   // unrotated footprint
+    worldToViewSub(c.occRot, usx, usz, ch.geo.dx, ch.geo.dy, ox, oz);
+  }
+  const int32_t X = c.tileX * 256 + ox, Z = c.tileZ * 256 + oz, height = c.alt * 256 + ch.geo.dz;
   int32_t a, b;
   worldToViewSub(curRot_, w.W, w.H, X, Z, a, b);
   a = std::max<int32_t>(0, a); b = std::max<int32_t>(0, b);
@@ -1322,6 +1331,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
       ac.appearance = appearance; ac.cs = cs;
       ac.orient = (cs->zoomSetCount >= 4 && cs->rotCount == 4) ? ((rot + cam.rot) & 3) : 0;
       ac.base = it; ac.tileX = x; ac.tileZ = zz; ac.alt = y;
+      ac.occRot = rot & 3; ac.sizeX = sizeX; ac.sizeZ = sizeZ;
       animCands.push_back(ac);
     }
     // Uncached builds cull right away (cheap rejection of the ~90% off-screen items); the cached list keeps them.

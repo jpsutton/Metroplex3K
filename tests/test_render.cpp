@@ -37,6 +37,30 @@ int main() {
     CHECK(a == 300 && b == 16 * 256 - 1 - 1000);
   }
 
+  // ---- child-sprite offsets turn with the occupant rotation (spec 25 7.2, inferred for rot != 0) ----
+  // A 1x1 building placed with rotation r and viewed at cam c shows the orient (r+c)&3 sprite; its child point, measured
+  // from the footprint's anchor vertex, must equal the unrotated building's point viewed at (r+c)&3.
+  {
+    auto rel = [](int cam, int x0, int z0, int32_t X, int32_t Z, int& rx, int& ry) {
+      int us[4], vs[4];
+      const int cx[4] = {x0, x0 + 1, x0, x0 + 1}, cz[4] = {z0, z0, z0 + 1, z0 + 1};
+      for (int i = 0; i < 4; i++) Renderer::worldToViewVertex(cam, 16, 16, cx[i], cz[i], us[i], vs[i]);
+      const int umax = *std::max_element(us, us + 4), vmin = *std::min_element(vs, vs + 4);
+      int32_t a, b; Renderer::worldToViewSub(cam, 16, 16, X, Z, a, b);
+      rx = int(b - a) - (vmin - umax) * 256; ry = int(a + b) - (umax + vmin) * 256;
+    };
+    const int32_t dx = 208, dz = 48;
+    for (int r = 0; r < 4; r++)
+      for (int c = 0; c < 4; c++) {
+        int32_t ox = dx, oz = dz;
+        if (r) Renderer::worldToViewSub(r, 1, 1, dx, dz, ox, oz);
+        int rx, ry, ex, ey;
+        rel(c, 5, 9, 5 * 256 + ox, 9 * 256 + oz, rx, ry);
+        rel((r + c) & 3, 5, 9, 5 * 256 + dx, 9 * 256 + dz, ex, ey);
+        CHECK(std::abs(rx - ex) <= 2 && std::abs(ry - ey) <= 2);
+      }
+  }
+
   // ---- far-zoom adjustment (spec 6.2) ----
   {
     int r = 0, g = 0, b = 0;
