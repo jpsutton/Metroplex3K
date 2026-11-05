@@ -221,21 +221,32 @@ Each frame is composed back to front in this order: [STATIC partial, INFERRED or
 4. **Overlays.** Data-map tinting, selection highlights, placement previews and the cursor (§9).
 5. **UI windows** on top (`08-ui-framework.md`).
 
-**Draw height of network pieces** [OBSERVED: Berlin, tiles (132,137) and (132,138)]:
-* A network piece that lies on the terrain (road, rail, power line and the like, on flat or
-  sloped ground) is anchored at the **highest** of its tile's four corner altitudes.
-* Its sprite registration point (L, T) assumes that height. Slope sprites are drawn for the
-  slope shape and registered to the top of the slope.
-* Do not use the stored piece altitude for this. The save stores the minimum corner for about
-  half of the sloped pieces and the maximum for the rest (Berlin: 91 vs 90 sloped road pieces).
-  Using it puts those pieces 1–2 altitude steps too low, so they look detached from their
-  neighbours.
-* Pieces whose stored altitude is above every corner (bridge decks, inclines, elevated pieces,
-  agent types 16003, 16004, 16011, 17003, 17204 and others) are drawn at their stored altitude.
-* Verified: pieces 11201 (rot 2) and 31 (rot 2) drawn at their tile's maximum corner (33 and 35)
-  join the curve and the bridge incline exactly as in the original. Drawn at the stored y (32 and
-  33) they sit 8 and 16 px too low at zoom 3.
-* Vehicle paths use the same base. VPATHATT heights on slope pieces are 0 at the high edge and −256
+**Draw height of network pieces** [OBSERVED: Berlin road (132,137)/(132,138) and rail ramp
+(147–149,74), view rotation 0]:
+* A network piece lying on the terrain (road, rail, power line and the like, on flat or sloped
+  ground) is registered at the altitude of its tile's **front corner**: the corner nearest the
+  viewer, which is view vertex (u_max, v_max), the bottom corner of the tile diamond on screen. The
+  screen x anchor stays the usual left vertex (u_max, v_min).
+* World corner of the front vertex by view rotation:
+  * rotation 0: (x+1, z+1);
+  * rotation 1: (x+1, z);
+  * rotation 2: (x, z);
+  * rotation 3: (x, z+1).
+  Rotations 1–3 are [INFERRED] from worldToViewVertex.
+* Evidence, sprite registration T versus the corner altitudes:
+  * road 11201 orient 2 (corners 32 32 33 33) → 33;
+  * road 31 (33 33 35 35) → 35;
+  * rail 46 orient 0 (35 33 35 33) → 33, which is the **lowest** corner, not the highest;
+  * rail 16008 (33 32 33 32) → 32.
+  Every case equals the front corner. Rendering both sites with this rule reproduces the original;
+  the earlier "highest corner" rule matched the road site only by coincidence.
+* The stored piece altitude is not used for terrain-bound pieces. The save stores either the
+  lowest or the highest corner (Berlin roads: 91 vs 90).
+* Pieces whose stored altitude is above every corner keep it. These are bridge decks, inclines and
+  elevated pieces, agent types 16003, 16004, 16011, 17003, 17204 and others. Rail incline 17004
+  (piece 59) has its own sprite shape; it was drawn correctly by the front-corner rule at this
+  site.
+* Vehicle paths use a different base: the **highest** corner. VPATHATT heights on slope pieces are 0 at the high edge and −256
   per step at the low edge (piece 11201: 0 / −256, piece 31: 0 / −512). So an automaton's height is
   the max-corner altitude × 256 plus the path h [DATA].
 
