@@ -262,7 +262,7 @@ void Game::saveCurrent(const std::string& name, const fs::path& into) {
 void Game::requestLeave(int action) {
   auto cap = [&](uint32_t t, uint32_t i, const char* d) { std::string s = str(t, i); return s.empty() ? std::string(d) : s; };
   if (action == kLeaveQuit) {
-    msgBox_.open(cap(0x225872FE, 0x55, "Exit"), cap(0x015E410C, 0x16, "Now leaving Sim City 3000."), 1);
+    msgBox_.open(cap(0x225872FE, 0x55, "Exit"), cap(0x015E410C, 0x16, "Now leaving Metroplex3K."), 1);
     msgBoxPurpose_ = 1; msgBoxAction_ = action;
     return;
   }
