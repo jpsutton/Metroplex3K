@@ -321,6 +321,69 @@ owning screen logic, not by the button. `[INFERRED]`
   "tooltip removed" notification when it is removed, each with the tip's sequence number. It also
   accepts four further requests whose effect is `[OPEN]` (probably update text and move tip).
 
+#### 3.3a Observed tooltip geometry `[OBSERVED]`
+
+Measured in the original at 800 × 600 and 1024 × 768 (windowed under Wine) on every tool-column root
+and sub-menu button, the bottom-bar and navigator buttons, and the View Data mode strip. Coordinates
+are in client pixels. Box = the whole tip including its 1 px border.
+
+**Look**
+
+* Box: a 1 px black border; fill (255, 255, 224), seen as (255, 255, 231) on the 16-bit display.
+* Text: black, one line, in the 8-point system UI font (MS Sans Serif; under Wine its substitute).
+* Size: the box is 16 px tall. It is text width + 6 px wide: the text starts 2 px inside the left
+  border, and 2 px are left inside the right border. The text's cap top is 3 px below the box top.
+  No tip seen wraps; the longest, "Subway to Rail Connection", is 135 px wide on one line.
+
+**Anchoring**
+
+* The tip is anchored to the **button rectangle**, not to the pointer. Entering the Landscape root
+  at its top, middle, bottom, left and right gave the identical box every time. Moving inside the
+  button does not move the tip.
+* Each button uses one of three placements. Gap = 2 px in every case.
+  * **Left**, vertically centred:
+    * box right edge (exclusive) = button left − 2;
+    * box top = button top + ⌊(button height − 16) / 2⌋.
+    * Used by: all tool-column root buttons (56 × 32 hot rectangles: top = button top + 8), all
+      sub-menu buttons (36 × 36: top = button top + 10), the navigator Layer Views button and
+      the Hide Toolbars (minimise) button. The Terrain Grid Toggle in View City Layers also
+      opens to the left.
+  * **Above**, horizontally centred:
+    * box bottom (exclusive) = button top − 2;
+    * box left = button centre x − ⌊box width / 2⌋ (±1 px).
+    * Used by: Query "?", Pause, Run, the four speed cells, Visit SimCity Exchange (the map
+      button above the navigator), Zoom In/Out, Rotate Clockwise/Counterclockwise.
+  * **Below**, horizontally centred:
+    * box top = button bottom + 2.
+    * Used by: the twelve View Data mode-strip icons, e.g. Aura button (48, 72, 26 × 26) → tip
+      (22, 100, 78 × 16).
+* **Clamping:** a box that would cross the right edge of the client area is shifted left so that
+  its right edge is client width − 2. Examples: Rotate Counterclockwise at 1024 → box ends at
+  1022; at 800 → box ends at 798. There is no flip to the other side. Clamping at the left, top
+  and bottom edges was not exercised.
+
+**Behaviour**
+
+* The tip appears at once (within 0.1 s), also from cold.
+* It stays as long as the pointer stays on the button (checked to 6 s); see the timer of §3.3 for
+  other controls.
+* It is removed on mouse-down on the button and on leaving the button. After a click it does not
+  come back while the pointer rests on the button.
+* Moving straight onto an adjacent button replaces the tip at once (within 0.05 s).
+
+**Controls without tips** (observed): the RCI indicator, the compass, the minimap, the ticker, the
+bottom-bar text fields; and in dialogs the close boxes, OK buttons, check boxes, radio buttons and
+text buttons of View City Layers and the Budget, and the View Data "Use As Map" toggle.
+
+**Examples** at 1024 × 768:
+* Landscape root (961, 100, 56 × 32) → (901, 108, 58 × 16).
+* Road sub (928, 118, 36 × 36) → (896, 128, 30 × 16).
+* Query (773, 713, 40 × 39) → (776, 695, 33 × 16).
+* Zoom In (878, 704, 26 × 29) → (869, 686, 45 × 16).
+* Layer Views (978, 610, 36 × 35) → (911, 619, 65 × 16).
+
+At 800 × 600 the same rules hold exactly; the column origin is (704, 0) instead of (928, 0).
+
 ### 3.4 List boxes and double-click `[STATIC]`
 
 A list item is selected on mouse-down. A **double-click** is recognised when the same item index is

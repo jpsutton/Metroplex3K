@@ -1791,13 +1791,7 @@ Other behaviour:
 * Items whose button carries a small grid badge open a picker dialog or a fly-out (`08` §7).
 * A second-level column stays open after a dialog launched from it has closed. Clicking its root
   button again closes it.
-* Tooltips: small pale-yellow boxes with a black border.
-  * Column buttons: the box is to the left of the button, vertically centred on the pointer. The
-    Query button's box is above and to the left.
-  * Timing (1024 × 768, under Wine): the tip was visible within 0.1 s of the pointer entering,
-    including after 5 s away from any button. It was still visible after 6 s of hovering
-    [OBSERVED]. This differs from the 750 ms / 2250 ms timing of `08` §3.3, so these buttons
-    probably use the immediate and manual placement flags [INFERRED].
+* Tooltips: geometry, look and timing are in `08-ui-framework.md` §3.3a.
 * Root-button tooltip strings (`225872FE`): Landscape `1`, Zone `2`, Build Transportation `3`,
   Build Utilities `4`, Place Civic/Special Bldgs `5`, Emergency `56`, Meet `6`, Adjust & Review
   `7`, Change Settings & Exit `8`. Query "?" is `3C`.
