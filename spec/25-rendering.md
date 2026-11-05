@@ -224,22 +224,19 @@ Each frame is composed back to front in this order: [STATIC partial, INFERRED or
 **Draw height of network pieces** [OBSERVED: Berlin road (132,137)/(132,138) and rail ramp
 (147–149,74), view rotation 0]:
 * A network piece lying on the terrain (road, rail, power line and the like, on flat or sloped
-  ground) is registered at the altitude of its tile's **front corner**: the corner nearest the
-  viewer, which is view vertex (u_max, v_max), the bottom corner of the tile diamond on screen. The
-  screen x anchor stays the usual left vertex (u_max, v_min).
-* World corner of the front vertex by view rotation:
-  * rotation 0: (x+1, z+1);
-  * rotation 1: (x+1, z);
-  * rotation 2: (x, z);
-  * rotation 3: (x, z+1).
-  Rotations 1–3 are [INFERRED] from worldToViewVertex.
-* Evidence, sprite registration T versus the corner altitudes:
-  * road 11201 orient 2 (corners 32 32 33 33) → 33;
-  * road 31 (33 33 35 35) → 35;
-  * rail 46 orient 0 (35 33 35 33) → 33, which is the **lowest** corner, not the highest;
-  * rail 16008 (33 32 33 32) → 32.
-  Every case equals the front corner. Rendering both sites with this rule reproduces the original;
-  the earlier "highest corner" rule matched the road site only by coincidence.
+  ground) is registered at the altitude of the **world corner (x+1, z+1)** of its tile, in every
+  view rotation. The screen x anchor stays the usual left vertex (u_max, v_min).
+* At view rotation 0 that corner is the front (bottom) corner of the diamond. At the other
+  rotations it is a different screen corner; the rule is fixed in world coordinates and does
+  not depend on the view.
+* Evidence: for each piece the registration height H was solved from every orientation's sprite
+  T, and H is the same at all four camera rotations:
+  * road 11201 (piece rot 2, corners (x,z) (x+1,z) (x,z+1) (x+1,z+1) = 32 32 33 33) → H = 33;
+  * road 31 (33 33 35 35) → H = 35;
+  * rail 46 (rot 0, 35 33 35 33) → H = 33;
+  * rail 16008 (33 32 33 32) → H = 32.
+  All of them equal alt(x+1, z+1). Rendering at rotation 0 reproduces the original at both Berlin
+  sites.
 * The stored piece altitude is not used for terrain-bound pieces. The save stores either the
   lowest or the highest corner (Berlin roads: 91 vs 90).
 * Pieces whose stored altitude is above every corner keep it. These are bridge decks, inclines and
