@@ -267,6 +267,28 @@ shrunk by 100 units on every side. [STATIC] A moving object is drawn after every
 box lies entirely behind it on both axes, and before any static object in front. The tie-break
 rule is given below.
 
+**Mover versus static ordering** [STATIC, SIMSPR FUN_1000c7a6 / FUN_1000c802 / FUN_1000e52a]:
+
+* Every draw-list entry has a layer byte. Statics are always layer 1.
+* Comparator:
+  * If the two entries have the same layer, or their boxes do not overlap (touching counts as
+    overlap), the higher key draws first.
+  * Otherwise the lower layer draws first.
+* A post-pass moves each entry of layer ≥ 2 to after the last of its next 6 entries that should
+  precede it, at most 7 times per position. So a mover of layer ≥ 2 draws over every static whose
+  box it overlaps, whatever the keys.
+* Static box: [(x−s+1)·256, (x+1)·256] × [z·256, (z+s)·256] in unrotated world units. It is shrunk
+  by 100 per side when tile flag bit 1 is set. Bit 1 is forced for footprints with s > 1; for 1 × 1
+  pieces the caller sets it [OPEN which pieces]. The box has no height range.
+* Mover key: 0x40000000 − 0x40·(u'+v') − (z >> 2), with the view-rotated sub-tile position and the
+  height in 1/256 altitude units.
+* Mover box:
+  * flags & 3 = 0: centred on the anchor, with half-size from its screen width (at least 100);
+  * otherwise snapped to its tile (tile·256 − 2 … tile·256 + 258), shrunk by 50 when flags bit 1
+    is set.
+* Which layer and flags cars and trains pass is [OPEN]: they are set by another module. Recommended:
+  layer 2 with the anchor-centred box, so a car draws over the deck it is entering.
+
 For picking (§3) a finer key is used: 0x40000000 − 0x4000·(u + v) − 0x40·h; the smaller value is
 nearer. [STATIC]
 
