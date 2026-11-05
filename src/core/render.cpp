@@ -1365,7 +1365,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     animCands = cachedAnim_;
   } else {
     const bool net = true;
-    // Surface pieces on the terrain are registered to world corner (x+1, z+1) (World::surfaceDrawY, spec 25 5.1).
+    // Surface pieces on the terrain are registered to a corner fixed in the piece's own frame (World::surfaceDrawY, spec 25 5.1).
     auto surfaceY = [&](const NetPiece& np) {
       if (!data_) return np.y;
       const OccAttr* oa = data_->occupant(np.pieceId, net, false);
