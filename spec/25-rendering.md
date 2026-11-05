@@ -599,9 +599,27 @@ Sprite[zoom,rot,childInst(hex),dx,dy,dz]
 
 Each line attaches a child sprite instance (`6301:6400:childInst`) to the parent's (zoom,
 rotation) slot. When the parent starts animating, each child of the current slot is created at the
-parent's world position + (dx, dy, dz). dx/dy are in 1/256-tile units and dz is in the world-height
-units of §2.3. The engine adds the values without rotating them. The data already gives
-rotation-specific offsets per slot. The child is projected and depth-sorted as a separate object.
+parent's world position + (dx, dy, dz). [STATIC] The child is projected and depth-sorted as a
+separate object.
+
+Coordinate rules [OBSERVED: checked against the parent sprites of records 0x84 (1 × 1), 0xA0 (2 × 2)
+and 0x13B0 (3 × 3) in all four orientations; every predicted point lands on a chimney top]:
+
+* The parent origin is the footprint's **minimum world corner**: world (x·256, z·256) for an
+  occupant whose footprint spans x … x + sizeX − 1 and z … z + sizeZ − 1.
+* dx is added along world x and dy along world z, in 1/256-tile units.
+* dz is a height in the units where one altitude step is 256. On screen it rises dz × A / 256 px,
+  where A is the zoom's pixels per altitude step, the same scale as the parent's altitude.
+* Shipped data repeats the **same** (dx, dy, dz) in all four rotation slots. The offsets are
+  therefore a fixed world point. Camera rotation needs no extra handling: project the world point
+  with the current view rotation, exactly like any other world position.
+* Some slots list fewer children than others (0x13A0 has two extra stacks in slots 0, 2 and 3 but
+  not in slot 1). Always use the children of the slot actually drawn.
+* For an occupant placed with its own rotation r ≠ 0 the offsets must turn with the building
+  [INFERRED: all shipped child-bearing occupants have rotation 0]. The sprite drawn is orientation
+  (r + camera rotation) & 3, so place the child at the screen offset from the parent's anchor that
+  the rule above gives for an unrotated footprint (sizes from the occupant attribute) seen at view
+  rotation (r + camera rotation) & 3.
 It is ticked from the parent's update with the same dt and runs its own scripts (§7.1). When the
 parent stops, all children are removed. [STATIC]
 
