@@ -245,6 +245,11 @@ Each frame is composed back to front in this order: [STATIC partial, INFERRED or
   elevated pieces, agent types 16003, 16004, 16011, 17003, 17204 and others. Rail incline 17004
   (piece 59) has its own sprite shape; it was drawn correctly by the front-corner rule at this
   site.
+* Highway pieces (16001) store y at ground level. The deck elevation is in the sprite and in the
+  path h (+1024, i.e. +4 steps, relative to the highest corner) [DATA].
+* Highway bridge pieces (17204) use the **bridge level** as their vehicle base: the water surface at
+  the tile, not their stored y. Span paths are +1806, transition inclines run 1550 to 1806, and both
+  join the highway (+4 over ground) only on that base [INFERRED, 2 Berlin sites].
 * Vehicle paths use a different base: the **highest** corner. VPATHATT heights on slope pieces are 0 at the high edge and −256
   per step at the low edge (piece 11201: 0 / −256, piece 31: 0 / −512). So an automaton's height is
   the max-corner altitude × 256 plus the path h [DATA].
