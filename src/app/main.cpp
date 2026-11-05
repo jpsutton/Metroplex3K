@@ -84,6 +84,11 @@ int main(int argc, char** argv) {
     }
   }
   SDL_SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");   // closing the window is a request, not a quit
+#if defined(__linux__)
+  // Prefer native Wayland, fall back to X11 (SDL2 alone picks X11 whenever it is available). An explicit SDL_VIDEODRIVER wins. The environment
+  // variable is used rather than SDL_HINT_VIDEODRIVER because sdl2-compat (SDL3 underneath) ignores the hint.
+  setenv("SDL_VIDEODRIVER", "wayland,x11", 0);
+#endif
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { std::cerr << "SDL_Init: " << SDL_GetError() << "\n"; return 1; }
   // GL present: the window itself owns a GL context. Falls back to the SDL renderer when unavailable.
   std::unique_ptr<GlPresenter> glPresent;

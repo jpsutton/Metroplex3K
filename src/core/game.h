@@ -519,6 +519,8 @@ class Game {
   int panAnchorX_ = 0, panAnchorY_ = 0;
   double scrollAcc_ = 0;
   std::string cursorName_;
+  std::string tipKey_;   // identity of the tooltip placed for the current hover (text, kind, button)
+  Rect tipRect_;         // where it was placed
   void handleScrolling(uint32_t dtMs);
   // Tunables the query panel's service figures need (SC3Tune.ini [PoliceStation] [FireStation] [Library] [Museum]).
   struct QueryTune { bool loaded = false; us::StationParams police, fire; us::LibraryParams library, museum; };

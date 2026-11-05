@@ -725,14 +725,24 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
   }
   // Over any HUD element, window or dialog the cursor is the normal desktop arrow; tool cursors only apply on the map.
   if ((uiHit_ && !panning_) || scr_ != Screen::InCity) cursorName_.clear();
-  if (!ui_.tooltip.empty()) {
+  if (ui_.tooltip.empty()) {
+    tipKey_.clear();   // the pointer left the button: the next hover places a new tip
+  } else {
     int tw = ui_.textWidth(ui_.tooltip);
-    Rect r{std::min(in.mx + 12, w - tw - 8), in.my + 18, tw + 8, 18};
-    // Observed on the tool column (spec 09 7a.1): pale yellow, black border, ~16 px tall, shown at once and kept while the pointer stays; left of a
-    // column button (right edge 5 px from it, centred on the pointer), above and to the left of the "?" button.
-    if (ui_.tooltipPlace == 1) r = {ui_.tooltipRect.x - 5 - (tw + 8), in.my - 8, tw + 8, 16};
-    else if (ui_.tooltipPlace == 2) r = {ui_.tooltipRect.x - (tw + 8), ui_.tooltipRect.y - 18, tw + 8, 16};
-    if (ui_.tooltipPlace) { r.x = std::max(0, r.x); r.y = std::max(0, r.y); }
+    // Observed in the original: the tip appears as soon as the pointer is over a button and stays where it first appeared while the pointer moves
+    // across that button; it is placed once per hover (keyed by its text, kind and button) and not re-placed from the pointer every frame.
+    // Placement (spec 09 7a.1): left of a column button (right edge 5 px from it, centred on the pointer at entry), above and to the left of the
+    // "?" button; elsewhere just below and right of the pointer at entry.
+    const std::string key = ui_.tooltip + "|" + std::to_string(ui_.tooltipPlace) + "|" + std::to_string(ui_.tooltipRect.x) + "," + std::to_string(ui_.tooltipRect.y);
+    if (key != tipKey_) {
+      tipKey_ = key;
+      Rect r{std::min(in.mx + 12, w - tw - 8), in.my + 18, tw + 8, 18};
+      if (ui_.tooltipPlace == 1) r = {ui_.tooltipRect.x - 5 - (tw + 8), in.my - 8, tw + 8, 16};
+      else if (ui_.tooltipPlace == 2) r = {ui_.tooltipRect.x - (tw + 8), ui_.tooltipRect.y - 18, tw + 8, 16};
+      if (ui_.tooltipPlace) { r.x = std::max(0, r.x); r.y = std::max(0, r.y); }
+      tipRect_ = r;
+    }
+    const Rect r = tipRect_;
     ui_.fill(r, rgb(255, 255, 200));
     ui_.fill({r.x, r.y, r.w, 1}, 0xFF000000u); ui_.fill({r.x, r.y + r.h - 1, r.w, 1}, 0xFF000000u);
     ui_.fill({r.x, r.y, 1, r.h}, 0xFF000000u); ui_.fill({r.x + r.w - 1, r.y, 1, r.h}, 0xFF000000u);
