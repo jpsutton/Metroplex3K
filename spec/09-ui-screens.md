@@ -376,6 +376,33 @@ one-shot pointer: the next click on the map scrolls that point to the screen cen
 * Layer Views (978, 610), 36 × 35.
 * Visit SimCity Exchange (830, 680), 33 × 30.
 
+**Visit SimCity Exchange button** [DATA][OBSERVED]:
+* It is a button of its own, not part of the background art. Image `02F78C6D:52FB06F0` is a
+  132 × 30 strip of four 33 × 30 cells in the standard order (`08`):
+  * disabled: a grey glyph;
+  * normal;
+  * pressed: a dark inset frame;
+  * highlighted: a lighter frame.
+* Glyph: a globe and a monitor joined by a yellow cable, on a light-blue rounded tile.
+* Frame, normal cell, column 16:
+  * top rows FFF6FF, DEDEFF, BDBEFF;
+  * bottom rows 5A6DBD, 7385EE;
+  * right edge columns 29–32 at row 15: 293052, 414883, 5A6DBD, 626DC5;
+  * the outside background is 7B91FF.
+* Position:
+  * x = client width − 194;
+  * y = bottom-bar top − 24, so its bottom 6 px overlap nothing; it sits just above the bar,
+    left of the navigator.
+  * At 800 × 600 that is (606, 520), at 1024 × 768 (830, 680).
+* Tooltip: `041F2625:190` "Visit SimCity Exchange", placed above.
+* Click: opens a modal message box titled "Visit SimCity Exchange" with text `041F2625:1F9`
+  ("SimCity will now open your web browser…") and OK / Cancel. OK starts the web browser on the
+  exchange site.
+* Failure messages: `1FA` no Internet connection, `1FB` no web browser installed (both offer to try
+  anyway), `1FC` the browser could not be launched ("Please try browsing to %s manually").
+  `1FD` is "SimCity Exchange". The failure paths are [DATA] by text, not observed.
+* A clone may reuse this slot for its own button.
+
 ### 4.4 News ticker [STATIC]
 
 A one-line horizontally scrolling strip. Items scroll right-to-left by 2 pixels per step, a step
