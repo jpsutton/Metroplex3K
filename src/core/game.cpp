@@ -1494,11 +1494,9 @@ void Game::handleMap() {
     PickResult pr;
     if (renderer_.pick(cam_, in.mx, in.my, pr) && pr.hit && world_.inTiles(pr.tileX, pr.tileZ)) { tx = pr.tileX; tz = pr.tileZ; }
   }
-  // Right button: cancel tool, else pan by dragging.
-  if (in.rightPressed && !uiHit_) {
-    if (dragging_) dragging_ = false;
-    else if (tool_ != ToolKind::None && tool_ != ToolKind::Query) setTool(ToolKind::None);   // a right click does not leave Query (observed); Esc does
-  }
+  // Right button: pans by dragging (above). It cancels a drag in progress but never leaves the armed tool: in the original a right click does not
+  // cancel Query, Road or the bulldozer (observed); only Esc or a fly-out root button returns to no tool.
+  if (in.rightPressed && !uiHit_ && dragging_) dragging_ = false;
   updateHover(tx, tz, onTile);
   if (onTile && in.pressed) {
     // No tool: the "center" cursor is showing and a click scrolls that point to the screen centre (spec 08 8.2).
