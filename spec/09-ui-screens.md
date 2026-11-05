@@ -401,6 +401,9 @@ one-shot pointer: the next click on the map scrolls that point to the screen cen
 * Failure messages: `1FA` no Internet connection, `1FB` no web browser installed (both offer to try
   anyway), `1FC` the browser could not be launched ("Please try browsing to %s manually").
   `1FD` is "SimCity Exchange". The failure paths are [DATA] by text, not observed.
+* The **normal cell is also baked into the RCI background** `02F78C6D:42FB77F6` (41 × 88) at
+  (7, 0)–(40, 30). That image is drawn at (client width − 201, bottom-bar top − 24). A clone that
+  reuses the slot must draw its button after the RCI background, or mask that region of it.
 * A clone may reuse this slot for its own button.
 
 ### 4.4 News ticker [STATIC]
