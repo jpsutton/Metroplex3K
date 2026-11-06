@@ -1838,9 +1838,9 @@ void City::rebuildTraffic() {
       if (cfg_.tiling.inSet(netKindToTable(NK_RAIL), p.pieceId)) f |= TF_RAIL;
       if (!f) continue;
       const OccAttr* a = game_->occupant(p.pieceId, true);
-      // Highway access (the on-ramp classes, spec 13): pieces 15130-15141 and the whole OffRamp agent type 17202 (15107-15110, 15115-15128
-      // too) [the shared class is inferred from the agent type].
-      if ((p.pieceId >= 15130 && p.pieceId <= 15141) || (a && a->agentType == 17202)) f |= TF_ACCESS;
+      // Highway access (0x40, the on-ramp pieces) is 15130-15141 only: 15115-15122 are two-exit mainline lanes at highway forks, and a
+      // car dropped to mode 3 there leaves the highway (spec 18 3.1).
+      if (p.pieceId >= 15130 && p.pieceId <= 15141) f |= TF_ACCESS;
       if (a && (a->netAttr12D & 1)) f |= TF_PROP_A;
       // Piece word (spec 10 s6.2.6) [STATIC]: bit 16 span flag, bits 17-18 direction (0 -x, 1 -z, 2 +x, 3 +z), bits 19-26
       // length; bit 27 damaged (traffic 0x80). Saved and restored with the piece, so spans come back at load.

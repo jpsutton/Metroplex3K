@@ -544,9 +544,7 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
       }
       (void)bus;
       if (!nm) { if (!privateBits) visit_[k] |= uint16_t(rejectBit); continue; }
-      SpanInfo sp; bool isSpan;
-      if (!spanOk(x, z, sp, isSpan)) continue;
-      int d = densityOf(uint8_t(layerMode), x, z);
+      int d = densityOf(uint8_t(layerMode), x, z);   // no span check on the highway neighbours (SimTransit)
       if (!have) { best = {x, z, nm, d, false, f}; have = true; }
       else if (d < p_.annoyanceLevel) { best = {x, z, nm, d, false, f}; alt = true; }
     }
@@ -597,13 +595,16 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
   nn.r = TripRect{best.x, best.z, best.x, best.z};
   int mult = 1;
   {
+    // A bridge or tunnel: the one-tile node moves onto the landing tile and the step cost is multiplied by the span length (SimTransit
+    // [STATIC]); it used to become a rectangle over the whole span, which also credited density to every span tile and dead-ended trips
+    // whose next exit was read from the span's start tile.
     SpanInfo sp; bool isSpan;
     spanOk(best.x, best.z, sp, isSpan);
     if (isSpan) {
       static const int sx[4] = {-1, 0, 1, 0}, sz[4] = {0, -1, 0, 1};
       int d = sp.dir & 3;
       int ex = std::min(std::max(best.x + sx[d] * sp.len, 0), W_ - 1), ez = std::min(std::max(best.z + sz[d] * sp.len, 0), H_ - 1);
-      nn.r = TripRect{std::min(best.x, ex), std::min(best.z, ez), std::max(best.x, ex), std::max(best.z, ez)};
+      nn.r = TripRect{ex, ez, ex, ez};
       mult = sp.len;
     }
   }

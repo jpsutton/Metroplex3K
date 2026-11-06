@@ -237,9 +237,10 @@ static void testSpansAndHighway() {
   r.dest = CAT_IND;
   auto t = s.routeTrip(r);
   CHECK(t.success && calls > 0);
-  bool spanNode = false;
-  for (auto& n : t.path) if (n.r.x1 - n.r.x0 == 4) spanNode = true;
-  CHECK(spanNode);
+  // the span node is one tile on the landing tile (x = 5 + 4), not a rectangle over the span
+  bool landing = false, wide = false;
+  for (auto& n : t.path) { if (n.r.x0 == 9 && n.r.x1 == 9) landing = true; if (n.r.x1 - n.r.x0 > 0 && n.mode != TM_START) wide = true; }
+  CHECK(landing && !wide);
   // without a span reporter the step fails -> the trip cannot pass x=5
   TrafficSim s2(20, 6, p, 8);
   for (int x = 0; x <= 19; x++) s2.flags(x, 3) |= TF_ROAD;
