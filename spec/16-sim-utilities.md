@@ -563,6 +563,12 @@ byte layouts are in `10-save-format.md` §6.14 [DATA: all 59 shipped saves parse
 The power distribution grids, per-network supply and brown-out state are **not** saved; they are
 recomputed by the next monthly update (§2.6). [STATIC]
 
+[OBSERVED, Berlin re-saved right after load with no sim time] Loading performs one roll of the
+production table: the current-slot index advances (9 → 10), the slot it moves to is overwritten
+with the current month's production (equal to the previous slot here), and each annual total is
+adjusted by the difference. The Charts electricity total (Σ of the 10 annual totals) then reads
+1,906,937 instead of the saved 1,908,843.
+
 **Water layer `206C6E7C:02BF0033:0`** (version 4). It stores the per-tile water-service bitmap
 (trimmed to the range of non-zero words), the `water %` graph history (fixed scale 100), the month's
 total supply and consumption, the neighbour sale/purchase-deal accumulators of §3.4 step 4, the counts of
