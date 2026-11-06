@@ -511,6 +511,14 @@ void Game::drawWindows(uint32_t dtMs) {
 
     } else if (viewData_.mode == int(ViewDataWindow::ModeCharts)) {
       cd = chartsFromPopulation(city.pop, uint32_t(std::max(0, city.population())));
+      // Electricity: the annual production by plant type (the power record's annual totals); garbage: the 12-month disposal totals (spec 16 4.5).
+      for (int i = 0; i < 10; i++) cd.electricity[i] = double(std::max<int32_t>(0, city.power.annualTotal[i]));
+      const auto& gt = city.pollution.disp.totals;
+      cd.garbage[0] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Landfilled]));
+      cd.garbage[1] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Exported]));
+      cd.garbage[2] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Incinerated] + gt[us::GarbageDisposal::Wte]));
+      cd.garbage[3] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Recycled]));
+      cd.garbage[4] = 0;   // garbage collecting in the streets: not tracked
     }
     viewData_.map.viewRotation = cam_.rot;
     viewData_.graphs.year = city.clock.date().year; viewData_.graphs.month = city.clock.date().month;

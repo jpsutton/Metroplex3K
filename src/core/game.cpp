@@ -422,6 +422,7 @@ bool Game::transportToolEnabled(uint32_t id) const {
       if (it != menu_.items.end()) {
         const uint32_t t = it->second.target;
         if ((t == 0xC30177CA || t == 0x029A52DD || t == 0x229A528C || t == 0xA5354652) && !disasterActive()) return false;
+        if (t == 0x844587AE && !scenarioActive()) return false;   // Scenario Status: drawn disabled (grey) in a city that is not a scenario [OBSERVED]
       }
       return true;
     }

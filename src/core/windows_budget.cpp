@@ -537,7 +537,7 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   ui.panel(r, E.win(0x76, "Ordinances"));
   // All positions below are measured on the original at 800 x 600 (window at 8, 8); main9 is the 9 pt UI face (cap height 9 rows).
   ui.text(r.x + 6, r.y + 41, E.win(0x1C2, "Ordinance"), "main9", ink);
-  rightText(ui, r.x + 350, r.y + 41, E.win(0x1C3, "Current Monthly Cost"), "main9", ink);
+  rightText(ui, r.x + 351, r.y + 41, E.win(0x1C3, "Current Monthly Cost"), "main9", ink);
   const Rect list{r.x + 4, r.y + 58, 376, 228};   // frame: dark top / left, light bottom / right; flat interior
   ui.fill(list, rgb(222, 223, 255)); insetBevel(ui, list);
   static const uint32_t order[7] = {kAdvUtilities, kAdvDemographics, kAdvSafety, kAdvEnvironment, kAdvPlanner, kAdvTransport, kAdvBudget};
@@ -565,17 +565,21 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   } else scroll = 0;
   const int bodyR = list.x + (bar ? 360 : 372);   // right limit of the band
   const Image* checkArt = ui.skin ? ui.skin->get("check") : nullptr;
+  // Rows are clipped at the interior bottom (y 292): a partly visible last row is drawn whole and the pixels below the interior are then restored.
+  std::vector<uint32_t> below;
+  const int clipY = list.y + list.h - 1, clipRows = 40;
+  for (int yy = 0; yy < clipRows; yy++)
+    for (int xx = list.x; xx < list.x + list.w; xx++) below.push_back(clipY + yy < ui.H && xx < ui.W ? ui.at(xx, clipY + yy) : 0u);
   int y = top;
   for (size_t i = size_t(scroll); i < items.size(); i++) {
     const Item& it = items[i];
     if (y >= bottom) break;
     if (it.header) {
-      if (y + 26 > bottom) break;
       const Rect bd{list.x + 4, y, 349, 26};   // x 16..364
       ui.fill(bd, bandEdge); ui.fill({bd.x + 1, bd.y + 1, bd.w - 2, bd.h - 2}, band);
       ui.text(bd.x + 4, bd.y + 6, it.name, "main9", ink);   // ink rows 80..88: 9 below the band top
       bool c = false;
-      const Rect q{bd.x + bd.w - 27, bd.y + 2, 23, 23};
+      const Rect q{bd.x + bd.w - 31, bd.y + 1, 23, 23};
       E.spot("adv." + std::to_string(it.id), q);
       if (ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Gonzo, 0x19), 4, q, "", false, true, c)) {}
       else c = ui.button(q, "?");
@@ -597,10 +601,13 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
       }
       ui.text(list.x + 19, y, it.name, "system9", ink);   // SYSTEM9 (not bold), ink x 31, cap top 101
       const int64_t val = en ? o.monthlyValue(it.id, money) : o.ifEnactedValue(it.id, money);   // not enacted: the cost it would have, in grey
-      rightText(ui, list.x + 351, y + 1, E.money(val), "system9", en ? (val < 0 ? rgb(0xC0, 0, 0) : 0) : grey);
+      rightText(ui, list.x + 351, y, E.money(val), "main9", en ? (val < 0 ? rgb(0xC0, 0, 0) : 0) : grey);
     }
     y += advance(i);
   }
+  for (int yy = 0; yy < clipRows; yy++)
+    for (int xx = list.x; xx < list.x + list.w; xx++)
+      if (clipY + yy < ui.H && xx < ui.W) ui.at(xx, clipY + yy) = below[size_t(yy) * size_t(list.w) + size_t(xx - list.x)];
   const auto m = o.monthlyMoney(money);
   const int64_t net = m.income - m.cost;
   { // Footer: "Monthly Total" from x 255, the amount from x 343, cap top y 298.
@@ -693,7 +700,7 @@ WindowResult BusinessDealsWindow::draw(Ui& ui, const WinEnv& E, BusinessDeals& d
   { std::string tv = plus(d.monthlyIncome()); ui.text(r.x + 304 - ui.textWidth(tv, "main9"), r.y + 129, tv, "main9", ink); }
   // Plates.
   blueBand(ui, {r.x + 86, r.y + 155, 44, 34});
-  blueBand(ui, {r.x + 272, r.y + 157, 42, 32});   // plate 42 x 32 at (508, 358) [OBSERVED]
+  blueBand(ui, {r.x + 271, r.y + 156, 44, 34});   // plate 42 x 32 at (508, 358) inside a 1 px light border, outer box x 507..550 y 357..390 [OBSERVED]
   { std::string fb = E.win(0x23A, "Finance Briefing:");
     size_t sp = fb.rfind(' ');
     T(24, 159, sp == std::string::npos ? fb : fb.substr(0, sp));

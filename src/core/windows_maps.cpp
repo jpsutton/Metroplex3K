@@ -639,7 +639,9 @@ void pieChart(Ui& ui, int cx, int cy, const std::vector<PieSlice>& sl) {
 WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const ChartsData& d) {
   WindowResult R;
   const Rect box{r.x + 52, r.y + 50, 357, 189}, plot{r.x + 144, r.y + 52, 264, 153};
-  sunkenLines(ui, box);
+  // Frame: (123,142,255) left / top, white bottom [OBSERVED]; outside the plot the interior is (222,223,255).
+  ui.fill({box.x, box.y, 1, box.h}, rgb(123, 142, 255)); ui.fill({box.x, box.y, box.w, 1}, rgb(123, 142, 255));
+  ui.fill({box.x + box.w - 1, box.y, 1, box.h}, rgb(255, 255, 255)); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, rgb(255, 255, 255));
   const bool agePage = tab <= 2;
   // Stripe bands (spec 09 7.1.1): each page has its band period and the row of the first edge, counted from the plot top (y = 51); the Workforce
   // band draws them from the page's pink tile (5E5:31 Health 15 px, 33 Education 17 px, 35 Population 12 px), the rest of the plot draws the
@@ -649,7 +651,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
   const Band bd = kBand[tab % 5];
   auto bandIndex = [&](int row) { return row < bd.edge1 ? 0 : 1 + (row - bd.edge1) / bd.period; };
   const uint32_t lavLight = rgb(231, 231, 255), lavDark = rgb(222, 223, 255);
-  ui.fill({box.x + 1, box.y + 1, box.w - 2, box.h - 2}, lavLight);
+  ui.fill({box.x + 1, box.y + 1, box.w - 2, box.h - 2}, lavDark);
   for (int row = 0; row < 155; row++)
     ui.fill({plot.x + 1, r.y + 51 + row, plot.w - 1, 1}, bandIndex(row) % 2 ? lavDark : lavLight);
   if (!agePage) ui.fill({box.x + 1, box.y + 1, box.w - 2, box.h - 2}, lavDark);   // the pie pages have a plain (222,223,255) background
@@ -664,15 +666,19 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
           if (tile && !tile->empty() && row < tile->h) { const uint32_t px = tile->px[size_t(row) * tile->w + size_t((x - 197) % tile->w)]; if (px >> 24) col = px | 0xFF000000u; }
           ui.at(r.x + x, r.y + 51 + row) = col;
         }
-      ui.textCentered({r.x + 197, plot.y + 1, 118, 12}, E.win(0x1E5, "Workforce"), "system9", rgb(230, 130, 0));
+      ui.textCentered({r.x + 197, plot.y + 1, 118, 12}, E.win(0x1E5, "Workforce"), "main9", rgb(214, 142, 90));
     }
-    ui.fill({plot.x, plot.y, 1, plot.h + 1}, axis); ui.fill({plot.x, plot.y + plot.h, plot.w, 1}, axis);
+    // Axes: light (173,178,222), 2 px: vertical x 183..184 over the full box height, horizontal rows 238..239 [OBSERVED].
+    (void)axis;
+    ui.fill({r.x + 143, r.y + 51, 2, 187}, rgb(173, 178, 222)); ui.fill({r.x + 143, r.y + 204, plot.w + 1, 2}, rgb(173, 178, 222));
     const std::vector<float>& src = tab == 0 ? d.eq : tab == 1 ? d.lifeExpectancy : d.population;
     // y axis: Education 0..140 step 20, Health 0..90 step 10, Population 0..10 step 5 (thousand people per year of age); labels right-aligned at x 138
+    // Population: percent of the people per 5-year bucket, 10.2 px per unit, labels 0 / 5 / 10 [OBSERVED 800 x 600; the unit is INFERRED].
     const int step = tab == 0 ? 20 : tab == 1 ? 10 : 5, top = tab == 0 ? 140 : tab == 1 ? 90 : 10;
+    const float pxPerUnit = tab == 2 ? 10.2f : 142.f / float(top);
     for (int v = 0; v <= top; v += step) {
-      const int cy = plot.y + plot.h - int(142.f * float(v) / float(top) + 0.5f);
-      rightText(ui, r.x + 138, cy - 5, std::to_string(v), "system9", kInkBlue);
+      const int cy = plot.y + plot.h - int(pxPerUnit * float(v) + 0.5f);
+      rightText(ui, r.x + 138, cy - 5, std::to_string(v), "main9", kInkBlue);
     }
     for (int n = 10; n <= 90; n += 10) {   // x labels, 26 px per 10 years, "10" at x ~ 164
       const std::string t = std::to_string(n);
@@ -683,7 +689,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
       const std::string t = E.win(tab == 0 ? 0x1E4u : tab == 1 ? 0x1E0u : 0x1E1u, tab == 0 ? "Education Quotient" : tab == 1 ? "Health" : "Population");
       const size_t sp = tab == 0 ? t.find(' ') : std::string::npos;
       const int hgt = ui.fonts->get("system9").height();
-      auto put = [&](const std::string& s, int x) { verticalText(ui, x, r.y + 170 - ui.textWidth(s, "system9") / 2, s, "system9", kInkBlue); };
+      auto put = [&](const std::string& s, int x) { verticalText(ui, x, r.y + 170 - ui.textWidth(s, "main9") / 2, s, "main9", kInkBlue); };
       if (sp == std::string::npos) put(t, r.x + 80 - hgt / 2);
       else { put(t.substr(0, sp), r.x + 68); put(t.substr(sp + 1), r.x + 68 + hgt + 2); }
     }
@@ -691,12 +697,13 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
       float sum = 0; int n = 0;
       for (int a = i * 5; a < i * 5 + 5 && a < int(src.size()); a++) { sum += src[size_t(a)]; n++; }
       float v = n ? sum / float(n) : 0.f;
-      if (tab == 2) v /= 1000.f;
-      const int h = std::max(0, std::min(plot.h - 4, int(v * 142.f / float(top))));
-      const int bx = r.x + 149 + 13 * i;
+      if (tab == 2) v = d.totalPopulation > 0 ? sum * 100.f / float(d.totalPopulation) : 0.f;   // percent of the population in the bucket
+      const int h = std::max(0, std::min(plot.h - 4, int(v * pxPerUnit)));
+      // Outlines: right at x 196 + 13 k; left at 188 + 13 k for the first three bars and 187 + 13 k from the fourth: fills of 7, then 8 px [OBSERVED].
+      const int fx0 = r.x + 149 + 13 * i - (i >= 3 ? 1 : 0), fw = i >= 3 ? 8 : 7;
       if (h > 0) {
-        ui.fill({bx, plot.y + plot.h - h, 7, h}, rgb(0, 211, 140));
-        ui.fill({bx - 1, plot.y + plot.h - h, 1, h}, rgb(173, 178, 222)); ui.fill({bx + 7, plot.y + plot.h - h, 1, h}, rgb(173, 178, 222));
+        ui.fill({fx0, plot.y + plot.h - h, fw, h}, rgb(0, 211, 140));
+        ui.fill({fx0 - 1, plot.y + plot.h - h, 1, h}, rgb(173, 178, 222)); ui.fill({fx0 + fw, plot.y + plot.h - h, 1, h}, rgb(173, 178, 222));
       }
     }
     if (tab == 0) { cap1 = capText(E, 0x1E2, "Population EQ = %s", whole(d.populationEQ)); cap2 = capText(E, 0x1E3, "Workforce EQ = %s", whole(d.workforceEQ)); }
@@ -722,22 +729,26 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
       for (const Cat& c : L) { cats.push_back(c); total += c.v; }
     }
     // heading at the top left of the box, then one colour bar per category present
-    ui.text(box.x + 6, box.y + 4, E.win(el ? 0x28A : 0x1F3, el ? "Annually Averaged" : "% Garbage Goes To:"), "main10", kInkBlue);
+    { std::string head = E.win(el ? 0x28A : 0x1F3, el ? "Annually Averaged" : "% Garbage Goes To:");
+      auto lines = wrap(ui, head, 168, "main10");
+      ui.text(box.x + 6, box.y + 4, lines.empty() ? head : lines[0], "main10", kInkBlue); }   // the first line only; the legend bars cover the rest
     std::vector<PieSlice> slices;
-    int by = box.y + 22;
+    int by = box.y + 20;
+    const int barH = el ? 14 : 23, barPitch = el ? 16 : 25;   // legend bars x 98..264: 14 rows at a 16 px pitch (electricity), 23 rows at 25 (garbage) [OBSERVED]
     for (const Cat& c : cats) {
       if (c.v <= 0) continue;
-      ui.fill({box.x + 6, by, 168, 16}, c.col);
+      ui.fill({box.x + 6, by, 167, barH}, c.col);
       const uint32_t lum = ((c.col & 255) * 30 + ((c.col >> 8) & 255) * 59 + ((c.col >> 16) & 255) * 11) / 100;
-      ui.text(box.x + 10, by + 2, E.win(c.id, c.fb), "main10", lum > 140 ? rgb(0, 0, 0) : rgb(255, 255, 255));
-      by += 18;
+      ui.text(box.x + 10, by + (barH - 12) / 2, E.win(c.id, c.fb), "main10", lum > 140 ? rgb(0, 0, 0) : rgb(255, 255, 255));
+      by += barPitch;
       slices.push_back({"", c.v, c.col});
     }
     pieChart(ui, r.x + 318, r.y + 117, slices);
     cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(int64_t(total)));
   }
-  ui.textCentered({r.x + 55, r.y + 249, 340, 14}, cap1, "main10", kInkBlue);
-  if (!cap2.empty()) ui.textCentered({r.x + 55, r.y + 265, 340, 14}, cap2, "main10", rgb(230, 130, 0));
+  const int capDy = agePage ? -6 : 0;   // the bar pages' caption lines sit 6 px higher (observed)
+  ui.textCentered({r.x + 55, r.y + 249 + capDy, 340, 14}, cap1, "main10", kInkBlue);
+  if (!cap2.empty()) ui.textCentered({r.x + 55, r.y + 265 + capDy, 340, 14}, cap2, "main10", rgb(247, 142, 90));
   static const uint32_t tid[5] = {0x1DD, 0x1E0, 0x1E1, 0x1DE, 0x1DF};
   static const char* const tfb[5] = {"Education", "Health", "Population", "Electricity", "Garbage"};
   for (int i = 0; i < 5; i++)
