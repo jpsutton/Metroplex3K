@@ -609,7 +609,10 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
   }
   nn.mode = best.mode;
   nn.prevMode = cur.mode;
-  nn.cost = cur.cost + stepCost(best.mode, cur.mode, best.d, best.f) * mult;
+  nn.cost = cur.cost + stepCost(best.mode, cur.mode, best.d, best.f) * mult;   // costed as the station it is
+  // A station node reached by subway is STORED as mode 8 (SimTransit): subway-only density at the node, previous mode 8 for its children and
+  // the plain subway code in the visit mask, so the subway trip continues past the station [STATIC].
+  if (nn.mode == TM_SUBWAY_STN && cur.mode == TM_SUBWAY) nn.mode = TM_SUBWAY;
   if (nn.r.z0 > cur.r.z1) nn.lastDir = 1;
   else if (nn.r.x0 > cur.r.x1) nn.lastDir = 0;
   else if (nn.r.z1 < cur.r.z1) nn.lastDir = 3;
