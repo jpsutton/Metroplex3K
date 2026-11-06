@@ -1089,10 +1089,23 @@ void Game::drawHud() {
     if (ui_.clicked(pr) && !paused_) { setPaused(true); sound(24); }
     if (ui_.clicked(rr) && paused_) { setPaused(false); sound(23); }
     int sp = std::max(1, std::min(4, speed_));
-    ui_.blit(*skin_.get("speed." + std::to_string(sp - 1)), place.p4x, place.p4y);
+    // Four 10x11 cells at (4 + 10 i, 5) of the panel (spec 09 4.2 [OBSERVED]). Running: the whole 48x23 indicator for the speed. Paused: dark-green
+    // cell (speed.5) in cells 0..speed over the grey background. Then the hovered cell h gets the hover cell (speed.4) in cells 0..h.
+    if (paused_) {
+      if (const Image* dg = skin_.get("speed.5"))
+        for (int i = 0; i < sp; i++) ui_.blit(*dg, place.p4x + 4 + 10 * i, place.p4y + 5);
+    } else {
+      ui_.blit(*skin_.get("speed." + std::to_string(sp - 1)), place.p4x, place.p4y);
+    }
+    int hoverCell = -1;
+    for (int i = 0; i < 4; i++)
+      if (ui_.hover(Rect{place.p4x + 4 + i * 10, place.p4y + 5, 10, 11})) hoverCell = i;
+    if (hoverCell >= 0)
+      if (const Image* hv = skin_.get("speed.4"))
+        for (int i = 0; i <= hoverCell; i++) ui_.blit(*hv, place.p4x + 4 + 10 * i, place.p4y + 5);
     static const char* spTip[4] = {"Turtle", "Llama", "Cheetah", "African Swallow"};
     for (int i = 0; i < 4; i++) {
-      Rect cr{place.p4x + 3 + i * 11, place.p4y + 4, 10, 12};
+      Rect cr{place.p4x + 4 + i * 10, place.p4y + 5, 10, 11};
       if (ui_.hover(cr)) ui_.setTip(tip(0x66 + i, spTip[i]), cr, Ui::kTipAbove);
       if (ui_.clicked(cr)) setSpeedBtn(i + 1);
     }
