@@ -420,6 +420,22 @@ void spriteAt(Ui& ui, GameData* gd, uint32_t cat, uint32_t id, int ax, int ay) {
     for (int x = 0; x < sp->img.w; x++) {
       int dx = x0 + x; if (dx < 0 || dx >= ui.W) continue;
       uint32_t c = sp->img.px[size_t(y) * sp->img.w + x];
+      if (pl && !ui.overlay) {
+        // Plane sprites [OBSERVED, New City preview, 0 px differ]: visit only the pixels where the colour sprite is opaque; blend in 5 bits per channel with the
+        // plane level a5 (0..31, m2 = 32): floor((32 d + a5 (s - d)) / 32), green taken at 5 bits (g6 >> 1); write back as 565 with the green LSB cleared, also at a5 = 0.
+        if ((c >> 24) == 0 || (c & 0xFFFFFF) == 0xFF00FF) continue;
+        const int a5 = std::min<int>(31, pl->v[size_t(y) * pl->w + x]);
+        uint32_t& d = ui.at(dx, dy);
+        int out[3];
+        for (int k = 0; k < 3; k++) {
+          const int sh = k * 8;
+          const int s5 = int((c >> sh) & 255) >> 3, d5 = int((d >> sh) & 255) >> 3;
+          out[k] = std::max(0, std::min(31, (32 * d5 + a5 * (s5 - d5)) >> 5));
+        }
+        const int g6 = out[1] << 1;
+        d = 0xFF000000u | uint32_t((out[2] << 3) | (out[2] >> 2)) << 16 | uint32_t((g6 << 2) | (g6 >> 4)) << 8 | uint32_t((out[0] << 3) | (out[0] >> 2));
+        continue;
+      }
       int a = pl ? pl->v[size_t(y) * pl->w + x] * 255 / 31 : int(c >> 24);
       if (!pl && (c & 0xFFFFFF) == 0xFF00FF) a = 0;
       if (a <= 0) continue;
@@ -444,10 +460,8 @@ void schemePreview(Ui& ui, GameData* gd, int x, int y, uint32_t land, uint32_t f
   // (3FBB0000). Other sets use the pine position until observed (the sprite spans do not explain the difference).
   // Each flora choice has two sprites; the second (xxxx0001, fmt 0x03) decodes as a plane, not a tree, so the same tree sprite is drawn twice [the 79fe354
   // attempt to draw it as the right tree left that tree missing].
-  // Right tree, behind the house [OBSERVED top-left positions: pine x657 y258, NW x657 y250]: the other sets use the pine place until observed.
-  if (flora == 0x3FBB0000) put(flora, 546, 90);
-  else if (flora == 0x3FC60000) put(flora, 537, 131);
-  else put(flora, 546, 91);   // pine: trunk column 673, top y260 [OBSERVED]; the original's right tree is probably not the left tree's image (sparser crown), see #57
+  // Right tree, behind the house: the same sprite as the left tree at (546,90) for every set [OBSERVED, both sets 0 px differ].
+  put(flora, 546, 90);
   put(building, 470, 145);
   put(flora, 445, 110);
 }
