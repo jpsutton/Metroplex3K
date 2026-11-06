@@ -806,12 +806,15 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
       }
       float v = n ? sum / float(n) : 0.f;
       if (tab == 2) v = d.totalPopulation > 0 ? sum * 100.f / float(d.totalPopulation) : 0.f;   // percent of the population in the bucket
-      const int h = std::max(0, std::min(plot.h - 4, int(v * pxPerUnit + (tab == 2 ? 0.5f : 0.f))));
+      // Total bar height including the 1 px outline row on top, down to the baseline row (y237 on the original) [OBSERVED]; rounded to nearest.
+      const int h = std::max(0, std::min(plot.h - 4, int(v * pxPerUnit + 0.5f)));
       // Outlines: right at x 196 + 13 k; left at 188 + 13 k for the first three bars and 187 + 13 k from the fourth: fills of 7, then 8 px [OBSERVED].
       const int fx0 = r.x + 149 + 13 * i - (i >= 3 ? 1 : 0), fw = i >= 3 ? 8 : 7;
       if (h > 0) {
-        ui.fill({fx0, plot.y + plot.h - h, fw, h}, rgb(0, 211, 140));
-        ui.fill({fx0 - 1, plot.y + plot.h - h, 1, h}, rgb(173, 178, 222)); ui.fill({fx0 + fw, plot.y + plot.h - h, 1, h}, rgb(173, 178, 222));
+        const int yb = plot.y + plot.h - 2, top = yb - h + 1;   // baseline row y237; the outline is a 1 px frame on the left, right AND top of the bar
+        ui.fill({fx0, top + 1, fw, h - 1}, rgb(0, 211, 140));
+        ui.fill({fx0 - 1, top, fw + 2, 1}, rgb(173, 178, 222));
+        ui.fill({fx0 - 1, top, 1, h}, rgb(173, 178, 222)); ui.fill({fx0 + fw, top, 1, h}, rgb(173, 178, 222));
       }
     }
     // The axis lines are drawn over the bars [OBSERVED: the bottom axis rows y238/240/241 across the bars].
