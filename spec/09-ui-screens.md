@@ -300,6 +300,23 @@ confirmation `141`, and "import set from selected city" `140`. User buildings ar
 `Buildings/` (`*.BLD`, `24-bat-buildings.md`). The choice is saved with the city
 (`10-save-format.md`).
 
+**Scheme preview picture** [OBSERVED, exact on the 200×180 preview area for two flora/building
+combinations]. The picture next to the three selectors is composed from the chosen sets' sprites
+(category 0), with top-left corners relative to the dialog:
+
+1. landscape sprite (`3FC0`…`3FC4 0000`, no opacity plane) at (444, 92), opaque copy;
+2. the flora sprite `xxxx0000` again as the right tree at (546, 90) (same sprite and position for every
+   flora set);
+3. the building-set sprite (`3FBA`/`3FBD`/`3FBF 0000`) at (470, 145);
+4. the flora sprite as the left tree at (445, 110).
+
+Each sprite that has an opacity plane (`xxxx0001`, `04-graphics-formats.md` §3.5; all flora and
+building sets) is blended through it. Only pixels where the colour sprite is opaque (its 1-bit
+transparency) are visited. For each one, alpha a = the plane value 0..31 is used unscaled. Each
+channel is blended at 5 bits (green taken as the 6-bit value >> 1):
+r = ⌊(32·d + a·(s − d)) / 32⌋. Green is written back as r << 1, so the green low bit is cleared on
+every visited pixel, including those whose plane value is 0.
+
 ## 4. In-game main UI
 
 The in-game screen consists of the full-window 3-D city view (`25-rendering.md`), the control
