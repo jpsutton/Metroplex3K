@@ -268,6 +268,7 @@ void Tiler::note(Ctx& c, int x, int z, uint32_t id, int rot, int y) {
 bool Tiler::canOverwrite(const Ctx& c, int x, int z) const {
   TileOcc o = map_.occupantAt(x, z, c.layer);
   if (!o.present) return true;
+  if (o.fixed) return false;
   if (c.layer != LAYER_SURFACE) return isNetOcc(c.kind, o) && !c.nr->isProtected(o.id);
   if (isNetOcc(c.kind, o)) return !c.nr->isProtected(o.id);
   if (!o.removable) return false;

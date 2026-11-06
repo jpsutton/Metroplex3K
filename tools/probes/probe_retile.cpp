@@ -29,6 +29,7 @@ int main(int argc, char** argv) {
     for (int kind = 1; kind <= 3; kind++) {
       World copy = w;
       WorldNetworkMap map(copy, flags);
+      s.game.city().configureMap(map);   // the game path: exit sides from the connection matrices, neighbour connections
       std::vector<PathTile> drawn;
       std::map<std::pair<int, int>, NetPiece> stored;
       for (const auto& p : w.surface) {

@@ -61,6 +61,7 @@ struct TileOcc {
   int rot = 0;
   uint32_t flags = 0;
   bool removable = true;
+  bool fixed = false;   // an occupant that is not a piece (a subway station in the subway layer): never overwritten
 };
 
 struct PlacedPiece {

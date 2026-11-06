@@ -680,6 +680,10 @@ void City::setTaxRate(int rate) {
 // of the low 16 bits of its connection matrix (occupant attribute 0x136 road/highway, 0x137 rail, 0x138 subway) has (b mod 4 + r) mod 4 == k,
 // i.e. the OR of the four low nibbles rotated left by r. Pieces without a matrix stay open on all four sides.
 void City::configureMap(WorldNetworkMap& map) const {
+  // Neighbour connections (map-edge bits, spec 12 4.6): kind -> saved set index (rail, road, pipe, power, highway, subway).
+  static const int setOfKind[7] = {-1, 1, 0, 3, 4, 2, 5};
+  for (int nk = 1; nk <= 6; nk++)
+    for (uint32_t p : neighbours.conn[setOfKind[nk]]) map.setConnection(nk, int(p >> 16), int(p & 0xFFFF), true);
   if (!game_ || !cfg_.haveTiling) return;
   GameData* g = game_;
   const auto* tr = &cfg_.tiling;

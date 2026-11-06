@@ -64,6 +64,16 @@ class WorldNetworkMap : public INetworkMap {
       o.present = true; o.id = p.pieceId; o.rot = p.rot; o.flags = flagsOf_ ? flagsOf_(p.pieceId) : 0;
       return o;
     }
+    if (layer == LAYER_SUBWAY) {   // a subway station (12360 / 12361) occupies the subway layer: always considered connected (flags 0x40100, spec 12 4.6)
+      auto b = bld_.find(key(x, z));
+      if (b != bld_.end()) {
+        const Occupant& oc = w_.occupants[b->second];
+        if (oc.agentType == 12360 || oc.agentType == 12361) {
+          o.present = true; o.id = oc.occId; o.rot = oc.rot; o.flags = 0x40100; o.removable = false; o.fixed = true;
+        }
+      }
+      return o;
+    }
     if (layer == LAYER_SURFACE) {
       auto b = bld_.find(key(x, z));
       if (b != bld_.end()) {
