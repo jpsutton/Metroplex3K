@@ -2167,6 +2167,28 @@ void City::monthlyPopulation() {
   if (const Department* e = budget.dept(dept::Education)) in.educationFunding = e->funding;
   if (const Department* h = budget.dept(dept::Health)) in.healthFunding = h->funding;
   in.ordinanceEnacted = [this](uint32_t id) { return ordinances.enacted(id); };
+  // Operating schools, colleges, libraries, museums and hospitals feed the education and health sums (spec 20 4.2, 17 5-6); their
+  // capacities and effects come from SC3Tune.ini and are scaled by the department's funding.
+  {
+    const us::SchoolParams sp = us::SchoolParams::school(cfg_.ini.tune), cp = us::SchoolParams::college(cfg_.ini.tune);
+    const us::LibraryParams lp = us::LibraryParams::library(cfg_.ini.tune), mp = us::LibraryParams::museum(cfg_.ini.tune);
+    const us::HospitalParams hp = us::HospitalParams::fromIni(cfg_.ini.tune);
+    auto edu = [&](EduKind k, float cap, double eff, int lo, int hi, uint32_t staff) {
+      EduFacility f; f.kind = k; f.capacity = cap; f.effect = float(eff); f.minAge = lo; f.maxAge = hi; f.staff = staff;
+      in.education.push_back(f);
+    };
+    for (const auto& o : world_->occupants) {
+      if ((o.state & ~0x200u) != 1) continue;
+      switch (o.agentType) {
+        case 13010: { auto f = us::schoolFunding(sp, in.educationFunding); edu(EduKind::School, float(sp.desks), f.effect, sp.minAge, sp.maxAge, uint32_t(f.staff)); break; }
+        case 13873: { auto f = us::schoolFunding(cp, in.educationFunding); edu(EduKind::College, float(cp.desks), f.effect, cp.minAge, cp.maxAge, uint32_t(f.staff)); break; }
+        case 14130: edu(EduKind::Library, float(lp.popServed), lp.eqEffect, lp.minAge, lp.maxAge, 0); break;
+        case 14140: edu(EduKind::Museum, float(mp.popServed), mp.eqEffect, mp.minAge, mp.maxAge, 0); break;
+        case 13310: { auto f = us::hospitalFunding(hp, in.healthFunding); Hospital h; h.beds = f.beds; h.effect = float(f.effect); h.doctors = uint32_t(f.doctors); in.hospitals.push_back(h); break; }
+        default: break;
+      }
+    }
+  }
   pop.monthly(in);
 }
 

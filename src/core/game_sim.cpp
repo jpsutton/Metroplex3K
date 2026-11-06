@@ -221,6 +221,11 @@ void Game::initManagers() {
       }
     }
     advisors_.thr = thr;
+    {  // disaster tunables: SimTune.INI [Tunables] and SC3DisasterLayer.ini (they were never read; the header defaults ran)
+      IniFile simTune, layer;
+      const bool a = data_.ini().load("SimTune.INI", simTune), b = data_.ini().load("SC3DisasterLayer.ini", layer);
+      if (a || b) disasters_.tune.load(simTune, layer);
+    }
     IniFile pm;
     if (data_.ini().load("PetitionerManager.ini", pm)) {
       petitioners_.config.loadManagerIni(pm);

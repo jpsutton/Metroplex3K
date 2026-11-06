@@ -145,6 +145,7 @@ void Game::setupStreetSim() {
         size_t n = r.declared && r.declared < r.available ? r.declared : r.available;
         automata_.addRecord(k, Bytes(r.data, r.data + n));
       }
+    { IniFile st; if (data_.ini().load("SC3StrtSimLayer.ini", st)) automata_.tunables = StreetSimTunables::fromIni(st); }   // key / emergency vehicle lists
     automataLoaded_ = true;
   }
   streetHost_ = std::make_unique<StreetHost>();
