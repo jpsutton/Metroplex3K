@@ -593,8 +593,38 @@ before building, and also refuses if the price exceeds funds `[STATIC]`.
 
 `[STATIC]` unless stated:
 
-1. Validate: walk the tile list and determine the buildable prefix (straight runs longer than 2
-   tiles are checked as a unit) `[INFERRED]`.
+1. Validate (SIMNTWRK 0x1000938B, also used by the preview) [STATIC]: the path is split into
+   straight **runs**, broken at water, at turns (a turn tile belongs to both runs) and at a further
+   per-tile test. Every run of ≥ 3 tiles (≥ 2 for the final run) is **strip-graded**
+   (0x10008064 → 0x100077E7; the highway uses its own grader). If grading a run fails, the
+   buildable prefix stays at the index before that run: that run and all later tiles are invalid
+   (for a single straight drag the whole preview is red and nothing is built).
+   * **Strip grade** (SIMDIRT 0x10007DC0) [STATIC; reconstruction checked against observations].
+     Skipped when every tile of the run is already a valid slope (§6.3). startH = c0 of the first
+     tile if it is flat (then s = 1), else trunc(mean of its 4 corners) (s = 0); endH likewise for
+     the last tile (last = n − 1, minus 1 if the end tile is flat). The walk runs in increasing
+     coordinate (startH/endH swapped for a drag in the negative direction). Along z the *main*
+     vertex of step k is (x + 1, z0 + k) and its *mirror* (x, z0 + k); along x main (x0 + k, z),
+     mirror (x0 + k, z + 1). For k = s … last + 1: lo = max(0, endH − 2 − 2(last − k)),
+     hi = min(255, endH + 2 + 2(last − k)); at k = s also lo = max(lo, startH), hi = min(hi, startH),
+     otherwise lo = max(lo, prev − 2), hi = min(hi, prev + 2); if hi < lo the run fails; the main
+     vertex is clamped into [lo, hi] and becomes prev. Then each mirror vertex is set to its main
+     vertex, and the surroundings are re-sloped ring by ring (|step| ≤ 4) as for the terrain
+     tools. Cost = (RaiseTerrain × raised + LowerTerrain × lowered) >> 2 plus the ring costs.
+   * **Permission**: for every vertex the grade changes, the up to four tiles sharing it are
+     checked in all three layers (surface, pipe, subway) regardless of the network kind. A surface
+     occupant passes if it reports kind 5 or passes the network manager's terrain-change filter and
+     is not in the kind's ID list; pipe/subway occupants must pass the filter and not be in the
+     list (the surface result overwrites rather than ANDs the flag). Any failure fails the run.
+   * At commit the grade is applied and **charged** (terrain apply flag 0). Afterwards, for
+     non-highway kinds, tiles the grade left invalid are re-graded one tile at a time (up to 100
+     rounds).
+   * [OBSERVED, Mount Herrang, road/rail/power/pipe/subway] A drag along +z over six tiles ending
+     on a tile with corners 92/94/92/92 changes only the mirror corner (2,79) 92 → 94 (end tile
+     becomes a clean slope, the tile before it flat) and adds a charge of 25·2 >> 2 = 12. The
+     same drag one tile longer needs a raise at a corner of a water-tower tile and is rejected
+     entirely (whole preview red, nothing built); the reverse drag (end to start) is also
+     rejected.
 2. Check funds ≥ total price; otherwise nothing is built.
 3. Endpoint levelling [STATIC unless marked]. It is done once at the start of the path and once at
    the end. The end call is made only on the non-bridge branch, and only when no tunnel was
