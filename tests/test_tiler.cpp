@@ -282,9 +282,11 @@ static void testBlockedShore() {
   for (int x = 6; x <= 9; x++) m.setWater(x, 3, true);
   m.setCornerHeight(8, 4, 31);   // tile (7,3): corners 30 30 31 30 = not flat, not a valid slope, an interior water tile: allowed
   { RoutedPath wr = routePath(m, TOOL_ROAD, {2, 3}, {17, 3}); CHECK(!wr.blocked && wr.tiles.size() == 16); }
-  {  // the drag ends before the countdown (3 land tiles) and a valid land tile follow the water: the water and the land after it are invalid
-    RoutedPath er = routePath(m, TOOL_ROAD, {2, 3}, {12, 3});
+  {  // the drag ends within the countdown (2 of the 3 land tiles): the water and the land after it are invalid
+    RoutedPath er = routePath(m, TOOL_ROAD, {2, 3}, {11, 3});
     CHECK(er.blocked && er.validPrefix == 4);
+    RoutedPath ok3 = routePath(m, TOOL_ROAD, {2, 3}, {12, 3});   // the third land tile clears the pending tiles
+    CHECK(!ok3.blocked && ok3.validPrefix == 11);
   }
   m.addForeign(6, 3, 99999, 0, false);
   RoutedPath rp = routePath(m, TOOL_ROAD, {2, 3}, {17, 3});

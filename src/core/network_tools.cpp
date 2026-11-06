@@ -292,7 +292,8 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
     addTile(cx, cz, alongX);
   }
   // Water crossing countdown [STATIC, the drag-path builder 0x1000488D]: after the water, minRun land tiles are counted down, and the water tiles stay pending
-  // until a valid land tile (flat or a valid slope) follows the countdown. A drag that ends (or turns invalid) first sets every pending tile red; only the
+  // until a valid land tile (flat or a valid slope) is reached: the last tile of the countdown or a later one (Roadless Paradise (35,155)->(35,176): the
+  // third land tile (35,175) clears the pending tiles, the drag's own last tile (35,176) need not be valid). A drag that ends (or turns invalid) first sets every pending tile red; only the
   // leading buildable tiles remain (Roadless Paradise (34,158)->(34,175): the water at z162..173 and two land tiles after it, all red).
   if (!P.wide && P.minRun > 0 && tool != TOOL_ONRAMP) {
     size_t w0 = rp.tiles.size();
@@ -301,7 +302,7 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
       size_t j = w0;
       while (j < rp.tiles.size() && rp.tiles[j].valid && m.onMap(rp.tiles[j].x, rp.tiles[j].z) && m.isWaterTile(rp.tiles[j].x, rp.tiles[j].z)) j++;
       bool confirmed = false;
-      for (size_t k = j + size_t(P.minRun); k < rp.tiles.size() && rp.tiles[k].valid && !confirmed; k++) {
+      for (size_t k = j + size_t(P.minRun) - 1; k < rp.tiles.size() && rp.tiles[k].valid && !confirmed; k++) {
         if (m.isWaterTile(rp.tiles[k].x, rp.tiles[k].z)) break;
         int c[4]; m.tileCorners(rp.tiles[k].x, rp.tiles[k].z, c);
         if ((c[0] == c[1] && c[1] == c[2] && c[2] == c[3]) || isValidSlope(c)) confirmed = true;
