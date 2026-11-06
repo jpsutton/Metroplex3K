@@ -126,9 +126,7 @@ void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst) {
       if (!a) continue;
       uint32_t& d = ui.at(dx, dy);   // partial alpha (button shadow): blend over what is there
       if (ui.overlay && (d >> 24) != 255) { d = overlayOver(d, float(p & 255), float(p >> 8 & 255), float(p >> 16 & 255), float(a) / 255.f); continue; }
-      uint32_t out = 0xFF000000u;
-      for (int sh = 0; sh < 24; sh += 8) out |= (((p >> sh) & 255) * a + ((d >> sh) & 255) * (255 - a) + 127) / 255 << sh;
-      d = out;
+      d = blendPlane5(d, p, a);
     }
   }
 }
@@ -588,7 +586,7 @@ bool Skin::drawButton3(Ui& ui, const Image* s, int cells, int cell, Rect r, cons
     int off = cell == CELL_PRESSED ? 1 : 0;
     // Centre on the pill, not the whole cell: the art carries a drop shadow on the right and bottom (measured on the
     // original's prompt buttons: caption sits 2 px left and 1 px up of the cell centre).
-    ui.textCentered({r.x + off, r.y + off, r.w - 4, r.h - 2}, label, font,
+    ui.textCentered({r.x + off, r.y + off + ui.buttonLabelDy, r.w - 4, r.h - 2}, label, font,
                     cell == CELL_DISABLED ? rgb(0x90, 0x94, 0xA0) : textCol ? textCol : ui.textCol);
   }
   return true;

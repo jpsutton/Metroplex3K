@@ -307,7 +307,9 @@ WindowResult CityPropertiesDialog::draw(Ui& ui, const WinEnv& E, CityPropsState&
   Rect sel{r.x + 434, r.y + 282, 78, 33};
   ui.fill(sel, rgb(0x7B, 0x92, 0xFF));
   E.spot("select", sel);
+  ui.buttonLabelDy = -1;   // this caption sits 1 px higher than the other pill buttons [OBSERVED]
   if (ui.button(sel, E.se(0x2F, "Select"), true, false, "title9")) R.add(Act::OpenUserBuildings);
+  ui.buttonLabelDy = 0;
   // Check mark.
   Rect done{r.x + 589, r.y + 331, 42, 32};
   E.spot("ok", done);

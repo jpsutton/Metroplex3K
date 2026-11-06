@@ -7,14 +7,25 @@ namespace m3k {
 
 // One source pixel onto the frame: alpha 0 skips, 255 overwrites, anything between blends over what is there (soft edges of
 // art that ships with a separate opacity plane, e.g. the Show Toolbars button).
+uint32_t blendPlane5(uint32_t dst, uint32_t src, uint32_t a8) {
+  const int a5 = int((a8 * 31 + 127) / 255);
+  int out[3];
+  for (int k = 0; k < 3; k++) {
+    const int sh = k * 8;
+    const int s5 = int((src >> sh) & 255) >> 3, d5 = int((dst >> sh) & 255) >> 3;
+    out[k] = std::max(0, std::min(31, (32 * d5 + a5 * (s5 - d5)) >> 5));
+  }
+  const int g6 = out[1] << 1;
+  return 0xFF000000u | uint32_t((out[2] << 3) | (out[2] >> 2)) << 16 | uint32_t((g6 << 2) | (g6 >> 4)) << 8 | uint32_t((out[0] << 3) | (out[0] >> 2));
+}
+
 static inline void putPixel(Ui& ui, uint32_t& d, uint32_t p) {
   const uint32_t a = p >> 24;
   if (!a) return;
   if (a == 255) { d = p; return; }
   const float f = float(a) / 255.f;
   if (ui.overlay && (d >> 24) != 255) { d = overlayOver(d, float(p & 255), float((p >> 8) & 255), float((p >> 16) & 255), f); return; }
-  const float dr = float(d & 255), dg = float((d >> 8) & 255), db = float((d >> 16) & 255);
-  d = 0xFF000000u | (uint32_t(db + (float((p >> 16) & 255) - db) * f) << 16) | (uint32_t(dg + (float((p >> 8) & 255) - dg) * f) << 8) | uint32_t(dr + (float(p & 255) - dr) * f);
+  d = blendPlane5(d, p, a);
 }
 
 

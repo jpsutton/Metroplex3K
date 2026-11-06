@@ -44,11 +44,16 @@ enum Key { K_ENTER, K_ESC, K_BACKSPACE, K_UP, K_DOWN, K_PAGEUP, K_PAGEDOWN, K_TA
 // horizontally centred; a box crossing the right client edge is shifted left to end 2 px inside it. `pointer` is used only for kTipPointer.
 Rect tooltipBox(int place, Rect anchor, int textWidth, int clientW, int pointerX, int pointerY);
 
+// Alpha blend of a source pixel over a destination the way the original blends opacity planes: 5 bits per channel (green g8 >> 3), floor((32 d + a5 (s - d)) / 32),
+// written back as 565-expanded values; a8 is the 0..255 alpha of the decoded image (a5 = a8 * 31 / 255 rounded).
+uint32_t blendPlane5(uint32_t dst, uint32_t src, uint32_t a8);
+
 class Ui {
  public:
   std::vector<uint32_t>* fb = nullptr;   // optional owning vector (packed); pixels aliases its data when set
   uint32_t* pixels = nullptr;            // row-major framebuffer (may have pitch > W)
   int pitch = 0;                         // pixels per row
+  int buttonLabelDy = 0;                 // extra vertical offset of the next pill button's caption (cleared by the button)
   bool titleRecolour = false;            // dialog frame titles use the recolour palette instead of the stored one (scenario dialogs, observed)
   bool overlay = false;                  // drawing over a GPU-composited city (alpha 0 = city, see overlayOver)
   int W = 0, H = 0;

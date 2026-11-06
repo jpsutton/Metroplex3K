@@ -112,7 +112,7 @@ int main() {
     ui.blit(soft, 10, 300);
     CHECK(fb[o] == rgba(0, 0, 0) && fb[o + 1] == rgba(200, 100, 50));
     const uint32_t m = fb[o + 2];
-    CHECK((m & 255) >= 99 && (m & 255) <= 101 && ((m >> 8) & 255) >= 49 && ((m >> 8) & 255) <= 51 && (m >> 24) == 255);
+    CHECK((m & 255) >= 99 && (m & 255) <= 101 && ((m >> 8) & 255) >= 48 && ((m >> 8) & 255) <= 51 && (m >> 24) == 255);
   }
   BottomBarPlace pl;
   CHECK(s.drawBottomBar(ui, &pl));
