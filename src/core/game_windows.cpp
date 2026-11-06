@@ -521,6 +521,7 @@ void Game::drawWindows(uint32_t dtMs) {
       cd.garbage[1] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Exported]));
       cd.garbage[2] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Incinerated] + gt[us::GarbageDisposal::Wte]));
       cd.garbage[3] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Recycled]));
+      cd.garbageProduced = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Produced]));
       cd.garbage[4] = 0;   // garbage collecting in the streets: not tracked
     }
     viewData_.map.viewRotation = cam_.rot;

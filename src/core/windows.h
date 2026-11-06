@@ -649,6 +649,7 @@ struct ChartsData {
   int64_t totalPopulation = 0; int workforcePercent = 0;
   double electricity[10] = {};          // coal, oil, gas, wind, solar, nuclear, microwave, fusion, WTE, neighbour deals
   double garbage[5] = {};               // landfill, deals, incinerators, recycling, streets
+  double garbageProduced = -1;          // 12-month produced counter; the caption shows it / 10 (Berlin: 9,373,189 -> 937,319 [OBSERVED]); < 0 = use the slice sum
 };
 ChartsData chartsFromPopulation(const Population& p, uint32_t cityPopulation);
 class ChartsWindow {

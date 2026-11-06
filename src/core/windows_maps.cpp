@@ -335,7 +335,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
 
   // Group header: a toggle picking the mode. On = white face with an inset outline (pressed), off = lavender face
   // with a navy outline and a dark drop shadow.
-  auto header = [&](const std::string& name, int x, int y, const std::string& label, int mode) {
+  auto header = [&](const std::string& name, int x, int y, const std::string& label, int mode, int labelDy = 0) {
     Rect f{r.x + x, r.y + y, 132, 20};
     E.spot(name, f);
     const bool on = edit.mode == mode, down = ui.hover(f) && ui.in.down;
@@ -354,7 +354,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
       ui.fill({f.x + 2, f.y + f.h - 2, f.w - 3, 1}, navy); ui.fill({f.x + f.w - 2, f.y + 2, 1, f.h - 3}, navy);
     }
     const int o = on || down ? 1 : 0;
-    ui.textCentered({f.x + o, f.y + o + 1, f.w, f.h}, label, "main10", ink);
+    ui.textCentered({f.x + o, f.y + o + 1 + labelDy, f.w, f.h}, label, "main10", ink);
     if (ui.clicked(f)) edit.mode = mode;
   };
   // Check box (GZCheckBox) / radio (GZRadioBtn) with a label; greyed out while its group's mode is not selected.
@@ -375,21 +375,21 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   };
 
   // ---- Above Ground
-  header("mode.above", 8, 45, E.win(0x26A, "Above Ground:"), CityLayers::AboveGround);
+  header("mode.above", 8, 45, E.win(0x26A, "Above Ground:"), CityLayers::AboveGround, -1);   // left column: 1 px higher than first drawn [OBSERVED]
   struct Check { const char* name; uint32_t id; const char* fb; bool* v; };
   const Check checks[6] = {{"transport", 0x26E, "Transportation", &edit.transport}, {"powerLines", 0x26F, "Power Lines", &edit.powerLines},
                            {"flora", 0x270, "Flora", &edit.flora}, {"zonedBuildings", 0x271, "Zoned Buildings", &edit.zonedBuildings},
                            {"otherBuildings", 0x272, "Other Buildings", &edit.otherBuildings}, {"zones", 0x273, "Zones", &edit.zones}};
   const bool above = edit.mode == CityLayers::AboveGround;
   for (int i = 0; i < 6; i++)
-    if (control(std::string("above.") + checks[i].name, false, 12, 76 + 18 * i, E.win(checks[i].id, checks[i].fb), *checks[i].v, above))
+    if (control(std::string("above.") + checks[i].name, false, 12, 75 + 18 * i, E.win(checks[i].id, checks[i].fb), *checks[i].v, above))
       *checks[i].v = !*checks[i].v;
 
   // ---- Underground
-  header("mode.under", 8, 191, E.win(0x280, "Underground:"), CityLayers::Underground);
+  header("mode.under", 8, 191, E.win(0x280, "Underground:"), CityLayers::Underground, -1);
   const bool under = edit.mode == CityLayers::Underground;
-  if (control("under.subways", true, 12, 223, E.win(0x274, "Subways"), edit.underground == 0, under)) edit.underground = 0;
-  if (control("under.pipes", true, 12, 239, E.win(0x275, "Water Pipes"), edit.underground == 1, under)) edit.underground = 1;
+  if (control("under.subways", true, 12, 222, E.win(0x274, "Subways"), edit.underground == 0, under)) edit.underground = 0;
+  if (control("under.pipes", true, 12, 238, E.win(0x275, "Water Pipes"), edit.underground == 1, under)) edit.underground = 1;
 
   // ---- City Layer Views
   header("mode.layers", 154, 45, E.win(0x26B, "City Layer Views:"), CityLayers::LayerView);
@@ -403,7 +403,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   auto pill = [&](const char* name, Rect b, const std::string& label) { E.spot(name, b); return ui.button(b, label, true, false, "title9"); };
   if (pill("apply", {r.x + 9, r.y + 262, 102, 33}, E.win(0x26D, "Apply"))) R.add(Act::ApplyLayers);
   if (pill("default", {r.x + 9, r.y + 295, 102, 33}, E.win(0x26C, "Default View"))) { edit = CityLayers(); R.add(Act::ApplyLayers); }
-  Rect grid{r.x + 248, r.y + 260, 36, 35};
+  Rect grid{r.x + 247, r.y + 260, 36, 35};
   E.spot("grid", grid);
   { bool c = false;
     std::string tip = E.gui(0x74, "Grid");
@@ -828,7 +828,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
       slices.push_back({"", c.v, c.col});
     }
     if (!pieChartArt(ui, E, r.x + 232, r.y + 90, slices)) pieChart(ui, r.x + 318, r.y + 138, slices);   // art at (272, 124) in the 800 x 600 window [OBSERVED]
-    cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(int64_t(total)));
+    cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(!el && d.garbageProduced >= 0 ? int64_t(std::llround(d.garbageProduced / 10.0)) : int64_t(total)));
   }
   const int capDy = agePage ? -6 : 0;   // the bar pages' caption lines sit 6 px higher (observed)
   ui.textCentered({r.x + 55, r.y + 249 + capDy, 340, 14}, cap1, "main10", kInkBlue);
