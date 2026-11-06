@@ -160,6 +160,7 @@ class Skin {
 
  private:
   void bind(const std::string& name, uint32_t group, uint32_t inst);
+  void buildShowButton();
   void buildCogButton();      // synthesise "cog" from the exchange-button strip (slimmer cog in its frame)
   void buildEngineButton();   // synthesise "engine" from the help strip (cog instead of "?")
   bool havePanel() const { return get("rootpanel") != nullptr; }

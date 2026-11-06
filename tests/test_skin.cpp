@@ -104,7 +104,16 @@ int main() {
   Rect sb = s.subButtonRect(8, 1, col.x, col.y);
   CHECK(sb.x == col.x && sb.y == 164 && sb.w == 36);
   CHECK(!s.drawSubPanel(ui, 0, 0, 6));
-
+  {  // art with an opacity plane draws soft: alpha 0 skips, 255 overwrites, partial blends over the frame
+    Image soft; soft.w = 3; soft.h = 1;
+    soft.px = {rgba(200, 100, 50, 0), rgba(200, 100, 50, 255), rgba(200, 100, 50, 128)};
+    const size_t o = size_t(300) * W + 10;
+    fb[o] = fb[o + 1] = fb[o + 2] = rgba(0, 0, 0);
+    ui.blit(soft, 10, 300);
+    CHECK(fb[o] == rgba(0, 0, 0) && fb[o + 1] == rgba(200, 100, 50));
+    const uint32_t m = fb[o + 2];
+    CHECK((m & 255) >= 99 && (m & 255) <= 101 && ((m >> 8) & 255) >= 49 && ((m >> 8) & 255) <= 51 && (m >> 24) == 255);
+  }
   BottomBarPlace pl;
   CHECK(s.drawBottomBar(ui, &pl));
   CHECK(pl.bar.y == H - 56 && pl.bar.w == 600 && pl.fieldA.x == 8 && pl.fieldA.y == H - 56 + 26 && pl.textLine.w == 473);

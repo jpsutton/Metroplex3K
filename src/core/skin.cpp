@@ -359,6 +359,20 @@ void Skin::buildCogButton() {
   extras_["cog"] = std::move(im);
 }
 
+// The round Show Toolbars button (02F78C6D:53244588) has black corners and no colour key: its opacity comes from the plane image 53244589 (same
+// 4 x 26 x 26 layout, white where opaque), so the button is a soft disc over the city (observed on the original).
+void Skin::buildShowButton() {
+  const Image* col = fetch(UiBig, 0x53244588);
+  const Image* pl = fetch(UiBig, 0x53244589);
+  if (!col || !pl || col->empty() || col->w != pl->w || col->h != pl->h) return;
+  Image im = *col;
+  for (size_t i = 0; i < im.px.size(); i++) {
+    const uint32_t g = pl->px[i] & 255;   // plane brightness = opacity
+    im.px[i] = (im.px[i] & 0x00FFFFFFu) | (g << 24);
+  }
+  extras_["show"] = std::move(im);
+}
+
 bool Skin::load(ResourceDb& db, int screenH, int screenW) {
   db_ = &db; h_ = screenH;
   w_ = screenW > 0 ? screenW : screenH <= 480 ? 640 : screenH <= 600 ? 800 : 1024;
@@ -392,7 +406,7 @@ bool Skin::load(ResourceDb& db, int screenH, int screenW) {
   bind("nav.layers", UiBig, 0x22F96E35);   // 22F96E31 is the lattice (grid) strip
   for (uint32_t k = 0; k < 4; k++) bind("nav.btn." + std::to_string(k), UiBig, 0x22F96E2D + k);
   bind("hide", UiBig, 0x53244586);   // Hide Toolbars: 4 cells 26x26 (disabled, normal, pressed, highlighted), spec 08 4.2
-  bind("show", UiBig, 0x53244588);   // the round "Show Toolbars" button that remains while the panels are hidden
+  buildShowButton();   // the round "Show Toolbars" button that remains while the panels are hidden (53244588 + opacity plane 53244589)
   // Pause / run buttons (spec 09 4.2): lit, hover (yellow) and unlit (grey) faces.
   bind("pause", UiBig, 0x52FB06E0); bind("pause.hover", UiBig, 0x52FB06E1); bind("pause.off", UiBig, 0x52FB06EB);
   bind("run", UiBig, 0x52FB06E2); bind("run.hover", UiBig, 0x52FB06E3); bind("run.off", UiBig, 0x52FB06EC);

@@ -5,6 +5,20 @@
 
 namespace m3k {
 
+// One source pixel onto the frame: alpha 0 skips, 255 overwrites, anything between blends over what is there (soft edges of
+// art that ships with a separate opacity plane, e.g. the Show Toolbars button).
+static inline void putPixel(Ui& ui, uint32_t& d, uint32_t p) {
+  const uint32_t a = p >> 24;
+  if (!a) return;
+  if (a == 255) { d = p; return; }
+  const float f = float(a) / 255.f;
+  if (ui.overlay && (d >> 24) != 255) { d = overlayOver(d, float(p & 255), float((p >> 8) & 255), float((p >> 16) & 255), f); return; }
+  const float dr = float(d & 255), dg = float((d >> 8) & 255), db = float((d >> 16) & 255);
+  d = 0xFF000000u | (uint32_t(db + (float((p >> 16) & 255) - db) * f) << 16) | (uint32_t(dg + (float((p >> 8) & 255) - dg) * f) << 8) | uint32_t(dr + (float(p & 255) - dr) * f);
+}
+
+
+
 Rect tooltipBox(int place, Rect a, int textWidth, int clientW, int px, int py) {
   const int bw = textWidth + 5, bh = 16;   // our font's advance width includes one blank column the original's box does not count
   Rect r{0, 0, bw, bh};
@@ -99,7 +113,7 @@ void Ui::blitRect(const Image& im, int dx, int dy, int sx, int sy, int sw, int s
     for (int i = 0; i < sw; i++) {
       int x = dx + i; if (x < 0 || x >= W || sx + i >= im.w) continue;
       uint32_t p = im.px[size_t(sy + j) * im.w + sx + i];
-      if (p >> 24) at(x, y) = overlay ? (p | 0xFF000000u) : p;
+      putPixel(*this, at(x, y), p);
     }
   }
 }
@@ -130,7 +144,7 @@ void Ui::blit(const Image& im, int x, int y, int sx, int sw) {
     for (int i = 0; i < sw; i++) {
       int dx = x + i; if (dx < 0 || dx >= W) continue;
       uint32_t p = im.px[size_t(j) * im.w + sx + i];
-      if (p >> 24) at(dx, dy) = overlay ? (p | 0xFF000000u) : p;
+      putPixel(*this, at(dx, dy), p);
     }
   }
 }
