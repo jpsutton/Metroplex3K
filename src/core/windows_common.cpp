@@ -552,7 +552,7 @@ WindowResult MessageBox::draw(Ui& ui, const WinEnv& E) {
     ui.fill({body.x, body.y + body.h - 1, body.w, 1}, rgb(0xFF, 0xF3, 0xFF));
     ui.fill({body.x + body.w - 1, body.y, 1, body.h}, rgb(0xFF, 0xF3, 0xFF));
     // Button band: same blue band with lighter ring as the title bar.
-    Rect band{box.x + 4, box.y + L.bandY, box.w - 9, 35};
+    Rect band{box.x + 4, box.y + L.bandY, box.w - 8, 35};
     ui.fill(band, rgb(173, 182, 255));
     ui.fill({band.x + 1, band.y + 1, band.w - 2, band.h - 2}, rgb(123, 146, 255));
     const Image* icons = ui.skin->image(skin_group::Sys, 0x42E55FD4);
