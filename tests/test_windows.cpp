@@ -335,8 +335,7 @@ void testNeighbours() {
   CHECK(r.has(Act::AcceptDeal) && r.close);
   r = h.click("deal.button2");
   CHECK(r.has(Act::DeclineDeal) && r.close);
-  r = h.click("deal.dismiss");
-  CHECK(r.has(Act::DeclineDeal));
+  // Offers use the radio layout: no Dismiss Petitioner button (the original draws "Take Action:" with two radios instead).
   // Opened from the Meet list the page sits inside the Meet frame at (8, 8); a popup stays centred.
   pd.inMeet = true; h.frame();
   CHECK(!h.ui.windowRects.empty() && h.ui.windowRects[0].x == 8 && h.ui.windowRects[0].y == 8 && h.ui.windowRects[0].w == 384);
@@ -434,8 +433,6 @@ void testPetitioner() {
   CHECK(r.has(Act::AnswerPetition) && r.find(Act::AnswerPetition)->id == 0x55 && r.find(Act::AnswerPetition)->a == 1 && r.close);
   r = h.click("pet.button2");
   CHECK(r.has(Act::AnswerPetition) && r.find(Act::AnswerPetition)->a == 0 && r.close);
-  r = h.click("pet.dismiss");
-  CHECK(r.has(Act::DismissPetitioner) && r.close);
   h.click("pet.impact");
   CHECK(d.impact);
   h.frame(); CHECK(h.inked() > 1000);

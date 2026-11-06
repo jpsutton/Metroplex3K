@@ -859,13 +859,27 @@ void Game::applyPetitionEffect(const PetitionEffect& e) {
   if (e.voiceSound) sound(e.voiceSound);
 }
 
+TextContext Game::petitionContext(uint32_t id) {
+  TextContext tc = env().tc;
+  // Offer petitions of the neighbour deal categories (spec 22 3.13.2): the petition concerns the neighbour of the pending offer of its deal type.
+  struct Cat { int type; uint32_t ids[3]; };
+  static const Cat cats[6] = {{1, {0xB3, 0xB4, 0xB5}}, {0, {0xAC, 0xAD, 0xCA}}, {3, {0xB9, 0xBA, 0xBB}}, {2, {0xA5, 0xA6, 0xA7}}, {5, {0xBF, 0xC0, 0xC1}}, {4, {0xC4, 0xC5, 0xF7}}};
+  for (const Cat& c : cats)
+    for (uint32_t x : c.ids)
+      if (x == id)
+        for (const auto& d : city().neighbours.pending)
+          if (d.dealType == c.type && !d.neighbourName.empty()) { tc.neighbour = d.neighbourName; return tc; }
+  return tc;
+}
+
 void Game::presentPetitions() {
   if (petView_ || !managersReady_) return;
   for (const auto& p : petitioners_.list()) {
     if (p.hidden() || !p.raised()) continue;
     if (std::find(petShown_.begin(), petShown_.end(), p.id) != petShown_.end()) continue;
     WinEnv E = env();
-    petView_ = std::make_unique<PetitionerView>(makePetitionerView(E, petitioners_.config, p, &E.tc));
+    const TextContext ptc = petitionContext(p.id);
+    petView_ = std::make_unique<PetitionerView>(makePetitionerView(E, petitioners_.config, p, &ptc));
     petViewId_ = p.id; petDlg_.impact = false; petDlg_.inMeet = false;
     petShown_.push_back(p.id);
     break;

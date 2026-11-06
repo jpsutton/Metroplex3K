@@ -302,6 +302,7 @@ class AdvisorWindow {
   void open(uint32_t advisorId = 0) { selected = advisorId; tab = 0; topicSel = -1; scroll = 0; comboOpen = false; }
   WindowResult draw(Ui& ui, const WinEnv& E, AdvisorManager& am, const PetitionerManager& pm);
   bool comboOpen = false;     // "Discuss:" drop-down open
+  int petScroll = 0;          // first visible row of the Petitioner Issues list
   int petSel = -1;            // selected row of the Petitioner Issues list (petition id); a double click opens it
   int frameNo = 0, petClickFrame = -1000;
   static std::string advisorName(const WinEnv& E, uint32_t advisorId);   // title, e.g. "City Planner"
@@ -328,6 +329,7 @@ PetitionerView makePetitionerView(const WinEnv& E, const PetitionerConfig& cfg, 
 class PetitionerDialog {
  public:
   bool impact = false;        // impact-analysis page showing the advisor/council responses
+  int scroll = 0;             // first visible line of an offer petition's text
   bool inMeet = false;        // opened from the Meet window's list: the page replaces the list inside that frame, at (8, 8) (spec 09 6.5)
   // Events: AnswerPetition(id, accepted) / DismissPetitioner(id); for deal offers: AcceptDeal /
   // DeclineDeal(id = pending index).

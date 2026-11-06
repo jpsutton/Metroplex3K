@@ -731,7 +731,8 @@ void Game::handleWindowResult(const WindowResult& r) {
         const PendingPetition* p = petitioners_.find(e.id);
         if (p) {
           WinEnv E = env();
-          petView_ = std::make_unique<PetitionerView>(makePetitionerView(E, petitioners_.config, *p, &E.tc));
+          const TextContext ptc = petitionContext(p->id);
+          petView_ = std::make_unique<PetitionerView>(makePetitionerView(E, petitioners_.config, *p, &ptc));
           petViewId_ = e.id; petDlg_.impact = false; petDlg_.inMeet = true;   // from the Meet list: shown inside that frame
         }
         break;

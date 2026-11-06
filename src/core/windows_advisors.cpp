@@ -134,15 +134,25 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
     // Ascending petition id: the original's list control orders its rows by the id of the heading string (spec 09 6.5, 4/4 on Berlin).
     auto pending = pm.presentable();
     std::stable_sort(pending.begin(), pending.end(), [](const PendingPetition* a, const PendingPetition* b) { return a->id < b->id; });
-    for (const PendingPetition* p : pending) {
-      if (k >= (lr.h - 3) / 14) break;
+    // More than 13 petitions: a scrollbar inside the list box (screen x ~370..385, y 175..355) and the rows start 5 px lower, first row y 180 [OBSERVED].
+    const bool bar = int(pending.size()) > 13;
+    const int visibleRows = bar ? (lr.h - 3 - 5) / 14 : (lr.h - 3) / 14;
+    if (bar) {
+      const Rect br{lr.x + 343, lr.y + 3, 16, lr.h - 6};
+      ui.fill(br, rgb(0x7B, 0x92, 0xFF));
+      scenarioScrollBar(ui, E, br, lr, int(pending.size()), visibleRows, petScroll);
+    } else petScroll = 0;
+    petScroll = std::max(0, std::min(petScroll, std::max(0, int(pending.size()) - visibleRows)));
+    for (size_t pi = size_t(petScroll); pi < pending.size(); pi++) {
+      const PendingPetition* p = pending[pi];
+      if (k >= visibleRows) break;
       uint32_t tbl = pm.config.tableFor(PetitionText::Heading, p->id, has);
       std::string h = tbl ? E.text(tbl, p->id, hexName("Petition ", p->id)) : hexName("Petition ", p->id);
-      const int ty = lr.y + 3 + 14 * k;
-      Rect row{lr.x + 1, ty - 1, lr.w - 2, 14};
+      const int ty = lr.y + 3 + (bar ? 5 : 0) + 14 * k;
+      Rect row{lr.x + 1, ty - 1, lr.w - 2 - (bar ? 18 : 0), 14};
       E.spot("petition." + std::to_string(p->id), row);
       const bool sel = petSel == int(p->id);
-      if (sel) ui.fill({r.x + 28, ty, lr.x + lr.w - 1 - (r.x + 28), 13}, rgb(0, 0, 255));
+      if (sel) ui.fill({r.x + 28, ty, lr.x + lr.w - 1 - (r.x + 28) - (bar ? 18 : 0), 13}, rgb(0, 0, 255));
       for (int k2 = 0; k2 < 9; k2++) ui.fill({r.x + 23, ty + k2, k2 < 5 ? k2 + 1 : 9 - k2, 1}, sel ? kWhite : kInk);   // 5 x 9 triangle, rows 175..183 [observed]
       ui.text(r.x + 34, ty - 3, ellipsize(ui, h, lr.x + lr.w - (r.x + 34) - 6), "main9", sel ? kWhite : kInk);   // main9: first ink row 175 (observed)
       if (ui.clicked(row)) {
@@ -330,15 +340,18 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
     else R.add(Act::AnswerPetition, v.petition, accepted);
     R.close = true;
   };
+  const bool offer = (!v.button1.empty() || !v.button2.empty()) && !impact;   // offers use their own layout [OBSERVED: business, reward, neighbour deal, complaints]
   blueBand(ui, {r.x + 4, r.y + 34, 8, 316});
-  blueBand(ui, {r.x + 4, r.y + 310, 47, 40});
-  ui.fill({r.x + 5, r.y + 311, 11, 38}, rgb(0x7B, 0x92, 0xFF));   // plate merges with the strip
+  if (!offer) {
+    blueBand(ui, {r.x + 4, r.y + 310, 47, 40});
+    ui.fill({r.x + 5, r.y + 311, 11, 38}, rgb(0x7B, 0x92, 0xFF));   // plate merges with the strip
+  }
   ui.text(r.x + 21, r.y + 41, v.name, "main9", kInk);
   Rect pp{r.x + 19, r.y + 58, 92, 115};
   if (v.portrait) ui.blitRect(*v.portrait, pp.x, pp.y, 0, 0, std::min(92, v.portrait->w), std::min(115, v.portrait->h));
   else portrait(ui, pp, nullptr, v.name.empty() ? "?" : v.name.substr(0, 1), rgb(0x9A, 0x84, 0x7A));
   sunkenLines(ui, pp);
-  Rect mb{r.x + 121, r.y + 58, 258, 291};
+  Rect mb{r.x + 121, r.y + 58, 258, offer ? 202 : 291};
   ui.fill(mb, kLav); sunkenLines(ui, mb);
   const bool hasAnswers = !v.button1.empty() || !v.button2.empty();
   const bool hasImpact = !v.advisorResponse.empty() || !v.councilResponse.empty();
@@ -349,10 +362,44 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
     for (const auto& l : wrap(ui, text, 232, "main9")) { if (br.h > 0 && y + 14 > br.h) break; ui.text(br.x, br.y + y, l, "main9", rgb(0, 0, 0)); y += 14; }
     return y;
   };
-  if (!impact) {
+  if (offer) {
+    // Text panel x129..386 y66..267 with a scrollbar inside its right edge; 13 lines of 14 px; "Take Action:" plate with two radio buttons; "Impact Analysis:"
+    // plate with the round "?" button [OBSERVED at 800 x 600, window at (8, 8)].
+    const auto lines = wrap(ui, v.message, 214, "main9");
+    const int visible = 13;
+    const bool over = int(lines.size()) > visible;
+    if (over) {
+      ui.fill({r.x + 363, r.y + 60, 16, 198}, rgb(0x7B, 0x92, 0xFF));
+      scenarioScrollBar(ui, E, {r.x + 363, r.y + 60, 16, 198}, mb, int(lines.size()), visible, scroll);
+    } else scroll = 0;
+    for (int i = 0; i < visible && scroll + i < int(lines.size()); i++) ui.text(r.x + 133, r.y + 63 + 14 * i, lines[size_t(scroll + i)], "main9", rgb(0, 0, 0));
+    const uint32_t plate = rgb(0x7B, 0x92, 0xFF);
+    ui.fill({r.x + 5, r.y + 263, 115, 24}, plate); ui.fill({r.x + 5, r.y + 287, 45, 62}, plate);
+    ui.text(r.x + 21, r.y + 270, E.win(0x82, "Take Action:"), "main9", kInk);
+    const Image* radioArt = ui.skin ? ui.skin->get("radio") : nullptr;
+    const std::string labels[2] = {v.button1, v.button2};
+    for (int k = 0; k < 2; k++) {
+      Rect hit{r.x + 20, r.y + 290 + 28 * k, 24 + 4 + ui.textWidth(labels[k], "main9") + 8, 24};
+      E.spot(t + (k ? ".button2" : ".button1"), hit);
+      const bool hot = ui.hover(hit);
+      if (!(ui.skin && ui.skin->drawCheck(ui, radioArt, hit.x + 6, hit.y + 6, false, true, hot, hot && ui.in.down))) { ui.fill({hit.x + 6, hit.y + 6, 12, 12}, rgb(255, 255, 255)); ui.frame({hit.x + 6, hit.y + 6, 12, 12}, false); }
+      ui.text(r.x + 58, r.y + 294 + 28 * k, labels[k], "main9", kInk);
+      if (ui.clicked(hit)) answer(k == 0);
+    }
+    ui.fill({r.x + 273, r.y + 294, 105, 54}, plate);
+    ui.text(r.x + 278, r.y + 309, "Impact", "main9", kInk); ui.text(r.x + 278, r.y + 325, "Analysis:", "main9", kInk);
+    {
+      Rect q{r.x + 344, r.y + 317, 26, 24};
+      E.spot(t + ".impact", q);
+      bool c = false;
+      if (ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Gonzo, 0x19), 4, q, "", false, true, c)) {}
+      else c = ui.button(q, "?");
+      if (c) impact = true;
+    }
+  } else if (!impact) {
     body({r.x + 133, r.y + 63, 232, textH}, v.message);
     int bx = mb.x + 6, by = mb.y + mb.h - 38, bw = 80;
-    if (hasAnswers) {
+    if (hasAnswers) {   // (not reached for offers: they use the radio layout above)
       if (!v.button1.empty() && button(ui, E, t + ".button1", {bx, by, bw, 33}, v.button1)) answer(true);
       if (!v.button2.empty() && button(ui, E, t + ".button2", {bx + bw + 4, by, bw, 33}, v.button2)) answer(false);
     } else if (hasImpact && button(ui, E, t + ".ok", {bx, by, bw, 33}, E.win(0x85, "OK"))) {
@@ -367,8 +414,8 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
     body({r.x + 133, y + 16, 232, 100}, v.councilResponse.empty() ? "-" : v.councilResponse);
     if (button(ui, E, t + ".return", {mb.x + 6, mb.y + mb.h - 38, 112, 33}, "<<")) impact = false;
   }
-  // Round Dismiss button on the plate with its two-line label.
-  {
+  // Round Dismiss button on the plate with its two-line label (info petitions only).
+  if (!offer) {
     Rect db{r.x + 19, r.y + 318, 26, 25};
     E.spot(t + ".dismiss", db);
     bool c = false;

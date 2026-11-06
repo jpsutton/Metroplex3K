@@ -302,6 +302,7 @@ class Game {
   void monthlyHook(int month, int year);
   void fillAdvisorInputs(AdvisorInputs& in);
   void presentPetitions();
+  TextContext petitionContext(uint32_t petitionId);   // env().tc with %NEIGHBOR% = the neighbour of the pending deal offer this petition belongs to
   void applyPetitionEffect(const PetitionEffect& e);
   void applyDisasterOutput(DisasterOutput& out);
   void gotoDisaster();
