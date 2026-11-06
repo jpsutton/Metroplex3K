@@ -237,7 +237,8 @@ void Game::initManagers() {
     IniFile moods, gold, gfx;
     bool haveGold = data_.ini().load("GoldAdvisorMoods.INI", gold);
     if (data_.ini().load("AdvisorMoods.INI", moods)) advisors_.moods.load(moods, haveGold ? &gold : nullptr);
-    if (data_.ini().load("AdvisorTopicGfx.INI", gfx)) advisors_.gfx.load(gfx);
+    { IniFile goldGfx; const bool haveGoldGfx = data_.ini().load("GoldAdvisor-TopicGfxIDs.ini", goldGfx);   // the original's file names [OBSERVED]
+      if (data_.ini().load("Advisor-TopicGfxIDs.ini", gfx)) advisors_.gfx.load(gfx, haveGoldGfx ? &goldGfx : nullptr); }
   }
   news_.setDb(&tickerDb_);
   news_.setTextFn(textFn);

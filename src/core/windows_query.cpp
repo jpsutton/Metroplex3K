@@ -501,8 +501,9 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
     // The button sits on a (123,146,255) plate the size of the button; its label is the regular main9 weight [OBSERVED].
     ui.fill(b, rgb(123, 146, 255));
     E.spot("replace", b);
-    const bool repClicked = ui.button(b, "", true, false, "title9");
-    ui.textCentered({b.x, b.y - 1, b.w - 4, b.h - 2}, E.se(0x12C, "Replace"), "title9", ui.textCol);   // caption 1 px higher than the generic button centring
+    ui.buttonLabelDy = -1;   // caption 1 px higher than the generic button centring; the pill's fixed TITLE9 palette applies
+    const bool repClicked = ui.button(b, E.se(0x12C, "Replace"), true, false, "title9");
+    ui.buttonLabelDy = 0;
     if (repClicked) { R.add(Act::QueryReplace, 0, q.x, q.z); R.close = true; R.add(Act::Close); }
   }
   if (historical) {

@@ -580,9 +580,7 @@ void Game::drawWindows(uint32_t dtMs) {
         series[14].chart = &wc[2];              // Industry
         series[15].chart = &conv[2];            // Power %
         // Live current values: the 12-month plot's last point and its label [OBSERVED: City Size 1,234,286 is in no saved slot].
-        series[3].live = city.population();
-        series[13].live = sim_.funds;
-        { const auto& ps = city.power.stats(); series[15].live = ps.produced > 0 ? std::min<int64_t>(100, 100 * int64_t(ps.consumed) / int64_t(ps.produced)) : 0; }
+        // The 12th point is the live value in the original; its formulas are unknown, so the newest saved sample stands in (monthly[0]).
       }
 
     } else if (viewData_.mode == int(ViewDataWindow::ModeCharts)) {

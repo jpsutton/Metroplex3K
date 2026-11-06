@@ -769,7 +769,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
           if (tile && !tile->empty() && row < tile->h) { const uint32_t px = tile->px[size_t(row) * tile->w + size_t((x - 197) % tile->w)]; if (px >> 24) col = px | 0xFF000000u; }
           ui.at(r.x + x, r.y + 51 + row) = col;
         }
-      ui.textCentered({r.x + 197, plot.y + 1, 118, 12}, E.win(0x1E5, "Workforce"), "main9", rgb(214, 142, 90));
+      ui.textCentered({r.x + 198, plot.y, 118, 12}, E.win(0x1E5, "Workforce"), "main9", rgb(214, 142, 90));
     }
     // Axes: light (173,178,222), 2 px: vertical x 183..184 over the full box height, horizontal rows 238..239 [OBSERVED].
     (void)axis;
@@ -782,13 +782,13 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     for (int v = 0; v <= top; v += step) {
       // Label tops 235 - round(v * 143 / top) on the original (Education: 235, 215, 194, 174, 153, 133, 112, 92), right-aligned at x 160.
       const int ly = 198 - int(143.f * float(v) / float(top) + 0.5f);
-      rightText(ui, r.x + 138, r.y + ly, std::to_string(v), "main9", kAxisInk);
+      rightText(ui, r.x + 139, r.y + ly, std::to_string(v), "main9", kAxisInk);
     }
     for (int n = 10; n <= 90; n += 10) {   // x labels, 26 px per 10 years, "10" at x ~ 164
       const std::string t = std::to_string(n);
-      ui.text(r.x + 138 + 26 * n / 10 - ui.textWidth(t, "system9") / 2 - (n > 10 ? 1 : 0), r.y + 208, t, "system9", kAxisInk);   // row y244, lefts 199 / 223 / 249 ... [OBSERVED]
+      ui.text(r.x + 138 + 26 * n / 10 - ui.textWidth(t, "system9") / 2 - (n > 10 ? 0 : 0), r.y + 208, t, "system9", kAxisInk);   // row y244, lefts 199 / 223 / 249 ... [OBSERVED]
     }
-    ui.text(r.x + 218, r.y + 218, E.win(0x1E6, "Resident Age"), "main9", kAxisInk);   // bold, ink from x257 [OBSERVED]
+    ui.text(r.x + 219, r.y + 218, E.win(0x1E6, "Resident Age"), "main9", kAxisInk);   // bold, ink from x257 [OBSERVED]
     {   // vertical axis caption, rotated: Education Quotient on two lines, Health and Population on one
       const std::string t = E.win(tab == 0 ? 0x1E4u : tab == 1 ? 0x1E0u : 0x1E1u, tab == 0 ? "Education Quotient" : tab == 1 ? "Health" : "Population");
       const size_t sp = tab == 0 ? t.find(' ') : std::string::npos;
@@ -855,12 +855,12 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(!el && d.garbageProduced >= 0 ? int64_t(std::llround(d.garbageProduced / 10.0)) : int64_t(total)));
   }
   const int capDy = -6;   // the caption lines sit 6 px higher on every chart page (observed)
-  ui.textCentered({r.x + 55, r.y + 249 + capDy, 340, 14}, cap1, "main9", kInkBlue);   // the caption lines are MAIN9 [OBSERVED on the pie pages; the age pages' text starts 2 px right of main10's]
-  if (!cap2.empty()) ui.textCentered({r.x + 55, r.y + 265 + capDy, 340, 14}, cap2, "main9", rgb(247, 142, 90));
+  ui.textCentered({r.x + 56, r.y + 249 + capDy, 340, 14}, cap1, "main9", kInkBlue);   // the caption lines are MAIN9 [OBSERVED on the pie pages; the age pages' text starts 2 px right of main10's]
+  if (!cap2.empty()) ui.textCentered({r.x + 56, r.y + 264 + capDy, 340, 14}, cap2, "main9", rgb(247, 142, 90));
   static const uint32_t tid[5] = {0x1DD, 0x1E0, 0x1E1, 0x1DE, 0x1DF};
   static const char* const tfb[5] = {"Education", "Health", "Population", "Electricity", "Garbage"};
   for (int i = 0; i < 5; i++)
-    if (radio(ui, E, "tab." + std::to_string(i), {r.x + 192, r.y + 314 + 20 * i - 6, 140, 12}, E.win(tid[i], tfb[i]), tab == i, "main10")) tab = i;
+    if (radio(ui, E, "tab." + std::to_string(i), {r.x + 192, r.y + 314 + 20 * i - 6, 140, 12}, E.win(tid[i], tfb[i]), tab == i, "system9")) tab = i;
   return R;
 }
 

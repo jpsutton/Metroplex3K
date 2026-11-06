@@ -222,7 +222,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
     const std::string raw = help ? E.text(0xE26EC3B8, uint32_t(topicSel), "(no text)") : E.text(kTblAdvisorMessage, uint32_t(topicSel), "(no text)");
     const std::string body = topicText(raw, E.tc, ti ? ti->args : std::vector<TopicArg>{});
     auto lines = wrapKeepSpaces(ui, body, 228, "main9");
-    const int bodyTop = r.y + 79, visible = std::max(1, (P.y + P.h - 4 - bodyTop) / 14);
+    const int bodyTop = r.y + 78, visible = std::max(1, (P.y + P.h - 4 - bodyTop) / 14);
     const bool overflow = int(lines.size()) > visible;
     if (overflow) { lines = wrapKeepSpaces(ui, body, 212, "main9"); scenarioScrollBar(ui, E, {r.x + 238, r.y + 78, 16, 265}, P, int(lines.size()), visible, scroll); }
     else scroll = 0;
@@ -288,8 +288,12 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
   }
   // Drop-down list on top.
   if (comboOpen) {
-    Rect dd{combo.x, combo.y + combo.h, combo.w, 3 * 14 + 2};
-    ui.fill(dd, kWhite); ui.frame(dd, false);
+    Rect dd{r.x + 63, combo.y + combo.h, 192, 42};   // x71..262 y68..109 on the original
+    ui.fill(dd, kWhite);
+    { const uint32_t blk = rgb(0, 0, 0);
+      ui.fill({dd.x, dd.y, dd.w, 1}, blk); ui.fill({dd.x, dd.y + dd.h - 1, dd.w, 1}, blk); ui.fill({dd.x, dd.y, 1, dd.h}, blk); ui.fill({dd.x + dd.w - 1, dd.y, 1, dd.h}, blk);
+      ui.fill({dd.x + 1, dd.y + 1, 1, dd.h - 2}, rgb(189, 190, 189)); ui.fill({dd.x + 1, dd.y + dd.h - 2, dd.w - 2, 1}, rgb(189, 190, 189)); ui.fill({dd.x + dd.w - 2, dd.y + 1, 1, dd.h - 2}, rgb(140, 142, 140));
+      ui.fill({dd.x, dd.y + dd.h, dd.w, 2}, rgb(49, 52, 123)); }
     for (int t = 0; t < 3; t++) {
       Rect row{dd.x + 1, dd.y + 1 + 14 * t, dd.w - 2, 14};
       E.spot("tab." + std::to_string(t), row);
