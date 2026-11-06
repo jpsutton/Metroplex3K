@@ -106,7 +106,7 @@ void Game::openWindow(const std::string& name) {
   else if (name == "ordinances") { showOrd_ = true; ordWin_.scroll = 0; }
   else if (name == "neighbours" || name == "neighbors") {
     showNeigh_ = true;
-    neighWin_.selected = 0;   // the original selects the first neighbour on open (spec 09 6.7 [OBSERVED])
+    neighWin_.selected = 1;   // the original opens on area 0, which maps to neighbour (0 + 1) & 3 = the upper-left cell at rotation 0 [STATIC SIMUI 0x1005163d]
     // Region image (spec 11 section 9): the city's heights in the middle, deterministic invented terrain around it,
     // coloured with row 3 of the map ramp 000005E5:21.
     std::array<uint32_t, 12> ramp = neighbourRegionDefaultRamp();

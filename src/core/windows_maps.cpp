@@ -522,8 +522,13 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   // ticks along y ~ 220 and the current year in grey
   ui.fill({r.x + 300, box.y + 1, 1, box.h - 2}, rgb(173, 178, 222));   // the "now" line between the lines and their labels (axis colour)
   ui.fill({r.x + 44, r.y + 218, 256, 2}, rgb(173, 178, 222));         // axis, 2 px
-  if (nPts > 1) for (int k = 0; k < nPts; k++) ui.fill({x0 + k * (x1 - x0) / (nPts - 1), r.y + 220, 1, 3}, rgb(173, 178, 222));
-  if (year) rightText(ui, r.x + 265, r.y + 221, std::to_string(year), "system9", rgb(128, 128, 128));   // ink ends ~35 px left of the now line [observed]
+  // Ticks: 1 x 2 px at rows 254..255, one per sample from x 85 to the now line (12 ticks, ~23.2 px apart on a 1-year view) [OBSERVED].
+  if (nPts > 1) for (int k = 0; k < nPts; k++) ui.fill({r.x + 45 + k * 255 / (nPts - 1), r.y + 220, 1, 2}, rgb(173, 178, 222));
+  // The year label (axis colour) is centred under the tick span it names: the second-to-last tick [INFERRED from one same-length capture].
+  if (year) {
+    const int tx = nPts > 2 ? r.x + 45 + (nPts - 2) * 255 / (nPts - 1) : r.x + 253;
+    ui.text(tx - ui.textWidth(std::to_string(year), "system9") / 2, r.y + 221, std::to_string(year), "system9", rgb(173, 178, 222));
+  }
   // check-box grid: three columns of 5, 6 and 5
   static const int colSize[3] = {5, 6, 5}, colX[3] = {58, 178, 298};
   size_t idx = 0;

@@ -128,7 +128,11 @@ void splitHeading(Ui& ui, int cx, int y, const std::string& s, const char* font,
     if (sp == std::string::npos) parts.push_back(s);
     else { parts.push_back(s.substr(0, sp)); parts.push_back(s.substr(sp + 1)); }
   }
-  for (size_t i = 0; i < parts.size(); i++) ui.text(cx - ui.textWidth(parts[i], font) / 2, y + int(i) * 14, parts[i], font, col);
+  for (size_t i = 0; i < parts.size(); i++) {
+    // The original centres these three lines 2 px off the ink-width centre (English strings, observed): "Expense" and "Estimate" 2 px right, "Meet" 2 px left.
+    const int adj = (parts[i] == "Expense" || parts[i] == "Estimate") ? 2 : parts[i] == "Meet" ? -2 : 0;
+    ui.text(cx - ui.textWidth(parts[i], font) / 2 + adj, y + int(i) * 14, parts[i], font, col);
+  }
 }
 
 uint32_t moneyCol(int64_t v) { return v < 0 ? kRed : kBlack; }
@@ -218,8 +222,12 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
     ui.text(r.x + 18, r.y + fy + 2, E.win(row.label, row.fb), F, kInkLabel);
     if (const Line* l = line(key)) {
       int64_t ya = incomeTab ? l->ytd : -l->ytd, ye = incomeTab ? l->est : -l->est;
-      whiteField(ui, at(275, fy, 76, 18));
-      whiteField(ui, at(353, fy, 76, 18));
+      // Value boxes [OBSERVED, Berlin]: 17 rows tall on the expenditure page (top 1 px lower; the Ordinances box 2 px lower and 1 px longer at the
+      // bottom); the Neighbor Deals box stays 18.
+      int vt = 0, vb = 0;
+      if (!incomeTab && key != "deal.exp") { vt = key == "ord.exp" ? 2 : 1; vb = key == "ord.exp" ? 1 : 0; }
+      whiteField(ui, at(275, fy + vt, 76, 18 - vt + vb));
+      whiteField(ui, at(353, fy + vt, 76, 18 - vt + vb));
       rightText(ui, r.x + 349, r.y + fy + 2, E.money(ya), F, moneyCol(ya));
       rightText(ui, r.x + 429, r.y + fy + 2, E.money(ye), F, moneyCol(ye));
     }
@@ -838,9 +846,8 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
   ui.text(r.x + 239, r.y + 318, E.win(0x29C, "Discuss Deal:"), "main9", ink);
   { Rect db{r.x + 322, r.y + 310, 38, 33};
     E.spot("discuss", db);
-    // Disabled while the selected neighbour has no land link (`exists` 0): the original draws the button grey for Hawkin's Creek in Berlin [OBSERVED; the
-    // rule is INFERRED].
-    const bool canDeal = haveSel && n.neighbours[selected].exists;
+    bool canDeal = false;   // enabled only when the selected neighbour has deals in the list below [STATIC SIMUI]
+    if (haveSel) for (const Deal& d : n.active) if (d.neighbourIndex == selected && !d.terminated() && d.dealType < kDealTypes) canDeal = true;
     bool c = false; const Image* art = E.img(0x42DEC7D2, 0x10);
     if (!(ui.skin && art && ui.skin->imageButtonCells(ui, art, 4, db, "", false, canDeal, c))) c = ui.button(db, "?", canDeal);
     if (c && canDeal) R.add(Act::DiscussDeal, uint32_t(selected)); }
