@@ -618,6 +618,7 @@ void Game::drawWindows(uint32_t dtMs) {
   }
   if (msgBox_.active) {
     uiHit_ = true;
+    msgBox_.centreInView = scr_ == Screen::InCity;
     handleWindowResult(msgBox_.draw(ui_, E));
   }
 

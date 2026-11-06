@@ -165,7 +165,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
   std::vector<Row> rows;
   if (tab == 2) {
     for (const auto& oc : AdvisorManager::ordinanceTopics(selected))
-      if (!ordinances || ordinances->available(oc.first)) rows.push_back({oc.second, E.text(kTblAdvisorHeading, oc.second, hexName("Topic ", oc.second))});
+      if (!ordinances || ordinances->available(oc.first)) rows.push_back({oc.second, E.text(0x82B85965, oc.second, hexName("Ordinance ", oc.second))});   // help ids = the 3.6 topic numbers
   } else if (tab == 1) {
     for (uint32_t t : briefingIds(selected)) rows.push_back({t, E.text(0x82B85965, t, hexName("Help ", t))});
   } else {
@@ -203,7 +203,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
     const Rect P{r.x + 7, r.y + 39, 248, 307};
     ui.fill(P, rgb(222, 223, 255)); insetBevel(ui, P);
     const TopicInstance* ti = list.find(uint32_t(topicSel));
-    const bool help = tab == 1;
+    const bool help = tab >= 1;   // briefings and ordinances read the help tables 82B85965 / E26EC3B8
     const std::string head = help ? E.text(0x82B85965, uint32_t(topicSel), hexName("Help ", uint32_t(topicSel)))
                                   : E.text(kTblAdvisorHeading, uint32_t(topicSel), hexName("Topic ", uint32_t(topicSel)));
     ui.text(r.x + 13, r.y + 51, ellipsize(ui, head, 232), "main10", kInk);   // bold heading: ink x 21, rows 61..73

@@ -701,6 +701,7 @@ class MessageBox {
   // Set after open(): Esc and the close box report Cancel although the box has no Cancel button (the Yes/No prompts
   // that ask to save before New / Load, whose close box aborts). Reset by open().
   bool closeCancels = false;
+  bool centreInView = false;   // centred on the map viewport (screen minus the navigator column and the bottom bar) instead of the whole screen; set by the game while a city is open
   // Icon cells of the SYS MBIcons sheet (82B9B75B:42E55FD4), measured on the art.
   enum Icon { NoIcon = -1, IconError = 0, IconWarning = 1, IconInfo = 2, IconQuestion = 3 };
   void open(const std::string& title, const std::string& message, int style = 0, int icon = IconWarning);   // style 0..5

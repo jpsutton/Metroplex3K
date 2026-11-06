@@ -513,7 +513,7 @@ WindowResult MessageBox::draw(Ui& ui, const WinEnv& E) {
   if (!active) return R;
   Layout L = layout(ui);
   const int lh = wui::lineHeight(ui);
-  Rect box = wui::centered(ui, L.boxW, L.boxH);
+  Rect box = centreInView ? wui::centredInView(ui, L.boxW, L.boxH) : wui::centered(ui, L.boxW, L.boxH);   // observed: in a city the box is centred on the viewport
   const uint32_t ink = rgb(0x31, 0x34, 0x7B);
   bool closeClicked = false;
   if (ui.skin && ui.skin->drawDialogFrame(ui, box, title_)) {
@@ -521,6 +521,7 @@ WindowResult MessageBox::draw(Ui& ui, const WinEnv& E) {
     if (ui.skin->dialogCloseBox(ui, box, hit, closeClicked)) E.spot("close", hit);
     // Sunken body panel: dark blue top/left line, light bottom/right line over the cloud body.
     Rect body{box.x + 4, box.y + L.bodyY, box.w - 8, L.bodyH};
+    ui.fill(body, rgb(222, 223, 255));   // flat interior (the cloud texture does not show through) [OBSERVED]
     ui.fill({body.x, body.y, body.w, 1}, rgb(0x7B, 0x8A, 0xFF));
     ui.fill({body.x, body.y, 1, body.h}, rgb(0x7B, 0x8A, 0xFF));
     ui.fill({body.x, body.y + body.h - 1, body.w, 1}, rgb(0xFF, 0xF3, 0xFF));

@@ -78,11 +78,19 @@ void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::strin
     if (c == '\n') { x = x0; y += glyphH_ + 1; continue; }
     if (c == '\r') continue;
     const Glyph& g = g_[c];
+    // Ramp (title) fonts: a glyph whose first atlas column is all background is drawn from its second column at the pen, i.e. one pixel to the left
+    // [OBSERVED: the 'S' of the scenario dialog title has ink at the pen column; its record l=604 has an empty first column].
+    int skipLeft = 0;
+    if (ramp_ && !multi_ && g.r - g.l > 1 && g.l >= 0 && g.l < w_) {
+      bool empty = true;
+      for (int gy = g.t; gy < g.b && empty; gy++) if (gy >= 0 && gy < h_ && atlas_[size_t(gy) * w_ + g.l] != atlas_[0]) empty = false;
+      if (empty) skipLeft = 1;
+    }
     for (int gy = g.t; gy < g.b; gy++) {
       int dy = y + gy - g.t;
       if (dy < 0 || dy >= fbH || gy < 0 || gy >= h_) continue;
-      for (int gx = g.l; gx < g.r; gx++) {
-        int dx = x + gx - g.l;
+      for (int gx = g.l + skipLeft; gx < g.r; gx++) {
+        int dx = x + gx - g.l - skipLeft;
         if (dx < 0 || dx >= fbW || gx < 0 || gx >= w_) continue;
         uint8_t idx = atlas_[size_t(gy) * w_ + gx];
         uint32_t& d = fb[size_t(dy) * pitch + dx];
