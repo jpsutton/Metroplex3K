@@ -154,6 +154,7 @@ struct AdvisorInputs {
     int jailUnjailed = 0;                           // prisoners without a cell (police getter +0x78, "jail full") [INFERRED]
     int policeStrength = 0;                         // "police strength measure"
     bool curfewEnacted = false, youthSportsEnacted = false;
+    bool toxicImminent = false, debrisActive = false;   // Ra / Rb flags (spec 22 3.9, SIMDSTR)
   } safety;
 
   struct Transport {

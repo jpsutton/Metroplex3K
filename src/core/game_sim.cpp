@@ -360,6 +360,8 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   in.env.airPollution = int(c.pollution.avgAir); in.env.waterPollution = int(c.pollution.avgWater);
   in.plan.airPollution = in.env.airPollution; in.plan.waterPollution = in.env.waterPollution;
   in.safety.crime = int(c.crime.avgCrime);
+  in.safety.toxicImminent = disasters_.toxicImminent(inputsFor(c, disastersOn_, cheats_));
+  in.safety.debrisActive = disasters_.debrisActive();
   in.safety.policeStrike = c.police.strike.striking; in.safety.fireStrike = c.fire.strike.striking;
   // Strike warnings = the layers' strike chance per tick / 100 (spec 22 s3.9) [STATIC police; INFERRED fire].
   in.safety.policeWarn = int(c.police.lastStrikeChance / 100); in.safety.fireWarn = int(c.fire.lastStrikeChance / 100);

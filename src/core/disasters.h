@@ -370,6 +370,9 @@ class DisasterManager {
   const std::vector<LocustInst>& locusts() const { return locusts_; }
   const std::vector<WhirlInst>& whirlpools() const { return whirls_; }
   const std::vector<JunkInst>& junk() const { return junk_; }
+  int64_t toxicScore(const DisasterInputs& in) const;
+  bool toxicImminent(const DisasterInputs& in) const;   // advisor flag Ra (spec 22 3.9)
+  bool debrisActive() const { return !junk_.empty(); }  // advisor flag Rb: a debris piece is in flight or impacting
   HistoryList& quakeHistory() { return quakeHist_; }
   HistoryList& ufoHistory() { return ufoHist_; }
   HistoryList& junkHistory() { return junkHist_; }

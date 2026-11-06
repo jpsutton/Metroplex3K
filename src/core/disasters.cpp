@@ -1493,12 +1493,7 @@ void DisasterManager::monthlyTick(DisasterWorld& w, const DisasterInputs& in, Di
   // Toxic cloud
   if (int(clouds_.size()) < tune.toxMaxInstances &&
       (!haveCloud_ || int64_t(in.jdn) - lastCloudJdn_ >= int64_t(tune.toxAvgMonthsBetween) * 30)) {
-    // spec 21 s6.2 [STATIC]: floor(WeightForPollution x avgAir / MaxAirPolluteForUI), product first, signed 32-bit division
-    int64_t score = in.pollutionNorm != 0 ? int64_t(int32_t(int32_t(tune.toxWeightPollution) * int32_t(in.pollutionTotal)) / int32_t(in.pollutionNorm)) : 0;
-    if (in.ordCleanIndustry) score -= tune.toxWeightCleanInd;
-    if (in.ordIndPollutantFee) score -= tune.toxWeightIndFee;
-    if (in.ordWasteDisposal) score -= tune.toxWeightWaste;
-    score += int64_t(tune.toxWeightPlant) * in.toxicWastePlants;
+    const int64_t score = toxicScore(in);
     if (score > tune.toxThreshold) {
       int per = tune.toxScorePerLevel == 0 ? 10 : tune.toxScorePerLevel;
       int level = int((score - tune.toxThreshold) / per);
@@ -1519,6 +1514,25 @@ void DisasterManager::monthlyTick(DisasterWorld& w, const DisasterInputs& in, Di
       startSpaceJunk(w, in, float(rng_.nextFloat()), true, out);
   }
   checkAllOver(out);
+}
+
+int64_t DisasterManager::toxicScore(const DisasterInputs& in) const {
+  // spec 21 s6.2 [STATIC]: floor(WeightForPollution x avgAir / MaxAirPolluteForUI), product first, signed 32-bit division
+  int64_t score = in.pollutionNorm != 0 ? int64_t(int32_t(int32_t(tune.toxWeightPollution) * int32_t(in.pollutionTotal)) / int32_t(in.pollutionNorm)) : 0;
+  if (in.ordCleanIndustry) score -= tune.toxWeightCleanInd;
+  if (in.ordIndPollutantFee) score -= tune.toxWeightIndFee;
+  if (in.ordWasteDisposal) score -= tune.toxWeightWaste;
+  score += int64_t(tune.toxWeightPlant) * in.toxicWastePlants;
+  return score;
+}
+
+// Advisor flag Ra (spec 22 s3.9 [STATIC, SIMDSTR 0x10014FC8]): no cloud active, the occurrence countdown at >= 80 % of its interval, score above the
+// threshold. The interval here is the fixed mean (AverageDurationBetweenOccurrences months); the original redraws it triangularly [INFERRED approximation].
+bool DisasterManager::toxicImminent(const DisasterInputs& in) const {
+  if (!clouds_.empty() || !in.disastersEnabled) return false;
+  const int64_t interval = int64_t(tune.toxAvgMonthsBetween) * 30;
+  const int64_t elapsed = haveCloud_ ? int64_t(in.jdn) - lastCloudJdn_ : interval;
+  return elapsed >= interval * 8 / 10 && toxicScore(in) > tune.toxThreshold;
 }
 
 void DisasterManager::emergencyDayTick(const DisasterInputs& in, DisasterOutput& out) {

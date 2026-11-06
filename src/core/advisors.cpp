@@ -588,7 +588,9 @@ void AdvisorManager::safetyRules(TopicList& L, const AdvisorInputs& in) {
     else if (S.fireCoverage < 99) L.raise(0xA5, 0x235981F6);
     else if (S.fireFunding >= 100) L.raise(0xC4, 0x235981F6);
   }
-  // 0xD9FDDF6D / 0x1A4A387F (topics 0x193 / 0x199) read two interface floats whose meaning is [OPEN]: not modelled.
+  // Ra / Rb are flags (exactly 1.0 or 0.0, tested > 0.8): a toxic cloud is imminent / a space-debris piece is in flight (spec 22 3.9).
+  if (S.toxicImminent) L.raise(0x193, 0xD9FDDF6D);
+  if (S.debrisActive) L.raise(0x199, 0x1A4A387F);
 }
 
 // Public-safety petitions (spec 22 3.9, post-update). Randomised requests are skipped while the same petition is pending.
