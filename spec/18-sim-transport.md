@@ -293,7 +293,14 @@ against the saved 6 546. Without the untried term it is ≈ 4 200.
 
 ### 4.5 Counting test
 
-This test only applies to buildings that are functional (as in §4.3). Let d be the value (0–255)
+A trip starts as **not counted**. Only a functional building (as in §4.3: the occupant reports
+functional and bit 0 of the lot state is set) draws the test below; a non-functional building's
+trip (under construction 4/0x204, abandoned 2/0x202) is never counted and adds no density or
+income [STATIC, SimTransit FUN_100097b9]. CORRECTION: the earlier wording let readers count
+non-functional buildings unconditionally. [DATA: implementing this rule lowers a reimplementation's
+London month-1 road density from 54.8 to 50.0, against the original's 47.8.]
+
+Let d be the value (0–255)
 at the lot's first tile of the **valve-effect map** of the RCI development layer (`10-save-format.md`
 §6.7 `effectMap`, the map of the last completed cycle; owned by the growth valve layer,
 `15-sim-growth.md` §3.3). The traffic layer looks it up by the layer ID 0x80F1E6D3 [STATIC]. Each tile
