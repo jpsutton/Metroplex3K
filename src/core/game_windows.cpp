@@ -580,7 +580,9 @@ void Game::drawWindows(uint32_t dtMs) {
         series[14].chart = &wc[2];              // Industry
         series[15].chart = &conv[2];            // Power %
         // Live current values: the 12-month plot's last point and its label [OBSERVED: City Size 1,234,286 is in no saved slot].
-        // The 12th point is the live value in the original; its formulas are unknown, so the newest saved sample stands in (monthly[0]).
+        // The 12th point is the live value in the original. Funds: the chart's own sample of the current treasury (213..218 on Berlin); the other series' live formulas
+        // are unknown, the newest saved sample stands in.
+        series[13].live = int64_t(Budget::chartSample(sim_.funds));
       }
 
     } else if (viewData_.mode == int(ViewDataWindow::ModeCharts)) {

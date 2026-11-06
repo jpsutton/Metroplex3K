@@ -212,8 +212,8 @@ class Budget {
   void parse(const uint8_t* p, size_t n);
   Bytes serialize() const;
 
- private:
-  static uint32_t chartSample(int64_t funds);
+ public:
+  static uint32_t chartSample(int64_t funds);   // the funds chart's sample of a treasury: (max(f, -100000) + 100000) / 1000
 };
 
 // ================================================================ ordinances (spec 19 s9)

@@ -515,11 +515,11 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     if (hi == 0) { lo = *std::min_element(s.begin(), s.end()); hi = *std::max_element(s.begin(), s.end()); }   // [OPEN] scaling
     int px = 0, py = 0; float yfEnd = 0;
     for (size_t k = 0; k < s.size(); k++) {
-      int x = x0 + int(k) * (x1 - 1 - x0) / int(s.size() - 1);   // the line stops at x339; the leader starts at x340
+      int x = r.x + 45 + 23 * int(k);   // point k at x = 85 + 23 k [OBSERVED]; the line stops at x339
       float t = hi <= lo ? 0.5f : std::max(0.f, std::min(1.f, float(int64_t(s[k]) - int64_t(lo)) / float(hi - lo)));
       const int rows = int(std::floor(double(t) * double(yBot - yTop)));
       int y = yBot - rows;
-      yfEnd = float(y);
+      yfEnd = float(yBot) - t * float(yBot - yTop);   // unfloored: the label slot is floor((yf - 4) / 10) * 10 - 1 [OBSERVED]
       if (k) line(ui, px, py, x, y, kSeriesCol[i]);
       px = x; py = y;
     }
@@ -547,7 +547,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     l.y = l.top - 2;   // text origin
   }
   for (auto& l : labs) {
-    line(ui, x1 - 1, l.endY, r.x + 304, l.top + 5, l.col, 1);
+    for (int dx = 1; dx <= 5; dx++) ui.fill({x1 - 1 + dx, int(std::lround(double(l.endY) + double(l.top + 5 - l.endY) * dx / 5.0)), 1, 1}, l.col);   // x340..344 straight to the label middle [OBSERVED]
     ui.text(r.x + 306, l.y, l.text, "system9", l.col);
   }
   // ticks along y ~ 220 and the current year in grey
