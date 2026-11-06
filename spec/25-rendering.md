@@ -272,7 +272,7 @@ shrunk by 100 units on every side. [STATIC] A moving object is drawn after every
 box lies entirely behind it on both axes, and before any static object in front. The tie-break
 rule is given below.
 
-**Mover versus static ordering** [STATIC, SIMSPR FUN_1000c7a6 / FUN_1000c802 / FUN_1000e52a]:
+**Mover versus static ordering** [STATIC, SIMSPR 0x1000C7A6 / 0x1000C802 / 0x1000E52A]:
 
 * Every draw-list entry has a layer byte. Statics are always layer 1.
 * Comparator:

@@ -173,7 +173,7 @@ The slot within a zoom set is
   * a straight segment stores g = Δh / horizontal distance.
 
   So a 1-step slope gives g ≈ ±1 and a 2-step slope g ≈ ±2. Turns and curves force class 2. The
-  class is recomputed after every movement step (STRTSIM FUN_10019660; slot lookup FUN_10005072).
+  class is recomputed after every movement step (STRTSIM 0x10019660; slot lookup 0x10005072).
 * Rounding is [OBSERVED]: a train in Berlin on rail piece 46 (g = ±1.698) showed the steep frame
   (slot 38). On piece 16008 (g ±1.016) it showed the gentle frame (slot 46). The float constant
   itself was not read.

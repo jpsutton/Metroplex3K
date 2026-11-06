@@ -351,7 +351,7 @@ of `14-sim-clock.md`. [STATIC]
 
 Images `02F78C6D:52FB06E4`–`52FB06E9` (pause/run and four speed buttons; 48×23 and 10×11 parts).
 
-**Speed indicator drawing** [STATIC, SIMUI vtable 0x100A489C; OBSERVED 800 × 600]:
+**Speed indicator drawing** [STATIC, SIMUI 0x1002643A draw, 0x10026144 messages; OBSERVED 800 × 600]:
 
 * Images:
   * `E4`, `E5`, `E6`, `E7` (48 × 23) are the complete indicator while running at speed 1, 2, 3, 4.

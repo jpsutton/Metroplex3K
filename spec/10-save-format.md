@@ -1380,7 +1380,7 @@ Rules [STATIC]:
   −$100,000. The label reverses this (sample × 1000 − 100,000) [STATIC, SIMMISC 6382–6461].
 * The Graphs window plots each series as sample × 100 / max, with 0 at the bottom of the plot. It
   uses no minimum, no nice steps and no extra headroom; a series whose max is 0 is not drawn
-  [STATIC, SIMUI FUN_1002ed75].
+  [STATIC, SIMUI 0x1002ED75].
 * A writer must emit all 33 words; a new chart holds the subsystem's initial sample in all 32
   slots (often 0; 127 for the aura) and its creation scale in `max`.
 

@@ -296,7 +296,7 @@ against the saved 6 546. Without the untried term it is ≈ 4 200.
 A trip starts as **not counted**. Only a functional building (as in §4.3: the occupant reports
 functional and bit 0 of the lot state is set) draws the test below; a non-functional building's
 trip (under construction 4/0x204, abandoned 2/0x202) is never counted and adds no density or
-income [STATIC, SimTransit FUN_100097b9]. CORRECTION: the earlier wording let readers count
+income [STATIC, SimTransit 0x100097B9]. CORRECTION: the earlier wording let readers count
 non-functional buildings unconditionally. [DATA: implementing this rule lowers a reimplementation's
 London month-1 road density from 54.8 to 50.0, against the original's 47.8.]
 
