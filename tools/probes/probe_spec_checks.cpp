@@ -383,6 +383,11 @@ int main(int argc, char** argv) {
       for (int d = 0; d < 120; d++) { s.game.sim().tickDay(); if (d % 30 == 29) std::printf("   roads 200%%: day %d potholes %d condition %.4f\n", d + 1, count(), c.roadCondition()); }
     }
     if (std::getenv("M3K_PLANTS")) {   // power plants after the first month start
+      std::printf("   at load (after the load-time roll): slot %d row (our category order, 9 = neighbours):", c.power.monthIndex);
+      for (int k = 0; k < 10; k++) std::printf(" %d", c.power.production[c.power.monthIndex][k]);
+      std::printf("   produced %lld consumed %lld unpowered consumers %d\n", (long long)c.power.stats().produced, (long long)c.power.stats().consumed, c.power.stats().unpoweredConsumers);
+      for (const auto& k : c.power.components())
+        std::printf("   load component seed (%d,%d): %d tiles, %d plants, raw S %lld, supplied %lld, r %.4f\n", k.sx, k.sz, k.tiles, k.plants, (long long)k.rawS, (long long)k.supplied, k.rawS > 0 ? double(k.supplied) / double(k.rawS) : 0.0);
       for (int d = 0; d < 35; d++) s.game.sim().tickDay();
       int now = 12 * c.clock.date().year + c.clock.date().month;
       for (const auto& p : c.power.plants())
