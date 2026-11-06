@@ -407,6 +407,8 @@ void Game::applyLayers() {
   if (above && (!L.transport || !L.powerLines)) {
     const bool t = L.transport, p = L.powerLines;
     ropt_.showNet = [this, t, p](const NetPiece& np) { return sim_.city().kindOf(np) == uint32_t(NetworkKind::Power) ? p : t; };
+  } else if (view && cityLayerViews()[li].layer == DataLayer::Traffic) {
+    ropt_.showNet = [](const NetPiece&) { return false; };   // the original draws no road pieces on the Traffic view: the road tiles carry the colour [OBSERVED]
   } else ropt_.showNet = nullptr;
   if (above && (!L.zonedBuildings || !L.otherBuildings)) {
     const bool zb = L.zonedBuildings, ob = L.otherBuildings;
