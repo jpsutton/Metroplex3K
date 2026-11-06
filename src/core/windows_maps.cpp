@@ -455,7 +455,7 @@ std::vector<GraphSeries> graphSeriesTemplate() {
     {0x168, "Unemployment", 1, 0x1D5, "Unemployment %s", true},
     {0x167, "Pollution", 0, 0x1D9, "Pollution %s", true}, {0x16E, "Education", 0, 0x28F, "Education %s", true},
     {0x166, "Traffic", 0, 0x1D7, "Traffic", false}, {0x163, "Commerce", 0, 0x1DA, "Com %s", true},
-    {0x165, "Nat'l Pop", 0, 0x28C, "Nat'l Population %s", false}, {0x16C, "Water %", 1, 0x16C, "Water %", false},
+    {0x165, "Nat'l Pop", 0, 0x28C, "Nat'l Population %s", true}, {0x16C, "Water %", 1, 0x16C, "Water %", false},
     {0x169, "Crime", 0, 0x1D8, "Crime %s", true}, {0x16D, "Health", 0, 0x28E, "Health %s", true},
     {0x283, "Funds", 2, 0x283, "Funds", false}, {0x164, "Industry", 0, 0x1D3, "Ind %s", true}, {0x16B, "Power %", 1, 0x16B, "Power %", false}};
   std::vector<GraphSeries> v;
@@ -567,10 +567,24 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   // before the leaders, which start on it at x340.
   ui.fill({r.x + 300, box.y + 1, 1, box.h - 2}, rgb(173, 178, 222));
   for (int ly = 65; ly <= 184; ly += 17) ui.fill({r.x + 300, r.y + ly, 1, 1}, rgb(173, 174, 222));
+  const int lh = ui.fonts->get("system9").height();
   for (auto& l : labs) {
-    line(ui, x1 - 1, l.endY, x1 + 3, l.top + 5, l.col);   // the plot-line primitive (2 x 2 stamp) from the last point's stamp column x339 to x343: pixels x340..344, ending at the ink top + 5 [OBSERVED]
-    ui.text(r.x + 306, l.y, l.text, "system9", l.col);
+    line(ui, x1 - 1, l.endY, x1 + 3, l.top + 5, l.col);   // the plot-line primitive (2 x 2 stamp) from the last point's stamp column x339 to x343: pixels x340..344, ending at the slot top + 5 [OBSERVED]
+    // A label wider than its ~100 px box wraps at spaces (Nat'l Population 41,008,660 -> two lines); the block is centred on the slot [OBSERVED].
+    std::vector<std::string> lines;
+    { std::string cur; size_t pos = 0;
+      while (pos <= l.text.size()) {
+        size_t e = l.text.find(' ', pos); if (e == std::string::npos) e = l.text.size();
+        const std::string w = l.text.substr(pos, e - pos);
+        const std::string cand = cur.empty() ? w : cur + " " + w;
+        if (!cur.empty() && ui.textWidth(cand, "system9") > 100) { lines.push_back(cur); cur = w; } else cur = cand;
+        pos = e + 1;
+      }
+      if (!cur.empty()) lines.push_back(cur); }
+    const int n = std::max<int>(1, int(lines.size()));
+    for (int k = 0; k < int(lines.size()); k++) ui.text(r.x + 306, l.y - (n - 1) * lh / 2 + k * lh, lines[size_t(k)], "system9", l.col);
   }
+  ui.fill({box.x, box.y, box.w, 1}, rgb(123, 142, 255));   // the plot box's top border is drawn over the label text [OBSERVED]
   ui.fill({r.x + 44, r.y + 218, 256, 2}, rgb(173, 178, 222));         // axis, 2 px
   // Ticks: 1 x 2 px at rows 254..255, one per sample from x 85 to the now line (12 ticks, ~23.2 px apart on a 1-year view) [OBSERVED].
   if (nPts > 1) for (int k = 0; k < nPts; k++) ui.fill({r.x + 45 + k * 255 / (nPts - 1), r.y + 220, 1, 2}, rgb(173, 178, 222));
