@@ -118,14 +118,8 @@ static StripGrade planStripGrade(const INetworkMap& m, const std::vector<std::pa
     m.tileCorners(tiles[a].first, tiles[a].second, c0);
     m.tileCorners(tiles[b].first, tiles[b].second, c1);
     const bool sFlat = c0[0] == c0[1] && c0[1] == c0[2] && c0[2] == c0[3], eFlat = c1[0] == c1[1] && c1[1] == c1[2] && c1[2] == c1[3];
-    // Height of a non-flat start/end tile. The grader itself uses the truncated mean; the original then re-grades a failing tile alone with FLATTEN
-    // [STATIC FUN_10008064 fix-up loop]: h = a if a == b or a == d, else c if c == b or c == d, else the truncated mean. Using the FLATTEN height here
-    // reproduces both observed ends (hill road 92/90/92/92 -> 92; Mount Herrang (2,79) 92/94/92/92 -> 92). The re-grade trigger is not understood.
-    auto tileH = [](const int c[4]) {
-      if (c[0] == c[1] || c[0] == c[3]) return c[0];
-      if (c[2] == c[1] || c[2] == c[3]) return c[2];
-      return (c[0] + c[1] + c[2] + c[3]) / 4;
-    };
+    // Height of a non-flat start/end tile: the truncated mean [STATIC cdq / and 3 / sar 2; confirmed by the hill road's start tile 86/86/84/84 -> 85].
+    auto tileH = [](const int c[4]) { return (c[0] + c[1] + c[2] + c[3]) / 4; };
     int startH = sFlat ? c0[0] : tileH(c0), endH = eFlat ? c1[0] : tileH(c1);
     const int s = sFlat ? 1 : 0, last = int(n) - 1 - (eFlat ? 1 : 0);
     const bool negative = alongZ ? tiles[b].second < tiles[a].second : tiles[b].first < tiles[a].first;
@@ -575,6 +569,11 @@ bool buildBridgeTerrain(INetworkMap& m, BridgePlan& pl) {
     if (d >= 3) { if (startSide) Bs = c.h; else Bf = c.h; }
   }
   pl.terrainDone = true;
+  // snapshot for the ripple pass after the approaches (the changed vertices form its ring)
+  const int rx0 = std::max(0, std::min(pl.x0, ex) - 8), rx1 = std::min(m.width(), std::max(pl.x0, ex) + 8);
+  const int rz0 = std::max(0, std::min(pl.z0, ez) - 8), rz1 = std::min(m.height(), std::max(pl.z0, ez) + 8);
+  std::vector<int> snap;
+  for (int vx = rx0; vx <= rx1; vx++) for (int vz = rz0; vz <= rz1; vz++) snap.push_back(m.cornerHeight(vx, vz));
   for (const auto& c : pl.corners) if (c.group == 0) m.setCornerHeight(c.vx, c.vz, c.h);   // start bank, written at once
   // start approach: rows W0-4a .. W0-a (B -> hw + D), tiles W0-4a .. W0-a
   if (!gradeApproach(m, pl, pl.x0, pl.z0, -1, Bs, pl.hw + D, 4, -1, 4, 1, 4)) return false;
@@ -582,6 +581,12 @@ bool buildBridgeTerrain(INetworkMap& m, BridgePlan& pl) {
   for (const auto& c : pl.corners) if (c.group == 2) m.setCornerHeight(c.vx, c.vz, c.h);   // far bank
   // far approach: rows E0+a .. E0+4a (hw + D -> B), tiles E0 .. E0+3a
   if (!gradeApproach(m, pl, ex, ez, +1, pl.hw + D, Bf, 1, +1, 4, 0, 4)) return false;
+  {  // ripple of the approach grades (the strip grader's apply): outer vertices next to the written ones, uncharged (the bridge terrain is part of the price)
+    std::vector<std::pair<int, int>> ring;
+    size_t i = 0;
+    for (int vx = rx0; vx <= rx1; vx++) for (int vz = rz0; vz <= rz1; vz++, i++) if (m.cornerHeight(vx, vz) != snap[i]) ring.push_back({vx, vz});
+    rippleRing(m, ring, 0);
+  }
   return true;
 }
 
@@ -899,16 +904,16 @@ static int levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool
   const PathTile& a = start ? lane.front() : lane.back();
   const PathTile& b = highway && lane.size() > 1 ? (start ? lane[1] : lane[lane.size() - 2]) : a;
   for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return 0;
-  if (!highway && !start) {   // the far end tile with one odd corner: that corner moves to the level of the other three [OBSERVED: Mount Herrang hill road (81,90) 90 -> 92]
+  if (!highway && !start) {
+    // The fix-up loop of the original's commit (FUN_10008064) re-grades a single end tile with FLATTEN; observed on the hill road's end tile 92/91/91/92 (a ramp
+    // of gap 1) -> flat 92, while a gap-2 ramp (Mount Herrang (2,79) 94/94/92/92) stays. The trigger is INFERRED; the fix-up is free [charge 607 = 260 + 287 + 60].
     int c[4]; m.tileCorners(a.x, a.z, c);
-    for (int i = 0; i < 4; i++) {
-      const int o1 = c[(i + 1) % 4], o2 = c[(i + 2) % 4], o3 = c[(i + 3) % 4];
-      if (o1 == o2 && o2 == o3 && c[i] != o1) {
-        const int vx = a.x + (i == 1 || i == 2), vz = a.z + (i == 2 || i == 3);
-        if (!m.canChangeCorner(vx, vz)) return 0;
-        m.setCornerHeight(vx, vz, o1);
-        return std::abs(c[i] - o1);
-      }
+    if (isValidSlope(c) && std::abs(c[2] - c[0]) == 1) {
+      const int h = (c[0] == c[1] || c[0] == c[3]) ? c[0] : (c[2] == c[1] || c[2] == c[3]) ? c[2] : (c[0] + c[1] + c[2] + c[3]) / 4;
+      const int vxs[4] = {a.x, a.x + 1, a.x + 1, a.x}, vzs[4] = {a.z, a.z, a.z + 1, a.z + 1};
+      for (int i = 0; i < 4; i++) if (c[i] != h && !m.canChangeCorner(vxs[i], vzs[i])) return 0;
+      for (int i = 0; i < 4; i++) if (c[i] != h) m.setCornerHeight(vxs[i], vzs[i], h);
+      return 0;
     }
   }
   bool bothValid = true, bothFlat = true;

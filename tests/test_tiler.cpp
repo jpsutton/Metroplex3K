@@ -330,8 +330,7 @@ static void testStripGradePermission() {
   CHECK(rp.blocked && rp.validPrefix == 0);
 }
 
-// Strip grade end height of a tile with three equal corners is that value, not the mean: the hill road's end tile 92/90/92/92 pins its far vertex column to 92
-// (observed: (81,90) 90 -> 92, (81,91) stays 92).
+// Strip grade end height is the truncated mean: the hill road's end tile 92/90/92/92 pins its far vertex column to 91 (the single-tile fix-up then flattens it).
 static void testStripGradeEndHeight() {
   SimpleNetworkMap m(20, 6);
   setupRoadFlags(m);
@@ -342,7 +341,7 @@ static void testStripGradeEndHeight() {
   std::vector<std::pair<int, int>> ts;
   for (const auto& t : rp.tiles) ts.push_back({t.x, t.z});
   const std::string d = describeStripGrade(m, ts);
-  CHECK(d.find("vertex (9,2) 90 -> 92") != std::string::npos && d.find("(9,3)") == std::string::npos);
+  CHECK(d.find("vertex (9,2) 90 -> 91") != std::string::npos && d.find("vertex (9,3) 92 -> 91") != std::string::npos);
 }
 
 // Ripple pass: a changed vertex pulls its neighbours into [max - 4, min + 4] of the changed neighbours and the pull cascades; each moved vertex is
