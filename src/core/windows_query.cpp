@@ -448,8 +448,10 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
     ui.fill({box.x, box.y, box.w + 1, box.h + 1}, rgb(222, 223, 255));
     ui.fill({box.x - 1, box.y - 1, box.w + 3, 1}, rgb(123, 138, 255)); ui.fill({box.x - 1, box.y, 1, box.h + 2}, rgb(123, 138, 255));
     ui.fill({box.x + box.w + 1, box.y - 1, 1, box.h + 3}, rgb(255, 243, 255)); ui.fill({box.x - 1, box.y + box.h + 1, box.w + 3, 1}, rgb(255, 243, 255));
-    // The interior's last row (the one above the bottom highlight) fades up from a darker shade: (206,211,255) at x140, (214,219,255) at x150 for a box at x136 [OBSERVED].
-    for (int i = 0; i < 24 && i <= box.w; i++) { const int rr = 202 + i * 5 / 6; ui.at(box.x + i, box.y + box.h) = rgb(rr, rr + 5, 255); }
+    // The interior's last row (above the bottom highlight): the original's exact, dither-like values from the box's left edge [OBSERVED].
+    static const struct { int from, to; uint32_t col; } kRow[] = {{0, 3, 0}, {4, 6, 1}, {7, 11, 2}, {12, 27, 3}, {28, 29, 4}, {30, 33, 3}, {34, 36, 4}};
+    static const uint32_t kCols[5] = {rgb(206, 207, 255), rgb(206, 211, 255), rgb(214, 215, 255), rgb(214, 219, 255), rgb(222, 219, 255)};
+    for (const auto& seg : kRow) for (int i = seg.from; i <= seg.to && i <= box.w; i++) ui.at(box.x + i, box.y + box.h) = kCols[seg.col];
     spriteCentred(ui, E.data, q.picture, box, box);
   }
 

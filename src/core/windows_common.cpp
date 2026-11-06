@@ -149,7 +149,7 @@ bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::
     ui.frame({r.x, by, box, box}, false);
     if (selected) ui.fill({r.x + 3, by + 3, box - 6, box - 6}, ink);
   }
-  ui.text(r.x + box + 3, r.y + (r.h - ui.fonts->get(font).height()) / 2, label, font, ink);
+  ui.text(r.x + box + 3 + ui.radioLabelDx, r.y + (r.h - ui.fonts->get(font).height()) / 2, label, font, ink);
   return ui.clicked(r);
 }
 
@@ -757,10 +757,12 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
   std::vector<uint32_t> buf(size_t(r.w) * r.h);
   for (int y = 0; y < r.h; y++)   // the bar art around the strip stays: copy what is there
     for (int x = 0; x < r.w; x++) { const int dx = r.x + x, dy = r.y + y; buf[size_t(y) * r.w + x] = (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) ? ui.at(dx, dy) : 0u; }
-  // The strip: a (99,109,198) top border row, then pure black for 16 rows; 472 px wide (x8..479 on the original), rows y549 / y550..565 at a ticker rect of y544 [OBSERVED].
-  for (int x = 0; x < r.w - 8; x++) {
-    if (5 < r.h) buf[size_t(5) * r.w + x] = rgb(99, 109, 198);
-    for (int y = 6; y < 22 && y < r.h; y++) buf[size_t(y) * r.w + x] = rgb(0, 0, 0);
+  // The strip, relative to the HUD's text line (y549 on the original at 800 x 600): a (99,109,198) top row at rel 0 and 16 pure black rows (y550..565) below it,
+  // x7..481, i.e. one column left of the rect and 475 wide [OBSERVED].
+  const int sw = std::min(r.w, 474);
+  for (int x = 0; x < sw; x++) {
+    buf[size_t(x)] = rgb(99, 109, 198);
+    for (int y = 1; y <= 16 && y < r.h; y++) buf[size_t(y) * r.w + x] = rgb(0, 0, 0);
   }
   Ui sub = ui; sub.setTarget(&buf, r.w, r.h);
   int fh = ui.fonts->ui().height();
@@ -771,7 +773,7 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
     uint32_t col = rgb(it.n.r, it.n.g, it.n.b);
     sub.text(it.x, ty + 1, it.n.text, "main9", col);   // main9 (9-row capitals) [OBSERVED]
     if (it.n.hasLoc) {
-      if (19 < r.h) for (int x = std::max(0, it.x); x < std::min(r.w, it.x + w + 1); x++) buf[size_t(19) * r.w + x] = col;   // underline row y563, 1 px past the glyphs [OBSERVED]
+      if (14 < r.h) for (int x = std::max(0, it.x); x < std::min(r.w, it.x + w + 1); x++) buf[size_t(14) * r.w + x] = col;   // underline row y563 (rel 14), 1 px past the glyphs [OBSERVED]
       Rect ir{r.x + it.x, r.y, w, r.h};
       if (ui.clicked(ir) && r.contains(ui.in.mx, ui.in.my)) {
         R.add(Act::TickerClick, it.n.number, it.n.locX, it.n.locZ);
@@ -785,6 +787,10 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
       int dx = r.x + x, dy = r.y + y;
       if (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) ui.at(dx, dy) = buf[size_t(y) * r.w + x];
     }
+  if (r.x >= 1) {   // the strip's extra left column (x7)
+    ui.at(r.x - 1, r.y) = rgb(99, 109, 198);
+    for (int y = 1; y <= 16; y++) ui.at(r.x - 1, r.y + y) = rgb(0, 0, 0);
+  }
   return R;
 }
 

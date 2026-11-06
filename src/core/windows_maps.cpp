@@ -860,7 +860,9 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
   static const uint32_t tid[5] = {0x1DD, 0x1E0, 0x1E1, 0x1DE, 0x1DF};
   static const char* const tfb[5] = {"Education", "Health", "Population", "Electricity", "Garbage"};
   for (int i = 0; i < 5; i++)
-    if (radio(ui, E, "tab." + std::to_string(i), {r.x + 192, r.y + 314 + 20 * i - 6, 140, 12}, E.win(tid[i], tfb[i]), tab == i, "main10")) tab = i;
+    { ui.radioLabelDx = -1;   // the labels sit 1 px further left than our generic radio label [OBSERVED]
+      if (radio(ui, E, "tab." + std::to_string(i), {r.x + 192, r.y + 314 + 20 * i - 6, 140, 12}, E.win(tid[i], tfb[i]), tab == i, "main10")) tab = i;
+      ui.radioLabelDx = 0; }
   return R;
 }
 

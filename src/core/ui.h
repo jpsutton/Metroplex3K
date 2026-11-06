@@ -54,6 +54,7 @@ class Ui {
   uint32_t* pixels = nullptr;            // row-major framebuffer (may have pitch > W)
   int pitch = 0;                         // pixels per row
   const uint16_t* buttonLabelRamp = nullptr;   // explicit 15-level 565 palette for the next pill caption (cleared by the caller)
+  int radioLabelDx = 0;                  // extra horizontal offset of the next radio() label (cleared by the caller)
   int buttonLabelDy = 0;                 // extra vertical offset of the next pill button's caption (cleared by the button)
   bool titleRecolour = false;            // dialog frame titles use the recolour palette instead of the stored one (scenario dialogs, observed)
   bool overlay = false;                  // drawing over a GPU-composited city (alpha 0 = city, see overlayOver)

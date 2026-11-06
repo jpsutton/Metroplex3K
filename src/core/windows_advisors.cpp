@@ -298,7 +298,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
       Rect row{dd.x + 1, dd.y + 14 * t, dd.w - 2, 14};
       E.spot("tab." + std::to_string(t), row);
       bool hot = ui.hover(row) || (t == tab && !ui.hover(dd));
-      if (hot) ui.fill(row, rgb(0, 0, 255));
+      if (hot) ui.fill({row.x, row.y + (t == 0 ? 1 : 0), row.w, row.h - (t == 0 ? 1 : 0) - (t == 2 ? 1 : 0)}, rgb(0, 0, 255));   // inside the frame's black rows [OBSERVED]
       ui.text(row.x + 3, row.y, E.win(tabIds[t], tabFb[t]), "main9", hot ? kWhite : kInk);
       if (ui.clicked(row)) { tab = t; topicSel = -1; scroll = 0; comboOpen = false; }
     }
