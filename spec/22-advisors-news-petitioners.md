@@ -259,9 +259,29 @@ loading, the first evaluation happens on the first Tuesday after the next Monday
 
 Additionally, the advisor panel can trigger an on-demand gather-and-rules pass (metrics and
 rules only, no update step), which is why saved topic instances can carry R = 1 [STATIC].
-Advisors also listen for the "ordinance changed" notification (argument = ordinance ID) and
-raise an ordinance-specific acknowledgement topic immediately (e.g. CPR `0x00D0723D` → `0x2D`,
-clinics `0x40D07236` → `0x28`, youth sports `0x815B4CEF` → `0x29`) [STATIC; full table OPEN].
+Advisors also listen for the ordinance notification `0xA2D1C5B9` (argument = ordinance ID) and
+raise an ordinance-specific announcement topic immediately. **Correction:** the notification is
+*not* sent on enact or repeal. It is sent when an ordinance **becomes available** (its
+availability flag is set because the year is reached or its condition is met, SIMMISC
+0x1001A153), and by the per-ordinance and all-ordinances unlock paths (SIMMISC 0x1001AB68,
+0x1001AE60; cheat paths [INFERRED]). A further routine re-broadcasts it for every available
+ordinance (SIMMISC 0x10019E38; caller unknown, possibly load). The payload is
+`{0xA2D1C5B9, ordinanceID, 0, 0}` and carries no enacted/repealed state [STATIC].
+
+The handler compares the ID inline and queues a forced topic with a = b = 0 (SIMADV 0x1001D881).
+The topic number is the instance used in the heading, message and ticker string tables. The
+comparisons are [STATIC]; the advisor of each handler is [INFERRED] from the category column of
+`19-sim-economy.md` §9.5, which it matches exactly. Every one of the 44 ordinances appears once:
+
+| Advisor | Handler (SIMADV) | Ordinance → topic |
+|---|---|---|
+| Budget | 0x100061C8 | `A0D07129` → `0x1F` |
+| City planner | 0x1000AEBE | `C2BF1DD1` → `0x01`, `20D07175` → `0x02`, `62F6E7CF` → `0x03`, `A2F6E7DA` → `0x04`, `E2F6E7EA` → `0x05`, `02F6E7EF` → `0x06`, `22F6E7F4` → `0x07`, `A2F6E7F9` → `0x08`, `E2F6E7FE` → `0x09`, `C2F6E804` → `0x0A`, `62F6E82B` → `0x1D`, `02F6E7E2` → `0x20` |
+| Environment | 0x1001140C | `A2F917CF` → `0x0B`, `C2BF1E04` → `0x14`, `A2BF1E43` → `0x15`, `22BF1E35` → `0x16`, `42BF1E18` → `0x17`, `62F6E808` → `0x18`, `22F6E80C` → `0x19`, `22F6E814` → `0x1A`, `22F6E81B` → `0x1B`, `C2F6E81F` → `0x1C` |
+| Health/education | 0x1000EF50 | `40D07236` → `0x28`, `815B4CEF` → `0x29`, `E0D0722E` → `0x2A`, `E0D07233` → `0x2B`, `E0D07239` → `0x2C`, `00D0723D` → `0x2D` |
+| Public safety | 0x100149F5 | `C2BF1DEF` → `0x32`, `62BF1DB9` → `0x33`, `62BF1DAA` → `0x34`, `C2BF1DC5` → `0x35` |
+| Transportation | 0x1001796B | `E2BF1E2A` → `0x3C`, `A2BF1DDC` → `0x3D`, `015B4D1E` → `0x3E`, `A2BF1DE5` → `0x3F`, `C2D1B025` → `0x40` |
+| Utilities | 0x1001C507 | `82E42E30` → `0x46`, `02BF1DFA` → `0x47`, `82B9999B` → `0x48`, `C2F90EB1` → `0x49` |
 
 One evaluation:
 
@@ -1569,8 +1589,8 @@ when unknown.
 * Advisor rule wiring is now transcribed for all seven advisors (3.7–3.13). Remaining gaps:
   exact identities of several metrics marked [INFERRED] (demand-cap cause flags A/B, neighbour
   counts K/Kr/Kt, the four extra counts in B (3.11.1), garbage capacity GC, utilities Nb), the
-  seed source of the utilities advisor's private generator, and the full ordinance → acknowledgement
-  topic table for the "ordinance changed" notification (3.6).
+  seed source of the utilities advisor's private generator. (The ordinance → topic table is now
+  complete, 3.6.)
 * Whether the city-planner demand-history ring is sampled weekly or monthly (3.11).
 * Exact metric definitions behind several rules (garbage surplus/limit, airport and park
   measures for rewards, the alternative population measure used for national park and

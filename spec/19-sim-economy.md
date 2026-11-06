@@ -72,7 +72,14 @@ difficulty [STATIC]. Outside the
 economy, the difficulty choice also does the following in the new-city dialog [STATIC]: (i) it
 sets the terrain generator's type (1/2/3) for the preview/random terrain (`11-world-terrain.md`);
 (ii) choosing *hard* also sets one more boolean in the dialog's new-city parameters (clear for
-easy and medium) [OPEN: meaning; candidates are disasters-on or no-starting-loan]. The simulation does not
+easy and medium). **This flag means "start on a bond"** [STATIC, city creation SIMINIT
+0x10008BF8]: when it is set, the treasury is set to 0 and the starting amount is then issued as
+an ordinary bond through the normal bond-issue path (SIMMISC 0x10009150, §5), so funds rise by
+the bond amount and the bond carries the usual terms. When it is clear, the amount is simply
+written to the treasury. Hard therefore starts with §0 cash plus one §10,000 bond (10,000 is
+already a multiple of the 5,000 bond step). [INFERRED] If the bond limits (`MaxBondAmt`,
+`MaxBonds`) refuse the issue, the city starts with 0. The dialog keeps the funds as a 64-bit
+value. The simulation does not
 use a stored difficulty value during play, and difficulty is not a stored setting [STATIC]. Treat difficulty as
 affecting only the starting funds, the generated terrain and that one flag.
 Shipped data [DATA, 59/59 files]: every terrain (`.sct`) and `TUTORIAL.SC3` stores funds 50,000
@@ -752,8 +759,9 @@ too late.
 2. If no offer is pending, `funds < TREASURY_LOW`, population > 1000 and `c ≥ MONTHS_TILL_BUSINESS_DEAL`:
    pick one deal uniformly at random; it is offered if `year ≤ currentYear`, the deal is enabled
    (scenario scripts can disable deals), the city does not already have that business, and for
-   the casino an additional permission check passes [OPEN: likely "gambling not banned"/ordinance
-   state]. The offer is raised as advisor message `messageId`. Because the evaluation is weekly,
+   the casino (19003) the Legalized Gambling ordinance `0xA0D07129` passes the ordinance query
+   (SIMADV, pushed at 0x10005588, 0x100057E2, 0x10005D4D) [STATIC; that the query means
+   "enacted" rather than "available" is INFERRED from its other uses, 22 §3.7]. The offer is raised as advisor message `messageId`. Because the evaluation is weekly,
    an offer can appear in any week of the month.
 3. If accepted, the business building is placed by the player (agent types 19001–19004, family
    19000) and pays monthly income [INFERRED: income line `bizIncome`, §7 step 5; shipped Madison
@@ -972,5 +980,6 @@ Byte layout in `10-save-format.md` §6.6 [DATA 59/59]. Semantics
 * World quantity `W` used by three ordinances (§9.4).
 * The quantity passed in §10.4. (Resolved: the offer schedule, §10.6; the deal age advances in the
   neighbours' monthly step, §10.5 and `14-sim-clock.md` §6.1.)
-* The casino permission check (§11). (Business-deal income source resolved: Budget advisor.)
-* Meaning of the extra boolean that the *hard* difficulty sets in the new-city parameters (§3).
+* Whether the casino's gambling-ordinance query (§11) tests "enacted" or "available"; the check
+  itself is resolved. (Business-deal income source resolved: Budget advisor. The *hard* flag is
+  resolved: start on a bond, §3.)

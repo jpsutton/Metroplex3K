@@ -78,7 +78,7 @@ parsed value is truncated to 8 bits. [STATIC] unless noted.
 | `TripChanceDensityMultiplier` | % | 50 | Stored as value × 0.01. Multiplies the origin's density value in the count chance (§4.5) |
 | `TrafficUseMassTransitChance` | u8 % | 50 | Chance that a commuter trip may use mass transit (§4.6) |
 | `MaxEfficiencyRoads` / `MaxEfficiencyTransit` | % | 120 | Stored ×0.01, clamped to ≥ 1.0. Funding-efficiency cap (§8) [STATIC, use OPEN] |
-| `MysticalERoads` / `MysticalETransit` | float | 30 | Funding-efficiency curve constant (§8) [OPEN] |
+| `MysticalERoads` / `MysticalETransit` | float | 30 | Funding-efficiency curve constant *K* (§8) [STATIC: road setter SIMSERV 0x10008D4B, transit 0x10008DBD; over-funding test f > 1.0; constants 4.999999 and 1.2 hard-coded] |
 | `DamageEfficiencyMultiplier` | ‰ | 100 | Stored ×0.001. Road damage rate when roads are underfunded (§8.4) [STATIC] |
 | `RepairEfficiencyMultiplier` | ‰ | 50 | Stored ×0.001. Road repair rate when roads are overfunded (§8.4) [STATIC] |
 | `DamagedCostAddToStep` | int | 32 | Extra step cost on a damaged road/highway tile. Only the low 8 bits are used |

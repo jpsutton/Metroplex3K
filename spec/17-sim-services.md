@@ -86,12 +86,17 @@ When the funding level *p* (percent, 0–255) of a station is set:
 
 1. *x* = *p* × 0.01 (single precision).
 2. The station's upkeep becomes *U* = round-to-nearest(*U₀* × *x*) (ties to even).
-3. If *U* > *U₀* (over-funding), *x* is replaced by the saturating efficiency
+3. If the station is over-funded, *x* is replaced by the saturating efficiency
    *x'* = *M* − 1 / ( (*A* − 1/(1 − *M*)) × *x* − *A* ),
    where *A* = 4.999999 × (*E* + 1.2 / (1 − *M*)). The constants 4.999999 (single precision,
    4.999999046…) and 1.2 are hard-coded. *x'* = 1 at *x* = 1 and tends to *M* as *x* grows; with the
-   shipped values (*M* = 1.2, *E* = 30), *x'* = 1.2 − 1/(125·*x* − 120). Under-funding (*U* ≤ *U₀*)
-   uses *x* unchanged (linear). [STATIC] Defect: *M* is floored at 1.0, so **any** `MaxEfficiency` ≤ 100
+   shipped values (*M* = 1.2, *E* = 30), *x'* = 1.2 − 1/(125·*x* − 120). Otherwise *x* is used
+   unchanged (linear). **The over-funding test differs per setter** [STATIC]: fire (SIMSERV
+   0x1000176C) tests *U* > *U₀* (the rounded upkeep), while police (0x10004B1E), the SIMRCI
+   school/college/hospital setters (0x100054F0, 0x10006C12, 0x1000A73F) and the road and transit
+   setters (0x10008D4B, 0x10008DBD) test *x* > 1.0. The two differ when *U₀* is small: for fire
+   with *U₀* = 20 at *p* = 101, *U* = 20, so fire stays linear (*x* = 1.01) where police would
+   saturate. *R*, *Max* and *Min* are then truncated (`_ftol`). [STATIC] Defect: *M* is floored at 1.0, so **any** `MaxEfficiency` ≤ 100
    (including 0 or a missing key) gives 1 − *M* = 0 and a division by zero. Correction: the
    previous text said only 100. Guard it, but preserve results for all other values. A key is
    stored only when present (fire 0x10001020, police 0x10004426).
