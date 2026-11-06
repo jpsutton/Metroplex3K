@@ -209,6 +209,13 @@ void PowerLayer::distribute(int sx, int sz, const PowerEnv& env, std::vector<uin
   }
   if (!brown) {
     int64_t left = int64_t(double(B) * k);
+    // The leftover goes first to the sale(s) of the connections in this network (the city is served first), then the rest is what the buys did not draw
+    // [STATIC spec 19 10.4: remSell -= min(L, remSell); remBuy reduced by D - L].
+    for (auto* d : active) {
+      if (d->sell <= 0) continue;
+      const int64_t take = std::min<int64_t>(left, d->sell);
+      d->sold += take; left -= take;
+    }
     stats_.consumed += S + D - left;
     int64_t rem = left;
     for (auto* d : active) {

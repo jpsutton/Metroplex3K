@@ -58,6 +58,9 @@ struct PowerDeal {          // one neighbour slot (up to 4)
   int amount = 0;           // purchased amount for the month (0 = no deal)
   bool reached = false, active = false;
   int64_t unused = 0;       // purchased power reported unused after distribution
+  int neighbour = -1;       // neighbour index of the slot
+  int sell = 0;             // contract amount of a sell deal at this slot (0 = none); served from the leftover first (spec 19 10.4)
+  int64_t sold = 0;         // amount of the sale actually delivered this month
 };
 
 struct PowerEnv {

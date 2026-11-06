@@ -2389,10 +2389,13 @@ us::PowerEnv City::powerEnv(std::vector<uint8_t>& conductive) const {
   // 204,000 capacity is exhausted at the end of row 235, the original's shipped pump cut).
   // [OPEN on our side] sell deals (kind 1) are not modelled by the power layer yet.
   for (int n = 0; n < 4; n++) {
-    us::PowerDeal pd;
+    us::PowerDeal pd; pd.neighbour = n;
     if (!connectionTile(3, n, pd.tx, pd.tz)) continue;
-    for (const auto& d : neighbours.active)
-      if (!d.terminated() && d.dealType == 0 && d.neighbourIndex == n) pd.amount = us::kPowerBuySlot;
+    for (const auto& d : neighbours.active) {
+      if (d.terminated() || d.neighbourIndex != n) continue;
+      if (d.dealType == 0) pd.amount = us::kPowerBuySlot;
+      else if (d.dealType == 1) pd.sell = std::max(0, d.quantity);
+    }
     env.deals.push_back(pd);
   }
   return env;
@@ -2414,6 +2417,15 @@ void City::monthlyPower() {
   std::vector<uint8_t> conductive;
   us::PowerEnv env = powerEnv(conductive);
   auto events = power.monthlyUpdate(env, urng_);
+  {  // A sale that is not delivered in full cancels the deal (any shortfall, even 1 unit) [STATIC spec 19 10.4]; before 60 months the penalty is charged.
+     // Off unless M3K_DEALCANCEL=1 until the sale accounting is checked against the original's saves (the sale model is new).
+    static const bool cancelOn = [] { const char* e = std::getenv("M3K_DEALCANCEL"); return e && e[0] == '1'; }();
+    if (cancelOn)
+      for (const auto& pd : power.deals())
+        if (pd.sell > 0 && pd.sold < pd.sell)
+          for (const auto& d : neighbours.active)
+            if (!d.terminated() && d.dealType == 1 && d.neighbourIndex == pd.neighbour) { budget.dealPenaltyAccumulator += neighbours.cancel(1); break; }
+  }
   {  // The deal entry's first s32 holds the reported draw (spec 19 s10.4, 10 s6.6); units are never overwritten.
     int64_t drawn = 0;
     for (const auto& d : power.deals()) if (d.active && d.amount > 0) drawn += std::max<int64_t>(0, d.amount - d.unused);

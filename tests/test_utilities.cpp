@@ -159,6 +159,24 @@ static void testPowerNeighbourDeal() {
     CHECK(b.L.powered(3, 1) && b.L.stats().consumed == 130);
     CHECK(b.L.deals()[0].amount - b.L.deals()[0].unused == 30 && b.L.production[b.L.monthIndex][9] == 30);
   }
+  {  // Sell deal (spec 19 10.4): the leftover after the city's own demand goes to the sale; a shortfall is reported in `sold`
+    PowerFixture sf;
+    sf.line(0, 6, 1);
+    sf.L.addPlant(0, 1, 12111, 0, sf.rng);          // output 100, no 10% margin with a connection
+    sf.L.setConsumption(3, 1, 30);
+    PowerEnv es; es.conductive = &sf.cond; es.nowAbsMonth = 1;
+    PowerDeal sd; sd.tx = 6; sd.tz = 1; sd.sell = 60; es.deals.push_back(sd);
+    sf.L.monthlyUpdate(es, sf.rng);
+    CHECK(sf.L.deals()[0].sold == 60);              // 100 - 30 = 70 left, the sale takes 60
+    PowerFixture sg;
+    sg.line(0, 6, 1);
+    sg.L.addPlant(0, 1, 12111, 0, sg.rng);
+    sg.L.setConsumption(3, 1, 60);
+    PowerEnv eg; eg.conductive = &sg.cond; eg.nowAbsMonth = 1;
+    PowerDeal gd; gd.tx = 6; gd.tz = 1; gd.sell = 60; eg.deals.push_back(gd);
+    sg.L.monthlyUpdate(eg, sg.rng);
+    CHECK(sg.L.deals()[0].sold == 40);              // only 40 left: undelivered, the original cancels the deal
+  }
   // Unconnected deal slot with amount but separate network: distribution seeded at connection.
   PowerFixture g;
   g.line(0, 3, 1);

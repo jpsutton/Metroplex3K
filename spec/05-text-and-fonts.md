@@ -384,9 +384,25 @@ normally width + 1 (one pixel spacing). There is **no kerning table**. [DATA]
 
 * Mono/anti-aliased fonts use indices 1–17 only: index 1 = full ink, indices 2–15 = decreasing ink
   coverage, index 16 = background (no ink), index 17 = atlas filler between glyphs (never inside a
-  glyph rectangle in practice). The palette holds a preview gradient; when drawing text the game
-  replaces the ink with the requested text colour: coverage c = (16 − index)/15 for indices 1–16,
-  output = destination × (1 − c) + textColour × c; index 16/17 pixels are transparent. [DATA][INFERRED]
+  glyph rectangle in practice). [DATA]
+* **Drawing is a palette blit, not a blend** [STATIC, GZServiceD font loader and glyph draw]. The
+  loader creates an 8-bit surface and loads the file's 565 palette into it unchanged. When the
+  font's colour-key flag is set, the colour of atlas pixel (0, 0) becomes the source colour key
+  (in `TITLE12` that pixel is index 16, the background shade). Each glyph is then drawn with a
+  plain surface blit: every non-key pixel is written as its palette colour, and the destination is
+  never read. Consequence: anti-aliased edge pixels keep the shade the font was pre-mixed
+  against, even over a textured background. [OBSERVED] The window-title text of `TITLE12` at
+  800×600 reproduces the stored palette entries exactly: indices 1–16 as (R5, G6), B5 = 31:
+  (27,55) (27,54) (26,53) (25,51) (24,50) (23,49) (23,47) (22,46) (21,45) (20,44) (19,42)
+  (19,41) (18,40) (17,38) (16,37) (15,36). The previous text here ("output = destination ×
+  (1 − c) + textColour × c") was wrong.
+* Palette recolour [STATIC; callers not found]: two routines rebuild a font palette for another
+  text colour T and background B: unpack both to 8 bits (r8 = r5·255/31, g8 = g6·255/63, floored),
+  set entry i+1 = pack(T + trunc((B − T)·i/16)) for i = 0..14 per channel, entry 16 = B, and pack
+  by truncation (`r>>3`, `g>>2`, `b>>3`). The observed title text does **not** match this, so
+  titles are drawn with the file palette as stored. For the non-anti-aliased fonts (`MAIN9`,
+  `MAIN10`, `SYSTEM9`, whose glyphs use only indices 1, 16, 17) only entry 1 matters, i.e. the ink
+  becomes the requested text colour. [INFERRED]
 * The `systemloadsave*` fonts are multi-coloured (indices across the palette); they are drawn with
   their palette colours, index of colour 0xF81F (magenta) being transparent. [DATA][INFERRED]
 
