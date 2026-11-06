@@ -432,7 +432,7 @@ uint8_t TrafficSim::classify(uint8_t from, uint8_t prev, uint16_t f, bool rail, 
       if (!stn) return subF ? TM_SUBWAY : 0;
       if (xfer) return TM_XFER_STN;
       if (subF && !road && !railF) return TM_SUBWAY_STN;
-      return 0;
+      return subF ? TM_SUBWAY : 0;   // a subway line under a bus stop or rail station stays on the subway layer (SimTransit 0x10007ba5)
     case TM_RAIL_STN: case TM_SUBWAY_STN: case TM_XFER_STN: {
       if (!stn) {
         if (from == TM_RAIL_STN && railF && prev != TM_RAIL) return TM_RAIL;
@@ -606,6 +606,11 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
       int ex = std::min(std::max(best.x + sx[d] * sp.len, 0), W_ - 1), ez = std::min(std::max(best.z + sz[d] * sp.len, 0), H_ - 1);
       nn.r = TripRect{ex, ez, ex, ez};
       mult = sp.len;
+    } else if ((best.f & TF_STATION) && stationRectOf) {
+      // A station node is the station occupant's whole footprint (SimTransit dc ~5476): rail stations are 2 x 2, all their tiles take the
+      // parent's visit code, and track touching any side boards.
+      TripRect sr;
+      if (stationRectOf(best.x, best.z, sr)) nn.r = TripRect{std::max(0, sr.x0), std::max(0, sr.z0), std::min(W_ - 1, sr.x1), std::min(H_ - 1, sr.z1)};
     }
   }
   nn.mode = best.mode;

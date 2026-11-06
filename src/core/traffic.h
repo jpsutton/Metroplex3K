@@ -194,6 +194,8 @@ class TrafficSim {
   std::function<bool(int x, int z, SpanInfo&)> spanOf;
   // Highway-like modes: permitted exits for a tile given the last move code; bit0 N(-z) 1 W(-x) 2 S(+z) 3 E(+x).
   std::function<unsigned(int x, int z, int lastDir)> highwayExits;
+  // Footprint of the station occupant covering a TF_STATION tile (false = unknown: the node stays one tile).
+  std::function<bool(int x, int z, TripRect& out)> stationRectOf;
   // Density layer value of the city at a lot tile (counting test, 4.5); default 0.
   std::function<int(int x, int z)> lotDensity;
   // (C, I) weights of 4.2; default (1,1).

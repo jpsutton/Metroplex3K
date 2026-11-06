@@ -1867,6 +1867,14 @@ void City::rebuildTraffic() {
                                         {5, 6, 7, 4}, {9, 10, 11, 8}, {13, 14, 15, 12}, {1, 2, 3, 0}};
     const char* bEnv = std::getenv("M3K_HWY_B");
     const bool B = !(bEnv && bEnv[0] == '0');
+    traffic->stationRectOf = [this](int x, int z, TripRect& r) -> bool {   // the station occupant's footprint (rail stations are 2 x 2)
+      if (!inMap(x, z)) return false;
+      const int i = occ_[idx(x, z)];
+      if (i < 0 || size_t(i) >= world_->occupants.size()) return false;
+      const Occupant& o = world_->occupants[size_t(i)];
+      r = TripRect{o.x, o.z, o.x + int(o.sizeX) - 1, o.z + int(o.sizeZ) - 1};
+      return true;
+    };
     traffic->highwayExits = [this, B, H](int x, int z, int d) -> unsigned {
       size_t i = size_t(x) * H + z;
       if (i >= hwyPiece_.size() || !hwyPiece_[i]) return 0;
