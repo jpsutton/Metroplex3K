@@ -91,8 +91,12 @@ When the funding level *p* (percent, 0–255) of a station is set:
    where *A* = 4.999999 × (*E* + 1.2 / (1 − *M*)). The constants 4.999999 (single precision,
    4.999999046…) and 1.2 are hard-coded. *x'* = 1 at *x* = 1 and tends to *M* as *x* grows; with the
    shipped values (*M* = 1.2, *E* = 30), *x'* = 1.2 − 1/(125·*x* − 120). Under-funding (*U* ≤ *U₀*)
-   uses *x* unchanged (linear). [STATIC] Defect: `MaxEfficiency` = 100 gives 1 − *M* = 0 (division by
-   zero); guard it, but preserve results for all other values.
+   uses *x* unchanged (linear). [STATIC] Defect: *M* is floored at 1.0, so **any** `MaxEfficiency` ≤ 100
+   (including 0 or a missing key) gives 1 − *M* = 0 and a division by zero. Correction: the
+   previous text said only 100. Guard it, but preserve results for all other values. A key is
+   stored only when present (fire 0x10001020, police 0x10004426).
+   `PoliceFactor` (u16, crime cell update) and `FireCoverageFactor` (signed byte, aura) are
+   divisors with no zero guard either; 0 faults in the original [STATIC].
 4. Effective parameters (truncated, stored as bytes): *R* = trunc(*R₀*·*x*), *Max* = trunc(*Max₀*·*x*),
    *Min* = trunc(*Min₀*·*x*). [STATIC]
 
@@ -237,7 +241,13 @@ not an INI key) [STATIC]; see §1 for the run frequency.
 then z ascending), continuing from a saved cursor `(cursorX, cursorZ)`. Each processed tile
 advances `cursorX` by 1; when `cursorX` reaches W it resets to 0 and `cursorZ` advances by 1;
 when `cursorZ` reaches H the cursor wraps to `(0, 0)` and the layer finalises its running
-average (`⌊sweepSum / sweepCount⌋`, or 0 if none) before the next tile. The same cursor and
+average (`⌊sweepSum / sweepCount⌋`, or 0 if none) before the next tile. Only tiles whose new
+value is non-zero add to `sweepSum` and `sweepCount`; zero tiles are excluded from both. The
+average is stored as a byte and is the value the fire strike compares with
+`MaxAcceptableFlam` [STATIC, SIMSERV 0x1000C523, strike chance 0x1000AF08]. Record trailer after
+the byte grid: u32 cursorX, u32 cursorZ, u32 sweepSum, u32 sweepCount, u8 average
+[STATIC for the fields, INFERRED order]. Tiles per run (⌊W·H/30⌋) are recomputed at load, not
+saved. The same cursor and
 running sum/count persist across daily runs, so a full map pass takes 30 simulated days on a
 square map.
 
@@ -590,7 +600,28 @@ handled elsewhere (`21-disasters.md`). Cell bit 30 is not a radiation marker; it
 
 A tile is "air polluted" if air ≥ `AirPollutedThreshold`. Water and garbage use their own thresholds
 in the same way (≥ comparisons). The map-view scale maxima are `Max*PolluteForUI`. The query text
-bands sit at 1/8, 1/4, 1/2 and 4/5 of the maximum. Landfill-zone tiles (zone type 17) are registered
+bands sit at 1/8, 1/4, 1/2 and 4/5 of the maximum.
+
+Details [STATIC, SIMECO 0x1000C95C query, 0x1000E3A3 / 0x1000E406 / 0x1000E469 overlays]:
+* **Map overlay.** The value is v = min(value, M). If v = 0 the tile is not tinted. Otherwise the
+  colour index is ⌊(N − 1)·v / M⌋, where N is the colour ramp's entry count. The values are:
+  * air and water: the stored, relaxed cell value;
+  * garbage: the tile's standing garbage.
+  M is `MaxAirPolluteForUI` 11000, `MaxWaterPolluteForUI` 11000 or `MaxGarbagePolluteForUI` 30000.
+* **Query text** for the air and water cell value (unsigned compares, string table `0x82E0074C`):
+
+  | Value | Air | Water |
+  |---|---|---|
+  | heading | 0x187 | 0x18E |
+  | 0 | 0x188 | 0x18F |
+  | < M/8 (1375) | 0x189 | 0x190 |
+  | < M/4 (2750) | 0x18A | 0x191 |
+  | < M/2 (5500) | 0x18B | 0x192 |
+  | < 4M/5 (8800) | 0x18C | 0x193 |
+  | otherwise | 0x18D | 0x194, and the "high" flag is set |
+
+* **Landfill garbage query** (zone 17 tiles only): total × `GarbageScalingFactor` (× 0.001),
+  **rounded to nearest** (not truncated). Landfill-zone tiles (zone type 17) are registered
 by setting bit 15 of their standing-garbage word, and the registered-tile count is saved. [STATIC]
 
 ### 7.3 Crime record `206C6E7C:20A7AE7F:00000000`
