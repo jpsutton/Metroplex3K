@@ -111,6 +111,39 @@ advisor broadcasts an "advisor updated" notification carrying its advisor ID (UI
 All INI files are read from the loose file `\Sys\<name>` if present, otherwise from the packed
 `Sys\SYS.PAK` (see `02-containers.md`). Each has an `[Admin]` section with `Enabled=ON`.
 
+#### 3.1.1 Threshold sections per file [DATA; readers STATIC]
+
+The shipped files contain exactly these sections (besides `[Admin]`). Every threshold key is read
+from the section it appears in here; there are no other threshold sections. Key names are unique
+across all seven files (no key name occurs twice), so one flat key → value map is safe.
+
+| File | Sections | Read by |
+|---|---|---|
+| `Advisor-Budget.ini` | `TAX_RATE_CUTOFFS`, `TREASURY_NUMBERS` | budget advisor |
+| | `BUSINESS_DEALS` (`MONTHS_TILL_BUSINESS_DEAL`), `BUSINESS_DEALS2` (`Name=type;year;cost;petition`) | business deals, `19-sim-economy.md` §11 |
+| `Advisor-CityPlanner.ini` | `ADVICE_TRIGGERS`, `GROWTH_CAP_LIMITS`, `DEMAND_CUTOFFS`, `DEMAND_RESPONSIVENESS` | city-planning advisor |
+| | `REWARD_BUILDINGS`, `REWARD_BUILDINGS_2`, `BUSINESS_DEAL_BUILDINGS` | rewards, section 6 |
+| `Advisor-Demographics.ini` | `FUNDING_RATE_CUTOFFS`, `ADVICE_TRIGGERS`, `PETITIONER_GENERATION` | health & education advisor |
+| `Advisor-Environment.ini` | `POLLUTION_RATE_CUTOFFS`, `GARBAGE_BUILDINGS`, `PETITIONER_GENERATION` (empty) | environment advisor |
+| `Advisor-PublicSafety.ini` | `FUNDING_RATE_CUTOFFS` (police/fire funding), **`ADVICE_GENERATION`** (`FIRE_COVERAGE_CUTOFF`, `FIRE_STATION_MIN_POP`, `JAIL_MIN_POP`, `HIGH_CRIME_LEVEL`, `MED_CRIME_LEVEL`), `PETITIONER_GENERATION` (`POLICE_STATION_RATIO`) | public-safety advisor |
+| `Advisor-Transportation.ini` | `FUNDING_RATE_CUTOFFS`, `TRANSPORTATION_ADVANCEMENTS`, **`TRANSPORTATION_CUTOFFS`** (`ROAD_DAMAGE`, `HIGH_ROAD_TRAFFIC`, `MED_ROAD_TRAFFIC`, `MED_RAIL_USAGE`, `HIGH_RAIL_USAGE`), `PETITIONER_GENERATION` | transportation advisor |
+| `Advisor-Utilities.ini` | `FUNDING_RATE_CUTOFFS`, `CONSUMPTION_RATE_CUTOFFS`, `POWER_BUILDINGS`, `WATER_BUILDINGS`, `NEIGHBOR_DEAL_CONSTANTS`, `PETITIONER_GENERATION` (`WATER_CONSERVATION_YEAR`) | utilities advisor |
+
+There are no sections named `CRIME_RATE_CUTOFFS` or `TRAFFIC_RATE_CUTOFFS`, no `ADVICE_TRIGGERS`
+in the public-safety and transportation files, and no `PETITIONER_GENERATION` in the city-planner
+file. The crime and traffic thresholds are in `ADVICE_GENERATION` and `TRANSPORTATION_CUTOFFS`.
+The SIMADV loader reads each key by (section, key) pair; it parses crime and funding cutoffs with
+`atoi` into a byte, and population minimums into a u32 [STATIC].
+
+The ordinance-petition thresholds (`POPULATION_FOR_GAMBLING`, `MAX_GAMBLING_AURA`,
+`PRO_READING_AURA`, `PRO_READING_POP`, `LE_LEVEL_FOR_CLINIC`, `PARKING_FINES_YEAR`,
+`POWER_CONSERVATION_YEAR`, `HOMELESS_SHELTER_POPULATION` and the other `*_YEAR` keys) are not in
+any advisor file. They are in `PetitionerManager.ini [PETITIONER_ORDINANCE_TRIGGER_MAPPINGS]`
+(section 5).
+
+No petition chance is configurable. Every petition probability in sections 3.7–3.13 is a constant
+in code.
+
 ### 3.2 Topic attributes
 
 A *topic* is identified by a 32-bit topic ID (the string Instance). For each topic ID:
@@ -372,6 +405,7 @@ fire, whose layer mirrors police].
 | | pf > PH and K > CM | `0x132` |
 | | pf > PH and K ≤ CM | `0xFB` |
 | | PM < pf ≤ PH | `0xA2` |
+| | pf ≤ PM | `0xA0` (same topic as the strike-warning case) [STATIC, SIMADV] |
 | Fire (`0x22A498D1`) | firefighters on strike | `0xA7` |
 | | no fire station: N > `FIRE_STATION_MIN_POP` → `0xFC`, else `0x120` | |
 | | strike-warning counter ≥ 16 | `0xA8` |
@@ -379,22 +413,42 @@ fire, whose layer mirrors police].
 | | FM < ff ≤ FH | `0xAA` |
 | | ff ≤ FM | `0xA9` |
 | Crime (no key) | K > CH → `0xBC`; else K > CM → `0xC5` | |
-| Jails (`0xC358210E`) | no jail, N > 1000 and K > CM → `0xBA`; jail over capacity by more than 8× a jail-capacity term → `0xBB`; at capacity → `0xB9` | |
-| Police coverage (`0xC3582DBE`, only N > 1000) | Q < 50 → `0x9B`; Q < 75 → `0x9C`; Q < 99 → `0x9D` | |
+| Jails (`0xC358210E`) | no jail (agent type 13881 count = 0): only if N > 1000; then K > CM → `0xBA`. Jail present: police-layer value J3 ≠ 0 → `0xB9`; else 10·J2 > 8·J1 → `0xBB` (J2 more than 80 % of J1); else nothing. J1, J2, J3 = police layer getters +0x70, +0x74, +0x78 [STATIC; INFERRED: J1 jail capacity, J2 inmates, J3 "jail full" flag]. CORRECTION: the earlier "over capacity by more than 8× a capacity term" reading was wrong | |
+| Police coverage (`0xC3582DBE`, only N > 1000) | Q < 50 → `0x9B`; Q < 75 → `0x9C`; Q < 99 → `0x9D`; else (Q ≥ 99): K > CM and pf < 100 → `0x9E`; else K < CM → `0xC2` | |
+| Fire coverage (`0x235981F6`, only N > 1000) | Qf < 50 → `0xA3`; Qf < 75 → `0xA4`; Qf < 99 → `0xA5`; else ff ≥ 100 → `0xC4` | |
+| `0xD9FDDF6D` | float Ra > 0.8 → `0x193` | |
+| `0x1A4A387F` | float Rb > 0.8 → `0x199` | |
 
-Public-safety petitions (post-update; probability per cycle, cool-down L in cycles):
+Metric sources [STATIC, SIMADV safety metric gather]: Q = police layer getter +0x6C, Qf = fire layer
+getter +0x6C (both percent); station counts by agent type: police 13130, fire 13002, jail 13881;
+Ra = interface `0x22963800`/`0xE475EAD4` method +0x10, Rb = interface `0x13873256`/`0x24889F6F`
+method +0x18 (both truncated to float) [OPEN: meaning of Ra/Rb]. The crime topics use key 0.
 
-| Petition | Condition | Chance | L |
-|---|---|---|---|
-| `0x22` | K > CH and N > 50000 | 4% | 48 |
-| `0x66` (curfew) | K > CH, N > 10000, curfew not enacted | 2% | 84 |
-| `0x6F` (youth sports) | K > CH and N > 10000 (3%), or CM < K ≤ CH and N > 1000 (2%); sports not enacted | 2–3% | 84 |
-| `0x67` / `0x70` (repeal) | K < CM, N > 100, curfew / sports enacted | 3% | 84 |
-| `0x37` | crime hurting business (K > CM) | [OPEN] | 84 |
-| `0x23` | K < CM, N > 10000, police coverage > 98 | 5% | 60 |
-| `0xD3` | K < CM, N > 10000, police funding pf > 105 (percent; the same byte as the police rule's pf) [STATIC] | 5% | 36 |
-| `0x32` | no fire station | 3% | 24 |
-| strike petitions | police/fire strike threatened (`0x9F`/`0xA0`/`0xA2`/`0xCC`) | — | 6 |
+Public-safety petitions (post-update; probability r(100) < chance per cycle, cool-down L in
+cycles). Every randomised request is skipped while the same petition is pending. No petition at
+all when N < 100. [STATIC, SIMADV; CORRECTION of the earlier table]
+
+1. Strikes (no random, not gated by pending): police **not** striking and warning counter > 15 →
+   `0x9F`; police striking → `0xA0`; argument `0x438293B1`, L = 6. Fire not striking and warning
+   counter > 15 → `0xCC`; fire striking → `0xA2`; argument `0xE38293BE`, L = 6.
+2. K > CH and N > 50000 → `0x22`, 4 %, L = 48.
+3. Crime branch, first match wins:
+   * K > CH and N > 10000: curfew (`0xC2BF1DC5`) not enacted → `0x66` 2 %; youth sports
+     (`0x815B4CEF`) not enacted → `0x6F` 3 %; then `0x37` 4 %. All L = 84.
+   * else K > CM and N > 1000 (this includes K > CH with N ≤ 10000): youth sports not enacted →
+     `0x6F` 2 %; then `0x37` 2 %. L = 84.
+   * else K < CM and N > 100: curfew enacted → `0x67` 3 %; youth sports enacted → `0x70` 2 %. L = 84.
+4. K < CM and topic `0xBC` or `0xC5` is still in the advisor's topic list → `0x38` with chance
+   40 %, requested as a persistent petition (P = 1), L = 6.
+5. K < CM and N > 10000: Q > 98 → `0x23` 5 %, L = 60; pf > 105 → `0xD3` 5 %, L = 36.
+6. Police stations > 0, no jail, N > `JAIL_MIN_POP` → `0x0B`, L = 36 (no random, no pending test).
+7. No fire station and N > `FIRE_STATION_MIN_POP` → `0x32` 3 %, L = 24.
+
+All comparisons with CH/CM are on bytes (the INI values are stored as u8).
+`POLICE_STATION_RATIO` is loaded but not read by either public-safety rule function.
+`FIRE_COVERAGE_CUTOFF` is used only by the fire-disaster message handler (`0x621CDA33`): when the
+fire coverage at the fire's cell is below the cutoff the advisor raises topic `0x9A` (key 0, L = 6)
+[STATIC, SIMADV].
 
 ### 3.10 Transportation advancement announcements [STATIC]
 
@@ -1429,10 +1483,38 @@ L = 6, 12 or 84 [DATA].
 | 0x0C | 14·count | entry[] | rewards | Only rewards that are available or owned are written |
 
 Entry: u32 Type, u32 Group, u32 Instance — the resource key identifying the reward building
-(all shipped entries use Type `0x207EDC0E`, Group `0x0000057E`; the Instance is the building's
-catalogue identifier, see `13-buildings-occupants.md` [OPEN: mapping to the decimal building type
-used in the INI]); u8 owned; u8 available. On load, entries not present are neither owned nor
-available.
+(all shipped entries use Type `0x207EDC0E`, Group `0x0000057E`; the Instance is an occupant ID,
+`13-buildings-occupants.md` §1); u8 owned; u8 available. On load, entries not present are neither
+owned nor available.
+
+Building type → saved Instance [DATA: every shipped city that has reward entries; each saved
+Instance is an occupant whose agent type (attribute 0x65) is the building type]:
+
+| Type | Instance | Occupant | Type | Instance | Occupant |
+|---|---|---|---|---|---|
+| 1002 | `00001F51` | Stock Exchange | 14003 | `00001F49` | Geyser Park (national park) |
+| 10110 | `000000F3` | Mayor's House | 14150 | `000000DB` | Historic Statue |
+| 10120 | `000000D0` | City Hall | 14170 | `00001F4B` | Performing Arts Center |
+| 11001 | `00001F57` | Defense Contractor | 14325 | `00001F5D` | Theme Park |
+| 11002 | `00001F8B` | Military Base | 14370 | `00001F6E` | Country Club |
+| 12350 | `00001F52` | Space Port | 14550 | `00001F53` | Lighthouse |
+| 13005 | `00001F4D` | County Courthouse | 14600 | `00001F54` | Stadium |
+| 13871 | `00001F98` | University | 19001 | `00001F55` | Toxic Waste Conversion Plant |
+| 13872 | `00001F56` | Medical Research Center | 19002 | `00001F95` | GigaMall |
+| 13874 | `00001F6A` | Science Center | 19003 | `00001F5B` | Casino Row |
+| 19004 | `00001F48` | Maximum Security Prison | 19999 | `00004E20` | Quigley Castle |
+| 20001 | `000061A8` | Haunted House | 20002 | `00002D18` | Winter Wonderland |
+
+Rule: the Instance is the **lowest occupant ID** with that agent type. Four types have more than
+one occupant: 11002 (`1F8B`–`1F8E`), 13871 (`1F98`–`1F9B`), 14325 (`1F5D`–`1F60`, `2351`) and
+14600 (`1F54`, and `3FCD` in `OccupantAttribs_2.IXF`). The saved Instance is always the lowest:
+European Berlin also saves `1F54`, and Sacramento saves `1F5D` with owned = 1 although no `1F5D`
+building is in the city (its theme park is another variant). So the key is canonical per type and
+**owned** is per agent type, not per occupant.
+
+Deal buildings (19001–19004, 19999) are in the same record. Entries are written in **ascending
+building type** order (every shipped city). Owned = 1 matched a placed building of that type in
+every case. Owned = 1 with available = 0 is common (Madrid has 13 such entries).
 
 ### P.4 Advisor-manager flags — `022E288E:422E28E8:00000000`
 
@@ -1459,8 +1541,8 @@ when unknown.
   lighthouse, jail capacity term, police strength measure).
 * Petitioner panel: whether the manager keeps tokens stable across refreshes (otherwise every refresh re-creates all portraits).
 * PetitionerExtraInfo character-type → voice-sound table.
-* Meaning of the six utilities-advisor booleans (P.4), the topic argument fields `a`/`b`/`value`
-  (P.1), and the mapping of reward-state resource keys (P.3) to INI building types.
+* Meaning of the six utilities-advisor booleans (P.4) and the topic argument fields `a`/`b`/`value`
+  (P.1). (Resolved: reward-state keys map to building types, P.3.)
 * (Resolved: declining petition `0xD7` sets the flag read by `zyxwvu`.) Whether that flag is saved with the city is OPEN.
 * Per-stage triggered-news IDs of the disaster state machines (`SIMDSTR`); network events were not
   found to post news (no `SIMNTWRK` reference to the news tables).

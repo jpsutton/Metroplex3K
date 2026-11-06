@@ -526,7 +526,21 @@ window's bottom-right corner (W, H) unless noted:
 | RCI background | `42FB77F6` | (W−201, bar top − 24) | 41 × 88 |
 | Visit SimCity Exchange | `52FB06F0` | (W−194, bar top − 24) | 33 × 30 |
 
-640 × 480 was not measured.
+At 640 × 480 [OBSERVED]:
+* Bar buttons: pause (348,430), run (371,430), speed (349,450), query (399,430). These are the
+  P2/P1/P4/P3 values on a bar whose top is 416.
+* Right cluster: RCI, Exchange and Hide Toolbars use the same offsets as above.
+* The navigator buttons sit 12 px lower: Layer Views (W−46, H−146), Zoom In (W−146, H−52), Zoom
+  Out (W−40, H−52), Rotate Clockwise (W−126, H−32), Rotate Counterclockwise (W−60, H−32).
+
+**Hide / Show Toolbars** [OBSERVED][DATA]:
+* Hide Toolbars is image `02F78C6D:53244586`: 104 × 26, four 26 × 26 cells (disabled, normal,
+  pressed, highlighted), each a small framed square on a magenta key. It is drawn on top of the
+  navigator art. Tooltip `225872FE:A6`, placed to the left.
+* While the toolbars are hidden, only a round button remains, in the same rect (W−26, H−26,
+  26 × 26). It is `53244588` (four 26 × 26 cells), with `53244589` as its opacity plane (white
+  discs) [INFERRED], so it is blended over the city. Tooltip `A9` "Show Toolbars", placed to the
+  left: box (697,579,75 × 16) at 800 × 600.
 Update rules are in `09-ui-screens.md` §4.1.
 
 **Observed at 2048×1152** `[OBSERVED]`:

@@ -150,6 +150,8 @@ struct AdvisorInputs {
     int policeWarn = 0, fireWarn = 0;               // strike-warning counters
     int jailInmates = 0, jailCapacity = 0, jailCapacityTerm = 1;
     int policeCoverage = 100;                       // percent
+    int fireCoverage = 100;                         // percent (fire layer getter +0x6C)
+    int jailUnjailed = 0;                           // prisoners without a cell (police getter +0x78, "jail full") [INFERRED]
     int policeStrength = 0;                         // "police strength measure"
     bool curfewEnacted = false, youthSportsEnacted = false;
   } safety;
@@ -251,10 +253,14 @@ class RewardTable {
   void setParam(const std::string& k, int64_t v) { p_[k] = v; }
   // Offer rule (6.2); runs after the planner update.
   void evaluate(const AdvisorInputs& in, PetitionerManager& pm);
-  // Persisted P.3. `typeToInstance` maps a building type to its resource Instance (unknown mapping [OPEN]);
-  // unmapped saved entries are preserved verbatim in `rawEntries`.
+  // Persisted P.3 (spec 22 P.3). `typeToInstance` maps a building (agent) type to the Instance of its occupant record, key
+  // 207EDC0E:0000057E:<instance>: the lowest occupant ID with that agent type [DATA, shipped cities]. Entries of unknown types
+  // are preserved verbatim in `rawEntries`.
   struct Raw { uint32_t type = 0, group = 0, instance = 0; uint8_t owned = 0, available = 0; };
-  std::map<int, uint32_t> typeToInstance;
+  std::map<int, uint32_t> typeToInstance = {
+      {1002, 0x1F51},  {10110, 0xF3},   {10120, 0xD0},   {11001, 0x1F57}, {11002, 0x1F8B}, {12350, 0x1F52}, {13005, 0x1F4D}, {13871, 0x1F98},
+      {13872, 0x1F56}, {13874, 0x1F6A}, {14003, 0x1F49}, {14150, 0xDB},   {14170, 0x1F4B}, {14325, 0x1F5D}, {14370, 0x1F6E}, {14550, 0x1F53},
+      {14600, 0x1F54}, {19001, 0x1F55}, {19002, 0x1F95}, {19003, 0x1F5B}, {19004, 0x1F48}, {19999, 0x4E20}, {20001, 0x61A8}, {20002, 0x2D18}};
   std::vector<Raw> rawEntries;
   Bytes save() const;
   bool load(const Bytes& b);
@@ -344,7 +350,7 @@ class AdvisorManager {
   void demoRules(TopicList&, const AdvisorInputs&, GameRng&);
   void utilRules(TopicList&, const AdvisorInputs&);
   void postUpdate(uint32_t advisorId, TopicList&, const AdvisorInputs&, GameRng&);
-  void safetyPetitions(const AdvisorInputs&, GameRng&);
+  void safetyPetitions(const TopicList&, const AdvisorInputs&, GameRng&);
   void transPetitions(const AdvisorInputs&, GameRng&);
   void planPetitions(const AdvisorInputs&, GameRng&);
   void demoPetitions(const AdvisorInputs&, GameRng&);

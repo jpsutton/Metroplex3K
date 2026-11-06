@@ -208,33 +208,33 @@ bool TopicList::load(const Bytes& d) {
 // Thresholds
 // ---------------------------------------------------------------------------------------------
 AdvisorThresholds::AdvisorThresholds() {
-  // [OPEN] defaults: spec gives only the budget growth/decline values (0.05 / -0.1 scaled by 1e-4).
+  // Defaults are the shipped Advisor-*.ini values (spec 22 3.1.1), used when a file is missing; the files override them.
   const std::pair<const char*, int64_t> d[] = {
-      {"TaxGrowthThreshold", 500}, {"TaxDeclineThreshold", -1000}, {"TREASURY_LOW", 20000}, {"LOSE_GAME_LEVEL", 100000},
-      {"WATER_POLLUTION_HIGH", 150}, {"WATER_POLLUTION_MEDIUM", 90}, {"AIR_POLLUTION_HIGH", 150}, {"AIR_POLLUTION_MEDIUM", 90},
-      {"POLICE_FUNDING_HIGH", 100}, {"POLICE_FUNDING_MEDIUM", 75}, {"FIRE_FUNDING_HIGH", 100}, {"FIRE_FUNDING_MEDIUM", 75},
-      {"HIGH_CRIME_LEVEL", 150}, {"MED_CRIME_LEVEL", 80}, {"FIRE_STATION_MIN_POP", 500}, {"JAIL_MIN_POP", 1000},
-      {"ROAD_FUNDING_HIGH", 100}, {"ROAD_FUNDING_MEDIUM", 75}, {"ROAD_FUNDING_LOW", 50}, {"RAIL_FUNDING_HIGH", 100},
-      {"RAIL_FUNDING_MEDIUM", 75}, {"ROAD_DAMAGE", 5}, {"HIGH_ROAD_TRAFFIC", 150}, {"MED_ROAD_TRAFFIC", 90},
-      {"MED_RAIL_USAGE", 50}, {"HIGH_RAIL_USAGE", 120},
-      {"SUBWAY_AVAILABLE", 1910}, {"BUS_STATION_AVAILABLE", 1900}, {"AIRPORT_AVAILABLE", 1920}, {"HIGHWAY_AVAILABLE", 1940},
-      {"CARPOOL_TRIGGER_LEVEL", 150}, {"CARPOOL_TRIGGER_YEAR", 1970}, {"CROSSING_GUARD_TRIGGER_LEVEL", 150},
-      {"CROSSING_GUARD_TRIGGER_YEAR", 1930}, {"ALTERNATE_DAY_DRIVING_LEVEL", 200}, {"ALTERNATE_DAY_DRIVING_YEAR", 1970},
-      {"BUS_STOP_TRIGGER_LEVEL", 100},
-      {"SMALL_SIZE_CITY", 5000}, {"MEDIUM_SIZE_CITY", 50000}, {"NON_DEV_SENSITIVITY", 20}, {"LOW_LAND_VALUE", 50},
-      {"LOW_AIR_POLLUTION_FARMS", 40}, {"LOW_WATER_POLLUTION_FARMS", 40}, {"COMMERCIAL_CAP_PROBLEM", 100},
-      {"INDUSTRIAL_CAP_PROBLEM", 100}, {"RESPONSIVENESS_IN_MONTHS", 6}, {"RESIDENTIAL_DEMAND_POSITIVE", 1000},
-      {"COMMERCIAL_DEMAND_POSITIVE", 1000}, {"MIN_HI_TECH_EQ", 80}, {"HI_TECH_JOB_RATIO", 25}, {"PARK_RATIO", 20},
-      {"PARK_AURA_CUTOFF", 0},
-      {"HOSPITAL_POPULATION_MINIMUM", 3000}, {"SCHOOL_POPULATION_MINIMUM", 1000}, {"LIBRARY_POPULATION_MINIMUM", 20000},
-      {"MUSEUM_POPULATION_MINIMUM", 40000}, {"LE_AND_EQ_POPULATION_MINIMUM", 10000}, {"STADIUM_GROWTH_CUTOFF", 50000},
-      {"RESIDENTIAL_GROWTH_CAP", 30000}, {"LOW_LIFE_EXPECTANCY", 60}, {"HIGH_LIFE_EXPECTANCY", 80}, {"LOW_EQ_CUTOFF", 60},
-      {"AVERAGE_EQ_CUTOFF", 100}, {"HIGH_EQ_CUTOFF", 140}, {"HIGH_DREARY_RATING", 60}, {"HOSPITAL_RATIO", 20000},
-      {"CITY_AURA_LOW", -20}, {"CITY_AURA_HIGH", 40}, {"LOW_DREARY_RATING", 20}, {"CITY_AURA_DREARY_POPULATION", 10000},
-      {"ZOO_POPULATION_MINIMUM", 20000}, {"MARINA_POPULATION_MINIMUM", 15000},
-      {"POWER_CONSUMPTION_CRITICAL", 99}, {"POWER_CONSUMPTION_HIGH", 90}, {"POWER_CONSUMPTION_MEDIUM", 75},
-      {"WATER_CONSUMPTION_MEDIUM", 75}, {"MINIMUM_DEAL_POPULATION", 3000}, {"LOW_TREASURY_LEVEL", 20000},
-      {"PETITION_0x37_CHANCE", 2},
+      {"TaxGrowthThreshold", 500}, {"TaxDeclineThreshold", -1000}, {"TREASURY_LOW", 1500}, {"LOSE_GAME_LEVEL", 100000},
+      {"WATER_POLLUTION_HIGH", 9}, {"WATER_POLLUTION_MEDIUM", 4}, {"AIR_POLLUTION_HIGH", 24}, {"AIR_POLLUTION_MEDIUM", 12},
+      {"POLICE_FUNDING_HIGH", 101}, {"POLICE_FUNDING_MEDIUM", 75}, {"FIRE_FUNDING_HIGH", 100}, {"FIRE_FUNDING_MEDIUM", 75},
+      {"HIGH_CRIME_LEVEL", 40}, {"MED_CRIME_LEVEL", 20}, {"FIRE_STATION_MIN_POP", 4000}, {"JAIL_MIN_POP", 35000},
+      {"ROAD_FUNDING_HIGH", 110}, {"ROAD_FUNDING_MEDIUM", 90}, {"ROAD_FUNDING_LOW", 75}, {"RAIL_FUNDING_HIGH", 110},
+      {"RAIL_FUNDING_MEDIUM", 90}, {"ROAD_DAMAGE", 15}, {"HIGH_ROAD_TRAFFIC", 85}, {"MED_ROAD_TRAFFIC", 45},
+      {"MED_RAIL_USAGE", 70}, {"HIGH_RAIL_USAGE", 155},
+      {"SUBWAY_AVAILABLE", 1910}, {"BUS_STATION_AVAILABLE", 1920}, {"AIRPORT_AVAILABLE", 1930}, {"HIGHWAY_AVAILABLE", 1940},
+      {"CARPOOL_TRIGGER_LEVEL", 80}, {"CARPOOL_TRIGGER_YEAR", 1984}, {"CROSSING_GUARD_TRIGGER_LEVEL", 40},
+      {"CROSSING_GUARD_TRIGGER_YEAR", 1925}, {"ALTERNATE_DAY_DRIVING_LEVEL", 60}, {"ALTERNATE_DAY_DRIVING_YEAR", 1932},
+      {"BUS_STOP_TRIGGER_LEVEL", 55},
+      {"SMALL_SIZE_CITY", 20000}, {"MEDIUM_SIZE_CITY", 80000}, {"NON_DEV_SENSITIVITY", 30}, {"LOW_LAND_VALUE", 30},
+      {"LOW_AIR_POLLUTION_FARMS", 33}, {"LOW_WATER_POLLUTION_FARMS", 33}, {"COMMERCIAL_CAP_PROBLEM", 75},
+      {"INDUSTRIAL_CAP_PROBLEM", 75}, {"RESPONSIVENESS_IN_MONTHS", 12}, {"RESIDENTIAL_DEMAND_POSITIVE", 40},
+      {"COMMERCIAL_DEMAND_POSITIVE", 40}, {"MIN_HI_TECH_EQ", 120}, {"HI_TECH_JOB_RATIO", 50}, {"PARK_RATIO", 20},
+      {"PARK_AURA_CUTOFF", 35},
+      {"HOSPITAL_POPULATION_MINIMUM", 6000}, {"SCHOOL_POPULATION_MINIMUM", 3000}, {"LIBRARY_POPULATION_MINIMUM", 15000},
+      {"MUSEUM_POPULATION_MINIMUM", 40000}, {"LE_AND_EQ_POPULATION_MINIMUM", 50000}, {"STADIUM_GROWTH_CUTOFF", 150000},
+      {"RESIDENTIAL_GROWTH_CAP", 15000}, {"LOW_LIFE_EXPECTANCY", 60}, {"HIGH_LIFE_EXPECTANCY", 80}, {"LOW_EQ_CUTOFF", 75},
+      {"AVERAGE_EQ_CUTOFF", 100}, {"HIGH_EQ_CUTOFF", 120}, {"HIGH_DREARY_RATING", 75}, {"HOSPITAL_RATIO", 5000},
+      {"CITY_AURA_LOW", -50}, {"CITY_AURA_HIGH", 60}, {"LOW_DREARY_RATING", 50}, {"CITY_AURA_DREARY_POPULATION", 10000},
+      {"ZOO_POPULATION_MINIMUM", 60000}, {"MARINA_POPULATION_MINIMUM", 100000},
+      {"POWER_CONSUMPTION_CRITICAL", 95}, {"POWER_CONSUMPTION_HIGH", 85}, {"POWER_CONSUMPTION_MEDIUM", 40},
+      {"WATER_CONSUMPTION_MEDIUM", 40}, {"MINIMUM_DEAL_POPULATION", 5000}, {"LOW_TREASURY_LEVEL", 10000},
+      {"FIRE_COVERAGE_CUTOFF", 30}, {"WATER_CONSERVATION_YEAR", 1929},
   };
   for (auto& p : d) v_[p.first] = p.second;
 }
@@ -265,17 +265,15 @@ void AdvisorThresholds::loadAdvisorIni(uint32_t id, const IniFile& f) {
   switch (id) {
     case kAdvBudget: loadSections(f, {"TAX_RATE_CUTOFFS", "TREASURY_NUMBERS"}); break;
     case kAdvPlanner:
-      loadSections(f, {"ADVICE_TRIGGERS", "GROWTH_CAP_LIMITS", "DEMAND_RESPONSIVENESS", "DEMAND_CUTOFFS",
-                       "REWARD_BUILDINGS_2", "PETITIONER_GENERATION"});
+      loadSections(f, {"ADVICE_TRIGGERS", "GROWTH_CAP_LIMITS", "DEMAND_RESPONSIVENESS", "DEMAND_CUTOFFS", "REWARD_BUILDINGS_2"});
       break;
     case kAdvDemographics: loadSections(f, {"ADVICE_TRIGGERS", "PETITIONER_GENERATION", "FUNDING_RATE_CUTOFFS"}); break;
     case kAdvEnvironment: loadSections(f, {"POLLUTION_RATE_CUTOFFS"}); break;
-    case kAdvSafety: loadSections(f, {"FUNDING_RATE_CUTOFFS", "CRIME_RATE_CUTOFFS", "ADVICE_TRIGGERS", "PETITIONER_GENERATION"}); break;
+    case kAdvSafety: loadSections(f, {"FUNDING_RATE_CUTOFFS", "ADVICE_GENERATION", "PETITIONER_GENERATION"}); break;
     case kAdvTransport:
-      loadSections(f, {"FUNDING_RATE_CUTOFFS", "TRAFFIC_RATE_CUTOFFS", "ADVICE_TRIGGERS", "PETITIONER_GENERATION",
-                       "TRANSPORTATION_ADVANCEMENTS"});
+      loadSections(f, {"FUNDING_RATE_CUTOFFS", "TRANSPORTATION_CUTOFFS", "PETITIONER_GENERATION", "TRANSPORTATION_ADVANCEMENTS"});
       break;
-    case kAdvUtilities: loadSections(f, {"CONSUMPTION_RATE_CUTOFFS", "FUNDING_RATE_CUTOFFS", "NEIGHBOR_DEAL_CONSTANTS"}); break;
+    case kAdvUtilities: loadSections(f, {"CONSUMPTION_RATE_CUTOFFS", "FUNDING_RATE_CUTOFFS", "NEIGHBOR_DEAL_CONSTANTS", "PETITIONER_GENERATION"}); break;
   }
   loadBuildingLists(f);
 }
@@ -347,30 +345,35 @@ void RewardTable::evaluate(const AdvisorInputs& in, PetitionerManager& pm) {
 }
 
 Bytes RewardTable::save() const {
-  Bytes body;
-  uint32_t count = 0;
+  // Entries are written in ascending building-type order, as in every shipped city; entries of unknown types follow in their saved order.
+  struct Out { int key; uint32_t type, group, instance; uint8_t owned, avail; };
+  std::vector<Out> out;
   std::set<uint32_t> written;
-  auto stateFor = [&](uint32_t inst, uint8_t& owned, uint8_t& avail) {
-    for (auto& kv : typeToInstance) if (kv.second == inst)
+  auto stateFor = [&](uint32_t inst, int& bt, uint8_t& owned, uint8_t& avail) {
+    for (auto& kv : typeToInstance) if (kv.second == inst) {
+      bt = kv.first;
       for (auto& e : e_) if (e.buildingType == kv.first) { owned = e.owned; avail = e.available; return true; }
+    }
     return false;
   };
   for (auto& r : rawEntries) {
     uint8_t o = r.owned, a = r.available;
-    stateFor(r.instance, o, a);
-    put32(body, r.type); put32(body, r.group); put32(body, r.instance); body.push_back(o); body.push_back(a);
-    written.insert(r.instance); ++count;
+    int bt = 0x7FFFFFFF;
+    stateFor(r.instance, bt, o, a);
+    out.push_back({bt, r.type, r.group, r.instance, o, a});
+    written.insert(r.instance);
   }
   for (auto& e : e_) {
     if (!(e.available || e.owned)) continue;
     auto it = typeToInstance.find(e.buildingType);
     if (it == typeToInstance.end() || written.count(it->second)) continue;
-    put32(body, 0x207EDC0Eu); put32(body, 0x0000057Eu); put32(body, it->second);
-    body.push_back(e.owned); body.push_back(e.available);
-    ++count;
+    out.push_back({e.buildingType, 0x207EDC0Eu, 0x0000057Eu, it->second, uint8_t(e.owned), uint8_t(e.available)});
   }
+  std::stable_sort(out.begin(), out.end(), [](const Out& x, const Out& y) { return x.key < y.key; });
+  Bytes body;
+  for (auto& o : out) { put32(body, o.type); put32(body, o.group); put32(body, o.instance); body.push_back(o.owned); body.push_back(o.avail); }
   Bytes b;
-  put16(b, 1); put16(b, 2); put32(b, 0xDEADBEEFu); put32(b, count);
+  put16(b, 1); put16(b, 2); put32(b, 0xDEADBEEFu); put32(b, uint32_t(out.size()));
   b.insert(b.end(), body.begin(), body.end());
   return b;
 }
@@ -557,6 +560,7 @@ void AdvisorManager::safetyRules(TopicList& L, const AdvisorInputs& in) {
   else if (S.policeFunding > PH && K > CM) L.raise(0x132, 0x42A498C9);
   else if (S.policeFunding > PH) L.raise(0xFB, 0x42A498C9);
   else if (S.policeFunding > PM) L.raise(0xA2, 0x42A498C9);
+  else L.raise(0xA0, 0x42A498C9);   // pf <= PM: same topic as the strike warning (spec 22 3.9)
   if (S.fireStrike) L.raise(0xA7, 0x22A498D1);
   else if (S.fireStations == 0) L.raise(N > thr.get("FIRE_STATION_MIN_POP") ? 0xFC : 0x120, 0x22A498D1);
   else if (S.fireWarn >= 16) L.raise(0xA8, 0x22A498D1);
@@ -565,40 +569,67 @@ void AdvisorManager::safetyRules(TopicList& L, const AdvisorInputs& in) {
   else L.raise(0xA9, 0x22A498D1);
   if (K > CH) L.raise(0xBC);
   else if (K > CM) L.raise(0xC5);
+  // Jails: none -> only with N > 1000 and K > CM; present -> prisoners without a cell, else inmates over 80 % of capacity.
   if (S.jails == 0) { if (N > 1000 && K > CM) L.raise(0xBA, 0xC358210E); }
-  else if (S.jailInmates - S.jailCapacity > 8 * S.jailCapacityTerm) L.raise(0xBB, 0xC358210E);
-  else if (S.jailInmates >= S.jailCapacity) L.raise(0xB9, 0xC358210E);
+  else if (S.jailUnjailed != 0) L.raise(0xB9, 0xC358210E);
+  else if (10 * int64_t(S.jailInmates) > 8 * int64_t(S.jailCapacity)) L.raise(0xBB, 0xC358210E);
   if (N > 1000) {
     if (S.policeCoverage < 50) L.raise(0x9B, 0xC3582DBE);
     else if (S.policeCoverage < 75) L.raise(0x9C, 0xC3582DBE);
     else if (S.policeCoverage < 99) L.raise(0x9D, 0xC3582DBE);
+    else if (K > CM && S.policeFunding < 100) L.raise(0x9E, 0xC3582DBE);
+    else if (K < CM) L.raise(0xC2, 0xC3582DBE);
+    if (S.fireCoverage < 50) L.raise(0xA3, 0x235981F6);
+    else if (S.fireCoverage < 75) L.raise(0xA4, 0x235981F6);
+    else if (S.fireCoverage < 99) L.raise(0xA5, 0x235981F6);
+    else if (S.fireFunding >= 100) L.raise(0xC4, 0x235981F6);
   }
+  // 0xD9FDDF6D / 0x1A4A387F (topics 0x193 / 0x199) read two interface floats whose meaning is [OPEN]: not modelled.
 }
 
-void AdvisorManager::safetyPetitions(const AdvisorInputs& in, GameRng& rng) {
+// Public-safety petitions (spec 22 3.9, post-update). Randomised requests are skipped while the same petition is pending.
+void AdvisorManager::safetyPetitions(const TopicList& L, const AdvisorInputs& in, GameRng& rng) {
   if (!petitioners) return;
   const auto& S = in.safety;
   const int64_t N = in.population;
+  if (N < 100) return;
   const int64_t CH = thr.get("HIGH_CRIME_LEVEL"), CM = thr.get("MED_CRIME_LEVEL");
   const int K = S.crime;
-  auto draw = [&](int pct) { return int(rng.rand(100)) < pct; };
   auto& P = *petitioners;
-  if (K > CH && N > 50000 && draw(4)) P.request(0x22, 0, 48);
-  if (K > CH && N > 10000 && !S.curfewEnacted && draw(2)) P.request(0x66, 0, 84);
-  if (!S.youthSportsEnacted) {
-    if (K > CH && N > 10000) { if (draw(3)) P.request(0x6F, 0, 84); }
-    else if (K > CM && K <= CH && N > 1000) { if (draw(2)) P.request(0x6F, 0, 84); }
+  auto chance = [&](uint32_t id, int pct, int limit, bool persistent = false) {
+    if (P.pending(id)) return;
+    if (int(rng.rand(100)) < pct) P.request(id, 0, limit, persistent);
+  };
+  // 1. Strikes: no random, not gated by pending; the argument is the layer's id.
+  if (S.policeStrike) P.request(0xA0, 0x438293B1u, 6);
+  else if (S.policeWarn > 15) P.request(0x9F, 0x438293B1u, 6);
+  if (S.fireStrike) P.request(0xA2, 0xE38293BEu, 6);
+  else if (S.fireWarn > 15) P.request(0xCC, 0xE38293BEu, 6);
+  // 2.
+  if (K > CH && N > 50000) chance(0x22, 4, 48);
+  // 3. Crime branch, first match wins.
+  if (K > CH && N > 10000) {
+    if (!S.curfewEnacted) chance(0x66, 2, 84);
+    if (!S.youthSportsEnacted) chance(0x6F, 3, 84);
+    chance(0x37, 4, 84);
+  } else if (K > CM && N > 1000) {
+    if (!S.youthSportsEnacted) chance(0x6F, 2, 84);
+    chance(0x37, 2, 84);
+  } else if (K < CM && N > 100) {
+    if (S.curfewEnacted) chance(0x67, 3, 84);
+    if (S.youthSportsEnacted) chance(0x70, 2, 84);
   }
-  if (K < CM && N > 100 && S.curfewEnacted && draw(3)) P.request(0x67, 0, 84);
-  if (K < CM && N > 100 && S.youthSportsEnacted && draw(3)) P.request(0x70, 0, 84);
-  if (K > CM && draw(int(thr.get("PETITION_0x37_CHANCE")))) P.request(0x37, 0, 84);
-  if (K < CM && N > 10000 && S.policeCoverage > 98 && draw(5)) P.request(0x23, 0, 60);
-  if (K < CM && N > 10000 && S.policeStrength > 105 && draw(5)) P.request(0xD3, 0, 36);
-  if (S.fireStations == 0 && draw(3)) P.request(0x32, 0, 24);
-  if (S.policeStrike) P.request(0x9F, 0, 6);
-  else if (S.policeWarn >= 16) P.request(0xA0, 0, 6);
-  if (S.fireStrike) P.request(0xCC, 0, 6);
-  else if (S.fireWarn >= 16) P.request(0xA2, 0, 6);
+  // 4. Crime has fallen but its advisor topic is still listed: persistent petition.
+  if (K < CM && (L.listed(0xBC) || L.listed(0xC5))) chance(0x38, 40, 6, true);
+  // 5.
+  if (K < CM && N > 10000) {
+    if (S.policeCoverage > 98) chance(0x23, 5, 60);
+    if (S.policeStrength > 105) chance(0xD3, 5, 36);
+  }
+  // 6. Police but no jail in a big city: no random, no pending test.
+  if (S.policeStations > 0 && S.jails == 0 && N > thr.get("JAIL_MIN_POP")) P.request(0x0B, 0, 36);
+  // 7.
+  if (S.fireStations == 0 && N > thr.get("FIRE_STATION_MIN_POP")) chance(0x32, 3, 24);
 }
 
 // ---- Transportation (3.10) --------------------------------------------------------------------
@@ -995,7 +1026,7 @@ void AdvisorManager::budgetPetitions(const AdvisorInputs& in, GameRng& rng) {
 void AdvisorManager::postUpdate(uint32_t id, TopicList& L, const AdvisorInputs& in, GameRng& rng) {
   switch (id) {
     case kAdvBudget: budgetPetitions(in, rng); break;
-    case kAdvSafety: safetyPetitions(in, rng); break;
+    case kAdvSafety: safetyPetitions(L, in, rng); break;
     case kAdvTransport: transPetitions(in, rng); break;
     case kAdvPlanner:
       planPetitions(in, rng);

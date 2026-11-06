@@ -352,6 +352,8 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   in.safety.policeWarn = int(c.police.lastStrikeChance / 100); in.safety.fireWarn = int(c.fire.lastStrikeChance / 100);
   for (const auto& j : c.police.jails()) { in.safety.jailInmates += j.inmates; in.safety.jailCapacity += j.capacity; }
   in.safety.policeCoverage = int(c.police.pctCovered);
+  in.safety.fireCoverage = int(c.fire.pctCovered);
+  in.safety.jailUnjailed = c.police.unjailed;
   // EQ and LE as the advisors read them (spec 22 s3.12, 20 s4.5) [STATIC]: unweighted means over ages 20-65, not Q(0,89).
   in.demo.lifeExpectancy = c.pop.qLE(20, 65); in.demo.eq = c.pop.qEQ(20, 65);
   in.plan.lifeExpectancy = c.pop.qLE(20, 65); in.plan.eq = c.pop.qEQ(20, 65);

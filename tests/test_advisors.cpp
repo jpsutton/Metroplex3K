@@ -361,7 +361,8 @@ static void testAdvisors() {
   am.evaluate(kAdvBudget, in, rng, out3);
   CHECK(B.listed(0x04) && !B.listed(0x03));
 
-  // Environment
+  // Environment (thresholds pinned to round numbers; the built-in defaults are the shipped values)
+  am.thr.loadAdvisorIni(kAdvEnvironment, IniFile::fromText("[POLLUTION_RATE_CUTOFFS]\nWATER_POLLUTION_HIGH=150\nWATER_POLLUTION_MEDIUM=90\nAIR_POLLUTION_HIGH=150\nAIR_POLLUTION_MEDIUM=90\n"));
   in.env.hasWaterSystem = true; in.env.waterPollution = 200; in.env.airPollution = 100;
   in.env.garbageAccumulating = true;
   am.evaluate(kAdvEnvironment, in, rng, out);
@@ -381,6 +382,22 @@ static void testAdvisors() {
   am.evaluate(kAdvSafety, in, rng, out);
   const TopicList& S = am.list(kAdvSafety);
   CHECK(S.listed(0x11F) && S.listed(0xFC) && S.listed(0xBC) && S.listed(0x9B));
+  {  // spec 22 3.9: low funding, jails, coverage tiers, fire coverage (thresholds from the shipped files)
+    AdvisorManager sm;
+    AdvisorInputs si; si.population = 60000;
+    si.safety.policeStations = 3; si.safety.fireStations = 3; si.safety.jails = 1; si.safety.crime = 10;
+    si.safety.policeFunding = 50; si.safety.fireFunding = 120;           // pf <= PM: same topic as the strike warning
+    si.safety.policeCoverage = 99; si.safety.fireCoverage = 40;
+    si.safety.jailCapacity = 100; si.safety.jailInmates = 90;            // over 80 %
+    AdvisorOutputs so; GameRng sr(1);
+    sm.evaluate(kAdvSafety, si, sr, so);
+    const TopicList& SL = sm.list(kAdvSafety);
+    CHECK(SL.listed(0xA0) && SL.listed(0xBB) && !SL.listed(0xB9));
+    CHECK(SL.listed(0xC2) && SL.listed(0xA3) && !SL.listed(0x9B));       // K < CM at 99 % coverage; fire coverage < 50
+    si.safety.jailUnjailed = 4; si.safety.crime = 30; si.safety.policeFunding = 80; si.safety.fireCoverage = 99;
+    sm.evaluate(kAdvSafety, si, sr, so);
+    CHECK(SL.listed(0xB9) && SL.listed(0x9E) && SL.listed(0xC4));        // jail full flag; K > CM and pf < 100 at 99 %; ff >= 100
+  }
 
   // Transportation
   in.trans.nRoad = 100; in.trans.nTransit = 0; in.trans.roadFunding = 100; in.trans.roadDamage = 0.0;
@@ -475,8 +492,8 @@ static void testAdvisorRecords() {
   CHECK(b.mgrFlags[2] == 0);
   // reward record: entries are 14 bytes each; unmapped entries preserved verbatim
   Bytes raw; put16(raw, 1); put16(raw, 2); put32(raw, 0xDEADBEEFu); put32(raw, 2);
-  put32(raw, 0x207EDC0E); put32(raw, 0x57E); put32(raw, 0x9999); raw.push_back(1); raw.push_back(1);
-  put32(raw, 0x207EDC0E); put32(raw, 0x57E); put32(raw, 0x2222); raw.push_back(0); raw.push_back(1);
+  put32(raw, 0x207EDC0E); put32(raw, 0x57E); put32(raw, 0x2222); raw.push_back(0); raw.push_back(1);   // mapped entries first (ascending building type)
+  put32(raw, 0x207EDC0E); put32(raw, 0x57E); put32(raw, 0x9999); raw.push_back(1); raw.push_back(1);   // unmapped entries follow, verbatim
   AdvisorManager c; c.rewards.load(cp); c.rewards.typeToInstance = a.rewards.typeToInstance;
   CHECK(c.rewards.load(raw));
   CHECK(c.rewards.find(14150)->available && !c.rewards.find(14150)->owned);
