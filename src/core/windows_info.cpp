@@ -318,6 +318,7 @@ namespace {
 const uint32_t kPanelFill = 0xFFFF927Bu;   // (123,146,255) in the frame's 0xAABBGGRR order
 const uint32_t kInset = 0xFFFFDFDEu;       // (222,223,255): every inset area (text boxes, goals list, results panel, button panels)
 const int kPitch = 14;                      // body, goal and rank text pitch
+const char* const kBodyFont = "main9";      // scenario text boxes and goals: 11 ink rows [OBSERVED]; main10 is 13 rows and 0.5 % wider
 
 // Presenter panel: the advisor portrait (92 x 115 cells) in a 1 px frame, and the person's name centred below it.
 void presenterPanel(Ui& ui, const WinEnv& E, Rect panel, int portraitX, int portraitY, int nameY, uint32_t advisor, int mood,
@@ -331,21 +332,25 @@ void presenterPanel(Ui& ui, const WinEnv& E, Rect panel, int portraitX, int port
   const Rect pr{portraitX, portraitY, 91, 114};
   const uint32_t nameInk = rgb(0x31, 0x36, 0x7C);
   if (pic && pic->custom && !advisor) {
-    // Kinds 0 / 2 (spec 23 4.7.0 [STATIC; crop INFERRED]): the picture (its own frame lines are baked in: dark top/left, white right/bottom) cropped
-    // from its top-left to at most 94 x 117, centred in the presenter column at x = column left + (colW - w) / 2; the name below it, centred in the
-    // rest of the panel; no title line. No picture: the name starts at the top.
+    // Kinds 0 / 2 (spec 23 4.7.0 [STATIC; crop INFERRED]): the picture drawn at x = column left + (colW - w) / 2 from picTop, cropped from its top-left
+    // to at most 94 x 117, and a 1 px frame laid over its outer ring (dark top/left (66,65,66), white right/bottom; the right line owns the top-right
+    // corner, the bottom line the bottom-left one) [OBSERVED]. The name below it, centred in the rest of the panel; no title line. No picture: the
+    // name starts at the top.
     int bottom = panel.y;
     if (pic->group) {
       if (const Image* im = E.img(pic->group, pic->inst)) {
         const int w = std::min(94, im->w), h = std::min(117, im->h);
-        ui.blitRect(*im, panel.x - 1 + ((colW ? colW : panel.w + 1) - w) / 2, picTop ? picTop : pr.y - 1, 0, 0, w, h);
-        bottom = (picTop ? picTop : pr.y - 1) + h;
+        const int x0 = panel.x - 1 + ((colW ? colW : panel.w + 1) - w) / 2, y0 = picTop ? picTop : pr.y - 1;
+        ui.blitRect(*im, x0, y0, 0, 0, w, h);
+        const uint32_t dark = rgb(66, 65, 66), white = rgb(255, 255, 255);
+        ui.fill({x0, y0, w - 1, 1}, dark); ui.fill({x0, y0, 1, h - 1}, dark);
+        ui.fill({x0 + w - 1, y0, 1, h - 1 + 1}, white); ui.fill({x0, y0 + h - 1, w, 1}, white);
+        bottom = y0 + h;
       }
     }
     if (!pic->name.empty()) {
-      const int fh = ui.fonts ? ui.fonts->get("main9").height() : 12;
       const int rest = panel.y + panel.h - 1 - bottom;
-      ui.textCentered({panel.x, bottom + std::max(0, (rest - fh) / 2), panel.w, fh + 2}, pic->name, "main9", nameInk);
+      ui.textCentered({panel.x, bottom + std::max(0, (rest - 6) / 2), panel.w, 14}, pic->name, "main9", nameInk);   // 6 = measured: ink rows 271..281
     }
     return;
   }
@@ -365,19 +370,65 @@ bool checkButton(Ui& ui, const WinEnv& E, const char* spot, Rect r) {
   return ok;
 }
 
+// Bevelled frame of the scenario text box and goals list: dark (123,138,255) left/top, light (255,243,255) right/bottom [OBSERVED 800 x 600].
+void insetBevel(Ui& ui, Rect b) {
+  ui.fill({b.x, b.y, 1, b.h}, rgb(123, 138, 255)); ui.fill({b.x, b.y, b.w, 1}, rgb(123, 138, 255));
+  ui.fill({b.x + b.w - 1, b.y, 1, b.h}, rgb(255, 243, 255)); ui.fill({b.x, b.y + b.h - 1, b.w, 1}, rgb(255, 243, 255));
+}
+
+// Scroll bar of the scenario goals list [OBSERVED 800 x 600, pixel measurements]: a 16 px column (x 0..15), track fill (123,146,255), 15 px wide
+// buttons (x 0..14) with a 14 px up arrow at the top, a 17 px thumb below it and a 14 px down arrow at the bottom (r.h = 137). Rows scroll by item.
+void scenarioScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int total, int visible, int& scroll) {
+  ui.fill(r, rgb(123, 146, 255));
+  auto button = [&](Rect b, bool thumb) {
+    ui.fill(b, rgb(214, 215, 255));
+    ui.fill({b.x, b.y, b.w, 1}, rgb(239, 235, 255)); ui.fill({b.x, b.y + 1, b.w, 1}, rgb(231, 231, 255)); ui.fill({b.x, b.y + 2, b.w, 1}, rgb(49, 56, 132));
+    ui.fill({b.x, b.y + b.h - 3, b.w, 1}, rgb(49, 52, 123)); ui.fill({b.x, b.y + b.h - 2, b.w, 1}, rgb(132, 138, 165));
+    ui.fill({b.x, b.y + b.h - 1, b.w, 1}, thumb ? rgb(8, 12, 24) : rgb(66, 65, 82));
+    ui.fill({b.x, b.y, 1, b.h}, rgb(231, 235, 255)); ui.fill({b.x + 1, b.y, 1, b.h}, rgb(222, 227, 255)); ui.fill({b.x + 2, b.y + 2, 1, b.h - 4}, rgb(49, 56, 132));
+    ui.fill({b.x + b.w - 3, b.y, 1, b.h}, rgb(49, 52, 123)); ui.fill({b.x + b.w - 2, b.y, 1, b.h}, rgb(123, 121, 148)); ui.fill({b.x + b.w - 1, b.y, 1, b.h}, rgb(66, 65, 82));
+  };
+  auto arrow = [&](Rect b, bool up) {
+    button(b, false);
+    const int cx = b.x + 7;
+    for (int i = 0; i < 4; i++) { const int w = up ? 2 * i + 1 : 7 - 2 * i; ui.fill({cx - w / 2, b.y + 5 + i, w, 1}, rgb(49, 56, 132)); }
+  };
+  const Rect up{r.x, r.y, 15, 14}, dn{r.x, r.y + r.h - 14, 15, 14};
+  E.spot("scroll.up", up); E.spot("scroll.down", dn);
+  if (ui.hover(wheelArea) && ui.in.wheel) scroll -= ui.in.wheel;
+  if (ui.clicked(up)) scroll--;
+  if (ui.clicked(dn)) scroll++;
+  const int range = std::max(0, total - visible);
+  const Rect track{r.x, r.y + 14, 15, r.h - 28};
+  const int th = 17;
+  if (range > 0) {
+    E.spot("scroll.track", track);
+    if (ui.hover(track) && ui.in.down) {
+      const int pos = ui.in.my - track.y - th / 2;
+      scroll = (pos * range + (track.h - th) / 2) / std::max(1, track.h - th);
+    }
+    scroll = std::max(0, std::min(scroll, range));
+  } else scroll = 0;
+  const int ty = track.y + (range > 0 ? (track.h - th) * scroll / range : 0);
+  // groove of the track below the thumb: (57,56,123) / (8,12,24) / (255,255,255) at x 6..8
+  const int g0 = ty + th, g1 = track.y + track.h;
+  if (g1 > g0) { ui.fill({r.x + 6, g0, 1, g1 - g0}, rgb(57, 56, 123)); ui.fill({r.x + 7, g0, 1, g1 - g0}, rgb(8, 12, 24)); ui.fill({r.x + 8, g0, 1, g1 - g0}, rgb(255, 255, 255)); }
+  arrow(up, true); arrow(dn, false);
+  button({track.x, ty, 15, th}, true);
+}
+
 // Scenario text box [OBSERVED 800 x 600]: fill (222,223,255) inside a bevel (dark left/top (123,138,255), light right/bottom (255,243,255)); the
 // text wraps at about 312 px (narrower by the 16 px scroll bar when the text overflows), 14 px pitch.
 void textBox(Ui& ui, const WinEnv& E, Rect box, const std::string& text, int& scroll) {
   ui.fill(box, kInset);
-  ui.fill({box.x, box.y, 1, box.h}, rgb(123, 138, 255)); ui.fill({box.x, box.y, box.w, 1}, rgb(123, 138, 255));
-  ui.fill({box.x + box.w - 1, box.y, 1, box.h}, rgb(255, 243, 255)); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, rgb(255, 243, 255));
+  insetBevel(ui, box);
   const int lh = kPitch;
   const int visible = std::max(1, (box.h - 4) / lh);
-  auto lines = wrapKeepSpaces(ui, text, box.w - 11, "main10");
+  auto lines = wrapKeepSpaces(ui, text, box.w - 11, kBodyFont);
   const bool overflow = int(lines.size()) > visible;
-  if (overflow) lines = wrapKeepSpaces(ui, text, box.w - 11 - 16, "main10");
+  if (overflow) lines = wrapKeepSpaces(ui, text, box.w - 11 - 16, kBodyFont);
   if (overflow) scrollBar(ui, E, {box.x + box.w - 17, box.y + 1, 16, box.h - 2}, int(lines.size()), visible, scroll); else scroll = 0;
-  for (int i = 0; i < visible && i + scroll < int(lines.size()); i++) ui.text(box.x + 6, box.y + 2 + i * lh, lines[size_t(i + scroll)], "main10", 0xFF000000u);
+  for (int i = 0; i < visible && i + scroll < int(lines.size()); i++) ui.text(box.x + 6, box.y + 2 + i * lh, lines[size_t(i + scroll)], kBodyFont, 0xFF000000u);
 }
 }  // namespace
 
@@ -404,19 +455,19 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
   // 392 px from x 220 with its first ink row 10 px below the icon top. The list clips at the frame; the 16 px scroll bar sits at its right edge.
   ui.text(r.x + 18, r.y + 224, v.goalsLabel.empty() ? "Scenario Goals:" : v.goalsLabel, "title12", ink);
   const Rect lb = at(18, 244, 453, 142);
-  ui.fill(lb, kInset); ui.frame(lb, false);
+  ui.fill(lb, kInset); insetBevel(ui, lb);
   std::vector<std::vector<std::string>> wrapped;
   std::vector<int> rowH;
   int total = 5;
   for (const auto& g : v.goals) {
-    wrapped.push_back(wrapKeepSpaces(ui, g.text, 392, "main10"));
+    wrapped.push_back(wrapKeepSpaces(ui, g.text, 392, kBodyFont));
     rowH.push_back(std::max(28, 12 + kPitch * int(wrapped.back().size())));
     total += rowH.back();
   }
   const bool bar = total > lb.h - 2;
   int fit = 0;
   { int acc = 5; for (size_t k = 0; k < rowH.size(); k++) { if (acc + rowH[k] > lb.h - 1) break; acc += rowH[k]; fit++; } }
-  if (bar) classicScrollBar(ui, E, {r.x + 455, lb.y + 2, 16, lb.h - 5}, lb, int(v.goals.size()), std::max(1, fit), goalScroll); else goalScroll = 0;
+  if (bar) scenarioScrollBar(ui, E, {r.x + 455, lb.y + 2, 16, 137}, lb, int(v.goals.size()), std::max(1, fit), goalScroll); else goalScroll = 0;
   {
     int acc = 5;
     const int bottom = lb.y + lb.h - 1;
@@ -438,7 +489,7 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
       for (size_t k = 0; k < lines.size(); k++) {
         const int ty = y + 7 + int(k) * kPitch;
         if (ty + 10 > bottom) break;
-        ui.text(r.x + 57, ty, lines[k], "main10", rgb(49, 52, 123));
+        ui.text(r.x + 57, ty, lines[k], kBodyFont, rgb(49, 52, 123));
       }
       acc += rowH[gi];
     }
