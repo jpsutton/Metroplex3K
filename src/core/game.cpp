@@ -1078,7 +1078,7 @@ void Game::drawHud() {
   const HudSnap& hud = hudNow();
   int month = std::min(11, (hud.dayOfYear - 1) * 12 / 365);
   std::string date = std::string(kMonths[month]) + " " + std::to_string(hud.year);
-  std::string funds = "$" + groupDigits(hud.funds), popText = "Pop " + groupDigits(hud.pop);
+  std::string funds = (hud.funds < 0 ? "-$" : "$") + groupDigits(hud.funds < 0 ? -int64_t(hud.funds) : int64_t(hud.funds)), popText = "Pop " + groupDigits(hud.pop);
   uint32_t fundsCol = hud.funds < 0 ? rgb(255, 0, 0) : 0;
   // Navigator panel (mini-map, zoom, rotate, layers) is in the bottom-right corner; the RCI indicator is just left of it
   // (spec 08 4.2 observed). Both are anchored to the window, not to the bar art.

@@ -164,6 +164,18 @@ const Image* Skin::fetch(uint32_t group, uint32_t inst) const {
     try {
       Image im = decodeUiImage(r.data, r.available, true);
       if (group == Sys && inst == 0xE2B66DB8) keyButtonPlate(im);
+      // Art whose opaque background must not show (the Layers window's lattice and check buttons): the opacity plane is the next instance, when it exists.
+      if ((group == UiBig && inst == 0x22F96E31) || (group == Sys && inst == 0xA2DEFD9A)) {
+        if (ResourceRef pr = db_->find({T_UI_IMAGE, group, inst + 1})) {
+          try {
+            Image pl = decodeUiImage(pr.data, pr.available, false);
+            if (pl.w == im.w && pl.h == im.h) {
+              uint32_t mx = 0; for (uint32_t q : pl.px) mx = std::max(mx, q & 255u);
+              for (size_t i = 0; i < im.px.size(); i++) { const uint32_t v = pl.px[i] & 255u; im.px[i] = (im.px[i] & 0x00FFFFFFu) | ((mx <= 31 ? v * 255 / 31 : v) << 24); }   // 5-bit levels or 8-bit
+            }
+          } catch (const FormatError&) {}
+        }
+      }
       if (!im.empty()) return &(cache_[k] = std::move(im));
     } catch (const FormatError&) {}
   }
@@ -581,7 +593,11 @@ bool Skin::drawButton3(Ui& ui, const Image* s, int cells, int cell, Rect r, cons
   int lw = std::min(third, r.w / 2), rw = lw;
   skinBlitScaled(ui, *s, {sx, 0, lw, s->h}, {r.x, r.y, lw, r.h});
   skinBlitScaled(ui, *s, {sx + cw - rw, 0, rw, s->h}, {r.x + r.w - rw, r.y, rw, r.h});
-  if (r.w > lw + rw) skinBlitScaled(ui, *s, {sx + third, 0, cw - 2 * third, s->h}, {r.x + lw, r.y, r.w - lw - rw, r.h});
+  if (r.w > lw + rw) {   // the middle slice is tiled, not stretched [OBSERVED: seam columns every 18 px on the pill buttons]
+    const int mw = cw - 2 * third;
+    for (int off = 0; off < r.w - lw - rw; off += mw)
+      skinBlitScaled(ui, *s, {sx + third, 0, mw, s->h}, {r.x + lw + off, r.y, std::min(mw, r.w - lw - rw - off), r.h});
+  }
   if (!label.empty() && ui.fonts) {
     int off = cell == CELL_PRESSED ? 1 : 0;
     // Centre on the pill, not the whole cell: the art carries a drop shadow on the right and bottom (measured on the

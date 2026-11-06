@@ -365,7 +365,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
       for (int k = 0; k < 7; k++) ui.fill({f.x + 3, f.y + 19 + k, W - 3 + (k < 6 ? 1 + k : 0), 1}, below[k]);
       for (int k = 0; k < 6; k++) ui.fill({f.x + W + k, f.y + 3, 1, 16 + (k < 5 ? 1 : 0)}, side[k]);
     }
-    const int o = on || down ? 1 : 0;
+    const int o = down && !on ? 1 : 0;   // the on-state caption sits where the off-state one does [OBSERVED]
     ui.textCentered({f.x + o, f.y + o + 1 + labelDy, f.w, f.h}, label, "main9", ink);   // the next smaller bold face [OBSERVED: ink 85 px against 88]
     if (ui.clicked(f)) edit.mode = mode;
   };
@@ -415,13 +415,13 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   auto pill = [&](const char* name, Rect b, const std::string& label) { E.spot(name, b); ui.buttonLabelDy = -1; const bool c = ui.button(b, label, true, false, "title9"); ui.buttonLabelDy = 0; return c; };   // caption 1 px up [OBSERVED]
   if (pill("apply", {r.x + 8, r.y + 260, 106, 33}, E.win(0x26D, "Apply"))) R.add(Act::ApplyLayers);
   if (pill("default", {r.x + 8, r.y + 293, 106, 33}, E.win(0x26C, "Default View"))) { edit = CityLayers(); R.add(Act::ApplyLayers); }
-  Rect grid{r.x + 247, r.y + 260, 36, 35};
+  Rect grid{r.x + 249, r.y + 260, 36, 35};
   E.spot("grid", grid);
   { bool c = false;
     std::string tip = E.gui(0x74, "Grid");
     if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::UiBig, 0x22F96E31), 4, grid, tip, gridOn, true, c, Ui::kTipLeft))) c = ui.button(grid, "#", true, gridOn);
     if (c) R.add(Act::ToggleGrid); }
-  Rect done{r.x + 246, r.y + 296, 42, 32};
+  Rect done{r.x + 246, r.y + 295, 42, 32};
   E.spot("ok", done);
   { bool c = false;
     if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::Sys, 0xA2DEFD9A), 4, done, "", false, true, c))) c = ui.button(done, E.app(0xB4, "OK"));
