@@ -56,6 +56,8 @@ WindowResult PreferencesDialog::draw(Ui& ui, const WinEnv& E, PrefsState& s) {
     ui.fill({b.x, b.y + b.h - 1, b.w, 1}, light); ui.fill({b.x + b.w - 1, b.y, 1, b.h}, light);
   };
   auto lab = [&](int x, int y, const std::string& t, uint32_t c) { ui.text(r.x + x, r.y + y, t, "main9", c); };
+  ui.fill({r.x + 6, r.y + 42, 200, 300}, rgb(222, 223, 255));   // flat fill inside the Performance and General Options panels (observed)
+  ui.fill({r.x + 6, r.y + 346, 468, 76}, rgb(222, 223, 255));
   sunkenLines({r.x + 6, r.y + 42, 200, 300});
   sunkenLines({r.x + 212, r.y + 42, 262, 300});
   sunkenLines({r.x + 6, r.y + 346, 468, 76});
@@ -454,13 +456,13 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
   std::vector<int> rowH;
   int total = 5;
   for (const auto& g : v.goals) {
-    wrapped.push_back(wrapKeepSpaces(ui, g.text, 400, kBodyFont));
+    wrapped.push_back(wrapKeepSpaces(ui, g.text, 390, kBodyFont, true));
     rowH.push_back(std::max(28, 12 + kPitch * int(wrapped.back().size())));
     total += rowH.back();
   }
   const bool bar = total > lb.h - 2;
   if (bar) {   // the bar column is not part of the frame: top/bottom lines stop before it and it has no right line
-    ui.fill({lb.x, lb.y, 1, lb.h}, rgb(123, 138, 255)); ui.fill({lb.x, lb.y, lb.w - 16, 1}, rgb(123, 138, 255)); ui.fill({lb.x, lb.y + lb.h - 1, lb.w - 16, 1}, rgb(255, 243, 255));
+    ui.fill({lb.x, lb.y, 1, lb.h}, rgb(123, 138, 255)); ui.fill({lb.x, lb.y, lb.w - 16, 1}, rgb(123, 138, 255)); ui.fill({lb.x, lb.y + lb.h - 1, lb.w, 1}, rgb(255, 243, 255));
   } else insetBevel(ui, lb);
   int fit = 0;
   { int acc = 5; for (size_t k = 0; k < rowH.size(); k++) { if (acc + rowH[k] > lb.h - 1) break; acc += rowH[k]; fit++; } }

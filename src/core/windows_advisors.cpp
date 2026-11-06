@@ -125,7 +125,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
       const bool sel = petSel == int(p->id);
       if (sel) ui.fill({r.x + 28, ty, lr.x + lr.w - 1 - (r.x + 28), 13}, rgb(0, 0, 255));
       for (int c = 0; c < 4; c++) ui.fill({r.x + 23 + c, ty + 6 - (3 - c), 1, 2 * (3 - c) + 1}, sel ? kWhite : kInk);
-      ui.text(r.x + 34, ty - 2, ellipsize(ui, h, lr.x + lr.w - (r.x + 34) - 6), "main9", sel ? kWhite : kInk);   // main9: first ink row 175 (observed)
+      ui.text(r.x + 34, ty - 3, ellipsize(ui, h, lr.x + lr.w - (r.x + 34) - 6), "main9", sel ? kWhite : kInk);   // main9: first ink row 175 (observed)
       if (ui.clicked(row)) {
         if (sel && frameNo - petClickFrame <= 30) R.add(Act::OpenPetitioner, p->id);
         petSel = int(p->id); petClickFrame = frameNo;

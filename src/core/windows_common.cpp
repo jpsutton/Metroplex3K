@@ -191,7 +191,7 @@ std::vector<std::string> wrap(const Ui& ui, const std::string& s, int width, con
 
 // Like wrap(), but runs of spaces inside a line are kept (the original's text boxes show the double space after a full stop); the spaces at
 // a break are dropped.
-std::vector<std::string> wrapKeepSpaces(const Ui& ui, const std::string& s, int width, const char* font) {
+std::vector<std::string> wrapKeepSpaces(const Ui& ui, const std::string& s, int width, const char* font, bool measureCollapsed) {
   std::vector<std::string> lines;
   size_t p = 0;
   while (p <= s.size()) {
@@ -206,7 +206,10 @@ std::vector<std::string> wrapKeepSpaces(const Ui& ui, const std::string& s, int 
       i = we;
       if (word.empty()) { if (cur.empty()) cur = gap; else cur += gap; break; }
       std::string t = cur.empty() ? (gap.size() > 1 && lines.empty() ? gap + word : word) : cur + gap + word;
-      if (!cur.empty() && ui.textWidth(t, font) > width) { lines.push_back(cur); cur = word; }
+      // measureCollapsed: the original measures a run of spaces as one space while drawing all of them (goal text, observed).
+      std::string m = t;
+      if (measureCollapsed) { m.clear(); for (char ch : t) if (!(ch == ' ' && !m.empty() && m.back() == ' ')) m.push_back(ch); }
+      if (!cur.empty() && ui.textWidth(m, font) > width) { lines.push_back(cur); cur = word; }
       else cur = t;
     }
     lines.push_back(cur);
