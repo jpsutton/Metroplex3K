@@ -199,6 +199,8 @@ uint32_t floraSpriteInstance(uint8_t cell, int x, int z);
 
 class Renderer : public ICityRasterizer {
  public:
+  // The stand-in occupant of a lot state (2 abandoned, 4 construction, 8 rubble, ...) from SC3BuildingLayer.ini [DefaultBuildingData]; false when none.
+  bool standInOccupant(uint32_t state, int size, uint32_t agent, ResKey& out) { return siteOccupant(state, size, agent, out); }
   // `data` may be null (no game files): procedural fallback palettes are used and no sprites drawn.
   void setWorld(const World* w, GameData* data) override;
   void resize(int w, int h) override;

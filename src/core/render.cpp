@@ -1501,7 +1501,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
         bool port = o.keyType == T_OCC_ATTR_PORT;
         uint32_t id = o.occId;
         const uint32_t ost = o.state & ~0x300u;   // bit 0x200 = protected, not a lot state
-        if (opt.constructionSites && ost != 1 && ost != 2 && data_) {
+        if (opt.constructionSites && ost != 1 && data_) {   // abandoned lots (2) use their own stand-in too [OBSERVED Berlin: a dark burnt-out tower]
           ResKey rk;
           if (siteOccupant(ost, std::max(o.sizeX, o.sizeZ), o.agentType, rk)) { id = rk.instance; port = rk.type == T_OCC_ATTR_PORT; }
         }

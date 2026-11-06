@@ -450,7 +450,7 @@ std::vector<GraphSeries> graphSeriesTemplate() {
   // original prints a value only for Health, Res, City Size, Education, Com, Ind, Crime, Pollution and Unemployment.
   struct E { uint32_t id; const char* fb; int fmt; uint32_t tmpl; const char* tfb; bool val; };
   static const E t[16] = {
-    {0x1D2, "Approval Rating", 0, 0x28D, "Approval Rating %s%%", false}, {0x162, "Residents", 0, 0x1D4, "Res %s", true},
+    {0x1D2, "Approval Rating", 0, 0x1D2, "Approval Rating", false}, {0x162, "Residents", 0, 0x1D4, "Res %s", true},
     {0x16F, "Land Value", 0, 0x16F, "Land Value", false}, {0x161, "City Size", 0, 0x1D6, "City Size %s", true},
     {0x168, "Unemployment", 1, 0x1D5, "Unemployment %s", true},
     {0x167, "Pollution", 0, 0x1D9, "Pollution %s", true}, {0x16E, "Education", 0, 0x28F, "Education %s", true},

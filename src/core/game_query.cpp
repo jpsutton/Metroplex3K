@@ -423,7 +423,12 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   }
   q.footprint = std::max<int>(o->sizeX, o->sizeZ);
   if (haveData_) {
-    if (const OccAttr* oa = data_.occupant(o->occId, false, o->keyType == T_OCC_ATTR_PORT)) q.picture = oa->appearance;
+    uint32_t picId = o->occId; bool picPort = o->keyType == T_OCC_ATTR_PORT;
+    if (ostate == 2) {   // an abandoned lot shows its stand-in (a burnt-out tower in Berlin), which also decides the wide layout [OBSERVED]
+      ResKey rk;
+      if (renderer_.standInOccupant(ostate, std::max<int>(o->sizeX, o->sizeZ), o->agentType, rk)) { picId = rk.instance; picPort = rk.type == T_OCC_ATTR_PORT; }
+    }
+    if (const OccAttr* oa = data_.occupant(picId, false, picPort)) q.picture = oa->appearance;
     q.canReplace = isReplaceableOccupant(o->occId);
   }
   bool plant = false;
