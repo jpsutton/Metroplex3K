@@ -448,6 +448,8 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
     ui.fill({box.x, box.y, box.w + 1, box.h + 1}, rgb(222, 223, 255));
     ui.fill({box.x - 1, box.y - 1, box.w + 3, 1}, rgb(123, 138, 255)); ui.fill({box.x - 1, box.y, 1, box.h + 2}, rgb(123, 138, 255));
     ui.fill({box.x + box.w + 1, box.y - 1, 1, box.h + 3}, rgb(255, 243, 255)); ui.fill({box.x - 1, box.y + box.h + 1, box.w + 3, 1}, rgb(255, 243, 255));
+    // The interior's last row (the one above the bottom highlight) fades up from a darker shade: (206,211,255) at x140, (214,219,255) at x150 for a box at x136 [OBSERVED].
+    for (int i = 0; i < 24 && i <= box.w; i++) { const int rr = 202 + i * 5 / 6; ui.at(box.x + i, box.y + box.h) = rgb(rr, rr + 5, 255); }
     spriteCentred(ui, E.data, q.picture, box, box);
   }
 
