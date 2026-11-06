@@ -1021,7 +1021,7 @@ adds them after its functional lines.
 
 | Line | Label | Value | Rule |
 |------|-------|-------|------|
-| Elevation | `2` | `3` (metres, number) | terrain height of the tile (`11-world-terrain.md`); water tiles show depth with label `17F` |
+| Elevation | `2` | `3` (metres, number) | [STATIC, SIMDIRT 0x100114BC] Uses the tile's anchor corner (min x, min z) only. Land: N = trunc(4.0f × (3.266f × (alt − seaLevel))), where seaLevel is the terrain record's global sea-level byte; no clamp, so it can be negative. Water tile (any corner with water ≥ ground, `11-world-terrain.md`): label `17F` (Depth), N = trunc(4.0f × max(0, 3.266f × (water − alt))) at the anchor corner, so a wet tile with a dry anchor shows 0. The constants 3.266 and 4.0 are hard-coded (13.064 m per altitude unit). [OBSERVED] Roadless Paradise (sea level 80): altitude 82 → "26 Meters"; a salt-water tile → "143 Meters" (Δ = 11). |
 | Surface type (no occupant) | — | `C1` dirt / `C2` fresh water / `C3` salt water | |
 | Zone type | `E` | `F`–`17` (light/medium/dense R/C/I), `18` seaport, `19` airport, `1A` landfill, `195` unzoned | zone code of the tile (§5.2) |
 | Land value | `8` | `1C0`, `9`, `A`, `B`, `C`, `D` | land-value byte *v* (0–255): v<35 → `1C0`; v<75 → `9`; v<130 → `A`; v<175 → `B`; v<225 → `C`; else `D` |

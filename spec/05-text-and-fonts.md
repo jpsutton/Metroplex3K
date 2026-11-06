@@ -399,10 +399,14 @@ normally width + 1 (one pixel spacing). There is **no kerning table**. [DATA]
 * Palette recolour [STATIC; callers not found]: two routines rebuild a font palette for another
   text colour T and background B: unpack both to 8 bits (r8 = r5·255/31, g8 = g6·255/63, floored),
   set entry i+1 = pack(T + trunc((B − T)·i/16)) for i = 0..14 per channel, entry 16 = B, and pack
-  by truncation (`r>>3`, `g>>2`, `b>>3`). The observed title text does **not** match this, so
-  titles are drawn with the file palette as stored. For the non-anti-aliased fonts (`MAIN9`,
-  `MAIN10`, `SYSTEM9`, whose glyphs use only indices 1, 16, 17) only entry 1 matters, i.e. the ink
-  becomes the requested text colour. [INFERRED]
+  by truncation (`r>>3`, `g>>2`, `b>>3`). Frame (window-bar) titles do **not** use it: they are
+  drawn with the file palette as stored. Caller-coloured anti-aliased text does use it
+  [OBSERVED, exact on every level]: the scenario start dialog title (T = (27,55,31),
+  B = `TITLE12` entry 16 = (15,36,31)) and the Budget window's "Income" tab caption
+  (T = (49,52,123); B = 565 (21,47,31), the background entry of the `MAIN*`/`SYSTEM9` fonts, which
+  is not the caption font's own entry 16). Where B comes from for each caller is open. For the
+  non-anti-aliased fonts (`MAIN9`, `MAIN10`, `SYSTEM9`, whose glyphs use only indices 1, 16, 17)
+  only entry 1 matters, i.e. the ink becomes the requested text colour. [INFERRED]
 * The `systemloadsave*` fonts are multi-coloured (indices across the palette); they are drawn with
   their palette colours, index of colour 0xF81F (magenta) being transparent. [DATA][INFERRED]
 
