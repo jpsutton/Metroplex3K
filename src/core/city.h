@@ -106,6 +106,10 @@ class City {
   std::vector<std::pair<int, int>> routeNetworkPath(NetworkKind k, int x0, int z0, int x1, int z1) const;
   // Text dump of the routed drag (every tile with carriage, validity, corner heights, water) for the probes.
   std::string describeRoute(NetworkKind k, int x0, int z0, int x1, int z1) const;
+  // The last routeNetworkPath result: its valid tiles and the number of tiles of the whole route. A blocked drag still pays for every routed tile
+  // (observed), so quoteNetwork / buildNetwork add the invalid tail when handed exactly this path.
+  mutable std::vector<std::pair<int, int>> lastRouteValid_;
+  mutable int lastRouteTotal_ = 0;
   // Spec 12 §7: highway on-ramp point tool (menu 02B5DEBB). Places the 3×2 piece group.
   bool buildOnRamp(int ax, int az);
   // Spec 12 §6.4 / §8: first yes/no confirm a drag would raise (bridge, then tunnel, then connection).

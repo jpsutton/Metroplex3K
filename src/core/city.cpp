@@ -1205,6 +1205,7 @@ City::Quote City::quoteNetwork(NetworkKind k, const std::vector<std::pair<int, i
     if (water && cfg_.haveTiling == false) continue;
     q.valid = true; q.cost += cost;
   }
+  if (q.valid && path == lastRouteValid_ && lastRouteTotal_ > int(path.size())) q.cost += int64_t(lastRouteTotal_ - int(path.size())) * cost;
   return q;
 }
 
@@ -1295,7 +1296,8 @@ PlacementCosts makeCosts(const Budget& b, const CityConfig& cfg) {
   pc.parent = cfg.parent;
   pc.demolish = int(b.cfg.specialCostFor(7));
   pc.demolishRubble = int(b.cfg.specialCostFor(12));
-  if (b.freePlacement) { pc.byType.clear(); pc.demolish = pc.demolishRubble = 0; return pc; }
+  pc.levelTerrain = int(b.cfg.specialCostFor(8));
+  if (b.freePlacement) { pc.byType.clear(); pc.demolish = pc.demolishRubble = pc.levelTerrain = 0; return pc; }
   if (cfg.synthetic) {
     static const std::pair<Tool, int> defs[] = {{TOOL_ROAD, 10}, {TOOL_RAIL, 20}, {TOOL_POWER, 5}, {TOOL_PIPE, 3},
                                                 {TOOL_HIGHWAY, 50}, {TOOL_SUBWAY, 30}};
@@ -1363,6 +1365,7 @@ std::vector<std::pair<int, int>> City::routeNetworkPath(NetworkKind k, int x0, i
   RoutedPath rp = ::m3k::routePath(map, tool, {x0, z0}, {x1, z1});
   path.reserve(rp.tiles.size());
   for (const auto& t : rp.tiles) if (t.valid) path.push_back({t.x, t.z});
+  lastRouteValid_ = path; lastRouteTotal_ = int(rp.tiles.size());
   return path;
 }
 
@@ -1604,11 +1607,16 @@ bool City::buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& p
   }
   segs.push_back({path[s], path.back()});
   bool any = false;
+  // The invalid tail of the routed drag is paid for too (observed); refuse up front when the whole price is not affordable.
+  int tail = 0;
+  if (path == lastRouteValid_ && lastRouteTotal_ > int(path.size())) tail = (lastRouteTotal_ - int(path.size())) * costs.cost(toolParams(tool).costKey);
+  if (tail > 0 && budget.funds < int64_t(tail) + int64_t(path.size()) * costs.cost(toolParams(tool).costKey)) { lastFailNoMoney = true; return false; }
   for (auto& sg : segs) {
     RoutedPath rp = routePath(map, tool, sg.first, sg.second);
     CommitResult r = commitPath(map, cfg_.tiling, costs, host, tool, rp);
     if (r.status == COMMIT_OK) any = true;
   }
+  if (any && tail > 0) budget.funds -= tail;
   {  // write back new connections
     for (const auto& t : map.connections()) {
       if (before.count(t)) continue;

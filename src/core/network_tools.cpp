@@ -105,6 +105,9 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
     m.tileCorners(x, z, c);
     bool flat = c[1] == c[0] && c[2] == c[0] && c[3] == c[0];
     if (!P.anySlope && !flat && !isValidSlope(c)) return false;
+    // A water tile must be flat or a valid slope whatever AnySlope says: the original blocks the path at a sloping shore row, and every shipped
+    // bridge end has flat banks [OBSERVED: Roadless Paradise highway drags blocked at (40,164) corners 82 82 81 80; INFERRED rule].
+    if (P.minRun > 0 && !flat && !isValidSlope(c) && m.isWaterTile(x, z)) return false;
     TileOcc o = m.occupantAt(x, z, layer);
     bool crossing = false;
     if (o.present) {
@@ -602,19 +605,29 @@ int removeConnectionsAt(INetworkMap& m, int x, int z) {
 // Network endpoint levelling (spec 12 6.2.6 step 3): at a path end the tiles A (the end tile) and B (the next tile for a highway, else A)
 // are levelled to the average of their corner rectangle's perimeter, unless an occupant stands on them, both tiles already have a valid slope
 // (flat or a straight ramp of rise <= 2) or both are flat. No money is charged and a refusal is silent: the network is built anyway.
-static void levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool start, bool highway) {
-  if (path.empty()) return;
+// Returns true when the terrain changed.
+static bool levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool start, bool highway) {
+  if (path.empty()) return false;
   const PathTile& a = start ? path.front() : path.back();
   const PathTile& b = highway && path.size() > 1 ? (start ? path[1] : path[path.size() - 2]) : a;
-  for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return;
+  for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return false;
   bool bothValid = true, bothFlat = true;
   for (const PathTile* t : {&a, &b}) {
     int c[4]; m.tileCorners(t->x, t->z, c);
     if (!isValidSlope(c)) bothValid = false;
     if (!(c[0] == c[1] && c[1] == c[2] && c[2] == c[3])) bothFlat = false;
   }
-  if (bothValid || bothFlat) return;
+  if (bothValid || bothFlat) return false;
+  auto sig = [&]() {
+    long long h = 0;
+    for (int vx = std::min(a.x, b.x) - 8; vx <= std::max(a.x, b.x) + 9; vx++)
+      for (int vz = std::min(a.z, b.z) - 8; vz <= std::max(a.z, b.z) + 9; vz++)
+        if (vx >= 0 && vz >= 0 && vx <= m.width() && vz <= m.height()) h = h * 1000003 + m.cornerHeight(vx, vz) + 1;
+    return h;
+  };
+  const long long before = sig();
   m.levelRectToAverage(std::min(a.x, b.x), std::min(a.z, b.z), std::max(a.x, b.x), std::max(a.z, b.z));
+  return sig() != before;
 }
 
 CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const PlacementCosts& costs, ToolHost& host,
@@ -623,10 +636,11 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
   const ToolParams& P = toolParams(tool);
   const int tileCost = costs.cost(P.costKey);
   int valid = 0;
-  bool anyInvalid = rp.tiles.empty();
-  for (auto& t : rp.tiles) { if (t.valid) valid++; else anyInvalid = true; }
-  if (anyInvalid) { host.sound(30); res.status = COMMIT_INVALID; return res; }
-  int dragPrice = valid * tileCost;
+  for (auto& t : rp.tiles) if (t.valid) valid++;
+  // A blocked drag builds its valid prefix (nothing at all when the prefix is empty); the price is that of every routed tile, built or not
+  // [OBSERVED: Roadless Paradise, 42 tiles x 150 charged for a 12-tile prefix; spec 6.2.5 said invalid tiles are free].
+  if (valid == 0) { host.sound(30); res.status = COMMIT_INVALID; return res; }
+  int dragPrice = int(rp.tiles.size()) * tileCost;
   if (dragPrice > host.funds()) { host.sound(32); res.status = COMMIT_NO_MONEY; return res; }
 
   if (tool == TOOL_ONRAMP) {
@@ -737,8 +751,11 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
     }
   }
   // Endpoint levelling: at the start always, at the end only when neither a bridge nor a tunnel was built.
-  levelEndpoint(m, path, true, P.kind == NK_HIGHWAY);
-  if (res.bridges == 0 && res.tunnels == 0) levelEndpoint(m, path, false, P.kind == NK_HIGHWAY);
+  // The terrain operation is charged once per levelling that changed terrain (LevelTerrain; observed 25 on one drag).
+  int levelled = 0;
+  if (levelEndpoint(m, path, true, P.kind == NK_HIGHWAY)) levelled++;
+  if (res.bridges == 0 && res.tunnels == 0 && levelEndpoint(m, path, false, P.kind == NK_HIGHWAY)) levelled++;
+  if (levelled && costs.levelTerrain > 0) { host.charge(levelled * costs.levelTerrain); extraSpent += levelled * costs.levelTerrain; }
   // connections
   res.connections = offerConnections(m, host, costs, P.kind, path, dragPrice);
 

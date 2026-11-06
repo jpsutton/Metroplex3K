@@ -34,6 +34,7 @@ struct PlacementCosts {
   std::map<uint32_t, int> byType;        // [BuildingPlacementCosts]
   std::map<uint32_t, uint32_t> parent;   // agent type hierarchy for fallback
   int demolish = 0, demolishRubble = 0;  // [SpecialCosts]
+  int levelTerrain = 0;                  // [SpecialCosts] LevelTerrain: charged once per endpoint levelling that changes terrain
   int cost(uint32_t agentType) const;    // nearest ancestor with an entry, else 0
 };
 // Neighbour-connection price keys (NetKind -> agent type).

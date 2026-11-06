@@ -273,6 +273,24 @@ struct TestHost : ToolHost {
   void message(const std::string& s) override { msgs.push_back(s); }
 };
 
+// A water tile that is neither flat nor a valid slope blocks the route (observed on Roadless Paradise); the valid prefix is built and every routed
+// tile is charged.
+static void testBlockedShore() {
+  auto rules = makeRules({{"ROAD_GRND_final.txt", roadFinal()}});
+  SimpleNetworkMap m(20, 8);
+  setupRoadFlags(m);
+  for (int x = 6; x <= 8; x++) m.setWater(x, 3, true);
+  m.setCornerHeight(7, 4, 31);   // tile (6,3): corners 30 30 31 30 = not flat, not a valid slope, and a water tile
+  RoutedPath rp = routePath(m, TOOL_ROAD, {2, 3}, {12, 3});
+  CHECK(rp.tiles.size() == 11 && rp.blocked && rp.validPrefix == 4 && rp.tiles[3].valid && !rp.tiles[4].valid && !rp.tiles[10].valid);
+  PlacementCosts costs;
+  costs.byType[16000] = 10;
+  TestHost host;
+  CommitResult r = commitPath(m, rules, costs, host, TOOL_ROAD, rp);
+  CHECK(r.status == COMMIT_OK && host.charged == 110);
+  CHECK(m.occupantAt(5, 3, LAYER_SURFACE).present && !m.occupantAt(6, 3, LAYER_SURFACE).present);
+}
+
 static void testBridge() {
   std::string bridges = "2\n14 0 1  1 " + std::to_string(P(200, 0)) + " 1 " + std::to_string(P(201, 0)) + " 2 " +
                         std::to_string(P(202, 0)) + " " + std::to_string(P(203, 0)) + " 1 " + std::to_string(P(204, 0)) +
@@ -666,6 +684,7 @@ int main() {
   testSlopeTables();
   testRouting();
   testBridge();
+  testBlockedShore();
   testTunnel();
   testConnections();
   testOnRamp();
