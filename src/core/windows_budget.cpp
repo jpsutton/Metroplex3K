@@ -559,7 +559,7 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   { int h = 0; for (size_t i = size_t(scroll); i < items.size(); i++) { h += advance(i); if (h > bottom - top) break; visible++; } }
   const bool bar = int(items.size()) > std::max(1, visible);
   if (bar) {
-    const Rect br{list.x + 364, list.y + 5, 16, 216};
+    const Rect br{list.x + 356, list.y + 5, 16, 216};
     ui.fill({br.x, br.y, 16, 218}, band);
     scenarioScrollBar(ui, E, br, list, int(items.size()), std::max(1, visible), scroll);
   } else scroll = 0;
@@ -571,7 +571,7 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
     if (y >= bottom) break;
     if (it.header) {
       if (y + 26 > bottom) break;
-      const Rect bd{list.x + 4, y, bodyR - (list.x + 4) - 8, 26};
+      const Rect bd{list.x + 4, y, 349, 26};   // x 16..364
       ui.fill(bd, bandEdge); ui.fill({bd.x + 1, bd.y + 1, bd.w - 2, bd.h - 2}, band);
       ui.text(bd.x + 4, bd.y + 6, it.name, "main9", ink);   // ink rows 80..88: 9 below the band top
       bool c = false;
@@ -595,9 +595,9 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
         const bool ok = en ? o.repeal(it.id) : o.enact(it.id);
         if (ok) R.add(Act::SetOrdinance, it.id, !en);
       }
-      ui.text(list.x + 19, y - 1, it.name, "system9", ink);   // SYSTEM9 (not bold), ink x 31, cap top 101
+      ui.text(list.x + 19, y, it.name, "system9", ink);   // SYSTEM9 (not bold), ink x 31, cap top 101
       const int64_t val = en ? o.monthlyValue(it.id, money) : o.ifEnactedValue(it.id, money);   // not enacted: the cost it would have, in grey
-      rightText(ui, list.x + 350, y - 1, E.money(val), "system9", en ? (val < 0 ? rgb(0xC0, 0, 0) : 0) : grey);
+      rightText(ui, list.x + 351, y + 1, E.money(val), "system9", en ? (val < 0 ? rgb(0xC0, 0, 0) : 0) : grey);
     }
     y += advance(i);
   }
@@ -693,7 +693,7 @@ WindowResult BusinessDealsWindow::draw(Ui& ui, const WinEnv& E, BusinessDeals& d
   { std::string tv = plus(d.monthlyIncome()); ui.text(r.x + 304 - ui.textWidth(tv, "main9"), r.y + 129, tv, "main9", ink); }
   // Plates.
   blueBand(ui, {r.x + 86, r.y + 155, 44, 34});
-  blueBand(ui, {r.x + 271, r.y + 155, 44, 34});
+  blueBand(ui, {r.x + 272, r.y + 157, 42, 32});   // plate 42 x 32 at (508, 358) [OBSERVED]
   { std::string fb = E.win(0x23A, "Finance Briefing:");
     size_t sp = fb.rfind(' ');
     T(24, 159, sp == std::string::npos ? fb : fb.substr(0, sp));
@@ -714,7 +714,7 @@ WindowResult BusinessDealsWindow::draw(Ui& ui, const WinEnv& E, BusinessDeals& d
       selType = -1;
     }
   }
-  Rect done{r.x + 272, r.y + 157, 42, 32};
+  Rect done{r.x + 272, r.y + 156, 42, 32};   // the check art sits 1 px higher than the plate (observed)
   E.spot("ok", done);
   { bool c = false;
     if (!(ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Sys, 0xA2DEFD9A), 4, done, "", false, true, c))) c = ui.button(done, E.app(0xB4, "OK"));

@@ -472,7 +472,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
       if (series[i].fallback == "City Size" || series[i].fallback == "Funds" || series[i].fallback == "Power %") enabledMask |= 1u << i;
     maskInit = true;
   }
-  ui.fill({r.x + 4, r.y + 6, 1, 430}, rgb(173, 182, 255));   // the frame's left line runs the full height [OBSERVED]
+  ui.fill({r.x + 4, r.y + 6, 1, 431}, rgb(173, 182, 255)); ui.fill({r.x + 37, r.y + 6, 1, 431}, rgb(173, 182, 255));   // icon column: borders at x 44 and x 77   // the frame's left line runs the full height [OBSERVED]
   const Rect box{r.x + 44, r.y + 50, 356, 189};
   // Stripes measured on the original (screen rows 85.. = local 51..): base (222,223,255) 51..64, then 17 px bands (edges 65, 82, ... 201) alternating
   // with (231,231,255) through local 217; below the 2 px axis (local 218..219) the base colour again to the frame (local 220..237).

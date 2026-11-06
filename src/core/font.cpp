@@ -64,7 +64,13 @@ void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::strin
   if (recolour) {
     auto un5 = [](uint32_t v) { return int(v * 255 / 31); };
     auto un6 = [](uint32_t v) { return int(v * 255 / 63); };
-    const uint16_t bp = pal_[atlas_[0]];
+    uint16_t bp = pal_[atlas_[0]];
+    // B is the colour under the text: the destination pixel at the text origin (565-truncated), which for the title bars equals the font's own key entry and
+    // for button captions is the button face [OBSERVED: Budget tab captions; falls back to the key entry over a GPU-composited area].
+    if (x0 >= 0 && y0 >= 0 && x0 < fbW && y0 < fbH) {
+      const uint32_t dp = fb[size_t(y0) * pitch + x0];
+      if (!overlay || (dp >> 24) == 255) bp = uint16_t((((dp & 255) >> 3) << 11) | ((((dp >> 8) & 255) >> 2) << 5) | (((dp >> 16) & 255) >> 3));
+    }
     const int tr = un5(cr >> 3), tg = un6(cg >> 2), tb = un5(cb >> 3);
     const int br = un5((bp >> 11) & 31), bg = un6((bp >> 5) & 63), bb = un5(bp & 31);
     for (int i = 0; i < 15; i++) {

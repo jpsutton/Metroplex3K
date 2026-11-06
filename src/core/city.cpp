@@ -2418,8 +2418,8 @@ void City::monthlyPower() {
   us::PowerEnv env = powerEnv(conductive);
   auto events = power.monthlyUpdate(env, urng_);
   {  // A sale that is not delivered in full cancels the deal (any shortfall, even 1 unit) [STATIC spec 19 10.4]; before 60 months the penalty is charged.
-     // Off unless M3K_DEALCANCEL=1 until the sale accounting is checked against the original's saves (the sale model is new).
-    static const bool cancelOn = [] { const char* e = std::getenv("M3K_DEALCANCEL"); return e && e[0] == '1'; }();
+     // On by default: Sacramento and Seoul's power sales stay active for 15 saves in both the original and ours. M3K_DEALCANCEL=0 turns it off.
+    static const bool cancelOn = [] { const char* e = std::getenv("M3K_DEALCANCEL"); return !(e && e[0] == '0'); }();
     if (cancelOn)
       for (const auto& pd : power.deals())
         if (pd.sell > 0 && pd.sold < pd.sell)
