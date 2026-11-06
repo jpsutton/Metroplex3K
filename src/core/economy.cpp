@@ -108,7 +108,8 @@ BudgetConfig BudgetConfig::fromIni(const IniFile& ini, const IniFile* advisor) {
   static const char* kSpecial[13] = {"LowDensityZone", "MedDensityZone", "HighDensityZone", "LandfillZone",
                                      "AirportZone", "SeaportZone", "Dezone", "Demolish", "LevelTerrain",
                                      "RaiseTerrain", "LowerTerrain", "DecorativeWater", "DemolishRubbleTile"};
-  for (int i = 0; i < 13; i++) c.specialCost[i] = getInt(ini, "SpecialCosts", kSpecial[i], 0);
+  static const int kSpecialDefault[13] = {10, 20, 50, 50, 500, 250, 2, 5, 25, 25, 25, 150, 5};   // shipped SC3BudgetLayer.ini
+  for (int i = 0; i < 13; i++) c.specialCost[i] = getInt(ini, "SpecialCosts", kSpecial[i], kSpecialDefault[i]);
   for (auto& kv : ini.section("BuildingPlacementCosts")) {
     int64_t v;
     std::string val = trimSpaces(kv.second);

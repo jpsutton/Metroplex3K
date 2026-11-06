@@ -82,6 +82,11 @@ LvAgentMod LandValueTuning::parseMod(const std::string& s) {
 void LandValueTuning::parse(const IniFile& ini) {
   const char* S = "TuningParameters";
   std::string s;
+  // Defaults are the shipped SC3LandValue.ini values (a pack that omits a key); the city-centre curves have no default.
+  updatePeriod = 60; radB = -1.0f;
+  water = parseTriple("100,-9000,100", true); air = parseTriple("400,-7000,250", true);
+  garbage = parseTriple("0,-400000,0", false); crime = parseTriple("25,-1900,200", false);
+  waterEffect = 50; waterRadiusBlocks = 3; hillEffect = 30; homelessShelterPct = 5;
   if (ini.get(S, "UpdatePeriod", s)) updatePeriod = std::max(1, toInt(s));
   if (ini.get(S, "RadPolluteFactor", s)) { auto f = split(s, ','); radB = f.size() > 1 ? float(toInt(f[1])) / 1000.0f : 0; }
   if (ini.get(S, "WaterPolluteFactor", s)) water = parseTriple(s, true);

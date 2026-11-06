@@ -72,7 +72,7 @@ static void testConfigIni() {
   CHECK(c.minAverageLV == 255);   // clamped
   CHECK(c.taxEffects.size() == 2 && c.taxEffects[1].pop == 10000 && c.taxEffects[1].n == 9);
   CHECK(std::fabs(c.taxEffects[0].b + 0.7f) < 1e-6f);
-  CHECK(c.specialCostFor(0) == 3 && c.specialCostFor(7) == 1 && c.specialCostFor(5) == 0 && c.specialCostFor(99) == 0);
+  CHECK(c.specialCostFor(0) == 3 && c.specialCostFor(7) == 1 && c.specialCostFor(5) == 250 && c.specialCostFor(99) == 0);   // absent keys: the shipped defaults
   CHECK(c.tireRecyclingPct == 25 && c.tireRecyclingTypes.count(300));
   AgentHierarchy h;
   h.setParent(300, 200);
