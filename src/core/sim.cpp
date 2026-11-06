@@ -54,7 +54,12 @@ bool Sim::bulldoze(int x0, int z0, int x1, int z1) {
 
 void Sim::tickDay() {
   if (taxRate != lastTax_) { city_.setTaxRate(taxRate); lastTax_ = taxRate; }
+  // Stepping a day by hand never waits on the schedule's hold (a loaded city starts paused, which raises it): the caller owns the
+  // pacing, as Game::daySimStep does for the worker.
+  auto savedHold = std::move(city_.sched.isHold);
+  city_.sched.isHold = nullptr;
   city_.tickDay();
+  city_.sched.isHold = std::move(savedHold);
   sync();
 }
 
