@@ -19,7 +19,7 @@ constexpr int kToolOnRamp = 7;
 
 void Game::setPaused(bool p) {
   if (p == paused_) return;
-  paused_ = p;
+  paused_ = p; userPaused_ = p;
   // Spec 14 §2.3 / Q-AZ: city pause count = ordinary player pause (bottom-bar / hotkey).
   // Resume and selecting a non-zero speed clear it. Modals use raisePending instead.
   if (!simReady_) return;
@@ -1079,9 +1079,11 @@ void Game::drawHud() {
   if (skinBar && imPause && skin_.get("run") && skin_.get("speed.0")) {
     Rect pr{place.p2x, place.p2y, 22, 22}, rr{place.p1x, place.p1y, 26, 22};
     // Lit (red / green) for the current state, grey otherwise; hover shows the yellow variant.
-    const bool pauseLit = paused_ && pauseFlashMs_ < 750;
-    const Image* pa = ui_.hover(pr) ? skin_.get("pause.hover") : pauseLit ? imPause : skin_.get("pause.off");
-    const Image* ra = ui_.hover(rr) ? skin_.get("run.hover") : !paused_ ? skin_.get("run") : skin_.get("run.off");
+    // The inactive face is no image: the bar art carries the dark red / dark green faces (spec 09 4.2 [OBSERVED]). pause.off / run.off (grey) are
+    // the bar's disabled faces and are never drawn in play.
+    const bool pauseLit = paused_ && userPaused_ && pauseFlashMs_ < 750;
+    const Image* pa = ui_.hover(pr) ? skin_.get("pause.hover") : pauseLit ? imPause : nullptr;
+    const Image* ra = ui_.hover(rr) ? skin_.get("run.hover") : !paused_ ? skin_.get("run") : nullptr;
     if (pa) ui_.blit(*pa, pr.x, pr.y);
     if (ra) ui_.blit(*ra, rr.x, rr.y);
     if (ui_.hover(pr)) ui_.setTip(tip(0x64, "Pause"), pr, Ui::kTipAbove);
@@ -1106,7 +1108,7 @@ void Game::drawHud() {
     static const char* spTip[4] = {"Turtle", "Llama", "Cheetah", "African Swallow"};
     for (int i = 0; i < 4; i++) {
       Rect cr{place.p4x + 4 + i * 10, place.p4y + 5, 10, 11};
-      if (ui_.hover(cr)) ui_.setTip(tip(0x66 + i, spTip[i]), cr, Ui::kTipAbove);
+      if (ui_.hover(cr)) ui_.setTip(tip(0x66 + i, spTip[i]), Rect{place.p4x, place.p4y, 48, 23}, Ui::kTipAbove);   // anchored on the whole indicator panel (measured)
       if (ui_.clicked(cr)) setSpeedBtn(i + 1);
     }
     // Help ("?") button, 4-cell strip at P3.

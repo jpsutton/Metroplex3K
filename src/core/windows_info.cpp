@@ -323,29 +323,39 @@ const int kPitch = 14;                      // body, goal and rank text pitch
 void presenterPanel(Ui& ui, const WinEnv& E, Rect panel, int portraitX, int portraitY, int nameY, uint32_t advisor, int mood,
                     const ScenarioPresenterPic* pic = nullptr) {
   ui.fill(panel, kPanelFill);
+  // One-pixel border lines (173,182,255) on the left (just outside the fill), right and bottom; none on top [OBSERVED 800 x 600, spec 23 4.7.0].
+  const uint32_t edge = rgb(173, 182, 255);
+  ui.fill({panel.x - 1, panel.y, 1, panel.h}, edge);
+  ui.fill({panel.x + panel.w - 1, panel.y, 1, panel.h}, edge);
+  ui.fill({panel.x, panel.y + panel.h - 1, panel.w - 1, 1}, edge);
+  const Rect pr{portraitX, portraitY, 91, 114};
+  const uint32_t nameInk = rgb(0x31, 0x36, 0x7C);
   if (pic && pic->custom && !advisor) {
-    // Kinds 0 / 2 (spec 23 4.7.0 [STATIC; crop INFERRED]): the picture cropped from its top-left to at most 94 x 117, centred in the presenter
-    // column, the name below it, centred; no title line. A missing picture leaves the name at the top of the column.
-    int bottom = panel.y + 4;
+    // Kinds 0 / 2 (spec 23 4.7.0 [STATIC; crop INFERRED]): the picture cropped from its top-left to at most 94 x 117 inside the portrait frame
+    // like an advisor portrait; the name below it, centred in the rest of the panel; no title line. No picture: the name starts at the top.
+    int bottom = panel.y;
     if (pic->group) {
       if (const Image* im = E.img(pic->group, pic->inst)) {
         const int w = std::min(94, im->w), h = std::min(117, im->h);
-        const int px = panel.x + (panel.w - w) / 2, py = portraitY;
-        ui.blitRect(*im, px, py, 0, 0, w, h);
-        bottom = py + h + 2;
+        ui.blitRect(*im, pr.x + (pr.w - w) / 2, pr.y, 0, 0, w, h);
+        ui.frame({pr.x - 1, pr.y - 1, pr.w + 2, pr.h + 2}, false);
+        bottom = pr.y + h;
       }
     }
-    if (!pic->name.empty()) ui.textCentered({panel.x, pic->group && bottom > panel.y + 4 ? bottom : panel.y + 4, panel.w, 14}, pic->name, "main9", rgb(0x31, 0x36, 0x7C));
+    if (!pic->name.empty()) {
+      const int fh = ui.fonts ? ui.fonts->get("main9").height() : 12;
+      const int rest = panel.y + panel.h - 1 - bottom;
+      ui.textCentered({panel.x, bottom + std::max(0, (rest - fh) / 2), panel.w, fh + 2}, pic->name, "main9", nameInk);
+    }
     return;
   }
   const int idx = AdvisorWindow::advisorIndex(advisor);
   if (idx < 1) return;
-  const Rect pr{portraitX, portraitY, 91, 114};
   if (const Image* im = E.img(0x52DB60A0, AdvisorWindow::portraitInstance(idx, mood)))
     ui.blitRect(*im, pr.x, pr.y, 0, 0, std::min(92, im->w), std::min(115, im->h));
   ui.frame({pr.x - 1, pr.y - 1, pr.w + 2, pr.h + 2}, false);
   const std::string name = AdvisorWindow::personName(E, advisor);
-  ui.textCentered({panel.x, nameY, panel.w, 14}, name, "main9", rgb(0x31, 0x36, 0x7C));
+  ui.textCentered({panel.x, nameY, panel.w, 14}, name, "main9", nameInk);
 }
 
 bool checkButton(Ui& ui, const WinEnv& E, const char* spot, Rect r) {
@@ -359,7 +369,7 @@ bool checkButton(Ui& ui, const WinEnv& E, const char* spot, Rect r) {
 void textBox(Ui& ui, const WinEnv& E, Rect box, const std::string& text, int& scroll) {
   ui.fill(box, kInset);
   const int lh = kPitch;
-  const auto lines = wrap(ui, text, box.w - 24, "main10");
+  const auto lines = wrapKeepSpaces(ui, text, box.w - 24, "main10");
   const int visible = std::max(1, box.h / lh);
   const bool overflow = int(lines.size()) > visible;
   if (overflow) scrollBar(ui, E, {box.x + box.w - 16, box.y, 16, box.h}, int(lines.size()), visible, scroll); else scroll = 0;

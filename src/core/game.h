@@ -449,6 +449,7 @@ class Game {
   int snapSize_ = 0;
   double viewAcc_ = 0; int viewUpdates_ = 0;   // view updates due this frame at kViewUpdateHz (keyboard / drag scroll)
   uint32_t frameDt_ = 0;   // dt of the current frame (ticker scrolling)
+  bool userPaused_ = false;     // the player pressed Pause (lights the pause button); a load pauses without it [spec 09 4.2]
   uint32_t pauseFlashMs_ = 0;   // position in the 1500 ms paused-indicator flash cycle (0 when running)
   bool disastersOn_ = true, autoBudget_ = false;
   // Transport tools greyed until the transportation advisor's tech flag is set (spec 22 s3.10, Q-AK).

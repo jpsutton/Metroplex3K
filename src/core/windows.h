@@ -150,6 +150,7 @@ void compassRose(Ui& ui, const WinEnv& E, int cx, int cy, int rotation);   // di
 bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool selected, const char* font = "system9");   // radio button with caption; true when clicked
 bool colourButton(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, uint32_t col);
 std::vector<std::string> wrap(const Ui& ui, const std::string& s, int width, const char* font = "main10");
+std::vector<std::string> wrapKeepSpaces(const Ui& ui, const std::string& s, int width, const char* font = "main10");   // keeps space runs inside a line
 // Draws wrapped text, returns the height used. Stops drawing past maxH (<=0: unlimited).
 int paragraph(Ui& ui, Rect r, const std::string& s, const char* font = "main10", uint32_t col = 0);
 int lineHeight(const Ui& ui);

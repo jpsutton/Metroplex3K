@@ -189,6 +189,33 @@ std::vector<std::string> wrap(const Ui& ui, const std::string& s, int width, con
   return lines;
 }
 
+// Like wrap(), but runs of spaces inside a line are kept (the original's text boxes show the double space after a full stop); the spaces at
+// a break are dropped.
+std::vector<std::string> wrapKeepSpaces(const Ui& ui, const std::string& s, int width, const char* font) {
+  std::vector<std::string> lines;
+  size_t p = 0;
+  while (p <= s.size()) {
+    size_t e = s.find('\n', p);
+    const std::string para = s.substr(p, e == std::string::npos ? std::string::npos : e - p);
+    std::string cur;
+    size_t i = 0;
+    while (i < para.size()) {
+      size_t sp = i; while (sp < para.size() && para[sp] == ' ') sp++;
+      size_t we = sp; while (we < para.size() && para[we] != ' ') we++;
+      const std::string gap = para.substr(i, sp - i), word = para.substr(sp, we - sp);
+      i = we;
+      if (word.empty()) { if (cur.empty()) cur = gap; else cur += gap; break; }
+      std::string t = cur.empty() ? (gap.size() > 1 && lines.empty() ? gap + word : word) : cur + gap + word;
+      if (!cur.empty() && ui.textWidth(t, font) > width) { lines.push_back(cur); cur = word; }
+      else cur = t;
+    }
+    lines.push_back(cur);
+    if (e == std::string::npos) break;
+    p = e + 1;
+  }
+  return lines;
+}
+
 int paragraph(Ui& ui, Rect r, const std::string& s, const char* font, uint32_t col) {
   int lh = ui.fonts->get(font).height() + 2;
   int y = 0;
