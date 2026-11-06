@@ -243,7 +243,10 @@ void Game::saveCurrent(const std::string& name, const fs::path& into) {
   fs::path p = dir / (name + ".sc3");
   if (simReady_) {
     sim_.city().flush();
-    if (managersReady_ && world_.raw) world_.raw->setInner({kPetitionerRecType, kPetitionerRecGroup, kPetitionerRecInstance}, petitioners_.save());
+    if (managersReady_ && world_.raw) {
+      world_.raw->setInner({kPetitionerRecType, kPetitionerRecGroup, kPetitionerRecInstance}, petitioners_.save());
+      for (auto& r : advisors_.saveRecords()) world_.raw->setInner({r.type, r.group, r.instance}, r.data);   // topic lists, rewards, flags
+    }
   }
   Bytes b = saveCity(world_);
   if (scen_) b = scen_->mergeState(b);

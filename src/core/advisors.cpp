@@ -369,6 +369,8 @@ Bytes RewardTable::save() const {
     if (it == typeToInstance.end() || written.count(it->second)) continue;
     out.push_back({e.buildingType, 0x207EDC0Eu, 0x0000057Eu, it->second, uint8_t(e.owned), uint8_t(e.available)});
   }
+  // Only entries that are available or owned are written (spec 22 P.3).
+  out.erase(std::remove_if(out.begin(), out.end(), [](const Out& o) { return !o.owned && !o.avail; }), out.end());
   std::stable_sort(out.begin(), out.end(), [](const Out& x, const Out& y) { return x.key < y.key; });
   Bytes body;
   for (auto& o : out) { put32(body, o.type); put32(body, o.group); put32(body, o.instance); body.push_back(o.owned); body.push_back(o.avail); }

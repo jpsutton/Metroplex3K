@@ -250,6 +250,10 @@ void Game::initManagers() {
   if (world_.raw)
     if (const InnerRecord* pr = world_.raw->findInner({kPetitionerRecType, kPetitionerRecGroup, kPetitionerRecInstance}))
       if (petitioners_.load(pr->data)) for (const auto& p : petitioners_.list()) petShown_.push_back(p.id);
+  // Advisor state travels with the city too: topic lists P.1, rewards P.3, manager flags P.4 (spec 22 P.1-P.4).
+  if (world_.raw)
+    for (const auto& r : advisors_.saveRecords())
+      if (const InnerRecord* ir = world_.raw->findInner({r.type, r.group, r.instance})) advisors_.loadRecord(r.type, r.group, r.instance, ir->data);
   advisors_.initBuildingUnlocks(city().clock.date().year);
   advisors_.initTransportFlags(city().clock.date().year);   // spec 22 "Building availability": unlocked at load
 }
