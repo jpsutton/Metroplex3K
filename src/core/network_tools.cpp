@@ -607,40 +607,43 @@ int removeConnectionsAt(INetworkMap& m, int x, int z) {
 // Network endpoint levelling (spec 12 6.2.6 step 3): at a path end the tiles A (the end tile) and B (the next tile for a highway, else A)
 // are levelled to the average of their corner rectangle's perimeter, unless an occupant stands on them, both tiles already have a valid slope
 // (flat or a straight ramp of rise <= 2) or both are flat. No money is charged and a refusal is silent: the network is built anyway.
-// Returns true when the terrain changed.
-static bool levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool start, bool highway) {
-  if (path.empty()) return false;
+// Returns the sum of the absolute corner changes (0 = terrain unchanged).
+static int levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool start, bool highway) {
+  if (path.empty()) return 0;
   // Highway: A and B are consecutive tiles of the first carriageway (A the end tile, B the previous / next one along the drag), not the pair partner
   // [OBSERVED: the original's levelled corners lie along the drag, x 40..41 and z 162..164, for an end at (40,163)].
   std::vector<PathTile> lane;
   for (const PathTile& t : path) if (!highway || t.carriage == 0) lane.push_back(t);
-  if (lane.empty()) return false;
+  if (lane.empty()) return 0;
   const PathTile& a = start ? lane.front() : lane.back();
   const PathTile& b = highway && lane.size() > 1 ? (start ? lane[1] : lane[lane.size() - 2]) : a;
-  for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return false;
+  for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return 0;
   bool bothValid = true, bothFlat = true;
   for (const PathTile* t : {&a, &b}) {
     int c[4]; m.tileCorners(t->x, t->z, c);
     if (!isValidSlope(c)) bothValid = false;
     if (!(c[0] == c[1] && c[1] == c[2] && c[2] == c[3])) bothFlat = false;
   }
-  if (bothValid || bothFlat) return false;
-  auto sig = [&]() {
-    long long h = 0;
-    for (int vx = std::min(a.x, b.x) - 8; vx <= std::max(a.x, b.x) + 9; vx++)
-      for (int vz = std::min(a.z, b.z) - 8; vz <= std::max(a.z, b.z) + 9; vz++)
-        if (vx >= 0 && vz >= 0 && vx <= m.width() && vz <= m.height()) h = h * 1000003 + m.cornerHeight(vx, vz) + 1;
-    return h;
+  if (bothValid || bothFlat) return 0;
+  const int x0 = std::min(a.x, b.x) - 8, x1 = std::max(a.x, b.x) + 9, z0 = std::min(a.z, b.z) - 8, z1 = std::max(a.z, b.z) + 9;
+  auto snap = [&]() {
+    std::vector<int> v;
+    for (int vx = x0; vx <= x1; vx++)
+      for (int vz = z0; vz <= z1; vz++) v.push_back(vx >= 0 && vz >= 0 && vx <= m.width() && vz <= m.height() ? m.cornerHeight(vx, vz) : 0);
+    return v;
   };
-  const long long before = sig();
+  const std::vector<int> before = snap();
   m.levelRectToAverage(std::min(a.x, b.x), std::min(a.z, b.z), std::max(a.x, b.x), std::max(a.z, b.z));
-  return sig() != before;
+  const std::vector<int> after = snap();
+  int k = 0;
+  for (size_t i = 0; i < before.size(); i++) k += std::abs(after[i] - before[i]);
+  return k;
 }
 
 // Highway cross-section levelling [OBSERVED once, Roadless Paradise drag B; INFERRED rule]: every vertex row across the two carriageways of the built
 // path (3 vertices) is set to its minimum when its heights differ. Refused as a whole when a changing vertex is not changeable. True when terrain changed.
-static bool levelHighwayCrossRows(INetworkMap& m, const std::vector<PathTile>& lane, int pairDx, int pairDz) {
-  if (lane.empty() || (pairDx == 0 && pairDz == 0)) return false;
+static int levelHighwayCrossRows(INetworkMap& m, const std::vector<PathTile>& lane, int pairDx, int pairDz) {
+  if (lane.empty() || (pairDx == 0 && pairDz == 0)) return 0;
   std::set<std::vector<std::pair<int, int>>> rows;
   for (const PathTile& t : lane) {
     if (!m.onMap(t.x, t.z)) continue;
@@ -659,10 +662,11 @@ static bool levelHighwayCrossRows(INetworkMap& m, const std::vector<PathTile>& l
     if (lo < 0 || !differ) continue;
     for (const auto& v : row) if (m.cornerHeight(v.first, v.second) != lo) plan.push_back({v, lo});
   }
-  if (plan.empty()) return false;
-  for (const auto& p : plan) if (!m.canChangeCorner(p.first.first, p.first.second)) return false;
-  for (const auto& p : plan) m.setCornerHeight(p.first.first, p.first.second, p.second);
-  return true;
+  if (plan.empty()) return 0;
+  for (const auto& p : plan) if (!m.canChangeCorner(p.first.first, p.first.second)) return 0;
+  int k = 0;
+  for (const auto& p : plan) { k += std::abs(m.cornerHeight(p.first.first, p.first.second) - p.second); m.setCornerHeight(p.first.first, p.first.second, p.second); }
+  return k;
 }
 
 CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const PlacementCosts& costs, ToolHost& host,
@@ -786,16 +790,17 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
     }
   }
   // Endpoint levelling: at the start always, at the end only when neither a bridge nor a tunnel was built.
-  // The terrain operation is charged once per levelling that changed terrain (LevelTerrain; observed 25 on one drag).
-  int levelled = 0;
+  // Terrain operations are charged LevelTerrain x k >> 2, k = the sum of the absolute corner changes [STATIC SIMDIRT level plan 0x1000A750; observed 25
+  // for four corners moving 1 each].
+  int levelK = 0;
   if (P.kind == NK_HIGHWAY) {
     std::vector<PathTile> lane0;
     for (const PathTile& t : path) if (t.carriage == 0 && !skip.count({t.x, t.z})) lane0.push_back(t);
-    if (levelHighwayCrossRows(m, lane0, rp.pairDx, rp.pairDz)) levelled++;
+    levelK += levelHighwayCrossRows(m, lane0, rp.pairDx, rp.pairDz);
   }
-  if (levelEndpoint(m, path, true, P.kind == NK_HIGHWAY)) levelled++;
-  if (res.bridges == 0 && res.tunnels == 0 && levelEndpoint(m, path, false, P.kind == NK_HIGHWAY)) levelled++;
-  if (levelled && costs.levelTerrain > 0) { host.charge(levelled * costs.levelTerrain); extraSpent += levelled * costs.levelTerrain; }
+  levelK += levelEndpoint(m, path, true, P.kind == NK_HIGHWAY);
+  if (res.bridges == 0 && res.tunnels == 0) levelK += levelEndpoint(m, path, false, P.kind == NK_HIGHWAY);
+  if (levelK > 0 && costs.levelTerrain > 0) { const int c = (costs.levelTerrain * levelK) >> 2; host.charge(c); extraSpent += c; }
   // connections
   res.connections = offerConnections(m, host, costs, P.kind, path, dragPrice);
 
