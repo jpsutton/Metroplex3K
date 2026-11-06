@@ -138,7 +138,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
     const bool bar = int(pending.size()) > 13;
     const int visibleRows = 13;   // 13 rows in both cases [OBSERVED]
     if (bar) {
-      const Rect br{lr.x + 344, lr.y + 5, 16, lr.h - 6};
+      const Rect br{lr.x + 343, lr.y + 1, 16, 182};   // plate rows y173..354 [OBSERVED]
       ui.fill(br, rgb(0x7B, 0x92, 0xFF));
       scenarioScrollBar(ui, E, br, lr, int(pending.size()), visibleRows, petScroll);
     } else petScroll = 0;
