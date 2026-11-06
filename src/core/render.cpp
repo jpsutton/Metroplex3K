@@ -1362,7 +1362,11 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
   };
 
   bool curDeck = false;   // set by addOccupant for the piece being added
+  // Set by addStatic when the sprite lookup itself failed (no sprite record, or a frame whose sprite cannot be loaded); a
+  // culled, zoom-less or substituted object is not a failure. Only this triggers a placeholder box (issue #56).
+  bool lookupFailed = false;
   auto addStatic = [&](const ResKey& appearance, bool useOwn, int footprint, int x, int zz, int y, int rot, int sizeX, int sizeZ, bool ground) {
+    lookupFailed = false;
     const CsAttrib* cs = data_ ? data_->csattrib(appearance) : nullptr;
     const SpriteImage* sp = nullptr;
     bool dbl = false;
@@ -1371,14 +1375,14 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
       sp = getSprite(subst_[footprint].cat, subst_[footprint].id);
     }
     if (!sp) {
-      if (!cs) return;
+      if (!cs) { lookupFailed = true; return; }
       int orient = (cs->zoomSetCount >= 4 && cs->rotCount == 4) ? ((rot + cam.rot) & 3) : 0;
       fr = frameFor(cs, 0, orient);
-      if (!fr) return;
+      if (!fr) return;   // the record has no image at this zoom: not drawn, as in the original
       sp = getSprite(fr->category, fr->spriteId);
       dbl = fr->flags == 2;
     }
-    if (!sp) return;
+    if (!sp) { lookupFailed = true; return; }
     Item it;
     setGeometry(it, x, zz, y, sizeX, sizeZ);
     int sc = dbl ? 2 : 1;
@@ -1431,6 +1435,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
   };
 
   auto addOccupant = [&](uint32_t occId, bool net, bool port, int x, int zz, int y, int rot, int sizeX, int sizeZ, bool ground) {
+    lookupFailed = false;
     if (!data_) return;
     const OccAttr* oa = data_->occupant(occId, net, port);
     if (!oa) return;
@@ -1473,9 +1478,8 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
           ResKey rk;
           if (siteOccupant(ost, std::max(o.sizeX, o.sizeZ), o.agentType, rk)) { id = rk.instance; port = rk.type == T_OCC_ATTR_PORT; }
         }
-        const size_t n0 = statics.size() + flat.size();
         addOccupant(id, false, port, o.x, o.z, o.y, o.rot, o.sizeX, o.sizeZ, false);
-        if (data_ && statics.size() + flat.size() == n0) addPlaceholder(o);
+        if (data_ && lookupFailed) addPlaceholder(o);
       }
       for (int x = 0; x < w.W && opt.flora; x++)
         for (int zz = 0; zz < w.H; zz++) {

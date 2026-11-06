@@ -132,10 +132,12 @@ void Game::drawNavigator(int barH) {
   // Buttons: 4-cell strips (26x29 cells) centred on the observed button centres.
   // Button rects measured on the original at 1024 x 768 (panel-relative; the panel is 160 x 164 at the window's bottom-right corner): zoom in
   // (14,100), zoom out (120,100), the left rotate button (34,120), the right one (100,120), all 26 x 29; layer views (114,6) 36 x 35.
+  // At 640 x 480 the buttons sit 12 px lower than at 800 x 600 and above (spec 08 4.2, measured on the original).
+  const int btnDy = H_ <= 480 ? 12 : 0;
   auto cellBtn = [&](const char* art, Rect rel, const std::string& tip, const std::function<void()>& fn, int tipPlace = Ui::kTipAbove) {
     const Image* s = skin_.get(art); if (!s) return;
     bool clicked = false;
-    skin_.imageButtonCells(ui_, s, 4, {ox + rel.x, oy + rel.y, rel.w, rel.h}, tip, false, true, clicked, tipPlace);
+    skin_.imageButtonCells(ui_, s, 4, {ox + rel.x, oy + rel.y + btnDy, rel.w, rel.h}, tip, false, true, clicked, tipPlace);
     if (clicked) fn();
   };
   auto tip = [&](uint32_t id, const char* fb) { std::string t = str(0x225872FE, id); return t.empty() ? std::string(fb) : t; };
@@ -145,6 +147,12 @@ void Game::drawNavigator(int barH) {
   cellBtn("nav.btn.2", {34, 120, 26, 29}, tip(0xD, "Rotate Clockwise"), [&] { rot(-1); });   // left button: clockwise, like PageDown (observed)
   cellBtn("nav.btn.3", {100, 120, 26, 29}, tip(0xC, "Rotate Counterclockwise"), [&] { rot(1); });   // right button: counter-clockwise, like PageUp
   cellBtn("nav.layers", {114, 6, 36, 35}, tip(0xA7, "Layer views"), [&] { if (showLayers_) showLayers_ = false; else openWindow("layers"); }, Ui::kTipLeft);
+  // Hide Toolbars: 26 x 26 in the window's bottom-right corner, over the navigator art (same place at every resolution).
+  if (const Image* hide = skin_.get("hide")) {
+    bool clicked = false;
+    skin_.imageButtonCells(ui_, hide, 4, {W_ - 26, H_ - 26, 26, 26}, tip(0xA6, "Hide Toolbars"), false, true, clicked, Ui::kTipLeft);
+    if (clicked) panelsHidden_ = true;
+  }
 }
 
 }  // namespace m3k

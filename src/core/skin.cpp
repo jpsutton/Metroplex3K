@@ -391,6 +391,8 @@ bool Skin::load(ResourceDb& db, int screenH, int screenW) {
   bind("nav.tl", UiBig, 0x22F96E32); bind("nav.tr", UiBig, 0x22F96E33); bind("nav.bot", UiBig, 0x22F96E34);
   bind("nav.layers", UiBig, 0x22F96E35);   // 22F96E31 is the lattice (grid) strip
   for (uint32_t k = 0; k < 4; k++) bind("nav.btn." + std::to_string(k), UiBig, 0x22F96E2D + k);
+  bind("hide", UiBig, 0x53244586);   // Hide Toolbars: 4 cells 26x26 (disabled, normal, pressed, highlighted), spec 08 4.2
+  bind("show", UiBig, 0x53244588);   // the round "Show Toolbars" button that remains while the panels are hidden
   // Pause / run buttons (spec 09 4.2): lit, hover (yellow) and unlit (grey) faces.
   bind("pause", UiBig, 0x52FB06E0); bind("pause.hover", UiBig, 0x52FB06E1); bind("pause.off", UiBig, 0x52FB06EB);
   bind("run", UiBig, 0x52FB06E2); bind("run.hover", UiBig, 0x52FB06E3); bind("run.off", UiBig, 0x52FB06EC);

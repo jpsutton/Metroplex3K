@@ -1611,6 +1611,13 @@ void Game::drawInCity(uint32_t dtMs) {
     // F12 hid the tool column, the bottom bar and the navigator: only a small round "show UI" button stays, bottom-right
     // (about 20 x 20 px; spec 08 5.4 [OBSERVED]).
     const Rect b{W_ - 26, H_ - 26, 20, 20};
+    bool shown = false;
+    const std::string tipText = str(0x225872FE, 0xA9).empty() ? std::string("Show Toolbars") : str(0x225872FE, 0xA9);
+    if (const Image* show = skin_.get("show")) {   // the original's round button, same rect as Hide Toolbars (spec 08 4.2)
+      skin_.imageButtonCells(ui_, show, 4, {W_ - 26, H_ - 26, 26, 26}, tipText, false, true, shown, Ui::kTipLeft);
+      if (ui_.hover({W_ - 26, H_ - 26, 26, 26})) uiHit_ = true;
+      if (shown) panelsHidden_ = false;
+    } else {
     const bool hot = ui_.hover(b);
     if (hot) { uiHit_ = true; ui_.tooltip = "Show UI"; }
     for (int y = 0; y < b.h; y++)
@@ -1620,6 +1627,7 @@ void Game::drawInCity(uint32_t dtMs) {
         ui_.fill({b.x + x, b.y + y, 1, 1}, d2 > 72.f ? rgb(0x31, 0x36, 0x7C) : hot ? rgb(0xDC, 0xE4, 0xF0) : rgb(0x7B, 0x92, 0xFF));
       }
     if (ui_.clicked(b)) panelsHidden_ = false;
+    }
   }
   drawWindows(dtMs);
   drawCheatBox();
