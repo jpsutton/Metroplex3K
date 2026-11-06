@@ -312,13 +312,14 @@ constexpr int kNeighbours = 4;
 enum ConnKind { ConnRoad = 1, ConnRail, ConnPower, ConnHighway, ConnPipe, ConnSubway };
 
 struct DealConfig {
-  uint32_t baseRate[kDealTypes] = {10, 12, 10, 12, 10, 12};   // simoleons per Base units per month
-  uint32_t rateVariable = 3;                                   // DEAL_RATE_VARIABLE
-  uint32_t penaltyMultiplier = 3;                              // DEAL_PENALTY_MULTIPLIER
-  uint32_t basePower = 1000, baseWater = 1000, baseGarbage = 100;
-  uint32_t powerUnitsPer1K = 100, waterUnitsPer1K = 100, garbageUnitsPer1K = 100;
-  uint32_t percentPopForBuy = 20, percentPopForSell = 20;
-  uint32_t minPowerBuy = 50, minWaterBuy = 50, minGarbageExport = 50;
+  // Defaults are the shipped NeighborDeals.ini values.
+  uint32_t baseRate[kDealTypes] = {8, 8, 8, 8, 5, 5};   // simoleons per Base units per month
+  uint32_t rateVariable = 5;                                   // DEAL_RATE_VARIABLE
+  uint32_t penaltyMultiplier = 25;                             // DEAL_PENALTY_MULTIPLIER
+  uint32_t basePower = 1000, baseWater = 1000, baseGarbage = 1000;
+  uint32_t powerUnitsPer1K = 500, waterUnitsPer1K = 200, garbageUnitsPer1K = 650;
+  uint32_t percentPopForBuy = 10, percentPopForSell = 25;
+  uint32_t minPowerBuy = 30, minWaterBuy = 25, minGarbageExport = 20;
   static DealConfig fromIni(const IniFile& ini);
   uint32_t base(int type) const { return type < 2 ? basePower : type < 4 ? baseWater : baseGarbage; }
   uint32_t unitsPer1K(int type) const { return type < 2 ? powerUnitsPer1K : type < 4 ? waterUnitsPer1K : garbageUnitsPer1K; }

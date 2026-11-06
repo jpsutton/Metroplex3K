@@ -52,13 +52,14 @@ const int CoverageLayer::kPolicePhases[16][2] = {{4, 8}, {0, 12}, {12, 0}, {8, 1
 static StationParams loadStation(const IniFile& f, const char* sec, bool police) {
   IniReader r{&f};
   StationParams p;
-  p.radius0 = int(uint8_t(r.num(sec, "OptimalCoverageRadius", 0)));
-  p.max0 = int(uint8_t(r.num(sec, "OptimalMaxCoverage", 0)));
-  p.min0 = int(uint8_t(r.num(sec, "OptimalMinCoverage", 0)));
-  p.upkeep0 = int(r.num(sec, "OptimalMonthlyUpkeep", 0));
+  // Defaults are the shipped SC3Tune.ini values (fire / police).
+  p.radius0 = int(uint8_t(r.num(sec, "OptimalCoverageRadius", police ? 30 : 25)));
+  p.max0 = int(uint8_t(r.num(sec, "OptimalMaxCoverage", police ? 80 : 200)));
+  p.min0 = int(uint8_t(r.num(sec, "OptimalMinCoverage", police ? 20 : 200)));
+  p.upkeep0 = int(r.num(sec, "OptimalMonthlyUpkeep", 30));
   p.maxEfficiencyPct = int(r.num(sec, "MaxEfficiency", 120));
   p.mysticalE = r.real(sec, "MysticalE", 30.0);
-  if (police) p.oppressionThreshold = int(r.num(sec, "OppressionThreshold", 0));
+  if (police) p.oppressionThreshold = int(r.num(sec, "OppressionThreshold", 210));
   return p;
 }
 StationParams StationParams::fire(const IniFile& f) { return loadStation(f, "FireStation", false); }
@@ -78,19 +79,19 @@ static CoverageParams loadCoverage(const IniFile& f, bool police) {
   CoverageParams p;
   int64_t up = r.num(S, "UpdatePeriod", 30);
   p.updatePeriod = up <= 0 ? 30 : int(up);
-  p.dispatchRadius = int(uint8_t(r.num(S, "DispatchRadius", 0)));
-  p.dispatchEffect = int(uint8_t(r.num(S, "DispatchEffect", 0)));
-  p.minAcceptableFunding = int(uint8_t(r.num(S, "MinAcceptableFunding", 0)));
-  p.strikeEfficiency = int(uint8_t(r.num(S, "StrikeEfficiency", 100)));
-  p.maxStrikeDuration = int(r.num(S, "MaxStrikeDuration", 0));
+  p.dispatchRadius = int(uint8_t(r.num(S, "DispatchRadius", 4)));
+  p.dispatchEffect = int(uint8_t(r.num(S, "DispatchEffect", police ? 200 : 225)));
+  p.minAcceptableFunding = int(uint8_t(r.num(S, "MinAcceptableFunding", 70)));
+  p.strikeEfficiency = int(uint8_t(r.num(S, "StrikeEfficiency", 20)));
+  p.maxStrikeDuration = int(r.num(S, "MaxStrikeDuration", police ? 800 : 700));
   if (police) {
-    p.maxAcceptable = int(uint8_t(r.num(S, "MaxAcceptableCrime", 255)));
-    p.dailyJailReleaseRate = r.num(S, "DailyJailReleaseRate", 0) * 0.001;
-    p.convictionRate = r.num(S, "ConvictionRate", 0) * 0.001;
-    p.noJailPenalty = r.num(S, "NoJailPenalty", 100) * 0.01;
-    p.maxJailOvercrowding = r.num(S, "MaxJailOvercrowding", 100) * 0.01;
+    p.maxAcceptable = int(uint8_t(r.num(S, "MaxAcceptableCrime", 20)));
+    p.dailyJailReleaseRate = r.num(S, "DailyJailReleaseRate", 18) * 0.001;
+    p.convictionRate = r.num(S, "ConvictionRate", 40) * 0.001;
+    p.noJailPenalty = r.num(S, "NoJailPenalty", 75) * 0.01;
+    p.maxJailOvercrowding = r.num(S, "MaxJailOvercrowding", 120) * 0.01;
   } else {
-    p.maxAcceptable = int(uint8_t(r.num(S, "MaxAcceptableFlam", 255)));
+    p.maxAcceptable = int(uint8_t(r.num(S, "MaxAcceptableFlam", 100)));
   }
   return p;
 }
@@ -335,9 +336,9 @@ void CoverageLayer::parse(const uint8_t* p, size_t n) {
 FlammabilityParams FlammabilityParams::fromIni(const IniFile& f) {
   IniReader r{&f};
   FlammabilityParams p;
-  p.leafBurningBanEffect = int(uint8_t(r.num("FlammabilityLayer", "LeafBurningBanOrdEffect", 0)));
-  p.smokeDetectorsEffect = int(uint8_t(r.num("FlammabilityLayer", "SmokeDetectorsOrdEffect", 0)));
-  p.noWaterEffect = int(uint8_t(r.num("FlammabilityLayer", "NoWaterEffect", 0)));
+  p.leafBurningBanEffect = int(uint8_t(r.num("FlammabilityLayer", "LeafBurningBanOrdEffect", 10)));
+  p.smokeDetectorsEffect = int(uint8_t(r.num("FlammabilityLayer", "SmokeDetectorsOrdEffect", 25)));
+  p.noWaterEffect = int(uint8_t(r.num("FlammabilityLayer", "NoWaterEffect", 25)));
   return p;
 }
 
@@ -418,11 +419,11 @@ CrimeParams CrimeParams::fromIni(const IniFile& f) {
   p.updatePeriod = uint16_t(up) == 0 ? 1 : int(uint16_t(up));
   int64_t pf = r.num(S, "PoliceFactor", 1);
   p.policeFactor = uint16_t(pf) == 0 ? 1 : int(uint16_t(pf));  // zero guarded (defect in original)
-  p.youthCurfew = int16_t(r.num(S, "YouthCurfewOrdEffect", 0));
-  p.gambling = int16_t(r.num(S, "GamblingOrdEffect", 0));
-  p.jrSports = int16_t(r.num(S, "JrSportsOrdEffect", 0));
-  p.neighborhoodWatch = int16_t(r.num(S, "NeighborhoodWatchOrdEffect", 0));
-  p.conservationCorps = int16_t(r.num(S, "ConservationCorpsOrdEffect", 0));
+  p.youthCurfew = int16_t(r.num(S, "YouthCurfewOrdEffect", -8));
+  p.gambling = int16_t(r.num(S, "GamblingOrdEffect", 80));
+  p.jrSports = int16_t(r.num(S, "JrSportsOrdEffect", -8));
+  p.neighborhoodWatch = int16_t(r.num(S, "NeighborhoodWatchOrdEffect", -16));
+  p.conservationCorps = int16_t(r.num(S, "ConservationCorpsOrdEffect", -8));
   for (const auto& kv : f.section("AgentIDModifiers")) {
     int a[2] = {0, 0};
     if (parseFields(kv.second, "%d,%d", a, 2) < 2) continue;   // radius first, amount second
@@ -567,23 +568,23 @@ PollutionParams PollutionParams::fromIni(const IniFile& f, const IniFile* tune, 
   PollutionParams p;
   int64_t up = r.num(S, "UpdatePeriod", 30);
   p.updatePeriod = uint16_t(up) == 0 ? 1 : int(uint16_t(up));
-  p.maxAir = int(r.num(S, "MaxAirPolluteForUI", 0));
+  p.maxAir = int(r.num(S, "MaxAirPolluteForUI", 11000));
   p.maxWater = int(r.num(S, "MaxWaterPolluteForUI", 11000));
-  p.maxGarbage = int(r.num(S, "MaxGarbagePolluteForUI", 0));
-  p.airThreshold = int(r.num(S, "AirPollutedThreshold", 0));
-  p.waterThreshold = int(r.num(S, "WaterPollutedThreshold", 16000));
-  p.garbageThreshold = int(r.num(S, "GarbagePollutedThreshold", 0));
-  auto b = [&](const char* k) { return int(uint8_t(r.num(S, k, 0))); };
-  p.cleanAir = b("CleanAirOrdEffect"); p.trashPresort = b("TrashPresortOrdEffect");
-  p.conservationCorps = b("ConservationCorpsOrdEffect"); p.indPolluteFee = b("IndPolluteFeeOrdEffect");
-  p.lawnChemBan = b("LawnChemBanOrdEffect"); p.tireRecycling = b("TireRecyclingOrdEffect");
-  p.leafBurningBan = b("LeafBurningBanOrdEffect"); p.backyardComposting = b("BackyardCompostingOrdEffect");
-  p.paperReduction = b("PaperReductionOrdEffect"); p.indWasteDisposal = b("IndWasteDisposalOrdEffect");
-  p.landfillGasRecovery = b("LandfillGasRecoveryOrdEffect"); p.carSmogging = b("CarSmoggingOrdEffect");
-  p.trafficAirFactor = int(r.num(S, "TrafficAirFactor", 0));
-  p.garbageAbduction = int(r.num(S, "GarbageAbductionAmount", 0));
+  p.maxGarbage = int(r.num(S, "MaxGarbagePolluteForUI", 30000));
+  p.airThreshold = int(r.num(S, "AirPollutedThreshold", 4000));
+  p.waterThreshold = int(r.num(S, "WaterPollutedThreshold", 2000));
+  p.garbageThreshold = int(r.num(S, "GarbagePollutedThreshold", 1));
+  auto b = [&](const char* k, int d) { return int(uint8_t(r.num(S, k, d))); };   // defaults: shipped SC3Pollution.ini
+  p.cleanAir = b("CleanAirOrdEffect", 10); p.trashPresort = b("TrashPresortOrdEffect", 3);
+  p.conservationCorps = b("ConservationCorpsOrdEffect", 7); p.indPolluteFee = b("IndPolluteFeeOrdEffect", 10);
+  p.lawnChemBan = b("LawnChemBanOrdEffect", 8); p.tireRecycling = b("TireRecyclingOrdEffect", 3);
+  p.leafBurningBan = b("LeafBurningBanOrdEffect", 2); p.backyardComposting = b("BackyardCompostingOrdEffect", 2);
+  p.paperReduction = b("PaperReductionOrdEffect", 2); p.indWasteDisposal = b("IndWasteDisposalOrdEffect", 5);
+  p.landfillGasRecovery = b("LandfillGasRecoveryOrdEffect", 3); p.carSmogging = b("CarSmoggingOrdEffect", 10);
+  p.trafficAirFactor = int(r.num(S, "TrafficAirFactor", 8));
+  p.garbageAbduction = int(r.num(S, "GarbageAbductionAmount", 5000));
   // Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: store ×0.001; query UI only (not disposal).
-  p.garbageScale = r.num(S, "GarbageScalingFactor", 0) * 0.001;
+  p.garbageScale = r.num(S, "GarbageScalingFactor", 100) * 0.001;
   for (const auto& kv : f.section("AgentIDModifiers")) {
     int a[5] = {0, 0, 0, 0, 0};
     if (parseFields(kv.second, "%d:%d,%d:%d,%d", a, 5) < 5) continue;
@@ -593,18 +594,18 @@ PollutionParams PollutionParams::fromIni(const IniFile& f, const IniFile* tune, 
   }
   if (tune) {
     IniReader t{tune};
-    p.treatmentCap = int(t.num("WaterTreatment", "OptimalPollutionCap", 0));
-    p.treatmentMaxLifespan = int(t.num("WaterTreatment", "MaxLifespan", 0));
-    p.treatmentDeclineAge = int(t.num("WaterTreatment", "DeclineAge", 0));
-    p.incineratorCap = int(t.num("Incinerator", "OptimalGarbageCap", 0));
-    p.recyclingPct = int(t.num("RecyclingCenter", "OptimalPctReduction", 0));
-    p.recyclingPopServed = int(t.num("RecyclingCenter", "OptimalPopServed", 0));
-    p.recyclingMaxLifespan = int(t.num("RecyclingCenter", "MaxLifespan", 0));
-    p.recyclingDeclineAge = int(t.num("RecyclingCenter", "DeclineAge", 0));
+    p.treatmentCap = int(t.num("WaterTreatment", "OptimalPollutionCap", 60000));
+    p.treatmentMaxLifespan = int(t.num("WaterTreatment", "MaxLifespan", 840));
+    p.treatmentDeclineAge = int(t.num("WaterTreatment", "DeclineAge", 768));
+    p.incineratorCap = int(t.num("Incinerator", "OptimalGarbageCap", 1500));
+    p.recyclingPct = int(t.num("RecyclingCenter", "OptimalPctReduction", 45));
+    p.recyclingPopServed = int(t.num("RecyclingCenter", "OptimalPopServed", 50000));
+    p.recyclingMaxLifespan = int(t.num("RecyclingCenter", "MaxLifespan", 900));
+    p.recyclingDeclineAge = int(t.num("RecyclingCenter", "DeclineAge", 810));
   }
   if (power) {
     IniReader t{power};
-    p.wteCap = int(t.num("WasteToEnergyPowerPlant", "OptimalGarbageCap", 0));
+    p.wteCap = int(t.num("WasteToEnergyPowerPlant", "OptimalGarbageCap", 1750));
   }
   return p;
 }
@@ -1197,10 +1198,10 @@ void AuraLayer::parse(const uint8_t* p, size_t n, int W, int H) {
 HospitalParams HospitalParams::fromIni(const IniFile& f) {
   IniReader r{&f};
   HospitalParams p;
-  p.beds = uint32_t(r.num("Hospital", "OptimalBedCount", 0));
-  p.doctors = uint32_t(r.num("Hospital", "OptimalDoctorCount", 0));
-  p.hqEffect = std::max(0.001, r.num("Hospital", "OptimalHQEffect", 1) * 0.001);
-  p.upkeep0 = int(r.num("Hospital", "OptimalMonthlyUpkeep", 0));
+  p.beds = uint32_t(r.num("Hospital", "OptimalBedCount", 1500));
+  p.doctors = uint32_t(r.num("Hospital", "OptimalDoctorCount", 100));
+  p.hqEffect = std::max(0.001, r.num("Hospital", "OptimalHQEffect", 120) * 0.001);
+  p.upkeep0 = int(r.num("Hospital", "OptimalMonthlyUpkeep", 50));
   p.maxEfficiencyPct = int(r.num("Hospital", "MaxEfficiency", 120));
   p.mysticalE = r.real("Hospital", "MysticalE", 30.0);
   return p;
@@ -1219,12 +1220,13 @@ HospitalFunding hospitalFunding(const HospitalParams& p, int pct) {
 static SchoolParams loadSchool(const IniFile& f, const char* sec, const char* staffKey) {
   IniReader r{&f};
   SchoolParams p;
-  p.desks = uint32_t(r.num(sec, "OptimalDeskCount", 0));
-  p.staff = uint32_t(r.num(sec, staffKey, 0));
-  p.minAge = int(uint8_t(r.num(sec, "MinAgeServed", 0)));
-  p.maxAge = std::min(89, int(uint8_t(r.num(sec, "MaxAgeServed", 0))));
-  p.eqEffect = std::max(0.001, r.num(sec, "OptimalEQEffect", 1) * 0.001);
-  p.upkeep0 = int(r.num(sec, "OptimalMonthlyUpkeep", 0));
+  const bool col = std::string(sec) == "College";   // defaults: shipped SC3Tune.ini [School] / [College]
+  p.desks = uint32_t(r.num(sec, "OptimalDeskCount", col ? 7500 : 3000));
+  p.staff = uint32_t(r.num(sec, staffKey, col ? 150 : 100));
+  p.minAge = int(uint8_t(r.num(sec, "MinAgeServed", col ? 19 : 6)));
+  p.maxAge = std::min(89, int(uint8_t(r.num(sec, "MaxAgeServed", col ? 24 : 18))));
+  p.eqEffect = std::max(0.001, r.num(sec, "OptimalEQEffect", col ? 250 : 105) * 0.001);
+  p.upkeep0 = int(r.num(sec, "OptimalMonthlyUpkeep", col ? 125 : 30));
   p.maxEfficiencyPct = int(r.num(sec, "MaxEfficiency", 120));
   p.mysticalE = r.real(sec, "MysticalE", 30.0);
   return p;
@@ -1245,11 +1247,12 @@ SchoolFunding schoolFunding(const SchoolParams& p, int pct) {
 static LibraryParams loadLib(const IniFile& f, const char* sec) {
   IniReader r{&f};
   LibraryParams p;
-  p.popServed = uint32_t(r.num(sec, "PopServed", 0));
-  p.minAge = int(uint8_t(r.num(sec, "MinAgeServed", 0)));
-  p.maxAge = int(uint8_t(r.num(sec, "MaxAgeServed", 0)));
-  p.eqEffect = std::max(0.001, r.num(sec, "EQEffect", 1) * 0.001);
-  p.upkeep = int(r.num(sec, "MonthlyUpkeep", 0));
+  const bool mus = std::string(sec) == "Museum";   // defaults: shipped SC3Tune.ini [Library] / [Museum]
+  p.popServed = uint32_t(r.num(sec, "PopServed", mus ? 83000 : 41000));
+  p.minAge = int(uint8_t(r.num(sec, "MinAgeServed", 25)));
+  p.maxAge = int(uint8_t(r.num(sec, "MaxAgeServed", 100)));
+  p.eqEffect = std::max(0.001, r.num(sec, "EQEffect", mus ? 70 : 90) * 0.001);
+  p.upkeep = int(r.num(sec, "MonthlyUpkeep", mus ? 75 : 50));
   return p;
 }
 LibraryParams LibraryParams::library(const IniFile& f) { return loadLib(f, "Library"); }

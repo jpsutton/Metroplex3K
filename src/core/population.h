@@ -16,32 +16,33 @@ constexpr int kAges = 90;
 // SC3ResLayer.ini [TuningParameters], already scaled to their working units.
 // Defaults are best guesses where the spec does not give a shipped value (marked "guess").
 struct PopulationConfig {
-  int externalFunSupply = 0;
+  // Defaults are the shipped SC3ResLayer.ini values (used when a pack omits a key).
+  int externalFunSupply = 25000;
   float newbornPopPct = 0.0136f;          // shipped 136
-  float minNewbornPopPct = 0.0100f;       // guess
-  float maxNewbornPopPct = 0.0180f;       // guess
+  float minNewbornPopPct = 0.0076f;       // shipped 76
+  float maxNewbornPopPct = 0.0196f;       // shipped 196
   float ageCohortDecay = 0.9970f;         // shipped 9970
-  float babyTrendChangeProb = 0.05f;      // guess
-  float eqDecay = 0.9900f;                // guess
-  float hqDecay = 0.9900f;                // guess
-  float optimalYearlyHQ = 1.0f;           // guess (x0.01)
-  float optimalYearlySchoolEQ = 4.0f;     // guess (x0.01)
-  float optimalYearlyCollegeEQ = 4.0f;    // guess (x0.01)
-  float hospitalizationRate = 0.005f;     // guess
-  double pollutionFactor = 1e-6;          // guess (x1e-8)
-  uint8_t ageOfRebellion = 18;            // guess
-  float monthlyYouthCurfewOrdEffect = 0.01f;
-  float monthlyReadingOrdEffectAdult = 0.002f, monthlyReadingOrdEffectChild = 0.02f;
-  float monthlyJrSportsOrdEffect = 0.01f;
-  float monthlyCrossingGuardsOrdEffect = 0.001f, monthlyFreeClinicsOrdEffect = 0.002f,
-        monthlyCPRTrainingOrdEffect = 0.002f, monthlySmokingBanOrdEffect = 0.002f;
-  int youthCurfewMinAge = 12, youthCurfewMaxAge = 17;
-  int readingMinChildAge = 5, readingMaxChildAge = 12;
-  int jrSportsMinAge = 6, jrSportsMaxAge = 17;
-  uint8_t minAcceptableEducationFunding = 80, minAcceptableHealthFunding = 80;
+  float babyTrendChangeProb = 0.20f;      // shipped 2000
+  float eqDecay = 0.9809f;                // shipped 9809
+  float hqDecay = 0.9870f;                // shipped 9870
+  float optimalYearlyHQ = 1.44f;          // shipped 144 (x0.01)
+  float optimalYearlySchoolEQ = 1.26f;    // shipped 126 (x0.01)
+  float optimalYearlyCollegeEQ = 3.0f;    // shipped 300 (x0.01)
+  float hospitalizationRate = 0.05f;      // shipped 500
+  double pollutionFactor = 999e-8;        // shipped 999 (x1e-8)
+  uint8_t ageOfRebellion = 15;            // shipped 15
+  float monthlyYouthCurfewOrdEffect = 0.001f;
+  float monthlyReadingOrdEffectAdult = 0.01f, monthlyReadingOrdEffectChild = 0.02f;
+  float monthlyJrSportsOrdEffect = 0.004f;
+  float monthlyCrossingGuardsOrdEffect = 0.02f, monthlyFreeClinicsOrdEffect = 0.05f,
+        monthlyCPRTrainingOrdEffect = 0.02f, monthlySmokingBanOrdEffect = 0.02f;
+  int youthCurfewMinAge = 1, youthCurfewMaxAge = 21;
+  int readingMinChildAge = 4, readingMaxChildAge = 16;
+  int jrSportsMinAge = 8, jrSportsMaxAge = 16;
+  uint8_t minAcceptableEducationFunding = 70, minAcceptableHealthFunding = 70;
   uint8_t minAcceptableEducationRating = 2, minAcceptableHealthRating = 2;
-  uint8_t educationStrikeEfficiency = 50, healthStrikeEfficiency = 50;   // raw byte, used UNSCALED (defect)
-  uint32_t maxEducationStrikeDuration = 6, maxHealthStrikeDuration = 6;
+  uint8_t educationStrikeEfficiency = 20, healthStrikeEfficiency = 20;   // raw byte, used UNSCALED (defect)
+  uint32_t maxEducationStrikeDuration = 26, maxHealthStrikeDuration = 20;
 
   static PopulationConfig fromIni(const IniFile& resLayer);
 };
