@@ -141,6 +141,12 @@ The ordinance-petition thresholds (`POPULATION_FOR_GAMBLING`, `MAX_GAMBLING_AURA
 any advisor file. They are in `PetitionerManager.ini [PETITIONER_ORDINANCE_TRIGGER_MAPPINGS]`
 (section 5).
 
+Keys that are loaded but never read by any rule or petition (dead data; reproduce by ignoring)
+[STATIC]: `RESIDENTIAL_/COMMERCIAL_/INDUSTRIAL_DEMAND_NEGATIVE`, `INDUSTRIAL_DEMAND_POSITIVE`,
+`HEALTH_FUNDING_*`, `EDUCATION_FUNDING_*`, `COLLEGE_POPULATION_MINIMUM`, `OVERALL_POLLUTION_*`,
+`POWER_FUNDING_*`, `WATER_FUNDING_*`, `WATER_CONSUMPTION_CRITICAL/HIGH`, `WATER_CONSERVATION_YEAR`,
+`POLICE_STATION_RATIO`, `MIN_POWER_SELL`, `MIN_WATER_SELL`, `MIN_GARBAGE_IMPORT`.
+
 No petition chance is configurable. Every petition probability in sections 3.7–3.13 is a constant
 in code.
 
