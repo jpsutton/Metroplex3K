@@ -364,11 +364,10 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
   ui.text(r.x + 20, r.y + 36, head, "title12", ink);
   int textTop = 56;
   if (v.startMode) {
-    const Rect nm = at(146, 44, 181, 17);
-    ui.fill(nm, rgb(255, 255, 255)); ui.frame(nm, false);
-    ui.text(nm.x + 3, nm.y + 2, v.mayor, "main10", 0xFF000000u);
+    if (!mayorInit) { mayorEdit = v.mayor; mayorInit = true; }
+    editField(ui, E, "mayor", at(146, 44, 181, 17), mayorEdit, 0x53434D59, 31);
     textTop = 71;
-  }
+  } else mayorInit = false;
   textBox(ui, E, at(18, textTop, 322, 210 - textTop), v.briefing, scroll);
   presenterPanel(ui, E, at(350, 35, 120, 177), r.x + 364, r.y + 56, r.y + 187, v.presenterAdvisor, v.presenterMood);
   // Goals: one row per goal on a 40 px pitch, a 28 px status icon, the text wrapped on two lines.
@@ -391,8 +390,11 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
     for (size_t k = 0; k < lines.size() && k < 2; k++) ui.text(r.x + 57, y + 4 + int(k) * kPitch, lines[k], "main10", rgb(49, 52, 123));
   }
   if (int(v.goals.size()) > rows) scrollBar(ui, E, {lb.x + lb.w - 16, lb.y, 16, lb.h}, int(v.goals.size()), rows, goalScroll);
-  if (checkButton(ui, E, "ok", at(426, 395, 42, 32))) { R.close = true; R.add(Act::Close); }
-  if (ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
+  const bool done = checkButton(ui, E, "ok", at(426, 395, 42, 32));
+  if (done || ui.in.key[K_ESC]) {
+    if (v.startMode && !mayorEdit.empty()) R.add(Act::ScenarioMayor, 0, 0, 0, mayorEdit);   // the typed name renames the mayor
+    R.close = true; R.add(Act::Close);
+  }
   return R;
 }
 
@@ -403,15 +405,16 @@ WindowResult ScenarioPopupWindow::draw(Ui& ui, const WinEnv& E, const ScenarioPo
   const std::string title = v.presenterAdvisor ? AdvisorWindow::advisorName(E, v.presenterAdvisor) : std::string();
   if (frame(ui, E, r, title.empty() ? "Message" : title)) { R.close = true; R.add(Act::Close); }
   auto at = [&](int x, int y, int w, int h) { return Rect{r.x + x, r.y + y, w, h}; };
+  ui.fill(at(4, 34, r.w - 8, r.h - 38), kPanelFill);   // solid blue behind the margin and the button strip
   const Rect tp = at(23, 41, 236, 150);
-  ui.fill(tp, kPanelFill);
+  ui.fill(tp, kInset);
   if (ui.skin) Skin::drawCell(ui, ui.skin->image(skin_group::Sys, 0x42E55FD4), 4, 1, r.x + 31, r.y + 58);   // the yellow warning triangle (MBIcons cell 1)
   const int lh = kPitch;
   const auto lines = wrap(ui, v.text, 167, "main10");
   const int visible = std::max(1, 138 / lh);
   const bool overflow = int(lines.size()) > visible;
   if (overflow) scrollBar(ui, E, {r.x + 241, tp.y, 16, tp.h}, int(lines.size()), visible, scroll); else scroll = 0;
-  for (int i = 0; i < visible && i + scroll < int(lines.size()); i++) ui.text(r.x + 74, r.y + 51 + i * lh, lines[size_t(i + scroll)], "main10", rgb(0x31, 0x36, 0x7C));
+  for (int i = 0; i < visible && i + scroll < int(lines.size()); i++) ui.text(r.x + 74, r.y + 51 + i * lh, lines[size_t(i + scroll)], "main10", 0xFF000000u);
   presenterPanel(ui, E, at(266, 40, 121, 150), r.x + 281, r.y + 41, r.y + 167, v.presenterAdvisor, v.mood);
   if (checkButton(ui, E, "ok", at(338, 199, 42, 32)) || ui.in.key[K_ENTER] || ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
   return R;

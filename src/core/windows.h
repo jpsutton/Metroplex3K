@@ -87,6 +87,7 @@ enum class Act {
   PlaySound,          // a = sound id (AUDIO.INI number)
   RestartPrompt,      // restart-only setting changed (message 015E410C:18)
   ApplyCityProps,
+  ScenarioMayor,        // text = the mayor name typed in the scenario start dialog
   PickBuilding,       // id = occupant id, a = building type (rewards), text = category
   SelectDataMap,      // a = DataLayer
   CenterView,         // a = x, b = z (tile)
@@ -391,6 +392,7 @@ class CityPropertiesDialog {
 class ScenarioGoalsWindow {
  public:
   int scroll = 0, goalScroll = 0;
+  std::string mayorEdit; bool mayorInit = false;   // the start dialog's editable mayor name
   // The view is built by makeScenarioGoalsView() (windows_scenario.h; separate because scenario.h and
   // news.h cannot be included in one translation unit).
   WindowResult draw(Ui& ui, const WinEnv& E, const ScenarioGoalsView& v);

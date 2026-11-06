@@ -1,4 +1,5 @@
 #include "core/script.h"
+#include "core/script_coro.h"
 #include "testutil.h"
 using namespace m3k;
 
@@ -49,6 +50,24 @@ static ScriptArg L(int32_t v) { return {0, v}; }
 static ScriptArg V(int32_t v) { return {1, v}; }
 
 static const Script* noLookup(void*, uint32_t) { return nullptr; }
+
+static void testCoroutine() {
+  std::vector<int> log;
+  {
+    ScriptCoroutine co;
+    co.run([&] { log.push_back(1); co.yield(); log.push_back(2); co.yield(); log.push_back(3); });
+    CHECK(log == std::vector<int>({1}) && co.suspended());
+    co.run([&] { log.push_back(99); });   // ignored while suspended
+    CHECK(log.size() == 1);
+    co.resume(); CHECK(log == std::vector<int>({1, 2}) && co.suspended());
+    co.resume(); CHECK(log == std::vector<int>({1, 2, 3}) && !co.suspended());
+    co.run([&] { log.push_back(4); }); CHECK(log.back() == 4 && !co.suspended());   // reusable
+    co.yield();                                                                 // on the caller: no effect
+    CHECK(!co.suspended());
+    co.run([&] { log.push_back(5); co.yield(); log.push_back(6); });            // destroyed while suspended: unwinds without running on
+  }
+  CHECK(log.back() == 5);
+}
 
 int main() {
   {
@@ -271,5 +290,6 @@ int main() {
     // an unknown command evaluates to 0
     CHECK(in4.run(mk({C(200, {})})) == 0);
   }
+  testCoroutine();
   TEST_MAIN_END();
 }

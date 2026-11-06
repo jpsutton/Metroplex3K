@@ -50,6 +50,9 @@ class ScenarioController {
   bool started() const;
   bool resumed() const;   // the file carried saved scenario state (a city saved mid-scenario)
   void setPopupOpen(bool open);
+  bool scriptWaiting() const;   // the script is suspended inside a pop-up command
+  void setMayor(const std::string& m);   // %MAYOR% / %YOURNAME% in scenario text
+  void popupClosed();           // the player closed the pop-up: the script continues (and may queue the next one)
   ScenarioGoalsView goalsView() const;
   struct Outcome {
     bool ended = false, win = false; int rank = -1; std::string rankTitle, text; int goalsMet = 0, goalsTotal = 0;

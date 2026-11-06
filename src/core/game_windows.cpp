@@ -540,8 +540,10 @@ void Game::drawWindows(uint32_t dtMs) {
   drawQueryPopup();
   if (!scenPopups_.empty()) {   // scenario pop-ups: one at a time in the same place, until OK or the close box
     WindowResult pr = scenPopupWin_.draw(ui_, E, scenPopups_.front());
-    if (pr.close) { scenPopups_.pop_front(); scenPopupWin_.scroll = 0; }
-    if (scen_) scen_->setPopupOpen(!scenPopups_.empty());
+    if (pr.close) {
+      scenPopups_.pop_front(); scenPopupWin_.scroll = 0;
+      if (scen_ && scenPopups_.empty()) scen_->popupClosed();   // the script was suspended inside the command: it continues now
+    }
   }
 
   // Modal.
@@ -713,6 +715,9 @@ void Game::handleWindowResult(const WindowResult& r) {
         msgBoxPurpose_ = 1;
         break;
       }
+      case Act::ScenarioMayor:   // the start dialog's mayor-name field
+        if (!e.text.empty()) { world_.info.mayorName = e.text; if (scen_) scen_->setMayor(e.text); dirty_ = true; }
+        break;
       case Act::ApplyCityProps: {
         const CityPropsState& s = propsState_;
         world_.info.cityName = s.name; world_.info.mayorName = s.mayor;

@@ -1,4 +1,5 @@
 #include "core/game_scenario.h"
+#include "core/script_coro.h"
 #include <algorithm>
 #include "core/scenario.h"
 #include "core/windows_scenario.h"
@@ -31,11 +32,31 @@ struct Stats : ICityStats {
   int32_t unwateredBuildings() const override { return 0; }
   GameDate date() const override { auto d = c->clock.date(); GameDate g; g.day = d.day; g.month = d.month; g.year = d.year; return g; }
   void mapSize(int& W, int& H) const override { W = w() ? w()->W : 0; H = w() ? w()->H : 0; }
-  int32_t countStructures(uint32_t id) const override {
-    int n = 0; if (w()) for (const auto& o : w()->occupants) if (o.occId == id) n++; return n;
+  // The argument of cmdCountStructures / cmdCountStructuresNearLocation is an AGENT TYPE; a parent type matches its subtypes (spec 23).
+  // Sources are tried while the count is 0: occupants, then network pieces (a third source, probably flora and props, is not modelled).
+  int countType(uint32_t type, int x0, int z0, int x1, int z1) const {
+    if (!w()) return 0;
+    const auto& hier = c->agentHierarchy();
+    int n = 0;
+    for (const auto& o : w()->occupants)
+      if (o.x >= x0 && o.x <= x1 && o.z >= z0 && o.z <= z1 && hier.isAncestorOrSelf(o.agentType, type)) n++;
+    if (n) return n;
+    NetworkKind k = NetworkKind::Road; bool known = true;
+    switch (type) { case 16000: k = NetworkKind::Road; break; case 16001: k = NetworkKind::Highway; break; case 17000: k = NetworkKind::Rail; break;
+                    case 17100: k = NetworkKind::Power; break; default: known = false; }
+    if (known)
+      for (const auto& p : w()->surface)
+        if (p.x >= x0 && p.x <= x1 && p.z >= z0 && p.z <= z1 && c->pieceInKind(p.pieceId, k)) n++;
+    return n;
   }
-  int32_t countStructuresNear(uint32_t id, int x, int z, int r) const override {
-    int n = 0; if (w()) for (const auto& o : w()->occupants) if (o.occId == id && std::abs(o.x - x) <= r && std::abs(o.z - z) <= r) n++; return n;
+  int32_t countStructures(uint32_t type) const override { return w() ? countType(type, 0, 0, w()->W, w()->H) : 0; }
+  int32_t countStructuresNear(uint32_t type, int x, int z, int r) const override {
+    if (!w()) return 0;
+    // Script coordinates are 1-based; one above the map size becomes 0. The rectangle is [centre - r, centre + r], clamped to the map.
+    int cx = x - 1, cz = z - 1;
+    if (cx > w()->W) cx = 0;
+    if (cz > w()->H) cz = 0;
+    return countType(type, std::max(0, cx - r), std::max(0, cz - r), std::min(w()->W, cx + r), std::min(w()->H, cz + r));
   }
   int32_t countAppearance(uint32_t, uint32_t, uint32_t) const override { return 0; }
   int32_t countAppearanceNear(uint32_t, uint32_t, uint32_t, int, int, int) const override { return 0; }
@@ -56,6 +77,7 @@ struct Stats : ICityStats {
 
 struct Host : IScenarioHost {
   ScenarioHooks* h = nullptr;
+  ScriptCoroutine* co = nullptr;   // the script suspends inside cmdPopUpMsg until the player closes the pop-up
   std::function<std::string(uint32_t, uint32_t)> resolve;
   ScenarioFile* file = nullptr;
   void popUp(const PopUpRequest& r) override {
@@ -63,6 +85,7 @@ struct Host : IScenarioHost {
     std::string t = resolve ? resolve(r.group, r.id) : std::string();
     uint32_t adv = r.presenter ? uint32_t(r.presenter) : (file ? file->header.effectivePresenter() : kAdvisorUtilities);
     h->popUp(t, advisorIndex(adv), adv, r.mood ? r.mood : 3, r.important != 0);
+    if (co) co->yield();   // resumes after the OK (ScenarioController::popupClosed)
   }
   void newsTicker(uint32_t g, uint32_t id) override {
     if (!h || !h->ticker) return;
@@ -90,6 +113,7 @@ struct ScenarioController::Impl {
   Stats stats;
   Host host;
   std::unique_ptr<ScenarioRuntime> rt;
+  ScriptCoroutine co;   // declared after rt: destroyed first, so a suspended script unwinds before the runtime goes
   City* city = nullptr;
   std::string mayor, cityName;
   std::string res(uint32_t g, uint32_t id) const {
@@ -142,14 +166,18 @@ void ScenarioController::start(City& city, const std::string& mayor, const std::
   p_->hooks = std::move(hooks);
   p_->city = &city; p_->mayor = mayor; p_->cityName = cityName;
   p_->stats.c = &city;
-  p_->host.h = &p_->hooks; p_->host.file = &p_->file;
+  p_->host.h = &p_->hooks; p_->host.file = &p_->file; p_->host.co = &p_->co;
   p_->host.resolve = [this](uint32_t g, uint32_t id) { return p_->res(g, id) .empty() ? std::string() : expandScenarioTokens(p_->res(g, id), p_->ctx()); };
   p_->rt.reset(new ScenarioRuntime(p_->file, p_->stats, p_->host, 1));
-  p_->rt->start();
+  p_->co.run([this] { p_->rt->start(); });
 }
 
-void ScenarioController::dayTick() { if (p_->rt) p_->rt->dayTick(); }
-void ScenarioController::minuteTick() { if (p_->rt) p_->rt->minuteTick(); }
+// A script blocked in a pop-up ignores ticks until the player closes it; every pass runs on the coroutine so that the pop-up command can suspend it.
+void ScenarioController::dayTick() { if (p_->rt && !p_->co.suspended()) p_->co.run([this] { p_->rt->dayTick(); }); }
+void ScenarioController::minuteTick() { if (p_->rt && !p_->co.suspended()) p_->co.run([this] { p_->rt->minuteTick(); }); }
+bool ScenarioController::scriptWaiting() const { return p_->co.suspended(); }
+void ScenarioController::popupClosed() { p_->co.resume(); }
+void ScenarioController::setMayor(const std::string& m) { p_->mayor = m; }
 bool ScenarioController::active() const { return p_->rt && p_->rt->active(); }
 bool ScenarioController::started() const { return p_->rt != nullptr; }
 bool ScenarioController::resumed() const { return p_->loaded && p_->file.hasState; }
