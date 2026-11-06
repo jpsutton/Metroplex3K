@@ -1665,8 +1665,11 @@ at a fixed position (§6.0).
   (`1E5`) is drawn in orange at the top of the band.
 * The plot background is horizontal stripes in alternating pinks. The band colour is about (231, 199, 198).
 * Bars (observed, Berlin): one bar per 5-year age bucket, 15 bars from age 0–4 to 70–74. Each bar
-  is 7 px wide in green (0, 211, 140) with a 1 px outline (173, 178, 222) on each side. The first
-  bar fill starts at x = 149 and the pitch is 13 px. Bars rise from the x axis at y = 205; their
+  is a green (0, 211, 140) fill with a 1 px outline (173, 178, 222) on each side. The pitch is
+  13 px, but the bars are not uniform [OBSERVED, all three bar pages, 800×600]: with k = 0..14 the
+  right outline is at x = 156 + 13k (window-local) and the left outline at 148 + 13k for k < 3 but
+  147 + 13k for k ≥ 3, so the first three fills are 7 px wide (from x = 149) and the rest 8 px.
+  Bars rise from the x axis at y = 205; their
   height is about value × 142 / 140, since the 140 label sits at y ≈ 63. The axis scale is fixed at
   0–140 [INFERRED from one city].
 * Captions: centred at x ≈ 225. The first line, y ≈ 249, is dark blue and bold (`1E2`). The second,
@@ -1681,7 +1684,9 @@ at a fixed position (§6.0).
   band and the 15 green bars. Only the y axis, its caption and the two caption lines change.
   * Health: y axis 0–90 in steps of 10. Axis caption "Health" is a single vertical line. Captions:
     "Population Life Expectancy = 87 Years" and "Workforce Life Expectancy = 88 Years".
-  * Population: y axis 0, 5, 10 (people per age bucket in thousands [INFERRED]). Axis caption
+  * Population: y axis 0, 5, 10, the **percentage of the population in each age bucket**
+    [INFERRED: the 15 observed bars of Berlin sum to about 97–100]. The scale is about 10.2 px per
+    unit (0 at y ≈ 204, 10 at y ≈ 102, window-local), so the plot top is about 15 %. Axis caption
     "Population" is a single vertical line. Captions: "Total Population = 794,278" and
     "Workforce = 65% of Population".
   * Education: the axis caption "Education Quotient" is two vertical lines (text rotated 90°, read
