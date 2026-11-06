@@ -50,6 +50,15 @@ int Font::measure(const std::string& s) const {
   return std::max(best, x);
 }
 
+int Font::inkTop(unsigned char c) const {
+  if (atlas_.empty()) return 0;
+  const Glyph& g = g_[c];
+  for (int gy = g.t; gy < g.b; gy++)
+    for (int gx = g.l; gx < g.r; gx++)
+      if (gy >= 0 && gy < h_ && gx >= 0 && gx < w_ && atlas_[size_t(gy) * w_ + gx] != atlas_[0]) return gy - g.t;
+  return 0;
+}
+
 void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::string& s, uint32_t col, int pitch, bool overlay) const {
   if (!loaded() || !fb) return;
   if (pitch <= 0) pitch = fbW;

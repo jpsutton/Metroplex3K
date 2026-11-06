@@ -17,6 +17,7 @@ class Font {
   // Build the built-in fallback font at integer scale (1 = 5x7 in a 6x8 cell).
   void makeBuiltin(int scale);
   int height() const { return glyphH_; }
+  int inkTop(unsigned char c) const;   // first row of glyph c that has ink, relative to the glyph's top (0 when unknown)
   int measure(const std::string& s) const;
   // Draw text with top-left at (x,y) into an RGBA framebuffer. Mono/AA fonts use `colour`.
   // `pitch` is pixels per row (0 = fbW).

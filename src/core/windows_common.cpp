@@ -664,15 +664,22 @@ WindowResult CreditsWindow::draw(Ui& ui, const WinEnv& E) {
   const Image* logo = E.img(0x82B9B75C, 0x22729940);
   const uint32_t ink = rgb(255, 223, 148);
   const int pitch = 58, left = ox + 127, right = ox + 672;
+  // The cap height of "D" is 17 rows and the cap top of the first line sits at y 339 when the text origin is `capTop - inkTop('D')` [OBSERVED].
+  const int topPad = ui.fonts->get("serif17").inkTop('D');
+  // The text fades in over y 505..535 and out over y 200..230 (linear, towards the picture) [OBSERVED]; it is drawn whole and blended back per row afterwards.
+  const int bandY0 = 0, bandY1 = ui.H;   // whole frame: text outside y 200..535 is removed again
+  std::vector<uint32_t> saved;
+  for (int y = std::max(0, bandY0); y < bandY1; y++) for (int x = 0; x < ui.W; x++) saved.push_back(ui.at(x, y));
   int totalLines = 0;
   for (auto& row : rows) totalLines += row.lineCount();
-  const double total = double(totalLines) * pitch + 600;
+  const double total = double(totalLines) * pitch + 530;
   if (scroll > total) scroll = 0;
   int line = 0;
   for (auto& row : rows) {
-    const int y0 = oy + 600 + int(std::lround(double(line) * pitch - scroll));
+    const int capTop = oy + 530 + int(std::lround(double(line) * pitch - scroll));   // lines enter at about y 530
+    const int y0 = capTop - topPad;
     line += row.lineCount();
-    if (y0 + pitch * row.lineCount() < 0 || y0 > ui.H) continue;
+    if (capTop + pitch * row.lineCount() < 0 || capTop > ui.H) continue;
     switch (row.kind) {
       case Row::Blank: break;
       case Row::Heading: case Row::Centered: ui.text(ox + 400 - ui.textWidth(row.left, "serif17") / 2, y0, row.left, "serif17", ink); break;
@@ -682,7 +689,19 @@ WindowResult CreditsWindow::draw(Ui& ui, const WinEnv& E) {
         break;
     }
   }
-  if (logo) ui.blit(*logo, (ui.W - logo->w) / 2, oy + logoY);
+  for (int y = std::max(0, bandY0); y < bandY1; y++) {
+    const int ry = y - oy;
+    const double a = std::max(0.0, std::min(1.0, std::min(double(ry - 200), double(535 - ry)) / 30.0));
+    for (int x = 0; x < ui.W; x++) {
+      const uint32_t bg = saved[size_t(y - std::max(0, bandY0)) * size_t(ui.W) + size_t(x)];
+      uint32_t& d = ui.at(x, y);
+      if (a >= 1.0) continue;
+      if (a <= 0.0) { d = bg; continue; }
+      auto mixc = [&](int sh) { return uint32_t(std::lround(double((bg >> sh) & 255) + double(int((d >> sh) & 255) - int((bg >> sh) & 255)) * a)) & 255; };
+      d = (d & 0xFF000000u) | (mixc(16) << 16) | (mixc(8) << 8) | mixc(0);
+    }
+  }
+  if (logo) ui.blit(*logo, (ui.W - logo->w) / 2, oy + 20);
   if (ui.in.key[K_ESC] || ui.in.pressed) R.close = true;
   return R;
 }
