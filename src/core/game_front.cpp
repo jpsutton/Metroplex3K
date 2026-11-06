@@ -135,6 +135,9 @@ void Game::attachWorld() {
   cam_.zoom = world_.view.valid ? std::max(0, std::min(4, world_.view.zoom)) : 2;
   cam_.rot = world_.view.valid ? (world_.view.rotation & 3) : 0;
   renderer_.centreOnWorld(cam_, world_.view.valid ? world_.view.centreX : world_.W / 2.f, world_.view.valid ? world_.view.centreZ : world_.H / 2.f);
+  // The original's load view sits 1 altitude step (16 px at zoom 4, i.e. (0.25, 0.25) view tiles at any zoom) further down the map than the saved centre
+  // gives here [OBSERVED on Berlin at the load camera; the cause is unknown, the correction is empirical].
+  if (world_.view.valid) { cam_.u += 0.25f; cam_.v += 0.25f; }
   invalidateCityView();
   scene_ = RenderScene();
   hoverValid_ = false;
