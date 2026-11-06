@@ -77,6 +77,15 @@ uint32_t plantOutput(uint32_t cap, int age, int lmax, int ld) {
   return cap;
 }
 
+int windSiteCapacity(int cap, int x, int z, int W, int H, const std::function<int(int, int)>& h) {
+  if (!h) return cap;
+  const double h0 = h(x, z);
+  const double n = (x < W - 2 ? h(x + 2, z) : h0) + (z < H - 2 ? h(x, z + 2) : h0) + (x > 0 ? h(x - 1, z) : h0) + (z > 0 ? h(x, z - 1) : h0);
+  const double f = std::max(-1.0, std::min(1.0, (h0 - n * 0.25) / 2.5));
+  const int base = int(cap * 0.4);
+  return int(base + (cap - base) * (f + 1.0) * 0.5);
+}
+
 void rollLifespan(const PlantTunables& t, SimRng& rng, int& lmax, int& ld) {
   if (t.variationPct == 0) {
     lmax = t.maxLife; ld = t.declineAge;
@@ -260,12 +269,14 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
   std::fill(powered_.begin(), powered_.end(), 0);
   for (auto c : cons_) if (c) stats_.consumerTiles++;
 
+  applySiteFactors(env);
+
   // Per-plant step (spec 16 §2.6 step 4 / Q-BW [STATIC]).
   std::vector<int> explode;
   for (auto& p : plants_) {
     int age = env.nowAbsMonth - p.buildAbsMonth;
     // Expired: same agent type kept; only recompute O (age ≥ Lmax → 0). City sets lot state 8.
-    if (p.expired) { p.output = int(plantOutput(uint32_t(p.capacity), age, p.lmax, p.ld)); continue; }
+    if (p.expired) { p.output = int(plantOutput(uint32_t(p.effCap()), age, p.lmax, p.ld)); continue; }
     uint32_t r = rng.randInt(uint32_t(params_.minOverwork), uint32_t(params_.maxOverwork));
     if (int64_t(r) < int64_t(p.overwork)) {
       explode.push_back(p.id);
@@ -277,7 +288,7 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
       p.expired = true;
       events.push_back({PlantEvent::Retired, p.id, p.agentType, p.x, p.z});
     }
-    p.output = int(plantOutput(uint32_t(p.capacity), age, p.lmax, p.ld));
+    p.output = int(plantOutput(uint32_t(p.effCap()), age, p.lmax, p.ld));
   }
   for (int id : explode) removePlant(id);
 
@@ -316,7 +327,15 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
   return events;
 }
 
+void PowerLayer::applySiteFactors(const PowerEnv& env) {
+  for (auto& p : plants_)
+    if (p.agentType == 12118) p.siteCap = windSiteCapacity(p.capacity, p.x, p.z, W_, H_, env.terrainHeight);
+}
+
 void PowerLayer::recomputeCoverage(const PowerEnv& env, bool rollover) {
+  applySiteFactors(env);
+  for (auto& p : plants_)
+    if (p.agentType == 12118 && !p.expired) p.output = int(plantOutput(uint32_t(p.effCap()), std::max(0, env.nowAbsMonth - p.buildAbsMonth), p.lmax, p.ld));
   consPct_ = env.ordinances.active(ord::PowerConservation);
   stairPct_ = env.ordinances.active(ord::StairwellLighting);
   // Neighbour deals take part as in the monthly update (a loaded Moscow otherwise browns out until the first month start).

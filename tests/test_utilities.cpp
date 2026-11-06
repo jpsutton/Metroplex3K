@@ -40,6 +40,18 @@ static void testPlantMath() {
   CHECK(plantOutput(100, 301, 600, 300) == 100 - (100 * 1 / 300));
   CHECK(plantOutput(100, 600, 600, 300) == 0);
   CHECK(plantOutput(100, 900, 600, 300) == 0);
+  {  // wind site factor (spec 16 2.4): flat 140, a peak (h0 5 above its neighbours) 200, a pit 80, edges count as h0
+    auto flat = [](int, int) { return 10; };
+    CHECK(windSiteCapacity(200, 5, 5, 64, 64, flat) == 140);
+    CHECK(windSiteCapacity(200, 0, 0, 64, 64, flat) == 140);
+    auto peak = [](int x, int z) { return x == 5 && z == 5 ? 15 : 10; };
+    CHECK(windSiteCapacity(200, 5, 5, 64, 64, peak) == 200);
+    auto pit = [](int x, int z) { return x == 5 && z == 5 ? 5 : 10; };
+    CHECK(windSiteCapacity(200, 5, 5, 64, 64, pit) == 80);
+    auto slope = [](int x, int) { return x == 5 ? 11 : 10; };   // n = 10 + 11 + 10 + 11, f = (11 - 10.5) / 2.5 = 0.2 -> 80 + 120 * 0.6 = 152
+    CHECK(windSiteCapacity(200, 5, 5, 64, 64, slope) == 152);
+    CHECK(windSiteCapacity(200, 5, 5, 64, 64, nullptr) == 200);
+  }
   PlantTunables t; t.maxLife = 600; t.declineAge = 300; t.variationPct = 0;
   SimRng r(1);
   int lm, ld;

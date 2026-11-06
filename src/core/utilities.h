@@ -40,6 +40,8 @@ struct PlantState {
   uint32_t agentType = 0;
   int x = 0, z = 0;
   int capacity = 0, output = 0, load = 0;
+  int siteCap = -1;                                  // capacity after the site factor (wind), -1 = capacity
+  int effCap() const { return siteCap >= 0 ? siteCap : capacity; }
   uint16_t overwork = 0;
   int buildAbsMonth = 0;
   int lmax = 1, ld = 0;
@@ -48,6 +50,9 @@ struct PlantState {
 
 // Output with age (spec 2.4), unsigned arithmetic.
 uint32_t plantOutput(uint32_t cap, int age, int lmax, int ld);
+// Wind turbine site factor (spec 16 s2.4) [STATIC]: h0 = h(x,z); n = h(x+2,z) + h(x,z+2) + h(x-1,z) + h(x,z-1), a missing neighbour counting as
+// h0; f = clamp((h0 - n/4) / 2.5, -1, 1); base = trunc(0.4 cap); capacity = trunc(base + (cap - base)(f + 1)/2). 140 on flat ground for cap 200.
+int windSiteCapacity(int cap, int x, int z, int W, int H, const std::function<int(int, int)>& h);
 // Lifespan randomisation (spec 2.3). Writes lmax/ld.
 void rollLifespan(const PlantTunables& t, SimRng& rng, int& lmax, int& ld);
 
@@ -68,6 +73,7 @@ struct PowerEnv {
   OrdinanceSet ordinances;
   int nowAbsMonth = 0;
   std::vector<PowerDeal> deals;                      // at most 4 are used
+  std::function<int(int, int)> terrainHeight;        // height byte at (x, z), for the wind turbines' site factor (null = flat)
 };
 
 struct PlantEvent {
@@ -89,6 +95,7 @@ class PowerLayer {
   PowerLayer() = default;
   PowerLayer(int W, int H, PowerParams p) { init(W, H, std::move(p)); }
   void init(int W, int H, PowerParams p);
+  void applySiteFactors(const PowerEnv& env);   // wind turbines' terrain factor
 
   int addPlant(int x, int z, uint32_t agentType, int buildAbsMonth, SimRng& rng);  // returns id (-1 if unknown type)
   void restorePlant(const PlantState& p) { plants_.push_back(p); if (p.id >= nextId_) nextId_ = p.id + 1; }

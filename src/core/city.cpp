@@ -2399,6 +2399,7 @@ us::PowerEnv City::powerEnv(std::vector<uint8_t>& conductive) const {
   env.conductive = &conductive;
   env.ordinances = usOrdinances();
   env.nowAbsMonth = absMonthOf(clock);
+  env.terrainHeight = [this](int x, int z) { return int(world_->altAt(x, z)); };
   // Neighbour slots (spec 16 s2.6 step 2, s2.7 steps 3-4) [STATIC]: one per neighbour with a power-line connection,
   // seeded at a connection tile; a buy deal (kind 0) gives the slot 1,000,000,000 (unlimited), otherwise 0. A component
   // reaching any connection tile has an active slot and loses the 10% margin, deal or not (Madrid: the main network's
