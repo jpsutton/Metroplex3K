@@ -402,7 +402,7 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   if (nm.empty()) nm = o->name;
   if (nm.empty()) nm = "Building " + std::to_string(o->agentType);
   q.name = nm;
-  const uint32_t ostate = o->state & ~0x200u;   // bit 0x200 = protected (Make Historical) [INFERRED, spec 13 3]
+  const uint32_t ostate = o->state & ~0x300u;   // bit 0x200 = protected (Make Historical) [INFERRED, spec 13 3]
   q.historical = (o->state & 0x200u) != 0;
   switch (ostate) {
     case 2: q.status |= QsAbandoned; break;

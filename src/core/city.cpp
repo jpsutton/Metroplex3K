@@ -317,6 +317,7 @@ class GrowthAdapter : public growth::GrowthCity {
     static const bool envOff = env && env[0] == '0';
     return c_.cfg_.useTripFailure && !envOff && c_.traffic && c_.traffic->tripResult(x, z) == 1;
   }
+  bool garbagePolluted(int x, int z) const override { return !c_.pollution.standing.empty() && c_.pollution.garbagePolluted(x, z); }
   int airPollution(int x, int z) const override { return c_.pollution.airAt(x, z); }
   int waterPollution(int x, int z) const override { return c_.pollution.waterAt(x, z); }
   bool ordinanceEnacted(uint32_t id) const override { return c_.ordinances.enacted(id); }
@@ -422,7 +423,7 @@ class LandValueAdapter : public growth::LandValueCity {
   // Static occupant set for the modifier maps (spec 15 s6.4 step 2): buildings (occupied: state 1 or 513), network pieces
   // and flora (no lot state, always counted) [INFERRED medium-high for pieces and flora].
   void occupants(std::vector<growth::LvOccupant>& out) const override {
-    for (const auto& o : c_.world_->occupants) out.push_back({o.x, o.z, o.sizeX, o.sizeZ, o.agentType, (o.state & ~0x200u) == 1});
+    for (const auto& o : c_.world_->occupants) out.push_back({o.x, o.z, o.sizeX, o.sizeZ, o.agentType, (o.state & ~0x300u) == 1});
     if (c_.game_)
       for (const auto* net : {&c_.world_->surface, &c_.world_->pipes, &c_.world_->subway})
         for (const auto& p : *net)
@@ -1022,7 +1023,7 @@ int City::addOccupant(const Occupant& o) {
 void City::damageOccupant(int i, uint32_t st) {
   if (i < 0 || i >= int(world_->occupants.size())) return;
   Occupant& o = world_->occupants[size_t(i)];
-  const uint32_t b = o.state & ~0x200u;
+  const uint32_t b = o.state & ~0x300u;
   if ((b == 1 || b == 4) && st != o.state) zones.buildingRemoved(o.agentType, o.sizeX, o.sizeZ, b);
   o.state = st;
   occDirty_ = true;
@@ -1695,7 +1696,7 @@ std::vector<us::SimOccupant> City::powerConsumers() const {
     // Only occupied lots (state 1 / 513) consume [DATA, clean side: Σ 0xC9 over state-1 lots equals the shipped consumed
     // total in Berlin 158,275 vs 158,254, Craterville 49,344 vs 49,192, London 0.9 x 127,580 vs 114,858, Madison 38,328 vs
     // 38,303; with abandoned and under-construction lots included every city is 2-12% over].
-    if ((o.state & ~0x200u) != 1) continue;
+    if ((o.state & ~0x300u) != 1) continue;
     const OccAttr* a = game_->occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT);
     int use = a && a->powerAttr > 0 ? a->powerAttr : 0;
     if (use <= 0) continue;
@@ -1717,7 +1718,7 @@ std::vector<us::SimOccupant> City::powerConsumers() const {
 std::vector<us::SimOccupant> City::simOccupants(bool operatingOnly) const {
   std::vector<us::SimOccupant> v;
   for (const auto& o : world_->occupants) {
-    if (operatingOnly && (o.state & ~0x200u) != 1) continue;
+    if (operatingOnly && (o.state & ~0x300u) != 1) continue;
     us::SimOccupant s;
     s.id = o.occId; s.agentType = o.agentType; s.group = o.agentType;
     s.x = o.x; s.z = o.z; s.sizeX = o.sizeX; s.sizeZ = o.sizeZ;
@@ -1740,7 +1741,7 @@ void City::syncFacilities() {
   std::set<std::pair<int, int>> plants, wf, st;
   for (const auto& o : world_->occupants) {
     std::pair<int, int> key{o.x, o.z};
-    const uint32_t lot = o.state & ~0x200u;
+    const uint32_t lot = o.state & ~0x300u;
     // Spec 16 §2.6 / Q-BW [STATIC]: expired plants stay on the map at lot state 8; keep them in the layer.
     if (us::powerCategory(o.agentType) >= 0 && (lot == 1 || lot == 8)) {
       plants.insert(key);
@@ -1797,7 +1798,7 @@ void City::syncFacilities() {
   }
   // Water facilities can also be expired at lot state 8 (Q-BW); keep them tracked like plants.
   for (const auto& o : world_->occupants) {
-    if ((o.state & ~0x200u) != 8) continue;
+    if ((o.state & ~0x300u) != 8) continue;
     if (o.agentType != kAgentPump && o.agentType != kAgentTower && o.agentType != kAgentDesal) continue;
     std::pair<int, int> key{o.x, o.z};
     wf.insert(key);
@@ -2118,7 +2119,7 @@ std::string City::debugStats() const {
     uint32_t k = oc.agentType / 1000;
     int c = k == 3 ? 0 : k == 5 ? 1 : k == 8 ? 2 : -1;
     if (c < 0) continue;
-    int st = (oc.state & ~0x200u) == 1 ? 0 : (oc.state & ~0x200u) == 2 ? 1 : (oc.state & ~0x200u) == 4 ? 2 : 3;
+    int st = (oc.state & ~0x300u) == 1 ? 0 : (oc.state & ~0x300u) == 2 ? 1 : (oc.state & ~0x300u) == 4 ? 2 : 3;
     cnt[c][st]++;
     if (power.powered(oc.x, oc.z)) poweredN++;
   }
@@ -2160,7 +2161,7 @@ void City::monthlyWorld() {
 int City::countResidents() const {
   int residents = 0;
   for (const auto& o : world_->occupants) {
-    if ((o.state & ~0x200u) != 1) continue;
+    if ((o.state & ~0x300u) != 1) continue;
     if (const auto* items = cfg_.valve.effectsFor(o.agentType))
       for (const auto& vi : *items) if (vi.valve == growth::kValveRes) residents += vi.supply * o.sizeX * o.sizeZ;
   }
@@ -2173,7 +2174,7 @@ std::vector<growth::ValveBuilding> City::valveBuildings() const {
   for (const auto& o : world_->occupants) {
     growth::ValveBuilding b;
     b.agentType = o.agentType; b.x = o.x; b.z = o.z; b.sizeX = o.sizeX; b.sizeZ = o.sizeZ;
-    b.operating = (o.state & ~0x200u) == 1;   // states 1 and 513 count (spec 15 s3.3) [STATIC]
+    b.operating = (o.state & ~0x300u) == 1;   // states 1 and 513 count (spec 15 s3.3) [STATIC]
     out.push_back(b);
   }
   return out;
@@ -2231,7 +2232,7 @@ void City::monthlyPopulation() {
       in.education.push_back(f);
     };
     for (const auto& o : world_->occupants) {
-      if ((o.state & ~0x200u) != 1) continue;
+      if ((o.state & ~0x300u) != 1) continue;
       switch (o.agentType) {
         case 13010: { auto f = us::schoolFunding(sp, in.educationFunding); edu(EduKind::School, float(sp.desks), f.effect, sp.minAge, sp.maxAge, uint32_t(f.staff)); break; }
         case 13873: { auto f = us::schoolFunding(cp, in.educationFunding); edu(EduKind::College, float(cp.desks), f.effect, cp.minAge, cp.maxAge, uint32_t(f.staff)); break; }
@@ -2268,7 +2269,7 @@ void City::monthlyTraffic() {
                   subRail = t.num("SubwayRailStation", "OptimalMonthlyUpkeep", 0), subStn = t.num("SubwayStation", "OptimalMonthlyUpkeep", 0);
     int64_t up = 0;
     for (const auto& o : world_->occupants) {
-      if ((o.state & ~0x200u) != 1) continue;
+      if ((o.state & ~0x300u) != 1) continue;
       switch (o.agentType) { case 12210: up += bus; break; case 12230: up += railStn; break; case 12361: up += subRail; break; case 12360: up += subStn; break; default: break; }
     }
     in.stationUpkeep = int(up);
@@ -2423,7 +2424,7 @@ void City::monthlyWater() {
   // Buildings with a needs-water mark: in practice lot states 1 and 4 (spec 16 s3.4 "Needs-water marks").
   auto consumers = simOccupants(false);
   consumers.erase(std::remove_if(consumers.begin(), consumers.end(), [](const us::SimOccupant& o) {
-                    const uint32_t b = o.state & ~0x200u; return b != 1 && b != 4; }), consumers.end());
+                    const uint32_t b = o.state & ~0x300u; return b != 1 && b != 4; }), consumers.end());
   us::WaterEnv env;
   env.nowAbsMonth = absMonthOf(clock);
   env.pipes = &pipes;
@@ -2444,7 +2445,7 @@ void City::monthlyWater() {
     if (!f.expired) continue;
     int oi = occupantAt(f.x, f.z);
     if (oi < 0) continue;
-    if ((world_->occupants[size_t(oi)].state & ~0x200u) == 8) continue;
+    if ((world_->occupants[size_t(oi)].state & ~0x300u) == 8) continue;
     damageOccupant(oi, 8);
   }
 }
@@ -2456,7 +2457,7 @@ void City::monthlyPollution() {
   // all hold result "ok" in the original's saves, while the weekly trips alone fail on interior tiles].
   if (traffic)
     for (const auto& o : world_->occupants)
-      if ((o.state & ~0x200u) == 1 && traffic->tripResult(o.x, o.z) == 1 && usHier_.isAncestorOrSelf(o.agentType, 12005))
+      if ((o.state & ~0x300u) == 1 && traffic->tripResult(o.x, o.z) == 1 && usHier_.isAncestorOrSelf(o.agentType, 12005))
         traffic->routeFacilityTrip(TripRect{o.x, o.z, o.x + o.sizeX - 1, o.z + o.sizeZ - 1});
   // Recycling centres' monthly values (spec 16 s4.3): working = occupied, powered and the lot's last trip not failed;
   // age from the build date.
@@ -2472,7 +2473,7 @@ void City::monthlyPollution() {
     const int age = std::max(0, now - std::min(built, now));
     retireAged(i, age, pollution.params().recyclingMaxLifespan);   // age >= MaxLifespan: replaced in its monthly step (spec 16 4.3)
     const Occupant& o = world_->occupants[i];
-    bool working = (o.state & ~0x200u) == 1 && power.powered(o.x, o.z) && !(traffic && traffic->tripResult(o.x, o.z) == 1);
+    bool working = (o.state & ~0x300u) == 1 && power.powered(o.x, o.z) && !(traffic && traffic->tripResult(o.x, o.z) == 1);
     centres.push_back(pollution.recyclingCentreValues(working, age));
   }
   pollution.monthEnd(d.month, d.year, residents_, &centres);
@@ -2483,7 +2484,7 @@ void City::monthlyPollution() {
 void City::retireAged(size_t oi, int age, int maxLife) {
   if (maxLife <= 0 || age < maxLife || oi >= world_->occupants.size()) return;
   Occupant& o = world_->occupants[oi];
-  if ((o.state & ~0x200u) == 8) return;
+  if ((o.state & ~0x300u) == 8) return;
   damageOccupant(int(oi), 8);
   Occupant& r = world_->occupants[oi];
   for (auto& kv : r.intProps) if (kv.first == 0x2351FAFB) { kv.second = 1; return; }
@@ -2505,7 +2506,7 @@ void City::updateTreatmentCaps(bool monthly) {
     const int age = std::max(0, now - std::min(built, now));
     if (monthly) retireAged(i, age, pollution.params().treatmentMaxLifespan);   // replaced at age >= MaxLifespan (spec 16 3.1)
     const Occupant& o = world_->occupants[i];
-    bool working = (o.state & ~0x200u) == 1 && power.powered(o.x, o.z) && water.tileServiced(o.x, o.z);
+    bool working = (o.state & ~0x300u) == 1 && power.powered(o.x, o.z) && water.tileServiced(o.x, o.z);
     caps.push_back(pollution.treatmentCapacity(working, age));
   }
   pollution.setTreatmentCaps(std::move(caps));

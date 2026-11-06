@@ -428,7 +428,29 @@ fire, whose layer mirrors police].
 Metric sources [STATIC, SIMADV safety metric gather]: Q = police layer getter +0x6C, Qf = fire layer
 getter +0x6C (both percent); station counts by agent type: police 13130, fire 13002, jail 13881;
 Ra = interface `0x22963800`/`0xE475EAD4` method +0x10, Rb = interface `0x13873256`/`0x24889F6F`
-method +0x18 (both truncated to float) [OPEN: meaning of Ra/Rb]. The crime topics use key 0.
+method +0x18. Both are **flags** that return exactly 1.0 or 0.0, so "> 0.8" means "set"
+[STATIC, SIMDSTR]:
+* **Ra** (toxic cloud disaster object, 0x10014FC8) = 1.0 when all three hold:
+  1. no toxic cloud is active (active-cloud count < 1);
+  2. the occurrence countdown has reached at least 80 % of its interval (counter ≥
+     trunc(0.8 × interval));
+  3. the toxic score is above `ThresholdScoreForToxicCloud`.
+  So Ra is set when a toxic cloud is about to occur. The interval is a triangular random draw on
+  [0, 2 × `AverageDurationBetweenOccurrences`], redrawn at each reset. The counter counts up only
+  while no cloud is active. The toxic score is:
+  * `WeightForPollution` × (pollution total ÷ pollution scale) `[INFERRED: the two
+    pollution-layer getters]`;
+  * minus `WeightForCleanIndustryOrdinance` if 0xE2F6E7EA is enacted;
+  * minus `WeightForIndPollutantFeeOrdinance` if 0x02F6E7E2 is enacted;
+  * minus `WeightForWasteDisposalOrdinance` if 0xA2F917CF is enacted;
+  * plus `WeightForEachToxicWastePlant` × the count of building 0x4A39.
+  The `SC3DisasterLayer.ini [ToxicCloudDisasterTunables]` keys are spec 21's; shipped values
+  675, 30, 30, 30, 60, threshold 120, average 48. The same countdown and score trigger the cloud
+  itself (spec 21).
+* **Rb** (space-debris disaster object, 0x100107A9) = 1.0 while at least one debris piece is in
+  flight or impacting (live piece count > 0), else 0.0. The count goes up when a piece spawns
+  (capped by game property 0x44860901, default 1) or is restored from a save, and down, not below
+  0, when the piece's state machine ends. The crime topics use key 0.
 
 Public-safety petitions (post-update; probability r(100) < chance per cycle, cool-down L in
 cycles). Every randomised request is skipped while the same petition is pending. No petition at

@@ -128,7 +128,7 @@ struct LotInfo {
   bool port = false;            // key group T_OCC_ATTR_PORT
   bool removable = true;        // developer-replaceable
   bool kind5 = false;           // "special kind 5" building (spec 15 section 5.3 e)
-  uint32_t baseState() const { return state & ~0x200u; }
+  uint32_t baseState() const { return state & ~0x300u; }   // 0x200 = protected, 0x100 = littered filler lot (spec 15 4.3.3)
   bool flagged() const { return (state & 0x200) != 0; }
   bool filler() const { return (flagWord & 0x100) != 0; }
   int tiles() const { return sizeX * sizeZ; }
@@ -150,6 +150,7 @@ class GrowthCity {
   virtual LotInfo lotAt(int x, int z) const = 0;                 // lot covering the tile (present=false when empty)
   virtual ValveReading valve(int id) const = 0;
   virtual bool radioactive(int, int) const { return false; }
+  virtual bool garbagePolluted(int, int) const { return false; }   // pollution layer: standing garbage >= GarbagePollutedThreshold
   // Tile-origin trip of the landfill developer (spec 15 s7, 18 s9.2): writes the tile's trip result; false = failed.
   virtual bool tileTrip(int, int) { return true; }
   virtual bool tripFailed(int, int) const { return false; }
@@ -286,7 +287,8 @@ class ZoneManager {
   IndPick pickIndustrial(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, int lv, bool watered, bool allowAg);
   void refreshCleanCurve(int year);
   bool startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, int cat, uint32_t replacedAgent, int V, int P, int Max, bool skipPower);
-  bool startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, const Category& cat, uint32_t replaced, int V, int P, int Max, bool skipPower);
+  bool startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, const Category& cat, uint32_t replaced, int V, int P, int Max, bool skipPower,
+                        int maxTries = 4, int fixedMaxDist = -1);   // ports: 5 tries, transport distance 6 (spec 15 7)
   int place(GrowthCity& c, const BuildingChoice& b, int x, int z);
   void removeLot(GrowthCity& c, const LotInfo& lot);
 

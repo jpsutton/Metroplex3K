@@ -283,7 +283,7 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   int unpowered = 0, needPower = 0;
   for (const auto& o : world_.occupants) {
     totalB++;
-    if ((o.state & ~0x200u) != 1) continue;
+    if ((o.state & ~0x300u) != 1) continue;
     switch (o.agentType) {
       case 13130: in.safety.policeStations++; break;
       case 13002: in.safety.fireStations++; break;
@@ -350,7 +350,7 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
     in.util.garbageCap = ps.disp.month[4] + ps.disp.month[5] + ps.disp.month[6] + ps.disp.wteBudget + ps.disp.incineratorBudget + ps.disp.landfillRoom();
   }
   for (const auto& o : world_.occupants)
-    if ((o.state & ~0x200u) == 1 && o.agentType >= 3000 && o.agentType < 10000 && !c.watered(o.x, o.z)) in.util.dryBuildings++;
+    if ((o.state & ~0x300u) == 1 && o.agentType >= 3000 && o.agentType < 10000 && !c.watered(o.x, o.z)) in.util.dryBuildings++;
   in.plan.landValue = c.landValue.cityAverage();
   in.safety.curfewEnacted = c.ordinances.enacted(ord::YouthCurfew);
   in.safety.youthSportsEnacted = c.ordinances.enacted(ord::YouthSports);
@@ -415,7 +415,7 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
     }
     P.seaportBadTiles = seaBad; P.landfillNoAccessTiles = fillNoAccess;
     for (const auto& o : world_.occupants) {
-      if ((o.state & ~0x200u) != 1) continue;
+      if ((o.state & ~0x300u) != 1) continue;
       switch (o.agentType) {
         case 12310: P.airportCount++; break;
         case 12330: P.seaportCount++; break;
@@ -459,7 +459,7 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
     int decl = int(tu.num("Incinerator", "DeclineAge", 0)); if (decl > maxL) decl = maxL / 2;
     const int now = 12 * c.clock.date().year + c.clock.date().month;
     for (const auto& o : world_.occupants) {
-      if ((o.state & ~0x200u) != 1) continue;
+      if ((o.state & ~0x300u) != 1) continue;
       if (o.agentType == 12852 && o.hasDate && o.dateYear > 0) {
         int built = 12 * o.dateYear + std::max(0, std::min(11, (std::max(1, o.dateDay) - 1) * 12 / 366)) + 1;
         if (now - built >= decl) in.util.nOldIncin++;
@@ -497,7 +497,7 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   }
   in.safety.policeStrength = in.safety.policeFunding;   // spec 22 s3.9: the "> 105" test reads police funding
   for (const auto& o : world_.occupants) {
-    if ((o.state & ~0x200u) != 1) continue;
+    if ((o.state & ~0x300u) != 1) continue;
     if (o.agentType == 14450) in.demo.nZoo++;
     else if (o.agentType == 14430) in.demo.nMarina++;
   }

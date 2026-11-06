@@ -184,7 +184,7 @@ void Game::syncStreetSources() {
     if (a && a->agentType == 17420) spawner(4, p.x, p.z);
   }
   for (const Occupant& o : world_.occupants) {
-    if ((o.state & ~0x200u) != 1) continue;
+    if ((o.state & ~0x300u) != 1) continue;
     const OccAttr* a = data_.occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT);
     if (!a) continue;
     if (a->agentType == 14430) spawner(2, o.x, o.z);   // leisure boats (spec 26 5.3); the marina is also an ordinary building
@@ -324,7 +324,7 @@ void Game::streetSimFrame(uint32_t dtMs) {
     streetSigSerial_ = cityVisualSerial_;
     uint64_t sig = 1469598103934665603ull;
     auto mix = [&](uint64_t v) { sig ^= v; sig *= 1099511628211ull; };
-    for (const Occupant& o : vw.occupants) mix(uint64_t(uint32_t(o.x)) << 40 ^ uint64_t(uint32_t(o.z)) << 20 ^ o.occId ^ uint64_t(o.state & ~0x200u) << 56);
+    for (const Occupant& o : vw.occupants) mix(uint64_t(uint32_t(o.x)) << 40 ^ uint64_t(uint32_t(o.z)) << 20 ^ o.occId ^ uint64_t(o.state & ~0x300u) << 56);
     for (const NetPiece& p : vw.surface) mix(uint64_t(uint32_t(p.x)) << 32 ^ uint32_t(p.z) ^ uint64_t(p.pieceId) << 12 ^ uint64_t(p.rot) << 60);
     if (sig != streetSig_) {
       streetSig_ = sig;

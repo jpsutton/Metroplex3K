@@ -381,15 +381,17 @@ bool ZoneManager::startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, co
   return startDevelopment(c, rng, x, z, zd, zd.cats[size_t(cat)], replaced, V, P, Max, skipPower);
 }
 
-bool ZoneManager::startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, const Category& k, uint32_t replaced, int V, int P, int Max, bool skipPower) {
+bool ZoneManager::startDevelopment(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd, const Category& k, uint32_t replaced, int V, int P, int Max, bool skipPower,
+                                   int maxTries, int fixedMaxDist) {
   int maxDist = (zd.developerClass == kDevIndustrial ? cfg_->ind : zd.developerClass == kDevCommercial ? cfg_->com : cfg_->res).maxDistFromTransport;
   if (c.ordinanceEnacted(0xA2BF1DE5)) maxDist++;
+  if (fixedMaxDist >= 0) maxDist = fixedMaxDist;
   Rect lot = findLot(c, x, z, k.minLV, replaced, maxDist, skipPower);
   auto rit = cfg_->rules.find(zd.zone);
   if (rit == cfg_->rules.end()) return false;
   std::vector<const DevRule*> pool;
   for (const auto& r : rit->second) pool.push_back(&r);
-  int tries = std::min<int>(4, int(pool.size()));
+  int tries = std::min<int>(maxTries, int(pool.size()));
   for (int t = 0; t < tries; t++) {
     int i = rng.rand(int(pool.size()));
     const DevRule* r = pool[size_t(i)]; pool.erase(pool.begin() + i);
@@ -1250,7 +1252,23 @@ int ZoneManager::visitRCI(GrowthCity& c, SimRand& rng, int x, int z, const ZoneD
   if (base != 1 && base != 2 && base != 4) return 0;
   const int tiles = std::max(1, lot.tiles());
   const int cat = findCategory(zd, lot.agentType);
-  const uint32_t keep = lot.state & 0x200;
+  // Filler-lot garbage flag (spec 15 4.3.3 [STATIC], all three developers): on an anchor visit of a filler lot the state flag 0x100 follows the
+  // pollution layer's garbage test. E (the extra flags carried into every state this visit sets) holds 0x100 only when g is true and f is clear
+  // (original quirk: g and f both set drops it on a state change). If g and f differ and the visit changes nothing, the occupant is replaced.
+  uint32_t keep = lot.state & 0x200;
+  struct Resync {
+    GrowthCity& c; LotInfo lot; uint32_t E; bool due;
+    ~Resync() {
+      if (!due) return;
+      LotInfo n = c.lotAt(lot.ax, lot.az);
+      if (n.present && n.ax == lot.ax && n.az == lot.az && n.agentType == lot.agentType && n.state == lot.state) c.setLotState(n, n.baseState() | E);
+    }
+  } resync{c, lot, 0, false};
+  if (lot.filler()) {
+    const bool g = c.garbagePolluted(x, z), f = (lot.state & 0x100) != 0;
+    if (g && !f) keep |= 0x100;
+    resync.E = keep; resync.due = g != f;
+  }
   const bool farm = I && lot.agentType == 9300;
   const bool field = farm && (lot.flagWord & 0x100) && (lot.flagWord & 0x400);
 
@@ -1316,7 +1334,7 @@ int ZoneManager::visitRCI(GrowthCity& c, SimRand& rng, int x, int z, const ZoneD
 }
 
 int ZoneManager::visitPort(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd) {
-  // Airport (zone 14) per-tile step, spec 15 s7 [STATIC]; S = the second service test, INFERRED to be water service.
+  // Airport (zone 14, SIMRCI 0x10004784) and seaport (zone 15, 0x1002CA1F) per-tile step, spec 15 s7 [STATIC]; S = water service.
   const bool airport = zd.developerClass == kDevAirport;
   const bool pw = c.powered(x, z), S = c.watered(x, z), blocked = c.radioactive(x, z);
   const bool acc = c.hasAccess(x, z, 6);   // the s4.2 access box with d = 6
@@ -1326,6 +1344,8 @@ int ZoneManager::visitPort(GrowthCity& c, SimRand& rng, int x, int z, const Zone
   k.agentType = airport ? 12310 : 12330;
   k.minLV = 0; k.maxLV = 255;
   LotInfo lot = c.lotAt(x, z);
+  // Rules: up to min(5, n) distinct rules, lot finder with transport distance 6, minimum land value 0, replaced type 0 and the power test active.
+  auto rules = [&](int V, int Max) { return startDevelopment(c, rng, x, z, zd, k, 0, V, 0, Max, false, 5, 6); };
   if (airport) {
     if (lot.present) {
       if (lot.ax != x || lot.az != z) return 0;
@@ -1339,27 +1359,35 @@ int ZoneManager::visitPort(GrowthCity& c, SimRand& rng, int x, int z, const Zone
       if (!acc) return kNdNoAccess;
       // Airport rules run with a fixed demand of 2000 of 2000: valve 5001 does not gate airport growth.
       if (c.insideLoadedAirport(x, z)) return kNdAirportIdle;   // spec 15 s7 interim: no part is ever added there
-      return startDevelopment(c, rng, x, z, zd, k, 0, 2000, 0, 2000, true) ? 0 : kNdAirportIdle;
+      return rules(2000, 2000) ? 0 : kNdAirportIdle;
     }
     if (!pw) return kNdNoPower;
     if (!acc) return kNdNoAccess;
     return kNdNoCategory;
   }
-  // Seaport (zone 15): rules receive valve 8001's V and Max (spec 15 s3.1); code 17 when a serviceable empty tile gets
-  // nothing [STATIC]. The rest of the seaport step mirrors the airport [INFERRED].
-  ValveReading vr = c.valve(cfg_->seaportValve);
-  int P = committed(cfg_->seaportValve);
+  // Seaport: valve 8001's V is read and discarded; the rules get (Max, Max). Q (a per-anchor test of another layer) is not identified [OPEN]: true.
+  const bool Q = true;
+  const int Max = c.valve(cfg_->seaportValve).Max;
   if (lot.present) {
     if (lot.ax != x || lot.az != z) return 0;
     const uint32_t b = lot.baseState();
-    if ((b == 2 || b == 4) && pw && acc && !blocked) c.setLotState(lot, 1 | (lot.state & 0x200));
+    if (b == 1 && !Q) { c.setLotState(lot, 2 | (lot.state & 0x200)); return !pw ? kAbNoPower : S ? kAbNoAccess : kAbNoWater; }   // codes 4 / 6 / 5 (dead while Q is true)
+    if (b == 2 || b == 4) {
+      if (S && pw && acc && Q && !blocked) c.setLotState(lot, 1 | (lot.state & 0x200));
+      else if (lot.removable && !lot.flagged()) removeLot(c, lot);
+    }
     return 0;
   }
   if (blocked) return kNdRadioactive;
+  if (S) {
+    if (!pw) return kNdNoPower;
+    if (!acc) return kNdNoAccess;
+    if (Max <= 0) return kNdSeaportIdle;   // [INFERRED] "gated only by Max > 0"
+    return rules(Max, Max) ? 0 : kNdSeaportIdle;
+  }
   if (!pw) return kNdNoPower;
   if (!acc) return kNdNoAccess;
-  if (vr.V < 1 || vr.V - P < 1) return 0;
-  return startDevelopment(c, rng, x, z, zd, k, 0, vr.V, P, vr.Max, true) ? 0 : kNdSeaportIdle;
+  return kNdNoCategory;   // code 15: no water service
 }
 
 // ---------------- persistence ----------------
