@@ -637,6 +637,34 @@ static bool levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, boo
   return sig() != before;
 }
 
+// Highway cross-section levelling [OBSERVED once, Roadless Paradise drag B; INFERRED rule]: every vertex row across the two carriageways of the built
+// path (3 vertices) is set to its minimum when its heights differ. Refused as a whole when a changing vertex is not changeable. True when terrain changed.
+static bool levelHighwayCrossRows(INetworkMap& m, const std::vector<PathTile>& lane, int pairDx, int pairDz) {
+  if (lane.empty() || (pairDx == 0 && pairDz == 0)) return false;
+  std::set<std::vector<std::pair<int, int>>> rows;
+  for (const PathTile& t : lane) {
+    if (!m.onMap(t.x, t.z)) continue;
+    const int ox = std::min(t.x, t.x + pairDx), oz = std::min(t.z, t.z + pairDz);
+    for (int k = 0; k < 2; k++) {
+      std::vector<std::pair<int, int>> row;
+      if (pairDx != 0) { const int vz = t.z + k; for (int i = 0; i < 3; i++) row.push_back({ox + i, vz}); }
+      else { const int vx = t.x + k; for (int i = 0; i < 3; i++) row.push_back({vx, oz + i}); }
+      rows.insert(row);
+    }
+  }
+  std::vector<std::pair<std::pair<int, int>, int>> plan;
+  for (const auto& row : rows) {
+    int lo = 1 << 30; bool differ = false;
+    for (const auto& v : row) { if (v.first < 0 || v.second < 0 || v.first > m.width() || v.second > m.height()) { lo = -1; break; } const int h = m.cornerHeight(v.first, v.second); if (h != m.cornerHeight(row[0].first, row[0].second)) differ = true; lo = std::min(lo, h); }
+    if (lo < 0 || !differ) continue;
+    for (const auto& v : row) if (m.cornerHeight(v.first, v.second) != lo) plan.push_back({v, lo});
+  }
+  if (plan.empty()) return false;
+  for (const auto& p : plan) if (!m.canChangeCorner(p.first.first, p.first.second)) return false;
+  for (const auto& p : plan) m.setCornerHeight(p.first.first, p.first.second, p.second);
+  return true;
+}
+
 CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const PlacementCosts& costs, ToolHost& host,
                         Tool tool, const RoutedPath& rp) {
   CommitResult res;
@@ -760,6 +788,11 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
   // Endpoint levelling: at the start always, at the end only when neither a bridge nor a tunnel was built.
   // The terrain operation is charged once per levelling that changed terrain (LevelTerrain; observed 25 on one drag).
   int levelled = 0;
+  if (P.kind == NK_HIGHWAY) {
+    std::vector<PathTile> lane0;
+    for (const PathTile& t : path) if (t.carriage == 0 && !skip.count({t.x, t.z})) lane0.push_back(t);
+    if (levelHighwayCrossRows(m, lane0, rp.pairDx, rp.pairDz)) levelled++;
+  }
   if (levelEndpoint(m, path, true, P.kind == NK_HIGHWAY)) levelled++;
   if (res.bridges == 0 && res.tunnels == 0 && levelEndpoint(m, path, false, P.kind == NK_HIGHWAY)) levelled++;
   if (levelled && costs.levelTerrain > 0) { host.charge(levelled * costs.levelTerrain); extraSpent += levelled * costs.levelTerrain; }
