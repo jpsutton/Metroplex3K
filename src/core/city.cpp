@@ -677,8 +677,8 @@ void City::setTaxRate(int rate) {
 // ============================================================================ index / network classification
 
 // Exit function of the network maps (spec 12 4.8, 18 5.4 [DATA]): a piece exposes side k (tiler dir 0..3 = W, N, E, S) at rotation r iff a bit b
-// of the low 16 bits of its connection matrix (occupant attribute 0x136 road/highway, 0x137 rail, 0x138 subway) has (b mod 4 + r) mod 4 == k,
-// i.e. the OR of the four low nibbles rotated left by r. Pieces without a matrix stay open on all four sides.
+// of its 32-bit connection matrix (occupant attribute 0x136 road/highway, 0x137 rail, 0x138 subway) has (b mod 4 + r) mod 4 == k,
+// i.e. the OR of its eight nibbles rotated left by r. Pieces without a matrix stay open on all four sides.
 void City::configureMap(WorldNetworkMap& map) const {
   // Neighbour connections (map-edge bits, spec 12 4.6): kind -> saved set index (rail, road, pipe, power, highway, subway).
   static const int setOfKind[7] = {-1, 1, 0, 3, 4, 2, 5};
@@ -697,7 +697,7 @@ void City::configureMap(WorldNetworkMap& map) const {
       if (const OccAttr* a = g->occupant(id, true)) {
         const int which = tr->inSet(netKindToTable(NK_RAIL), id) ? 1 : tr->inSet(netKindToTable(NK_SUBWAY), id) ? 2 : 0;
         const uint32_t m = a->netMatrix[which];
-        if (m) { const uint32_t lo = m & 0xFFFFu; base = (lo | (lo >> 4) | (lo >> 8) | (lo >> 12)) & 0xFu; }
+        if (m) base = (m | (m >> 4) | (m >> 8) | (m >> 12) | (m >> 16) | (m >> 20) | (m >> 24) | (m >> 28)) & 0xFu;   // all eight nibbles (the on-ramps 15130-15141 differ between the halves)
       }
       (*cache)[id] = base;
     }

@@ -78,6 +78,8 @@ class Terraformer {
   TerraPlan planLower(int tx, int tz) const;
   // Level: rectangle spanned by drag start tile and current tile; target = altitude of start tile's low corner.
   TerraPlan planLevel(int startX, int startZ, int curX, int curZ) const;
+  // Level the tile rectangle to an explicit target altitude (network endpoint levelling; same ring re-sloping as planLevel).
+  TerraPlan planLevelTo(int x0, int z0, int x1, int z1, int target) const;
   TerraPlan planWater(int tx, int tz) const;
 
   // Commit phase: writes the plan's changes. Returns refresh rectangles.

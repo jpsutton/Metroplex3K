@@ -93,6 +93,9 @@ class INetworkMap {
   virtual unsigned exitMask(uint32_t id, int rot) const { (void)id; (void)rot; return 0xF; }
   // May a terrain corner change? (no building / network piece on any of the up to 4 tiles)
   virtual bool canChangeCorner(int vx, int vz) const { (void)vx; (void)vz; return true; }
+  // Network endpoint levelling (spec 12 6.2.6 step 3): level the tile rectangle to the average of its perimeter corners with the level
+  // tool's re-sloping; false = not possible (the network is built anyway).
+  virtual bool levelRectToAverage(int x0, int z0, int x1, int z1) { (void)x0; (void)z0; (void)x1; (void)z1; return false; }
   virtual void setPierFlag(int x, int z, bool on) { (void)x; (void)z; (void)on; }
   // Span record of the piece at (x,z) (spec 10 s6.2.6 piece-word bits 16-26): dir 0 -x, 1 -z, 2 +x, 3 +z; length in tiles.
   virtual void setPieceSpan(int x, int z, NetLayer layer, int dir, int len) { (void)x; (void)z; (void)layer; (void)dir; (void)len; }

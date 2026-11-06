@@ -7,6 +7,7 @@
 #include <functional>
 #include <unordered_map>
 #include "core/tiler.h"
+#include "core/terraform.h"
 #include "core/world.h"
 
 namespace m3k {
@@ -113,6 +114,23 @@ class WorldNetworkMap : public INetworkMap {
       idx_[layer][key(v[i].x, v[i].z)] = i;
     }
     v.pop_back();
+  }
+  bool levelRectToAverage(int x0, int z0, int x1, int z1) override {
+    if (!w_.inTiles(x0, z0) || !w_.inTiles(x1, z1)) return false;
+    // Perimeter corners of the rectangle: target = (sum + n / 2) / n (integer division).
+    int sum = 0, n = 0;
+    for (int x = x0; x <= x1 + 1; x++)
+      for (int z = z0; z <= z1 + 1; z++)
+        if (x == x0 || x == x1 + 1 || z == z0 || z == z1 + 1) { sum += w_.altAt(x, z); n++; }
+    if (n == 0) return false;
+    Terraformer t(w_);
+    TerraformCosts free; free.raise = free.lower = free.level = free.water = 0;
+    t.setCosts(free);
+    TerraPlan plan = t.planLevelTo(x0, z0, x1, z1, (sum + n / 2) / n);
+    if (!plan.legal) return false;
+    for (const auto& c : plan.altChanges) if (!canChangeCorner(c.x, c.z)) return false;   // any blocked corner drops the whole levelling
+    t.commit(plan);
+    return true;
   }
   bool hasConnection(int kind, int x, int z) const override { return conns_.count({kind, x, z}) != 0; }
   void setConnection(int kind, int x, int z, bool on) override {

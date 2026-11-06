@@ -221,12 +221,15 @@ TerraPlan Terraformer::planRaise(int tx, int tz) const { return planRaiseLower(k
 TerraPlan Terraformer::planLower(int tx, int tz) const { return planRaiseLower(kTerraLower, tx, tz); }
 
 TerraPlan Terraformer::planLevel(int sx, int sz, int cx, int cz) const {
+  if (!w_.inTiles(sx, sz) || !w_.inTiles(cx, cz)) { TerraPlan p; p.op = kTerraLevel; p.reason = TerraReason::OutOfMap; return p; }
+  return planLevelTo(std::min(sx, cx), std::min(sz, cz), std::max(sx, cx), std::max(sz, cz), w_.altAt(sx, sz));
+}
+
+TerraPlan Terraformer::planLevelTo(int x0, int z0, int x1, int z1, int L) const {
   TerraPlan p;
   p.op = kTerraLevel;
-  if (!w_.inTiles(sx, sz) || !w_.inTiles(cx, cz)) { p.reason = TerraReason::OutOfMap; return p; }
-  const int x0 = std::min(sx, cx), x1 = std::max(sx, cx), z0 = std::min(sz, cz), z1 = std::max(sz, cz);
+  if (!w_.inTiles(x0, z0) || !w_.inTiles(x1, z1)) { p.reason = TerraReason::OutOfMap; return p; }
   p.footprint = {x0, z0, x1, z1};
-  const int L = w_.altAt(sx, sz);
   auto order = ringOrder(x0, z0, x1 + 1, z1 + 1);
   if (order.size() > 1024) { p.reason = TerraReason::RingTooLarge; return p; }
   std::vector<RE> ring;

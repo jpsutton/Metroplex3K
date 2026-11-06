@@ -577,6 +577,32 @@ static void testWorldAdapter() {
   CHECK(map.pieces(LAYER_SURFACE).size() == 2);
 }
 
+static void testEndpointLevelling() {
+  // spec 12 6.2.6 step 3: a rectangle is levelled to the average of its perimeter corners ((sum + n/2) / n)
+  World w; w.init(10, 10);
+  for (int x = 0; x <= 10; x++) for (int z = 0; z <= 10; z++) w.alt[size_t(w.vIdx(x, z))] = 30;
+  w.alt[size_t(w.vIdx(4, 4))] = 34;   // one raised corner of tile (4,4): perimeter 34 + 3 x 30 = 124, n = 4 -> 31
+  WorldNetworkMap map(w, [](uint32_t) { return uint32_t(0); });
+  CHECK(map.levelRectToAverage(4, 4, 4, 4));
+  for (int x = 4; x <= 5; x++) for (int z = 4; z <= 5; z++) CHECK(w.altAt(x, z) == 31);
+  // two tiles (the highway case): six perimeter corners
+  World w2; w2.init(10, 10);
+  for (int x = 0; x <= 10; x++) for (int z = 0; z <= 10; z++) w2.alt[size_t(w2.vIdx(x, z))] = 20;
+  w2.alt[size_t(w2.vIdx(3, 3))] = 26;   // (26 + 5 x 20 + 3) / 6 = 21
+  WorldNetworkMap map2(w2, [](uint32_t) { return uint32_t(0); });
+  CHECK(map2.levelRectToAverage(3, 3, 4, 3));
+  CHECK(w2.altAt(3, 3) == 21 && w2.altAt(5, 4) == 21);
+  // a building on a sharing tile drops the whole levelling
+  World w3; w3.init(10, 10);
+  for (int x = 0; x <= 10; x++) for (int z = 0; z <= 10; z++) w3.alt[size_t(w3.vIdx(x, z))] = 30;
+  w3.alt[size_t(w3.vIdx(4, 4))] = 34;
+  Occupant house; house.x = 3; house.z = 3; house.agentType = 3100; house.occId = 1; house.classFlags = kOccFlagGenericBuilding;
+  w3.occupants.push_back(house);
+  WorldNetworkMap map3(w3, [](uint32_t) { return uint32_t(0); });
+  map3.rebuild();
+  CHECK(!map3.levelRectToAverage(4, 4, 4, 4) && w3.altAt(4, 4) == 34);
+}
+
 static void testRuntimeOccupantFlags() {
   // Spec 13 §3.1a / Q-BC: generic (zoned and ordinary) buildings are a constant 0x104 —
   // no per-agent-type variation. Utility / station / landmark-deal words unchanged.
@@ -636,6 +662,7 @@ int main() {
   testRoadCondition();
   testPersist();
   testWorldAdapter();
+  testEndpointLevelling();
   testRuntimeOccupantFlags();
   TEST_MAIN_END();
 }

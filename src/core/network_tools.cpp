@@ -277,38 +277,48 @@ BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, co
   pl.rightFill = r - r / 2;
 
   // 5. abutment terrain
-  const int D = kind == NK_POWER ? 1 : 5, R = kind == NK_POWER ? 1 : 3;
+  const int D = kind == NK_POWER ? 1 : (kind == NK_HIGHWAY ? 2 : 5), R = kind == NK_POWER ? 1 : (kind == NK_HIGHWAY ? 2 : 3);
   auto vOn = [&](int vx, int vz) { return vx >= 0 && vz >= 0 && vx <= m.width() && vz <= m.height(); };
   const int ex = pl.x0 + pl.W * pl.ax, ez = pl.z0 + pl.W * pl.az;  // E0
+  auto hAt = [&](int vx, int vz, int dflt) { return vOn(vx, vz) ? m.cornerHeight(vx, vz) : dflt; };
   auto bank = [&](int bx, int bz, int sgn, int dflt) {
     int c1x = bx + sgn * 3 * pl.ax, c1z = bz + sgn * 3 * pl.az;
     int c2x = c1x + pl.px, c2z = c1z + pl.pz;
     int B = dflt;
-    if (vOn(c1x, c1z) && vOn(c2x, c2z)) B = (m.cornerHeight(c1x, c1z) + m.cornerHeight(c2x, c2z)) / 2;
+    if (kind == NK_HIGHWAY) {   // rows of three corners (+0, +p, +2p): B = floor(sum / 3) (spec 12 6.4 step 5a)
+      const int c3x = c2x + pl.px, c3z = c2z + pl.pz;
+      if (vOn(c1x, c1z) && vOn(c2x, c2z) && vOn(c3x, c3z)) B = (m.cornerHeight(c1x, c1z) + m.cornerHeight(c2x, c2z) + m.cornerHeight(c3x, c3z)) / 3;
+    } else if (vOn(c1x, c1z) && vOn(c2x, c2z)) B = (m.cornerHeight(c1x, c1z) + m.cornerHeight(c2x, c2z)) / 2;
     int lo = kind == NK_HIGHWAY ? hw - 2 : hw + D - 4;
-    int hi = kind == NK_HIGHWAY ? 1 << 20 : hw + D + 4;
+    int hi = kind == NK_HIGHWAY ? hw + 6 : hw + D + 4;
     return std::min(std::max(B, lo), hi);
   };
+  const int rows = kind == NK_HIGHWAY ? 3 : 2;
   auto addCorner = [&](int vx, int vz, int h) { if (vOn(vx, vz)) pl.corners.push_back({vx, vz, h}); };
   auto side = [&](int bx, int bz, int sgn, int B) {
     // sgn = -1: start side (W0 - n a), +1: far side (E0 + n a)
-    for (int n : {3, 4}) {
-      addCorner(bx + sgn * n * pl.ax, bz + sgn * n * pl.az, B);
-      addCorner(bx + sgn * n * pl.ax + pl.px, bz + sgn * n * pl.az + pl.pz, B);
-    }
-    addCorner(bx + sgn * pl.ax, bz + sgn * pl.az, hw + D);
-    addCorner(bx + sgn * pl.ax + pl.px, bz + sgn * pl.az + pl.pz, hw + D);
-    addCorner(bx, bz, hw + R);
-    addCorner(bx + pl.px, bz + pl.pz, hw + R);
+    for (int n : {3, 4})
+      for (int q = 0; q < rows; q++) addCorner(bx + sgn * n * pl.ax + q * pl.px, bz + sgn * n * pl.az + q * pl.pz, B);
+    for (int q = 0; q < rows; q++) addCorner(bx + sgn * pl.ax + q * pl.px, bz + sgn * pl.az + q * pl.pz, hw + D);
+    for (int q = 0; q < rows; q++) addCorner(bx + q * pl.px, bz + q * pl.pz, hw + R);
   };
   int Bs = bank(pl.x0, pl.z0, -1, 20), Bf = bank(ex, ez, +1, hw + 1);
+  if (kind == NK_HIGHWAY) {
+    // Two defects of the original's highway builders [STATIC, disassembly]: the start-side B corners take the raw height of the far-bank
+    // corner E0 + 3a (23 off the map) because a byte variable is overwritten by the first far-bank read, and the far B averages
+    // h(E0+3a), h(E0+3a+2p) and h(W0-3a+2p). The permission checks use the real B.
+    const int fx = ex + 3 * pl.ax, fz = ez + 3 * pl.az;
+    const int h1 = hAt(fx, fz, 23), h2 = hAt(fx + 2 * pl.px, fz + 2 * pl.pz, 23), h3 = hAt(pl.x0 - 3 * pl.ax + 2 * pl.px, pl.z0 - 3 * pl.az + 2 * pl.pz, 23);
+    Bf = std::min(std::max((h1 + h2 + h3) / 3, hw - 2), hw + 6);
+    Bs = h1;
+  }
   side(pl.x0, pl.z0, -1, Bs);
   side(ex, ez, +1, Bf);
   for (auto& c : pl.corners)
     if (!m.canChangeCorner(c.vx, c.vz)) { pl.terrainBlocked = true; break; }
 
   // 6. pieces
-  const int rampY = kind == NK_POWER ? hw + 1 : (pl.axis == 0 ? hw + 5 : hw + 7);
+  const int rampY = kind == NK_POWER ? hw + 1 : kind == NK_HIGHWAY ? hw + 2 : (pl.axis == 0 ? hw + 5 : hw + 7);   // highway ramps at hw + 2 (spec 12 6.4)
   auto put = [&](int idx, uint32_t packed, int y) {
     Piece p = unpackPiece(packed);
     PlacedPiece pp; pp.x = pl.x0 + idx * pl.ax; pp.z = pl.z0 + idx * pl.az; pp.y = y; pp.rot = p.rot; pp.id = p.id;
@@ -582,6 +592,24 @@ int removeConnectionsAt(INetworkMap& m, int x, int z) {
 }
 
 // ======================= commit =======================
+// Network endpoint levelling (spec 12 6.2.6 step 3): at a path end the tiles A (the end tile) and B (the next tile for a highway, else A)
+// are levelled to the average of their corner rectangle's perimeter, unless an occupant stands on them, both tiles already have a valid slope
+// (flat or a straight ramp of rise <= 2) or both are flat. No money is charged and a refusal is silent: the network is built anyway.
+static void levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool start, bool highway) {
+  if (path.empty()) return;
+  const PathTile& a = start ? path.front() : path.back();
+  const PathTile& b = highway && path.size() > 1 ? (start ? path[1] : path[path.size() - 2]) : a;
+  for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return;
+  bool bothValid = true, bothFlat = true;
+  for (const PathTile* t : {&a, &b}) {
+    int c[4]; m.tileCorners(t->x, t->z, c);
+    if (!isValidSlope(c)) bothValid = false;
+    if (!(c[0] == c[1] && c[1] == c[2] && c[2] == c[3])) bothFlat = false;
+  }
+  if (bothValid || bothFlat) return;
+  m.levelRectToAverage(std::min(a.x, b.x), std::min(a.z, b.z), std::max(a.x, b.x), std::max(a.z, b.z));
+}
+
 CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const PlacementCosts& costs, ToolHost& host,
                         Tool tool, const RoutedPath& rp) {
   CommitResult res;
@@ -701,6 +729,9 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
       for (auto& t : skip) context.push_back(t);
     }
   }
+  // Endpoint levelling: at the start always, at the end only when neither a bridge nor a tunnel was built.
+  levelEndpoint(m, path, true, P.kind == NK_HIGHWAY);
+  if (res.bridges == 0 && res.tunnels == 0) levelEndpoint(m, path, false, P.kind == NK_HIGHWAY);
   // connections
   res.connections = offerConnections(m, host, costs, P.kind, path, dragPrice);
 
