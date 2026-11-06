@@ -616,9 +616,27 @@ before building, and also refuses if the price exceeds funds `[STATIC]`.
      occupant passes if it reports kind 5 or passes the network manager's terrain-change filter and
      is not in the kind's ID list; pipe/subway occupants must pass the filter and not be in the
      list (the surface result overwrites rather than ANDs the flag). Any failure fails the run.
-   * At commit the grade is applied and **charged** (terrain apply flag 0). Afterwards, for
-     non-highway kinds, tiles the grade left invalid are re-graded one tile at a time (up to 100
-     rounds).
+   * At commit the grade is applied and **charged** (terrain apply flag 0); the grader itself only
+     builds the vertex list, the apply writes it and then runs ripple passes (SIMDIRT
+     0x100076E0) that add outer vertices clamped into [max − 4, min + 4] of the neighbouring ring
+     heights (these extra corners are charged too). Afterwards, for net types 1/2/3/5/6
+     (SIMNTWRK 0x10008064), a fix-up loop of up to 100 rounds scans the affected box for drag
+     tiles and same-network tiles; each tile that is neither flat nor a single-axis ramp of ≤ 2
+     is re-graded alone (single-tile branch) [STATIC]. With a = (x,z), b = (x+1,z),
+     c = (x+1,z+1), d = (x,z+1):
+     * if (a = b or c = d) and (b = c or d = a): *step*;
+     * else if a = b or c = d: z-ramp with edges (a + b)/2 and (c + d)/2, gap reduced to 2;
+     * else if b = c or d = a: *step*; else *flatten*;
+     * *step*: a = b → flatten to a; c = d → flatten; else x-ramp with edges (b + c)/2 at x + 1
+       and (a + d)/2 at x, gap reduced to 2;
+     * *flatten*: h = a if a = b or a = d, else c if c = b or c = d, else trunc(mean of the four);
+       all four corners ← h.
+     The derived start/end heights of the strip grade are the truncated mean (not a mode).
+     [OBSERVED, Mount Herrang road (55,90)→(80,90) over a hill] 26 terrain-following pieces
+     (29 flat / 32 slope, end 11225), mirror row z = 91 raised to the main row, end tile left flat
+     at 92 ((81,90) 90 → 92: the grade's mean 91 followed by the flatten rule, a = d = 92; why
+     this tile was re-graded is [INFERRED]), ring corners at z = 92/93 raised, charge 607 =
+     260 + 347.
    * [OBSERVED, Mount Herrang, road/rail/power/pipe/subway] A drag along +z over six tiles ending
      on a tile with corners 92/94/92/92 changes only the mirror corner (2,79) 92 → 94 (end tile
      becomes a clean slope, the tile before it flat) and adds a charge of 25·2 >> 2 = 12. The
