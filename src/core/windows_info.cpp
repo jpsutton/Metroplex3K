@@ -365,15 +365,19 @@ bool checkButton(Ui& ui, const WinEnv& E, const char* spot, Rect r) {
   return ok;
 }
 
-// A white text box with an optional scroll bar (only when the text overflows).
+// Scenario text box [OBSERVED 800 x 600]: fill (222,223,255) inside a bevel (dark left/top (123,138,255), light right/bottom (255,243,255)); the
+// text wraps at about 312 px (narrower by the 16 px scroll bar when the text overflows), 14 px pitch.
 void textBox(Ui& ui, const WinEnv& E, Rect box, const std::string& text, int& scroll) {
   ui.fill(box, kInset);
+  ui.fill({box.x, box.y, 1, box.h}, rgb(123, 138, 255)); ui.fill({box.x, box.y, box.w, 1}, rgb(123, 138, 255));
+  ui.fill({box.x + box.w - 1, box.y, 1, box.h}, rgb(255, 243, 255)); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, rgb(255, 243, 255));
   const int lh = kPitch;
-  const auto lines = wrapKeepSpaces(ui, text, box.w - 24, "main10");
-  const int visible = std::max(1, box.h / lh);
+  const int visible = std::max(1, (box.h - 4) / lh);
+  auto lines = wrapKeepSpaces(ui, text, box.w - 11, "main10");
   const bool overflow = int(lines.size()) > visible;
-  if (overflow) scrollBar(ui, E, {box.x + box.w - 16, box.y, 16, box.h}, int(lines.size()), visible, scroll); else scroll = 0;
-  for (int i = 0; i < visible && i + scroll < int(lines.size()); i++) ui.text(box.x + 4, box.y + 2 + i * lh, lines[size_t(i + scroll)], "main10", 0xFF000000u);
+  if (overflow) lines = wrapKeepSpaces(ui, text, box.w - 11 - 16, "main10");
+  if (overflow) scrollBar(ui, E, {box.x + box.w - 17, box.y + 1, 16, box.h - 2}, int(lines.size()), visible, scroll); else scroll = 0;
+  for (int i = 0; i < visible && i + scroll < int(lines.size()); i++) ui.text(box.x + 6, box.y + 2 + i * lh, lines[size_t(i + scroll)], "main10", 0xFF000000u);
 }
 }  // namespace
 
@@ -386,7 +390,7 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
   const uint32_t ink = rgb(0x31, 0x36, 0x7C);
   // Upper-left panel: heading, (start dialog: the mayor's name), the scrollable text.
   ui.fill(at(13, 34, 328, 178), kPanelFill);
-  const std::string head = v.startMode ? E.se(0x20, "Greetings Mayor:") : (v.statusLabel.empty() ? std::string("Scenario Status:") : v.statusLabel);
+  const std::string head = v.startMode ? E.se(3, "Greetings Mayor:") : (v.statusLabel.empty() ? std::string("Scenario Status:") : v.statusLabel);
   ui.text(r.x + 20, r.y + 36, head, "title12", ink);
   int textTop = 56;
   if (v.startMode) {
@@ -394,28 +398,51 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
     editField(ui, E, "mayor", at(146, 44, 181, 17), mayorEdit, 0x53434D59, 31);
     textTop = 71;
   } else mayorInit = false;
-  textBox(ui, E, at(18, textTop, 322, 210 - textTop), v.briefing, scroll);
+  textBox(ui, E, at(18, textTop - 1, 323, 211 - textTop), v.briefing, scroll);   // frame (181,154)-(503,293) on the start dialog
   presenterPanel(ui, E, at(350, 35, 120, 177), r.x + 364, r.y + 56, r.y + 187, v.presenterAdvisor, v.presenterMood, &v.presenterPic);
-  // Goals: one row per goal on a 40 px pitch, a 28 px status icon, the text wrapped on two lines.
+  // Goals [OBSERVED 800 x 600]: variable rows of 12 + 14 x lines px (minimum the 28 px icon), the icon at the row top, the text wrapped at about
+  // 392 px from x 220 with its first ink row 10 px below the icon top. The list clips at the frame; the 16 px scroll bar sits at its right edge.
   ui.text(r.x + 18, r.y + 224, v.goalsLabel.empty() ? "Scenario Goals:" : v.goalsLabel, "title12", ink);
-  const Rect lb = at(18, 245, 452, 141);
+  const Rect lb = at(18, 244, 453, 142);
   ui.fill(lb, kInset); ui.frame(lb, false);
-  const int rows = std::max(1, (lb.h - 4) / 40);
-  for (int i = 0; i < rows && goalScroll + i < int(v.goals.size()); i++) {
-    const auto& g = v.goals[size_t(goalScroll + i)];
-    const int y = r.y + 249 + i * 40;
-    const int ix = r.x + 22;
-    const Image* icon = E.img(0xC2BF3646u, g.met ? 0xE50ED85Au : 0x252A754Fu);   // DLG.IXF: the red SimCity stamp (met) / the "!" triangle (unmet)
-    if (icon) ui.blit(*icon, r.x + 21 - (g.met ? 3 : 0), y + (g.met ? -2 : 0));
-    else {   // no art: flat stand-ins
-      if (g.met) { for (int k = 0; k < 5; k++) ui.fill({ix + 7 + k, y + 14 + k, 2, 3}, rgb(0, 150, 0)); for (int k = 0; k < 9; k++) ui.fill({ix + 11 + k, y + 18 - k, 2, 3}, rgb(0, 150, 0)); }
-      else { for (int yy = 0; yy < 26; yy++) { const int half = yy / 2 + 1; ui.fill({ix + 14 - half, y + 1 + yy, half * 2, 1}, rgb(255, 255, 255)); }
-             ui.fill({ix + 13, y + 9, 3, 10}, 0xFF000000u); ui.fill({ix + 13, y + 21, 3, 3}, 0xFF000000u); }
-    }
-    const auto lines = wrap(ui, g.text, lb.w - 60, "main10");
-    for (size_t k = 0; k < lines.size() && k < 2; k++) ui.text(r.x + 57, y + 4 + int(k) * kPitch, lines[k], "main10", rgb(49, 52, 123));
+  std::vector<std::vector<std::string>> wrapped;
+  std::vector<int> rowH;
+  int total = 5;
+  for (const auto& g : v.goals) {
+    wrapped.push_back(wrapKeepSpaces(ui, g.text, 392, "main10"));
+    rowH.push_back(std::max(28, 12 + kPitch * int(wrapped.back().size())));
+    total += rowH.back();
   }
-  if (int(v.goals.size()) > rows) scrollBar(ui, E, {lb.x + lb.w - 16, lb.y, 16, lb.h}, int(v.goals.size()), rows, goalScroll);
+  const bool bar = total > lb.h - 2;
+  int fit = 0;
+  { int acc = 5; for (size_t k = 0; k < rowH.size(); k++) { if (acc + rowH[k] > lb.h - 1) break; acc += rowH[k]; fit++; } }
+  if (bar) classicScrollBar(ui, E, {r.x + 455, lb.y + 2, 16, lb.h - 5}, lb, int(v.goals.size()), std::max(1, fit), goalScroll); else goalScroll = 0;
+  {
+    int acc = 5;
+    const int bottom = lb.y + lb.h - 1;
+    for (size_t gi = size_t(goalScroll); gi < v.goals.size(); gi++) {
+      const auto& g = v.goals[gi];
+      const int y = lb.y + acc;
+      if (y >= bottom) break;
+      const int ix = r.x + 22;
+      const Image* icon = E.img(0xC2BF3646u, g.met ? 0xE50ED85Au : 0x252A754Fu);   // DLG.IXF: the red SimCity stamp (met) / the "!" triangle (unmet)
+      if (icon) {
+        const int iy = y + (g.met ? -2 : 0);
+        ui.blitRect(*icon, r.x + 21 - (g.met ? 3 : 0), iy, 0, 0, icon->w, std::max(0, std::min(icon->h, bottom - iy)));
+      } else if (y + 28 <= bottom) {   // no art: flat stand-ins
+        if (g.met) { for (int k = 0; k < 5; k++) ui.fill({ix + 7 + k, y + 14 + k, 2, 3}, rgb(0, 150, 0)); for (int k = 0; k < 9; k++) ui.fill({ix + 11 + k, y + 18 - k, 2, 3}, rgb(0, 150, 0)); }
+        else { for (int yy = 0; yy < 26; yy++) { const int half = yy / 2 + 1; ui.fill({ix + 14 - half, y + 1 + yy, half * 2, 1}, rgb(255, 255, 255)); }
+               ui.fill({ix + 13, y + 9, 3, 10}, 0xFF000000u); ui.fill({ix + 13, y + 21, 3, 3}, 0xFF000000u); }
+      }
+      const auto& lines = wrapped[gi];
+      for (size_t k = 0; k < lines.size(); k++) {
+        const int ty = y + 7 + int(k) * kPitch;
+        if (ty + 10 > bottom) break;
+        ui.text(r.x + 57, ty, lines[k], "main10", rgb(49, 52, 123));
+      }
+      acc += rowH[gi];
+    }
+  }
   const bool done = checkButton(ui, E, "ok", at(426, 395, 42, 32));
   if (done || ui.in.key[K_ESC]) {
     if (v.startMode && !mayorEdit.empty()) R.add(Act::ScenarioMayor, 0, 0, 0, mayorEdit);   // the typed name renames the mayor
