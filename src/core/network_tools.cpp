@@ -291,7 +291,7 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
     stepsTaken++;
     addTile(cx, cz, alongX);
   }
-  // A bridge needs both ends of the water span to be flat or valid slopes: without one the water tiles and everything after them are invalid and only
+  // A bridge needs the first water tile of the span to be flat or a valid slope: without it the water tiles and everything after them are invalid and only
   // the land prefix builds [OBSERVED, Roadless Paradise (34,158)->(34,175): the far water tile (34,173) 80 82 82 82 made all water and far land red;
   // INFERRED rule, the interior water tiles may be irregular as on the x=36 crossing].
   if (!P.wide && P.minRun > 0 && tool != TOOL_ONRAMP && rp.tiles.size() >= 4) {
@@ -301,7 +301,7 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
       size_t j = w0;
       while (j < rp.tiles.size() && rp.tiles[j].valid && m.onMap(rp.tiles[j].x, rp.tiles[j].z) && m.isWaterTile(rp.tiles[j].x, rp.tiles[j].z)) j++;
       auto fine = [&](size_t k) { int c[4]; m.tileCorners(rp.tiles[k].x, rp.tiles[k].z, c); return (c[0] == c[1] && c[1] == c[2] && c[2] == c[3]) || isValidSlope(c); };
-      if (j < rp.tiles.size() && (!fine(w0) || !fine(j - 1))) {
+      if (j < rp.tiles.size() && !fine(w0)) {   // the near-shore tile only: x=36's far water tile (rise 3) is bridged in the original
         for (size_t k = w0; k < rp.tiles.size(); k++) rp.tiles[k].valid = false;
         blocked = true;
       }
@@ -376,7 +376,7 @@ BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, co
   int hw = 1 << 30;
   int bx0 = 1 << 30, bx1 = -1, bz0 = 1 << 30, bz1 = -1;
   for (auto& t : pl.spanTiles) {
-    hw = std::min(hw, m.cornerHeight(t.first, t.second));
+    hw = std::min(hw, kind == NK_HIGHWAY ? m.cornerHeight(t.first, t.second) : m.waterLevel(t.first, t.second));   // roads/rails/power: the river's water level [OBSERVED hw = 80 on Roadless Paradise x=36]
     bx0 = std::min(bx0, t.first); bx1 = std::max(bx1, t.first);
     bz0 = std::min(bz0, t.second); bz1 = std::max(bz1, t.second);
   }

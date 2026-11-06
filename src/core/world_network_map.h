@@ -39,6 +39,7 @@ class WorldNetworkMap : public INetworkMap {
 
   int width() const override { return w_.W; }
   int height() const override { return w_.H; }
+  int waterLevel(int vx, int vz) const override { return (vx >= 0 && vz >= 0 && vx <= w_.W && vz <= w_.H) ? int(w_.waterAt(vx, vz)) : 0; }
   int cornerHeight(int vx, int vz) const override {
     if (vx < 0 || vz < 0 || vx > w_.W || vz > w_.H) return 23;
     return w_.altAt(vx, vz);

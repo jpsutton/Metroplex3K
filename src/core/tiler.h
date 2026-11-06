@@ -92,6 +92,8 @@ class INetworkMap {
   // rotation. Default: exposes everything.
   // `kind` is the NetKind being tiled: it picks the matrix (0x136 road/highway, 0x137 rail, 0x138 subway), since crossings belong to several sets.
   virtual unsigned exitMask(uint32_t id, int rot, int kind) const { (void)id; (void)rot; (void)kind; return 0xF; }
+  // Water surface level at a vertex (bridge height hw); maps without a separate water grid read the terrain height.
+  virtual int waterLevel(int vx, int vz) const { return cornerHeight(vx, vz); }
   // May a terrain corner change? (no building / network piece on any of the up to 4 tiles)
   virtual bool canChangeCorner(int vx, int vz) const { (void)vx; (void)vz; return true; }
   // Network endpoint levelling (spec 12 6.2.6 step 3): level the tile rectangle to the average of its perimeter corners with the level

@@ -282,11 +282,11 @@ static void testBlockedShore() {
   for (int x = 6; x <= 9; x++) m.setWater(x, 3, true);
   m.setCornerHeight(8, 4, 31);   // tile (7,3): corners 30 30 31 30 = not flat, not a valid slope, an interior water tile: allowed
   { RoutedPath wr = routePath(m, TOOL_ROAD, {2, 3}, {12, 3}); CHECK(!wr.blocked && wr.tiles.size() == 11); }
-  {  // an irregular tile at either end of the water span leaves no bridge: the water tiles and what follows are invalid
+  {  // an irregular first water tile leaves no bridge (the far end may be irregular): the water tiles and what follows are invalid
     SimpleNetworkMap e(20, 8);
     setupRoadFlags(e);
     for (int x = 6; x <= 9; x++) e.setWater(x, 3, true);
-    e.setCornerHeight(10, 4, 31);   // tile (9,3), the last water tile: 30 30 31 30
+    e.setCornerHeight(6, 4, 31);   // tile (6,3), the first water tile: 30 30 30 31
     RoutedPath er = routePath(e, TOOL_ROAD, {2, 3}, {12, 3});
     CHECK(er.blocked && er.validPrefix == 4);
   }
