@@ -19,6 +19,7 @@ class ScriptCoroutine {
     aborted_ = false;
     running_ = true; helperTurn_ = true;
     th_ = std::thread([this, fn = std::move(fn)] {
+      { std::lock_guard<std::mutex> g(m_); helperId_ = std::this_thread::get_id(); }   // recorded by the helper itself before fn runs (th_ may not be assigned yet)
       try { fn(); } catch (const Abort&) {}
       std::unique_lock<std::mutex> l(m_);
       running_ = false; suspended_ = false; helperTurn_ = false;
@@ -47,7 +48,7 @@ class ScriptCoroutine {
     if (aborted_) throw Abort();
   }
   bool suspended() const { return suspended_; }
-  bool onHelper() const { return running_ && std::this_thread::get_id() == th_.get_id(); }
+  bool onHelper() const { std::lock_guard<std::mutex> g(m_); return running_ && std::this_thread::get_id() == helperId_; }
 
  private:
   struct Abort {};
@@ -65,7 +66,8 @@ class ScriptCoroutine {
     join();
   }
   std::thread th_;
-  std::mutex m_;
+  mutable std::mutex m_;
+  std::thread::id helperId_;
   std::condition_variable cv_;
   bool helperTurn_ = false, suspended_ = false, running_ = false, aborted_ = false;
 };
