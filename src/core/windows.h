@@ -293,6 +293,8 @@ class AdvisorWindow {
   uint32_t selected = 0;      // 0 = overview, else advisor id
   int tab = 0;                // 0 news topics, 1 briefings, 2 ordinances
   int topicSel = -1, scroll = 0;
+  int rowSel = -1;            // selected row of the topic / briefing / ordinance list (a double click opens it)
+  int rowClickFrame = -1000;
   Ordinances* ordinances = nullptr;      // optional: enables the ordinances tab list
   OrdinanceMoneyInput money;
   OrdinancesWindow ordWindow;

@@ -378,24 +378,24 @@ void testAdvisors() {
   h.frame();
   CHECK(h.has("topic.0") && h.has("discuss") && h.has("back"));
   h.click("topic.0");
-  CHECK(w.topicSel == 0x101);
-  r = h.click("dismiss");
-  CHECK(r.has(Act::DismissTopic) && r.find(Act::DismissTopic)->id == kAdvBudget && r.find(Act::DismissTopic)->a == 0x101);
-  CHECK(!am.list(kAdvBudget).visible(0x101));
-  CHECK(w.topicSel == -1);
+  CHECK(w.topicSel == -1 && w.rowSel == 0x101);   // a single click only selects the row
+  h.click("topic.0");
+  CHECK(w.topicSel == 0x101);                     // the second click opens the page (no buttons, no Discuss row on the page)
+  h.frame(); CHECK(h.inked() > 1000 && !h.has("discuss"));
+  h.click("back");                                // back from the page returns to the list
+  CHECK(w.topicSel == -1 && w.selected == kAdvBudget);
   h.click("discuss");   // open the "Discuss:" drop-down
   h.click("tab.1");
   CHECK(w.tab == 1);
-  h.click("topic.0");
+  h.click("topic.0"); h.click("topic.0");
   CHECK(w.topicSel == 0x102);
   h.frame(); CHECK(h.inked() > 1000);
-  // Ordinances tab shows ordinance checkboxes filtered by the advisor.
+  h.click("back");
+  // Ordinances tab lists the advisor's ordinance announcements.
   h.click("discuss");
   h.click("tab.2");
   CHECK(w.tab == 2);
   h.frame();
-  bool anyOrd = false; for (auto& sp : h.spots) if (sp.name.rfind("ord.", 0) == 0) anyOrd = true;
-  CHECK(anyOrd || true);
   h.click("back");      // title-bar back button returns to the Meet list
   CHECK(w.selected == 0);
   r = h.click("advisor.1");

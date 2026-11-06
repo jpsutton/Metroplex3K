@@ -313,6 +313,8 @@ class AdvisorManager {
   // Ordinance announcement (spec 22 3.6 [STATIC]): sent when an ordinance BECOMES AVAILABLE (not on enact / repeal); the owning advisor queues a forced
   // topic (a = b = 0) that is raised at its next evaluation.
   void ordinanceAvailable(uint32_t ordinanceId);
+  // The (ordinance, topic) pairs an advisor announces (spec 22 3.6): the rows of its Ordinances tab once the ordinance is available.
+  static std::vector<std::pair<uint32_t, uint32_t>> ordinanceTopics(uint32_t advisorId);
   int mood(uint32_t advisorId) const { return list(advisorId).mood(moods); }
 
   // Persistence: P.1 per advisor, P.3, P.4

@@ -471,10 +471,11 @@ void AdvisorManager::evaluate(uint32_t id, const AdvisorInputs& in, GameRng& rng
   out.advisorsUpdated.push_back(id);
 }
 
-void AdvisorManager::ordinanceAvailable(uint32_t ord) {
-  struct E { uint32_t ord, topic; };
-  struct G { uint32_t advisor; std::vector<E> e; };
-  static const G table[] = {
+namespace {
+struct AdvOrdEntry { uint32_t ord, topic; };
+struct AdvOrdGroup { uint32_t advisor; std::vector<AdvOrdEntry> e; };
+const std::vector<AdvOrdGroup>& advisorOrdinanceTable() {
+  static const std::vector<AdvOrdGroup> table = {
       {kAdvBudget, {{0xA0D07129, 0x1F}}},
       {kAdvPlanner, {{0xC2BF1DD1, 0x01}, {0x20D07175, 0x02}, {0x62F6E7CF, 0x03}, {0xA2F6E7DA, 0x04}, {0xE2F6E7EA, 0x05}, {0x02F6E7EF, 0x06}, {0x22F6E7F4, 0x07},
                      {0xA2F6E7F9, 0x08}, {0xE2F6E7FE, 0x09}, {0xC2F6E804, 0x0A}, {0x62F6E82B, 0x1D}, {0x02F6E7E2, 0x20}}},
@@ -485,8 +486,20 @@ void AdvisorManager::ordinanceAvailable(uint32_t ord) {
       {kAdvTransport, {{0xE2BF1E2A, 0x3C}, {0xA2BF1DDC, 0x3D}, {0x015B4D1E, 0x3E}, {0xA2BF1DE5, 0x3F}, {0xC2D1B025, 0x40}}},
       {kAdvUtilities, {{0x82E42E30, 0x46}, {0x02BF1DFA, 0x47}, {0x82B9999B, 0x48}, {0xC2F90EB1, 0x49}}},
   };
-  for (const G& g : table)
-    for (const E& e : g.e)
+  return table;
+}
+}  // namespace
+
+std::vector<std::pair<uint32_t, uint32_t>> AdvisorManager::ordinanceTopics(uint32_t advisor) {
+  std::vector<std::pair<uint32_t, uint32_t>> out;
+  for (const auto& g : advisorOrdinanceTable())
+    if (g.advisor == advisor) for (const auto& e : g.e) out.push_back({e.ord, e.topic});
+  return out;
+}
+
+void AdvisorManager::ordinanceAvailable(uint32_t ord) {
+  for (const auto& g : advisorOrdinanceTable())
+    for (const auto& e : g.e)
       if (e.ord == ord) { list(g.advisor).queued.push_back(e.topic); return; }
 }
 

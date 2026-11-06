@@ -138,59 +138,99 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
 
   // ---- one advisor
   Rect r = placedAt(ui, 8, 8, 384, 354);
-  if (frame(ui, E, r, advisorName(E, selected))) { R.close = true; R.add(Act::Close); }
-  if (sysButton(ui, E, "back", 1, r.x + 328, r.y + 7)) { selected = 0; comboOpen = false; return R; }
-  ui.text(r.x + 9, r.y + 46, E.win(0x75, "Discuss:"), "main9", kInk);
+  TopicList& list = am.list(selected);
   const uint32_t tabIds[3] = {0x258, 0x1BF, 0x76};
   const char* tabFb[3] = {"News Topics", "Briefings", "Ordinances"};
-  // Drop-down: sunken white field with a double dark top/left edge and the combo arrow (62B99D31 cell 1).
-  Rect combo{r.x + 62, r.y + 43, 194, 17};
-  E.spot("discuss", combo);
-  ui.fill({combo.x, combo.y, combo.w, 2}, rgb(0x7B, 0x8A, 0xFF)); ui.fill({combo.x, combo.y, 2, combo.h}, rgb(0x7B, 0x8A, 0xFF));
-  ui.fill({combo.x + 2, combo.y + 2, 173, 14}, kWhite);
-  ui.fill({combo.x + 175, combo.y + 2, 1, 14}, rgb(0xFF, 0xF3, 0xFF));
-  ui.fill({combo.x + 176, combo.y + 1, 1, 15}, rgb(0x7B, 0x92, 0xFF));
-  ui.fill({combo.x + 193, combo.y, 1, 17}, rgb(0xFF, 0xF3, 0xFF)); ui.fill({combo.x, combo.y + 16, 177, 1}, rgb(0xFF, 0xF3, 0xFF));
-  { bool c = false; Rect ar{r.x + 239, r.y + 44, 16, 16};
-    if (!(ui.skin && ui.skin->imageButtonCells(ui, ui.skin->get("combo"), 4, ar, "", false, true, c))) c = ui.button(ar, "v");
-    if (c || ui.clicked(combo)) comboOpen = !comboOpen; }
-  ui.text(r.x + 66, r.y + 45, E.win(tabIds[tab], tabFb[tab]), "main9", kInk);
-  // List / topic area.
-  Rect lr{r.x + 7, r.y + 67, 248, 279};
-  ui.fill(lr, kLav); sunkenLines(ui, lr);
-  TopicList& list = am.list(selected);
+  // Rows of the current tab: news topics, briefings (persistent topics), ordinance announcements (spec 22 3.6).
+  struct Row { uint32_t id; std::string title; };
+  std::vector<Row> rows;
   if (tab == 2) {
-    if (ordinances) R.merge(ordWindow.draw(ui, E, *ordinances, money, selected, false, {lr.x + 3, lr.y + 3, lr.w - 6, lr.h - 6}));
-  } else if (topicSel >= 0) {
-    // Topic text (no reference screenshot): heading, message, Dismiss / back-to-list buttons at the bottom of the box.
+    for (const auto& oc : AdvisorManager::ordinanceTopics(selected))
+      if (!ordinances || ordinances->available(oc.first)) rows.push_back({oc.second, E.text(kTblAdvisorHeading, oc.second, hexName("Topic ", oc.second))});
+  } else {
+    for (uint32_t t : topicsFor(list, tab)) rows.push_back({t, E.text(kTblAdvisorHeading, t, hexName("Topic ", t))});
+  }
+  const bool onPage = topicSel >= 0;
+  // Title: "Financial Advisor" on the news pages, "<Financial> Briefings" / "<Financial> Ordinances" on the other tabs [OBSERVED].
+  std::string title = advisorName(E, selected);
+  if (onPage && tab != 0) {
+    const std::string suffix = " Advisor";
+    std::string base = title.size() > suffix.size() && title.compare(title.size() - suffix.size(), suffix.size(), suffix) == 0 ? title.substr(0, title.size() - suffix.size()) : title;
+    title = base + " " + E.win(tabIds[tab], tabFb[tab]);
+  }
+  if (frame(ui, E, r, title)) { R.close = true; R.add(Act::Close); }
+  if (sysButton(ui, E, "back", 1, r.x + 328, r.y + 7)) {
+    if (onPage) { topicSel = -1; scroll = 0; return R; }   // back from a page to its list
+    selected = 0; comboOpen = false; return R;
+  }
+  // Drop-down: sunken white field with a double dark top/left edge and the combo arrow (62B99D31 cell 1); gone on the pages.
+  Rect combo{r.x + 62, r.y + 43, 194, 17};
+  if (!onPage) {
+    ui.text(r.x + 9, r.y + 46, E.win(0x75, "Discuss:"), "main9", kInk);
+    E.spot("discuss", combo);
+    ui.fill({combo.x, combo.y, combo.w, 2}, rgb(0x7B, 0x8A, 0xFF)); ui.fill({combo.x, combo.y, 2, combo.h}, rgb(0x7B, 0x8A, 0xFF));
+    ui.fill({combo.x + 2, combo.y + 2, 173, 14}, kWhite);
+    ui.fill({combo.x + 175, combo.y + 2, 1, 14}, rgb(0xFF, 0xF3, 0xFF));
+    ui.fill({combo.x + 176, combo.y + 1, 1, 15}, rgb(0x7B, 0x92, 0xFF));
+    ui.fill({combo.x + 193, combo.y, 1, 17}, rgb(0xFF, 0xF3, 0xFF)); ui.fill({combo.x, combo.y + 16, 177, 1}, rgb(0xFF, 0xF3, 0xFF));
+    { bool c = false; Rect ar{r.x + 239, r.y + 44, 16, 16};
+      if (!(ui.skin && ui.skin->imageButtonCells(ui, ui.skin->get("combo"), 4, ar, "", false, true, c))) c = ui.button(ar, "v");
+      if (c || ui.clicked(combo)) comboOpen = !comboOpen; }
+    ui.text(r.x + 66, r.y + 45, E.win(tabIds[tab], tabFb[tab]), "main9", kInk);
+  } else comboOpen = false;
+  if (onPage) {
+    // Text panel x 15..262, y 47..353: (222,223,255) interior inside a dark top/left, light bottom/right bevel [OBSERVED].
+    const Rect P{r.x + 7, r.y + 39, 248, 307};
+    ui.fill(P, rgb(222, 223, 255)); insetBevel(ui, P);
     const TopicInstance* ti = list.find(uint32_t(topicSel));
-    if (!ti) topicSel = -1;
-    else {
-      ui.text(lr.x + 6, lr.y + 4, ellipsize(ui, E.text(kTblAdvisorHeading, ti->topicId, hexName("Topic ", ti->topicId)), lr.w - 12), "main9", kInk);
-      std::string raw = E.text(kTblAdvisorMessage, ti->topicId, "(no text)");
-      paragraph(ui, {lr.x + 6, lr.y + 22, lr.w - 12, lr.h - 64}, topicText(raw, E.tc, ti->args), "main9", rgb(0, 0, 0));
-      if (button(ui, E, "topics", {lr.x + 6, lr.y + lr.h - 38, 112, 33}, "<<")) topicSel = -1;
-      if (button(ui, E, "dismiss", {lr.x + lr.w - 118, lr.y + lr.h - 38, 112, 33}, E.win(0x2DE, "Dismiss"))) {
-        uint32_t t = ti->topicId;
-        list.dismiss(t);
-        R.add(Act::DismissTopic, selected, t);
-        topicSel = -1;
-      }
+    const std::string head = E.text(kTblAdvisorHeading, uint32_t(topicSel), hexName("Topic ", uint32_t(topicSel)));
+    ui.text(r.x + 13, r.y + 51, ellipsize(ui, head, 232), "main10", kInk);   // bold heading: ink x 21, rows 61..73
+    const std::string raw = E.text(kTblAdvisorMessage, uint32_t(topicSel), "(no text)");
+    const std::string body = topicText(raw, E.tc, ti ? ti->args : std::vector<TopicArg>{});
+    auto lines = wrapKeepSpaces(ui, body, 228, "main9");
+    const int bodyTop = r.y + 79, visible = std::max(1, (P.y + P.h - 4 - bodyTop) / 14);
+    const bool overflow = int(lines.size()) > visible;
+    if (overflow) { lines = wrapKeepSpaces(ui, body, 212, "main9"); scenarioScrollBar(ui, E, {r.x + 238, r.y + 78, 16, 265}, P, int(lines.size()), visible, scroll); }
+    else scroll = 0;
+    for (int i = 0; i < visible && scroll + i < int(lines.size()); i++) ui.text(r.x + 12, bodyTop + 14 * i, lines[size_t(scroll + i)], "main9", rgb(0, 0, 0));   // first line's ink at y 89, pitch 14
+    if (tab == 2) {
+      // "Review Ordinances" box x 277..376, y 84..149: a (173,182,255) border round (123,146,255), two centred bold lines and the Ordinances button.
+      const Rect B{r.x + 269, r.y + 76, 100, 66};
+      ui.fill(B, rgb(173, 182, 255)); ui.fill({B.x + 1, B.y + 1, B.w - 2, B.h - 2}, rgb(123, 146, 255));
+      const std::string cap = E.win(0x1C2, "Review Ordinances");
+      const size_t sp = cap.find(' ');
+      ui.textCentered({B.x, B.y + 7, B.w, 14}, sp == std::string::npos ? cap : cap.substr(0, sp), "main10", kInk);
+      if (sp != std::string::npos) ui.textCentered({B.x, B.y + 21, B.w, 14}, cap.substr(sp + 1), "main10", kInk);
+      bool c = false; Rect ob{B.x + 33, B.y + 37, 36, 24};
+      E.spot("ordinances", ob);
+      if (!(ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Gonzo, 0x09), 4, ob, "", false, true, c))) c = ui.button(ob, "?");
+      if (c) R.add(Act::OpenOrdinances);
+    } else {
+      // Topic picture 118 x 110 (831D112B via the topic's graphic id) at (270, 48) inside a dark top/left, light bottom/right frame x 269..388, y 47..158.
+      insetBevel(ui, {r.x + 261, r.y + 39, 120, 112});
+      uint32_t g = 0, gi = 0;
+      if (am.gfx.get(uint32_t(topicSel), g, gi)) if (const Image* im = E.img(g, gi)) ui.blit(*im, r.x + 262, r.y + 40);
     }
   } else {
-    auto topics = topicsFor(list, tab);
+    // List: 13 px selection bars on a 14 px pitch x 16..258 from y 76; a single click selects (blue bar, white text and arrow), a double click opens [OBSERVED].
+    const Rect lr{r.x + 7, r.y + 67, 248, 279};
+    ui.fill(lr, kLav); sunkenLines(ui, lr);
+    ++frameNo;
     const int visible = lr.h / 14;
     if (ui.hover(lr) && ui.in.wheel) scroll -= ui.in.wheel;
-    scroll = std::max(0, std::min(scroll, std::max(0, int(topics.size()) - visible)));
-    for (int i = 0; i < visible && scroll + i < int(topics.size()); i++) {
-      uint32_t t = topics[size_t(scroll + i)];
-      Rect row{lr.x + 1, lr.y + 14 * i, lr.w - 2, 14};
-      E.spot("topic." + std::to_string(i), row);
-      bool hot = ui.hover(row);
-      if (hot) ui.fill(row, rgb(0x7B, 0x92, 0xFF));
-      bullet(ui, lr.x + 4, row.y + 3);
-      ui.text(lr.x + 15, row.y, ellipsize(ui, E.text(kTblAdvisorHeading, t, hexName("Topic ", t)), lr.w - 22), "main9", hot ? kWhite : kInk);
-      if (ui.clicked(row)) topicSel = int(t);
+    scroll = std::max(0, std::min(scroll, std::max(0, int(rows.size()) - visible)));
+    for (int i = 0; i < visible && scroll + i < int(rows.size()); i++) {
+      const Row& row = rows[size_t(scroll + i)];
+      const Rect bar{r.x + 8, r.y + 68 + 14 * i, 243, 13};
+      E.spot("topic." + std::to_string(i), bar);
+      const bool sel = rowSel == int(row.id);
+      if (sel) ui.fill(bar, rgb(0, 0, 255));
+      for (int k = 0; k < 9; k++) ui.fill({lr.x + 4, bar.y + 2 + k, k < 5 ? k + 1 : 9 - k, 1}, sel ? kWhite : kInk);
+      ui.text(lr.x + 15, bar.y - 1, ellipsize(ui, row.title, lr.w - 22), "main9", sel ? kWhite : kInk);
+      if (ui.clicked(bar)) {
+        if (sel && frameNo - rowClickFrame <= 30) { topicSel = int(row.id); scroll = 0; }
+        rowSel = int(row.id); rowClickFrame = frameNo;
+      }
     }
   }
   // Portrait panel: big portrait (52DB60A0:00AAMM, 92x115 cells; cell 0) with a 1 px border, name on two lines.
