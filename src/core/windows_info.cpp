@@ -350,7 +350,7 @@ void presenterPanel(Ui& ui, const WinEnv& E, Rect panel, int portraitX, int port
     }
     if (!pic->name.empty()) {
       const int rest = panel.y + panel.h - 1 - bottom;
-      ui.textCentered({panel.x, bottom + std::max(0, (rest - 6) / 2), panel.w, 14}, pic->name, "main9", nameInk);   // 6 = measured: ink rows 271..281
+      ui.textCentered({panel.x, bottom + std::max(0, (rest - 12) / 2), panel.w, 14}, pic->name, "main9", nameInk);   // 12 = measured: ink rows 271..281
     }
     return;
   }
@@ -376,31 +376,20 @@ void insetBevel(Ui& ui, Rect b) {
   ui.fill({b.x + b.w - 1, b.y, 1, b.h}, rgb(255, 243, 255)); ui.fill({b.x, b.y + b.h - 1, b.w, 1}, rgb(255, 243, 255));
 }
 
-// Scroll bar of the scenario goals list [OBSERVED 800 x 600, pixel measurements]: a 16 px column (x 0..15), track fill (123,146,255), 15 px wide
-// buttons (x 0..14) with a 14 px up arrow at the top, a 17 px thumb below it and a 14 px down arrow at the bottom (r.h = 137). Rows scroll by item.
+// Vertical scroll bar from the skin strip Sys 82B9B75B:E2B99E01 (192 x 16: twelve 16 x 16 cells; 6/7 up arrow normal/pressed, 8 vertical thumb,
+// 9 vertical groove, 10/11 down arrow) [OBSERVED 800 x 600: up arrow at the top of r, thumb below it, groove tiled, down arrow at the bottom].
+// Scrolls by item. r is 16 px wide.
 void scenarioScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int total, int visible, int& scroll) {
+  const Image* strip = ui.skin ? ui.skin->image(skin_group::Sys, 0xE2B99E01) : nullptr;
   ui.fill(r, rgb(123, 146, 255));
-  auto button = [&](Rect b, bool thumb) {
-    ui.fill(b, rgb(214, 215, 255));
-    ui.fill({b.x, b.y, b.w, 1}, rgb(239, 235, 255)); ui.fill({b.x, b.y + 1, b.w, 1}, rgb(231, 231, 255)); ui.fill({b.x, b.y + 2, b.w, 1}, rgb(49, 56, 132));
-    ui.fill({b.x, b.y + b.h - 3, b.w, 1}, rgb(49, 52, 123)); ui.fill({b.x, b.y + b.h - 2, b.w, 1}, rgb(132, 138, 165));
-    ui.fill({b.x, b.y + b.h - 1, b.w, 1}, thumb ? rgb(8, 12, 24) : rgb(66, 65, 82));
-    ui.fill({b.x, b.y, 1, b.h}, rgb(231, 235, 255)); ui.fill({b.x + 1, b.y, 1, b.h}, rgb(222, 227, 255)); ui.fill({b.x + 2, b.y + 2, 1, b.h - 4}, rgb(49, 56, 132));
-    ui.fill({b.x + b.w - 3, b.y, 1, b.h}, rgb(49, 52, 123)); ui.fill({b.x + b.w - 2, b.y, 1, b.h}, rgb(123, 121, 148)); ui.fill({b.x + b.w - 1, b.y, 1, b.h}, rgb(66, 65, 82));
-  };
-  auto arrow = [&](Rect b, bool up) {
-    button(b, false);
-    const int cx = b.x + 7;
-    for (int i = 0; i < 4; i++) { const int w = up ? 2 * i + 1 : 7 - 2 * i; ui.fill({cx - w / 2, b.y + 5 + i, w, 1}, rgb(49, 56, 132)); }
-  };
-  const Rect up{r.x, r.y, 15, 14}, dn{r.x, r.y + r.h - 14, 15, 14};
+  const Rect up{r.x, r.y, 16, 16}, dn{r.x, r.y + r.h - 16, 16, 16};
   E.spot("scroll.up", up); E.spot("scroll.down", dn);
   if (ui.hover(wheelArea) && ui.in.wheel) scroll -= ui.in.wheel;
   if (ui.clicked(up)) scroll--;
   if (ui.clicked(dn)) scroll++;
   const int range = std::max(0, total - visible);
-  const Rect track{r.x, r.y + 14, 15, r.h - 28};
-  const int th = 17;
+  const Rect track{r.x, r.y + 16, 16, r.h - 32};
+  const int th = 16;
   if (range > 0) {
     E.spot("scroll.track", track);
     if (ui.hover(track) && ui.in.down) {
@@ -410,11 +399,16 @@ void scenarioScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int tota
     scroll = std::max(0, std::min(scroll, range));
   } else scroll = 0;
   const int ty = track.y + (range > 0 ? (track.h - th) * scroll / range : 0);
-  // groove of the track below the thumb: (57,56,123) / (8,12,24) / (255,255,255) at x 6..8
-  const int g0 = ty + th, g1 = track.y + track.h;
-  if (g1 > g0) { ui.fill({r.x + 6, g0, 1, g1 - g0}, rgb(57, 56, 123)); ui.fill({r.x + 7, g0, 1, g1 - g0}, rgb(8, 12, 24)); ui.fill({r.x + 8, g0, 1, g1 - g0}, rgb(255, 255, 255)); }
-  arrow(up, true); arrow(dn, false);
-  button({track.x, ty, 15, th}, true);
+  if (!strip) {   // no art: flat stand-ins
+    ui.fill(up, rgb(214, 215, 255)); ui.fill(dn, rgb(214, 215, 255)); ui.fill({track.x, ty, 16, th}, rgb(214, 215, 255));
+    return;
+  }
+  for (int y = track.y; y < track.y + track.h; y += 16)   // groove, tiled (the last tile clipped to the track)
+    ui.blitRect(*strip, track.x, y, 9 * 16, 0, 16, std::min(16, track.y + track.h - y));
+  const bool upDown = ui.hover(up) && ui.in.down, dnDown = ui.hover(dn) && ui.in.down;
+  Skin::drawCell(ui, strip, 12, upDown ? 7 : 6, up.x, up.y);
+  Skin::drawCell(ui, strip, 12, dnDown ? 11 : 10, dn.x, dn.y);
+  if (range > 0) Skin::drawCell(ui, strip, 12, 8, track.x, ty);
 }
 
 // Scenario text box [OBSERVED 800 x 600]: fill (222,223,255) inside a bevel (dark left/top (123,138,255), light right/bottom (255,243,255)); the
@@ -427,8 +421,8 @@ void textBox(Ui& ui, const WinEnv& E, Rect box, const std::string& text, int& sc
   auto lines = wrapKeepSpaces(ui, text, box.w - 11, kBodyFont);
   const bool overflow = int(lines.size()) > visible;
   if (overflow) lines = wrapKeepSpaces(ui, text, box.w - 11 - 16, kBodyFont);
-  if (overflow) scrollBar(ui, E, {box.x + box.w - 17, box.y + 1, 16, box.h - 2}, int(lines.size()), visible, scroll); else scroll = 0;
-  for (int i = 0; i < visible && i + scroll < int(lines.size()); i++) ui.text(box.x + 6, box.y + 2 + i * lh, lines[size_t(i + scroll)], kBodyFont, 0xFF000000u);
+  if (overflow) scenarioScrollBar(ui, E, {box.x + box.w - 17, box.y + 1, 16, box.h - 2}, box, int(lines.size()), visible, scroll); else scroll = 0;
+  for (int i = 0; i < visible && i + scroll < int(lines.size()); i++) ui.text(box.x + 6, box.y + 3 + i * lh, lines[size_t(i + scroll)], kBodyFont, 0xFF000000u);
 }
 }  // namespace
 
@@ -455,19 +449,22 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
   // 392 px from x 220 with its first ink row 10 px below the icon top. The list clips at the frame; the 16 px scroll bar sits at its right edge.
   ui.text(r.x + 18, r.y + 224, v.goalsLabel.empty() ? "Scenario Goals:" : v.goalsLabel, "title12", ink);
   const Rect lb = at(18, 244, 453, 142);
-  ui.fill(lb, kInset); insetBevel(ui, lb);
+  ui.fill(lb, kInset);
   std::vector<std::vector<std::string>> wrapped;
   std::vector<int> rowH;
   int total = 5;
   for (const auto& g : v.goals) {
-    wrapped.push_back(wrapKeepSpaces(ui, g.text, 392, kBodyFont));
+    wrapped.push_back(wrapKeepSpaces(ui, g.text, 400, kBodyFont));
     rowH.push_back(std::max(28, 12 + kPitch * int(wrapped.back().size())));
     total += rowH.back();
   }
   const bool bar = total > lb.h - 2;
+  if (bar) {   // the bar column is not part of the frame: top/bottom lines stop before it and it has no right line
+    ui.fill({lb.x, lb.y, 1, lb.h}, rgb(123, 138, 255)); ui.fill({lb.x, lb.y, lb.w - 16, 1}, rgb(123, 138, 255)); ui.fill({lb.x, lb.y + lb.h - 1, lb.w - 16, 1}, rgb(255, 243, 255));
+  } else insetBevel(ui, lb);
   int fit = 0;
   { int acc = 5; for (size_t k = 0; k < rowH.size(); k++) { if (acc + rowH[k] > lb.h - 1) break; acc += rowH[k]; fit++; } }
-  if (bar) scenarioScrollBar(ui, E, {r.x + 455, lb.y + 2, 16, 137}, lb, int(v.goals.size()), std::max(1, fit), goalScroll); else goalScroll = 0;
+  if (bar) scenarioScrollBar(ui, E, {r.x + 455, lb.y, 16, 141}, lb, int(v.goals.size()), std::max(1, fit), goalScroll); else goalScroll = 0;
   {
     int acc = 5;
     const int bottom = lb.y + lb.h - 1;
