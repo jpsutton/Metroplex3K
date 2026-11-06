@@ -451,13 +451,13 @@ std::vector<GraphSeries> graphSeriesTemplate() {
   struct E { uint32_t id; const char* fb; int fmt; uint32_t tmpl; const char* tfb; bool val; };
   static const E t[16] = {
     {0x1D2, "Approval Rating", 0, 0x28D, "Approval Rating %s%%", false}, {0x162, "Residents", 0, 0x1D4, "Res %s", true},
-    {0x16F, "Land Value", 0, 0x1DB, "Value %s", false}, {0x161, "City Size", 0, 0x1D6, "City Size %s", true},
+    {0x16F, "Land Value", 0, 0x16F, "Land Value", false}, {0x161, "City Size", 0, 0x1D6, "City Size %s", true},
     {0x168, "Unemployment", 1, 0x1D5, "Unemployment %s", true},
     {0x167, "Pollution", 0, 0x1D9, "Pollution %s", true}, {0x16E, "Education", 0, 0x28F, "Education %s", true},
     {0x166, "Traffic", 0, 0x1D7, "Traffic", false}, {0x163, "Commerce", 0, 0x1DA, "Com %s", true},
-    {0x165, "Nat'l Pop", 0, 0x28C, "Nat'l Population %s", false}, {0x16C, "Water %", 1, 0, "Water %", false},
+    {0x165, "Nat'l Pop", 0, 0x28C, "Nat'l Population %s", false}, {0x16C, "Water %", 1, 0x16C, "Water %", false},
     {0x169, "Crime", 0, 0x1D8, "Crime %s", true}, {0x16D, "Health", 0, 0x28E, "Health %s", true},
-    {0x283, "Funds", 2, 0x283, "Funds", false}, {0x164, "Industry", 0, 0x1D3, "Ind %s", true}, {0x16B, "Power %", 1, 0x1DC, "Power %s%%", false}};
+    {0x283, "Funds", 2, 0x283, "Funds", false}, {0x164, "Industry", 0, 0x1D3, "Ind %s", true}, {0x16B, "Power %", 1, 0x16B, "Power %", false}};
   std::vector<GraphSeries> v;
   for (auto& e : t) { GraphSeries g; g.labelId = e.id; g.fallback = e.fb; g.format = e.fmt; g.tmplId = e.tmpl; g.tmplFb = e.tfb; g.showValue = e.val; v.push_back(g); }
   return v;
