@@ -110,6 +110,8 @@ class City {
   // (observed), so quoteNetwork / buildNetwork add the invalid tail when handed exactly this path.
   mutable std::vector<std::pair<int, int>> lastRouteValid_;
   mutable int lastRouteTotal_ = 0;
+  mutable std::pair<int, int> lastRouteStart_{0, 0}, lastRouteEnd_{0, 0};
+  mutable int lastRouteKind_ = 0;
   // Spec 12 §7: highway on-ramp point tool (menu 02B5DEBB). Places the 3×2 piece group.
   bool buildOnRamp(int ax, int az);
   // Spec 12 §6.4 / §8: first yes/no confirm a drag would raise (bridge, then tunnel, then connection).

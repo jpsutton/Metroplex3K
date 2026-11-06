@@ -140,6 +140,7 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
     prevWater = water;
     if (!ok) blocked = true;
     t.valid = !blocked;
+    const size_t primaryIdx = rp.tiles.size();
     rp.tiles.push_back(t);
     if (P.wide) {
       RoutedTile u; u.x = x + wx; u.z = z + wz;
@@ -147,7 +148,8 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
       if (!uok) blocked = true;
       u.carriage = 1;
       u.valid = !blocked;
-      // blocking by the pair tile invalidates the primary too only from the pair on
+      // A carriageway pair is valid only when both tiles are: a failing pair tile invalidates the whole row [OBSERVED].
+      if (!uok) rp.tiles[primaryIdx].valid = false;
       rp.tiles.push_back(u);
     }
   };

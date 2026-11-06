@@ -1366,6 +1366,7 @@ std::vector<std::pair<int, int>> City::routeNetworkPath(NetworkKind k, int x0, i
   path.reserve(rp.tiles.size());
   for (const auto& t : rp.tiles) if (t.valid) path.push_back({t.x, t.z});
   lastRouteValid_ = path; lastRouteTotal_ = int(rp.tiles.size());
+  lastRouteStart_ = {x0, z0}; lastRouteEnd_ = {x1, z1}; lastRouteKind_ = int(k);
   return path;
 }
 
@@ -1607,16 +1608,20 @@ bool City::buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& p
   }
   segs.push_back({path[s], path.back()});
   bool any = false;
-  // The invalid tail of the routed drag is paid for too (observed); refuse up front when the whole price is not affordable.
-  int tail = 0;
-  if (path == lastRouteValid_ && lastRouteTotal_ > int(path.size())) tail = (lastRouteTotal_ - int(path.size())) * costs.cost(toolParams(tool).costKey);
-  if (tail > 0 && budget.funds < int64_t(tail) + int64_t(path.size()) * costs.cost(toolParams(tool).costKey)) { lastFailNoMoney = true; return false; }
-  for (auto& sg : segs) {
-    RoutedPath rp = routePath(map, tool, sg.first, sg.second);
+  if (!lastRouteValid_.empty() && path == lastRouteValid_ && lastRouteKind_ == int(k)) {
+    // The path is the last routed drag: commit that whole route once, as the original's network manager does (valid prefix built, every routed
+    // tile paid for). Splitting it into straight runs would re-route each piece as a separate drag.
+    RoutedPath rp = routePath(map, tool, lastRouteStart_, lastRouteEnd_);
     CommitResult r = commitPath(map, cfg_.tiling, costs, host, tool, rp);
     if (r.status == COMMIT_OK) any = true;
+    else if (r.status == COMMIT_NO_MONEY) lastFailNoMoney = true;
+  } else {
+    for (auto& sg : segs) {
+      RoutedPath rp = routePath(map, tool, sg.first, sg.second);
+      CommitResult r = commitPath(map, cfg_.tiling, costs, host, tool, rp);
+      if (r.status == COMMIT_OK) any = true;
+    }
   }
-  if (any && tail > 0) budget.funds -= tail;
   {  // write back new connections
     for (const auto& t : map.connections()) {
       if (before.count(t)) continue;
