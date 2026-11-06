@@ -50,11 +50,15 @@ class WorldNetworkMap : public INetworkMap {
   bool isWaterTile(int x, int z) const override {
     if (waterFn_) return waterFn_(x, z);
     if (!w_.inTiles(x, z)) return false;
-    // all four corners have water surface above terrain
+    // ANY of the four corners has water >= terrain (equality counts); a corner off the map is not water [STATIC SIMDIRT 0x100065F0, the test the
+    // bridge builders and the drag router call through 0x10016D69; spec 11 tile water test].
     for (int dx = 0; dx <= 1; dx++)
-      for (int dz = 0; dz <= 1; dz++)
-        if (w_.waterAt(x + dx, z + dz) <= w_.altAt(x + dx, z + dz)) return false;
-    return true;
+      for (int dz = 0; dz <= 1; dz++) {
+        const int vx = x + dx, vz = z + dz;
+        if (vx < 0 || vz < 0 || vx > w_.W || vz > w_.H) continue;
+        if (w_.waterAt(vx, vz) >= w_.altAt(vx, vz)) return true;
+      }
+    return false;
   }
   TileOcc occupantAt(int x, int z, NetLayer layer) const override {
     TileOcc o;

@@ -573,9 +573,16 @@ For raise, lower and level the commit repeats the plan computation and writes as
   `London, England.sct`) [DATA].
 * A vertex is **under water** when its altitude is below the water surface at that vertex. The
   generator treats a vertex as land when its altitude is greater than its water surface [STATIC].
-  The rule for when a whole tile counts as water (any corner, all corners, or the tile centre) is
-  `[OPEN]`; the shipped data is consistent with "all four corners under water" for open water and
-  "some corners under water" for shoreline tiles [INFERRED].
+  **Tile water test** [STATIC, SIMDIRT 0x100065F0, terrain interface slot 0x54; checked in the
+  disassembly]. A tile (x, z) counts as water if **any** of its four corners has water-surface height
+  ≥ terrain altitude. The corners are tested in the order (x,z), (x+1,z), …, and the test stops at
+  the first match; equality counts as water. A tile with a corner off the map is not water. The
+  test is used by:
+  * land value (`15-sim-growth.md`);
+  * the network drag router;
+  * the bridge builders (`12-networks.md` §6.4: water span, h_w);
+  * other "is this tile water" queries through the terrain.
+  Shoreline tiles with only one submerged corner are therefore water.
 * **Sea (salt) vs fresh water**: the generator produces a per-vertex sea flag next to the water
   surface (section 3.4 step 10) and hands it to the terrain together with the water surface
   [STATIC]. Vertices reached from a coastal edge are sea; inland lakes and rivers are fresh.
@@ -941,7 +948,7 @@ Notes:
   press-vs-drag handler split and sound looping; the tree-planting tool's rules.
 * The run-time per-tile "changed" bitset used for the plan preview highlight versus the persisted
   tileBits (they are different bitsets).
-* The exact rule for when a tile counts as water. (The sea flag storage is resolved in §5.)
+* Closed: the rule for when a tile counts as water (§ water test above: any corner, water ≥ ground). The sea flag storage is resolved in §5.
 * Neighbors-window region image (§9.7): the resampling filter used when the rotated image is
   scaled into the 302 × 302 widget, and the turning direction for view rotations 1–3.
 * A whole-terrain operation exists that clears every sea flag and then re-marks sea cells by

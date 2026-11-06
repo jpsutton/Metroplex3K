@@ -592,6 +592,17 @@ static void testEndpointLevelling() {
   WorldNetworkMap map2(w2, [](uint32_t) { return uint32_t(0); });
   CHECK(map2.levelRectToAverage(3, 3, 4, 3));
   CHECK(w2.altAt(3, 3) == 21 && w2.altAt(5, 4) == 21);
+  // water tile test (spec 11): ANY corner with water >= terrain, equality counts, off-map corners ignored
+  {
+    World ww; ww.init(10, 10);
+    for (int x = 0; x <= 10; x++) for (int z = 0; z <= 10; z++) { ww.alt[size_t(ww.vIdx(x, z))] = 82; ww.water[size_t(ww.vIdx(x, z))] = 80; }
+    WorldNetworkMap wm(ww, [](uint32_t) { return uint32_t(0); });
+    CHECK(!wm.isWaterTile(4, 4));                                   // all corners above the water
+    ww.alt[size_t(ww.vIdx(5, 5))] = 80;                             // one corner exactly at the water level
+    CHECK(wm.isWaterTile(4, 4) && wm.isWaterTile(5, 5) && !wm.isWaterTile(6, 6));
+    ww.alt[size_t(ww.vIdx(5, 5))] = 77;
+    CHECK(wm.isWaterTile(4, 4));                                    // one submerged corner is enough
+  }
   // a building on a sharing tile drops the whole levelling
   World w3; w3.init(10, 10);
   for (int x = 0; x <= 10; x++) for (int z = 0; z <= 10; z++) w3.alt[size_t(w3.vIdx(x, z))] = 30;
