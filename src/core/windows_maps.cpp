@@ -500,7 +500,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   ui.fill({box.x, box.y, box.w, 1}, rgb(123, 142, 255)); ui.fill({box.x, box.y, 1, box.h}, rgb(123, 142, 255));
   ui.fill({box.x + box.w - 1, box.y, 1, box.h}, rgb(255, 255, 255)); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, rgb(255, 255, 255));
   const int x0 = r.x + 46, x1 = r.x + 300, yTop = r.y + 65, yBot = r.y + 217;   // 0..max over y243..112 on the original (131 px) [OBSERVED]
-  struct Lab { std::string text; int endY; uint32_t col; int y = 0; };
+  struct Lab { std::string text; int endY; uint32_t col; int y = 0; float endYf = 0; int top = 0; };
   std::vector<Lab> labs;
   int nPts = 0;
   for (size_t i = 0; i < series.size() && i < 16; i++) {
@@ -511,11 +511,12 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     nPts = int(s.size());
     uint32_t lo = 0, hi = series[i].chart->max;
     if (hi == 0) { lo = *std::min_element(s.begin(), s.end()); hi = *std::max_element(s.begin(), s.end()); }   // [OPEN] scaling
-    int px = 0, py = 0;
+    int px = 0, py = 0; float yfEnd = 0;
     for (size_t k = 0; k < s.size(); k++) {
       int x = x0 + int(k) * (x1 - x0) / int(s.size() - 1);
       float t = hi <= lo ? 0.5f : std::max(0.f, std::min(1.f, float(int64_t(s[k]) - int64_t(lo)) / float(hi - lo)));
       int y = yBot - int(t * float(yBot - yTop));
+      yfEnd = float(yBot) - t * float(yBot - yTop);
       if (k) line(ui, px, py, x, y, kSeriesCol[i]);
       px = x; py = y;
     }
@@ -526,17 +527,24 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     }
     std::string t = subst(E.win(series[i].tmplId, series[i].tmplFb), {val});
     while (!t.empty() && t.back() == ' ') t.pop_back();
-    labs.push_back({t, py, kSeriesCol[i], 0});
+    labs.push_back({t, py, kSeriesCol[i], 0, yfEnd, 0});
   }
-  std::sort(labs.begin(), labs.end(), [](const Lab& a, const Lab& b) { return a.endY < b.endY; });
-  int lastY = -1000;
-  for (auto& l : labs) {   // 10 px pitch, pushed apart in line-end order
-    l.y = std::max(l.endY - 5, lastY + 10);
-    l.y = std::max(r.y + 52, std::min(r.y + 226, l.y));
-    lastY = l.y;
+  // Label slots [OBSERVED on London / Berlin captures, 1 Year view]: label ink tops sit on a 10 px grid (99, 109, ... 239, i.e. = 9 mod 10), the slot being
+  // floor((line end y - 4) / 10) * 10 - 1 in the original's screen rows; labels are placed bottom-up and a label that would share or lie below the slot of the one
+  // under it moves up whole slots. The leader runs from the line end (x340) to x344 at about the label's middle (top + 5).
+  const int origY = r.y - 34;   // the original's window top is y34 at 800 x 600
+  std::sort(labs.begin(), labs.end(), [](const Lab& a, const Lab& b) { return a.endYf > b.endYf; });
+  int prevTop = 1 << 30;
+  for (auto& l : labs) {
+    const int endAbs = int(std::floor(l.endYf)) - origY;   // in the original's coordinates
+    int top = int(std::floor(float(endAbs - 4) / 10.f)) * 10 - 1;
+    top = std::min(top, prevTop - 10);
+    prevTop = top;
+    l.top = top + origY;
+    l.y = l.top - 2;   // text origin
   }
   for (auto& l : labs) {
-    line(ui, x1, l.endY, r.x + 304, l.y + 5, l.col, 1);
+    line(ui, x1, l.endY, r.x + 304, l.top + 5, l.col, 1);
     ui.text(r.x + 306, l.y, l.text, "system9", l.col);
   }
   // ticks along y ~ 220 and the current year in grey
