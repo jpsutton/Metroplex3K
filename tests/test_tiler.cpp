@@ -273,14 +273,16 @@ struct TestHost : ToolHost {
   void message(const std::string& s) override { msgs.push_back(s); }
 };
 
-// A water tile that is neither flat nor a valid slope blocks the route (observed on Roadless Paradise); the valid prefix is built and every routed
-// tile is charged.
+// A blocked route (here a foreign occupant at (6,3)) builds its valid prefix and every routed tile is charged (observed on Roadless Paradise). A sloping
+// water tile alone does not block a road drag (Roadless Paradise river crossing, observed).
 static void testBlockedShore() {
   auto rules = makeRules({{"ROAD_GRND_final.txt", roadFinal()}});
   SimpleNetworkMap m(20, 8);
   setupRoadFlags(m);
   for (int x = 6; x <= 8; x++) m.setWater(x, 3, true);
   m.setCornerHeight(7, 4, 31);   // tile (6,3): corners 30 30 31 30 = not flat, not a valid slope, and a water tile
+  { RoutedPath wr = routePath(m, TOOL_ROAD, {2, 3}, {12, 3}); CHECK(!wr.blocked && wr.tiles.size() == 11); }
+  m.addForeign(6, 3, 99999, 0, false);
   RoutedPath rp = routePath(m, TOOL_ROAD, {2, 3}, {12, 3});
   CHECK(rp.tiles.size() == 11 && rp.blocked && rp.validPrefix == 4 && rp.tiles[3].valid && !rp.tiles[4].valid && !rp.tiles[10].valid);
   PlacementCosts costs;
@@ -288,7 +290,7 @@ static void testBlockedShore() {
   TestHost host;
   CommitResult r = commitPath(m, rules, costs, host, TOOL_ROAD, rp);
   CHECK(r.status == COMMIT_OK && host.charged == 110);
-  CHECK(m.occupantAt(5, 3, LAYER_SURFACE).present && !m.occupantAt(6, 3, LAYER_SURFACE).present);
+  CHECK(m.occupantAt(5, 3, LAYER_SURFACE).present && !m.occupantAt(7, 3, LAYER_SURFACE).present);
 }
 
 // A drag ending on a slope whose second-to-last tile has a single odd corner is accepted: that corner moves to the tile's level and the last tile

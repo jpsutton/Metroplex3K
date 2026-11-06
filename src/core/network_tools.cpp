@@ -213,7 +213,7 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
     if (!P.anySlope && !flat && !isValidSlope(c)) return false;
     // A water tile must be flat or a valid slope whatever AnySlope says: the original blocks the path at a sloping shore row, and every shipped
     // bridge end has flat banks [OBSERVED: Roadless Paradise highway drags blocked at (40,164) corners 82 82 81 80; INFERRED rule].
-    if (P.minRun > 0 && !flat && !isValidSlope(c) && m.isWaterTile(x, z)) return false;
+    if (P.wide && P.minRun > 0 && !flat && !isValidSlope(c) && m.isWaterTile(x, z)) return false;   // highway only: a road drag across the Roadless Paradise river is valid [OBSERVED]
     TileOcc o = m.occupantAt(x, z, layer);
     bool crossing = false;
     if (o.present) {
@@ -414,10 +414,12 @@ BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, co
   auto addCorner = [&](int vx, int vz, int h) { if (vOn(vx, vz)) pl.corners.push_back({vx, vz, h}); };
   auto side = [&](int bx, int bz, int sgn, int B) {
     // sgn = -1: start side (W0 - n a), +1: far side (E0 + n a)
+    // Order [OBSERVED, Roadless Paradise road bridge refused next to a train station: the R and D rows were already graded, the B rows were not]: the
+    // row at the water edge, the next row, then the two bank rows.
+    for (int q = 0; q < rows; q++) addCorner(bx + q * pl.px, bz + q * pl.pz, hw + R);
+    for (int q = 0; q < rows; q++) addCorner(bx + sgn * pl.ax + q * pl.px, bz + sgn * pl.az + q * pl.pz, hw + D);
     for (int n : {3, 4})
       for (int q = 0; q < rows; q++) addCorner(bx + sgn * n * pl.ax + q * pl.px, bz + sgn * n * pl.az + q * pl.pz, B);
-    for (int q = 0; q < rows; q++) addCorner(bx + sgn * pl.ax + q * pl.px, bz + sgn * pl.az + q * pl.pz, hw + D);
-    for (int q = 0; q < rows; q++) addCorner(bx + q * pl.px, bz + q * pl.pz, hw + R);
   };
   int Bs = bank(pl.x0, pl.z0, -1, 20), Bf = bank(ex, ez, +1, hw + 1);
   if (kind == NK_HIGHWAY) {
@@ -832,6 +834,8 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
       if (!host.confirmBridge(total, P.kind == NK_POWER)) { res.status = COMMIT_CANCELLED; return res; }
       for (auto& b : bridges)
         if (b.terrainBlocked) {
+          // The grading runs until the first vertex with an occupant next to it, is kept, is not charged, and nothing is built [OBSERVED].
+          for (auto& c : b.corners) { if (!m.canChangeCorner(c.vx, c.vz)) break; m.setCornerHeight(c.vx, c.vz, c.h); }
           host.message("construction discontinued");
           res.status = COMMIT_CANCELLED;
           return res;
@@ -925,7 +929,14 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
 
   // tile
   std::vector<PathTile> tilePath;
-  for (auto& t : path) if (!skip.count({t.x, t.z})) tilePath.push_back(t);
+  bool wetCut = false;
+  for (auto& t : path) {
+    if (skip.count({t.x, t.z})) continue;
+    // A water tile no bridge or tunnel covered is not built, nor is anything after it (roads and rails now validate across water; the bridge decides).
+    if (P.kind != NK_HIGHWAY && m.onMap(t.x, t.z) && m.isWaterTile(t.x, t.z)) wetCut = true;
+    if (wetCut) continue;
+    tilePath.push_back(t);
+  }
   TilerOptions opt;
   opt.pairDx = rp.pairDx; opt.pairDz = rp.pairDz;
   opt.contextPath = context;
