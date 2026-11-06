@@ -14,7 +14,8 @@ namespace m3k {
 
 struct ScenarioHooks {
   // Resolved text; advisorIdx 1..7 (0 = custom presenter), advisorId raw id, mood 1..5.
-  std::function<void(const std::string& text, int advisorIdx, uint32_t advisorId, int mood, bool important)> popUp;
+  std::function<void(const std::string& text, int advisorIdx, uint32_t advisorId, int mood, bool important, const ScenarioPresenterPic& pic)> popUp;
+  std::function<std::string(int neighbour)> neighbourMayor;   // kind-0 presenters 0x14..0x17
   std::function<void(const std::string& text, int cls, bool underline)> ticker;
   std::function<void(int soundId)> sound;
   std::function<void(int x, int z, int zoom)> moveCamera;
@@ -60,6 +61,7 @@ class ScenarioController {
     std::vector<std::string> ranks;   // every rank line (cmdAddRankInfo), in id order
     int achieved = -1;                // index of the achieved rank in `ranks`
     uint32_t presenterAdvisor = 0; int mood = 3;
+    ScenarioPresenterPic presenterPic;
     std::string title, mayor, resultsFor;
   };
   Outcome outcome() const;

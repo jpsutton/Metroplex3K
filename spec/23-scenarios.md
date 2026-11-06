@@ -87,7 +87,7 @@ All text scenario records (header, scripts, style table, presenter table) are 8-
 | 2 | path | Path of the source city used by the Scenario Creator; informational only [DATA] |
 | 3 | `T G I` | Key of the entry-point script. Always `601861727 601861772 n` = `23DFAE5F:23DFAE8C:n` [DATA] |
 | 4 | `G I` | String reference of the scenario title (string table G, string I; I is 1 in all shipped files) [DATA] |
-| 5 | `P K` | Default **presenter** for the scenario's dialogs: P = presenter ID, K = presenter kind, same codes as `cmdPopUpMsg` a4 [STATIC]: 0 = game-side presenter table (P looked up in a table that a city subsystem provides; it returns picture key, name and title) [OPEN: which subsystem]; 1 = advisor (P is an advisor ID from §4.6); 2 = scenario presenter table (P is a row key of §2.6). CORRECTION: earlier text called kind 0 the scenario table. Shipped `2 0` therefore means game-side presenter 2. If K = 1 and P is not a known advisor, the Utilities advisor `022E288E` is used. [STATIC] Values shipped: `828D04EB 1`, `828D0A2F 1`, `028D0FC5 1`, `C28D0B6E 1`, `628D0C45 1`, `2 0`. [DATA] |
+| 5 | `P K` | Default **presenter** for the scenario's dialogs: P = presenter ID, K = presenter kind, same codes as `cmdPopUpMsg` a4 [STATIC]: 0 = game-side presenter table (P looked up in the petitioner manager's built-in presenter list, §4.7.0; it returns picture key, name and title); 1 = advisor (P is an advisor ID from §4.6); 2 = scenario presenter table (P is a row key of §2.6). CORRECTION: earlier text called kind 0 the scenario table. Shipped `2 0` therefore means game-side presenter 2. If K = 1 and P is not a known advisor, the Utilities advisor `022E288E` is used. [STATIC] Values shipped: `828D04EB 1`, `828D0A2F 1`, `028D0FC5 1`, `C28D0B6E 1`, `628D0C45 1`, `2 0`. [DATA] |
 | 6 | `G` | Group of the scenario's string table (equals the G on line 4 in all shipped files) [DATA] |
 
 ### 2.4 Script record `23DFAE5F:23DFAE8C:n` — see §3.
@@ -462,6 +462,66 @@ The scenario engine only forwards these values; it never recomputes them.
   playing the city. [STATIC][INFERRED outcome labels]
 * Time limits are expressed purely by timeline delays or `cmdGetMonthsElapsed` comparisons. [DATA]
 
+#### 4.7.0 Non-advisor presenters [STATIC unless marked]
+
+**Kind 0, the game-side table.** This is a hard-coded list in the petitioner manager (city member
+class 0x02619041, interface 0x82619039, lookup at SIMADV 0x10021B97); it is not an INI or a
+resource table. For presenter ID P it returns:
+* picture `62B9DA24:52DB60A0:<pic>` (the advisor-portrait group);
+* the name string from table `041F2625`;
+* the title string from table `826DD2D0`.
+
+| P | pic | name | title |
+|---|---|---|---|
+| 2 | FF01 | 0x13 | 0x01 |
+| 3 | FF02 | 0x14 | 0x02 |
+| 4 | FF12 | 0x15 | 0x1D |
+| 5 | FF07 | 0x16 | 0x15 |
+| 6 | FF0B | 0x17 | 0x16 |
+| 7 | FF08 | 0x18 | 0x22 |
+| 8 | FF0E | 0x19 | 0x0C |
+| 9 | FF15 | 0x1A | 0x1B |
+| 0x0A | FF11 | 0x1B | 0x14 |
+| 0x0B | FF0C | 0x1C | 0x28 |
+| 0x0C | FF0F | 0x1D | 0x63 |
+| 0x0D | FF09 | 0x1E | 0x8F |
+| 0x0E | FF13 | 0x1F | 0x74 |
+| 0x0F | FF06 | 0x20 | 0x85 |
+| 0x10 | FF0A | 0x21 | 0x78 |
+| 0x11 | FF0D | 0x22 | 0x10 |
+| 0x13 | FF04 | 0x23 | 0xD7 |
+| 0x14–0x17 | FF03, FF05, FF10, FF14 | the mayor name of neighbour 0–3 | title 0xA5 with `%NEIGHBOR%` replaced by that neighbour's name |
+
+Other IDs (0, 1, 0x12, ≥ 0x18) give empty strings and no picture. [OBSERVED 800 × 600]
+Separation Anxiety, the only shipped scenario with a kind-0 default presenter (`2 0`), shows a
+petitioner portrait and the name "Beverly Overly" in its start dialog.
+
+**Kind 2.** The row of §2.6 gives picture `62B9DA24:6504691D:P`, and the name and title strings
+come from the scenario string table.
+
+**Drawing (kinds 0 and 2).** The picture is cropped from its top-left corner to at most 94 × 117
+(advisor portraits are not clipped). It is placed horizontally centred in the dialog's presenter
+column, with the name below it, centred, in font 0x0F. The title string is passed to the pop-up
+as its window caption `[INFERRED]`. The start and results dialogs build it but never show it.
+Positions in dialog coordinates:
+
+| Dialog | Portrait (x, y) | Name rect |
+|---|---|---|
+| pop-up (391 × 237) | (0x109 + (0x7A − w)/2, 0x28) | (0x109, portrait bottom)–(0x183, 0xBE) |
+| start | (0x15D + (0x79 − w)/2, 0x37) | (0x15D, portrait bottom)–(0x1D6, 0xD4) |
+| results | (0x140 + (0x79 − w)/2, 0x22) | (0x140, portrait bottom)–(0x1B9, 0xBC) |
+
+* When the picture is missing, no portrait is drawn and the name starts at the top of the column.
+* Original defect: for kind 2 (and any kind ≥ 3), the pop-up does not store the "portrait found"
+  result. Its draw flag is then a leftover value, normally 0, so these pop-ups show no portrait.
+  Start and results dialogs are not affected.
+* Observed panel at 800 × 600 (start dialog, kind 0), identical to the advisor case:
+  * inset (512,119)–(632,296), fill (123,146,255);
+  * portrait frame x 526–617, y 140–254, with a dark top/left line (66,65,66) and a white
+    right/bottom line;
+  * name ink rows 272–282, colour (49,52,123);
+  * no title line.
+
 #### 4.7.1 Observed layouts at 800 × 600 `[OBSERVED]` (A Better Betterfeld)
 
 Coordinates are window client pixels, as (left, top)–(right, bottom), right/bottom exclusive. All
@@ -584,6 +644,16 @@ The following tokens are substituted when scenario text is displayed [STATIC]:
 ticker). [STATIC][DATA]
 
 `%SCNV<x> <n>%` [STATIC]:
+* **Language index source.** The language index is the game's language setting, held by the
+  language manager and copied to the number formatter (default 1 = US English). At startup it is
+  read from `HKLM\Software\Electronic Arts\Maxis\SimCity 3000 Unlimited\Language`:
+  * a DWORD < 0x2C is the language index itself;
+  * a larger DWORD is a Windows LCID and is mapped to a language;
+  * a string value is matched by language name.
+  If the value is missing, an INI value (`Language` / `Default Locale`) is tried, then the
+  default 1. Index 0 maps to 1. The `Country` registry value is separate (DWORD < 0x39). The
+  index-to-language table is `27-platform.md` §1. An implementation should take the index from
+  its own language setting.
 * Parsing: the token text between the two `%` is read as a word and a decimal integer
   (`%s %d`). The first five characters must be `%SCNV`. The letter x is case-sensitive: `M`
   money, `N` number, `Y` year; any other letter leaves the token unchanged. The space before n is

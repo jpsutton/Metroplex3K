@@ -278,10 +278,14 @@ int main() {
   }
   {
     ScenarioFile f = makeScenario();
-    ResolvedPresenter a = f.resolvePresenter(0x828D04EB, 1), b = f.resolvePresenter(5, 1), cu = f.resolvePresenter(137, 0), nf = f.resolvePresenter(999, 0);
+    ResolvedPresenter a = f.resolvePresenter(0x828D04EB, 1), b = f.resolvePresenter(5, 1), cu = f.resolvePresenter(137, 2), nf = f.resolvePresenter(999, 2);
     CHECK(a.advisor && a.advisorIdx == 4 && b.advisorId == kAdvisorUtilities && b.advisorIdx == 1);
     CHECK(!cu.advisor && cu.picture == presenterPictureKey(137) && cu.nameString.instance == 0x80 && cu.titleString.instance == 0x81 && cu.nameString.group == f.header.stringTable);
     CHECK(!nf.found && f.defaultPresenter().advisorIdx == 4);
+    ResolvedPresenter g2 = f.resolvePresenter(2, 0), g14 = f.resolvePresenter(0x14, 0), gx = f.resolvePresenter(0x12, 0);
+    CHECK(!g2.advisor && g2.found && g2.picture.group == 0x52DB60A0 && g2.picture.instance == 0xFF01 && g2.nameString.group == 0x041F2625 && g2.nameString.instance == 0x13);
+    CHECK(g14.neighbour == 0 && g14.picture.instance == 0xFF03 && g14.nameString.instance == 0 && g14.titleString.instance == 0xA5);
+    CHECK(!gx.found);   // ids outside the game table: no picture, no strings
     ScenarioChooserInfo ci = f.chooserInfo();
     CHECK(ci.stringTable == 0xFA47D792u && ci.string1.instance == 1 && ci.string0.instance == 0 && ci.scenarioType == 7 && ci.difficulty == 5 && ci.author == "Jane");
     CHECK(f.entryScriptPresent());

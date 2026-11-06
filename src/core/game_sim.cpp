@@ -764,8 +764,9 @@ bool Game::scenarioActive() const { return scen_ && scen_->active(); }
 void Game::startScenarioHooks() {
   if (!scen_) return;
   ScenarioHooks h;
-  h.popUp = [this](const std::string& text, int, uint32_t adv, int mood, bool) {
-    ScenarioPopupView v; v.text = text; v.presenterAdvisor = adv; v.mood = mood;
+  h.neighbourMayor = [this](int n) { auto& nb = city().neighbours.neighbours; return n >= 0 && n < int(std::size(nb)) ? nb[size_t(n)].mayorName : std::string(); };
+  h.popUp = [this](const std::string& text, int, uint32_t adv, int mood, bool, const ScenarioPresenterPic& pic) {
+    ScenarioPopupView v; v.text = text; v.presenterAdvisor = adv; v.presenterPic = pic; v.mood = mood;
     scenPopups_.push_back(std::move(v));
   };
   h.ended = [this](int) { scr_ = Screen::ScenarioEnd; };

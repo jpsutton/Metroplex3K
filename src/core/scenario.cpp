@@ -386,6 +386,18 @@ bool ScenarioFile::load(const Bytes& file, ScenarioFile& o, std::string* err) {
   return true;
 }
 
+// Kind 0: the game-side presenter list of the petitioner manager (spec 23 4.7.0 [STATIC], SIMADV 0x10021B97): P -> picture 62B9DA24:52DB60A0:pic,
+// name from string table 041F2625, title from 826DD2D0. 0x14..0x17 are the neighbour mayors (picture only here: the name is the mayor's).
+namespace {
+struct GamePresenter { uint32_t p, pic, name, title; };
+const GamePresenter kGamePresenters[] = {
+    {0x02, 0xFF01, 0x13, 0x01}, {0x03, 0xFF02, 0x14, 0x02}, {0x04, 0xFF12, 0x15, 0x1D}, {0x05, 0xFF07, 0x16, 0x15}, {0x06, 0xFF0B, 0x17, 0x16},
+    {0x07, 0xFF08, 0x18, 0x22}, {0x08, 0xFF0E, 0x19, 0x0C}, {0x09, 0xFF15, 0x1A, 0x1B}, {0x0A, 0xFF11, 0x1B, 0x14}, {0x0B, 0xFF0C, 0x1C, 0x28},
+    {0x0C, 0xFF0F, 0x1D, 0x63}, {0x0D, 0xFF09, 0x1E, 0x8F}, {0x0E, 0xFF13, 0x1F, 0x74}, {0x0F, 0xFF06, 0x20, 0x85}, {0x10, 0xFF0A, 0x21, 0x78},
+    {0x11, 0xFF0D, 0x22, 0x10}, {0x13, 0xFF04, 0x23, 0xD7},
+    {0x14, 0xFF03, 0, 0xA5}, {0x15, 0xFF05, 0, 0xA5}, {0x16, 0xFF10, 0, 0xA5}, {0x17, 0xFF14, 0, 0xA5}};
+}  // namespace
+
 ResolvedPresenter ScenarioFile::resolvePresenter(uint32_t id, uint32_t kind) const {
   ResolvedPresenter r;
   if (kind == 1) {
@@ -395,6 +407,19 @@ ResolvedPresenter ScenarioFile::resolvePresenter(uint32_t id, uint32_t kind) con
     return r;
   }
   r.advisor = false;
+  if (kind == 0) {
+    r.found = false;   // other ids: empty strings and no picture
+    for (const auto& g : kGamePresenters)
+      if (g.p == id) {
+        r.found = true;
+        r.picture = ResKey{0x62B9DA24, 0x52DB60A0, g.pic};
+        if (g.name) r.nameString = {0x2026960B, 0x041F2625, g.name};
+        r.titleString = {0x2026960B, 0x826DD2D0, g.title};
+        if (id >= 0x14 && id <= 0x17) r.neighbour = int(id) - 0x14;
+      }
+    return r;
+  }
+  // Kind 2: the scenario's presenter table; the lookup does not check that the row exists (spec 23 2.6).
   r.picture = presenterPictureKey(id);
   if (const PresenterRow* row = presenters.find(int32_t(id))) {
     r.nameString = {0x2026960B, header.stringTable, uint32_t(row->name)};

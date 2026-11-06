@@ -320,8 +320,24 @@ const uint32_t kInset = 0xFFFFDFDEu;       // (222,223,255): every inset area (t
 const int kPitch = 14;                      // body, goal and rank text pitch
 
 // Presenter panel: the advisor portrait (92 x 115 cells) in a 1 px frame, and the person's name centred below it.
-void presenterPanel(Ui& ui, const WinEnv& E, Rect panel, int portraitX, int portraitY, int nameY, uint32_t advisor, int mood) {
+void presenterPanel(Ui& ui, const WinEnv& E, Rect panel, int portraitX, int portraitY, int nameY, uint32_t advisor, int mood,
+                    const ScenarioPresenterPic* pic = nullptr) {
   ui.fill(panel, kPanelFill);
+  if (pic && pic->custom && !advisor) {
+    // Kinds 0 / 2 (spec 23 4.7.0 [STATIC; crop INFERRED]): the picture cropped from its top-left to at most 94 x 117, centred in the presenter
+    // column, the name below it, centred; no title line. A missing picture leaves the name at the top of the column.
+    int bottom = panel.y + 4;
+    if (pic->group) {
+      if (const Image* im = E.img(pic->group, pic->inst)) {
+        const int w = std::min(94, im->w), h = std::min(117, im->h);
+        const int px = panel.x + (panel.w - w) / 2, py = portraitY;
+        ui.blitRect(*im, px, py, 0, 0, w, h);
+        bottom = py + h + 2;
+      }
+    }
+    if (!pic->name.empty()) ui.textCentered({panel.x, pic->group && bottom > panel.y + 4 ? bottom : panel.y + 4, panel.w, 14}, pic->name, "main9", rgb(0x31, 0x36, 0x7C));
+    return;
+  }
   const int idx = AdvisorWindow::advisorIndex(advisor);
   if (idx < 1) return;
   const Rect pr{portraitX, portraitY, 91, 114};
@@ -369,7 +385,7 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
     textTop = 71;
   } else mayorInit = false;
   textBox(ui, E, at(18, textTop, 322, 210 - textTop), v.briefing, scroll);
-  presenterPanel(ui, E, at(350, 35, 120, 177), r.x + 364, r.y + 56, r.y + 187, v.presenterAdvisor, v.presenterMood);
+  presenterPanel(ui, E, at(350, 35, 120, 177), r.x + 364, r.y + 56, r.y + 187, v.presenterAdvisor, v.presenterMood, &v.presenterPic);
   // Goals: one row per goal on a 40 px pitch, a 28 px status icon, the text wrapped on two lines.
   ui.text(r.x + 18, r.y + 224, v.goalsLabel.empty() ? "Scenario Goals:" : v.goalsLabel, "title12", ink);
   const Rect lb = at(18, 245, 452, 141);
@@ -415,7 +431,7 @@ WindowResult ScenarioPopupWindow::draw(Ui& ui, const WinEnv& E, const ScenarioPo
   const bool overflow = int(lines.size()) > visible;
   if (overflow) scrollBar(ui, E, {r.x + 241, tp.y, 16, tp.h}, int(lines.size()), visible, scroll); else scroll = 0;
   for (int i = 0; i < visible && i + scroll < int(lines.size()); i++) ui.text(r.x + 74, r.y + 51 + i * lh, lines[size_t(i + scroll)], "main10", 0xFF000000u);
-  presenterPanel(ui, E, at(266, 40, 121, 150), r.x + 281, r.y + 41, r.y + 167, v.presenterAdvisor, v.mood);
+  presenterPanel(ui, E, at(266, 40, 121, 150), r.x + 281, r.y + 41, r.y + 167, v.presenterAdvisor, v.mood, &v.presenterPic);
   if (checkButton(ui, E, "ok", at(338, 199, 42, 32)) || ui.in.key[K_ENTER] || ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
   return R;
 }
@@ -441,7 +457,7 @@ int ScenarioEndWindow::draw(Ui& ui, const WinEnv& E, const ScenarioEndView& v) {
     for (size_t k = 0; k < lines.size() && k < 2; k++) ui.text(r.x + 61, y + int(k) * kPitch, lines[k], "main10", got ? rgb(49, 52, 123) : rgb(165, 162, 165));
     y += 19 + (lines.size() > 1 ? kPitch : 0);
   }
-  presenterPanel(ui, E, at(321, 34, 119, 154), r.x + 334, r.y + 34, r.y + 163, v.presenterAdvisor, v.mood);
+  presenterPanel(ui, E, at(321, 34, 119, 154), r.x + 334, r.y + 34, r.y + 163, v.presenterAdvisor, v.mood, &v.presenterPic);
   int scr = 0;
   textBox(ui, E, at(13, 203, 427, 89), v.text, scr);
   int choice = -1;

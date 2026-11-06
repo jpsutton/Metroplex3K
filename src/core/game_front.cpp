@@ -1146,7 +1146,7 @@ void Game::drawScenarioEnd() {
   v.heading = head.empty() ? std::string(o.win ? "Scenario Completed!" : "Scenario Failed") : head;
   v.resultsFor = o.resultsFor.empty() ? "Results for Mayor " + o.mayor : o.resultsFor;
   v.ranks = o.ranks; v.achieved = o.achieved; v.text = o.text;
-  v.presenterAdvisor = o.presenterAdvisor; v.mood = o.mood;
+  v.presenterAdvisor = o.presenterAdvisor; v.presenterPic = o.presenterPic; v.mood = o.mood;
   v.captions[0] = str(0x041F2625, 8); v.captions[1] = str(0x041F2625, 9); v.captions[2] = str(0x041F2625, 0xA);
   WinEnv E = env();
   uiHit_ = true;

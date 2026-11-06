@@ -112,9 +112,10 @@ struct ResolvedPresenter {
   bool advisor = true;           // kind 1
   uint32_t advisorId = 0;        // effective advisor ID (kind 1)
   int advisorIdx = 0;            // 1..7
-  ResKey picture;                // custom presenter picture 62B9DA24:6504691D:P (kind 0)
+  ResKey picture;                // kind 0: 62B9DA24:52DB60A0:pic (game table); kind 2: 62B9DA24:6504691D:P (scenario table)
   ResKey nameString, titleString;  // 2026960B:<table>:NAME / TITLE (kind 0, when the row exists)
   bool found = true;             // false: custom presenter with no table row
+  int neighbour = -1;            // kind 0, ids 0x14..0x17: the neighbour whose mayor presents (name = mayor name)
 };
 
 // What the scenario chooser shows (spec 23 section 2.7, 6).

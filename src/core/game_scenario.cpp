@@ -103,8 +103,17 @@ struct Host : IScenarioHost {
   void popUp(const PopUpRequest& r) override {
     if (!h || !h->popUp) return;
     std::string t = resolve ? resolve(r.group, r.id) : std::string();
-    uint32_t adv = r.presenter ? uint32_t(r.presenter) : (file ? file->header.effectivePresenter() : kAdvisorUtilities);
-    h->popUp(t, advisorIndex(adv), adv, r.mood ? r.mood : 3, r.important != 0);
+    // Presenter: id 0 = the header's default; a4 = kind (0 game table, 1 advisor, 2 scenario table; spec 23 4.7.0).
+    uint32_t pid = uint32_t(r.presenter), kind = uint32_t(r.a4);
+    if (!pid && file) { pid = file->header.presenter; kind = file->header.presenterKind; }
+    uint32_t adv = kAdvisorUtilities;
+    ScenarioPresenterPic pic;
+    if (file) {
+      PresenterChoice pc = resolvePresenterChoice(h->text, h->neighbourMayor, *file, pid, kind);
+      adv = pc.advisor; pic = pc.pic;
+      if (kind >= 2) pic.group = pic.inst = 0;   // original defect: kind >= 2 pop-ups never store the "portrait found" flag (0x10001A1B): name only
+    } else if (pid) adv = pid;
+    h->popUp(t, advisorIndex(adv), adv, r.mood ? r.mood : 3, r.important != 0, pic);
     if (co) co->yield();   // resumes after the OK (ScenarioController::popupClosed)
   }
   void newsTicker(uint32_t g, uint32_t id) override {
@@ -207,7 +216,7 @@ void ScenarioController::setPopupOpen(bool o) { if (p_->rt) p_->rt->setPopupOpen
 ScenarioGoalsView ScenarioController::goalsView() const {
   ScenarioState empty;
   const ScenarioState& st = p_->rt ? p_->rt->state() : empty;
-  ScenarioGoalsView v = makeScenarioGoalsView(p_->hooks.text, st, &p_->file, p_->ctx());
+  ScenarioGoalsView v = makeScenarioGoalsView(p_->hooks.text, st, &p_->file, p_->ctx(), p_->hooks.neighbourMayor);
   v.startMode = false;
   v.title = title();   // the title bar shows the scenario's title (spec 23 4.7.1)
   return v;
@@ -226,7 +235,8 @@ ScenarioController::Outcome ScenarioController::outcome() const {
     if (int(kv.first) == r.rank) o.achieved = int(o.ranks.size());
     o.ranks.push_back(expandScenarioTokens(p_->res(kv.second.group, kv.second.id), c));
   }
-  o.presenterAdvisor = p_->file.header.effectivePresenter();
+  { PresenterChoice pc = resolvePresenterChoice(p_->hooks.text, p_->hooks.neighbourMayor, p_->file, p_->file.header.presenter, p_->file.header.presenterKind);
+    o.presenterAdvisor = pc.advisor; o.presenterPic = pc.pic; }
   o.mood = p_->rt->state().presenterMood ? int(p_->rt->state().presenterMood) : 3;   // the mood of cmdSetResultsDlgText
   o.title = title(); o.mayor = c.mayor;
   o.resultsFor = expandScenarioTokens(p_->res(0x041F2625, 0x25), c);   // "Results for Mayor %YOURNAME%"

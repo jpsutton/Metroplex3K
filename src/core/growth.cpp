@@ -1344,6 +1344,9 @@ int ZoneManager::visitPort(GrowthCity& c, SimRand& rng, int x, int z, const Zone
   k.agentType = airport ? 12310 : 12330;
   k.minLV = 0; k.maxLV = 255;
   LotInfo lot = c.lotAt(x, z);
+  // Tile-entry gate (spec 15 s7 [STATIC]): an existing part counts only when the occupant is a building (class flag 0x100: every building class
+  // has it, flora and network pieces do not); a tile holding only a tree takes the empty path.
+  if (lot.present && lot.agentType == 300) lot = LotInfo();
   // Rules: up to min(5, n) distinct rules, lot finder with transport distance 6, minimum land value 0, replaced type 0 and the power test active.
   auto rules = [&](int V, int Max) { return startDevelopment(c, rng, x, z, zd, k, 0, V, 0, Max, false, 5, 6); };
   if (airport) {

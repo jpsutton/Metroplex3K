@@ -16,9 +16,27 @@ std::string resolve(const std::function<std::string(uint32_t, uint32_t)>& text, 
 }
 }  // namespace
 
+PresenterChoice resolvePresenterChoice(const std::function<std::string(uint32_t, uint32_t)>& text, const std::function<std::string(int)>& neighbourMayor,
+                                       const ScenarioFile& file, uint32_t id, uint32_t kind) {
+  PresenterChoice c;
+  const ResolvedPresenter rp = file.resolvePresenter(id, kind);
+  if (rp.advisor) { c.advisor = rp.advisorId; return c; }
+  c.pic.custom = true;
+  if (!rp.found) return c;   // unknown id: no portrait, no name
+  c.pic.group = rp.picture.group; c.pic.inst = rp.picture.instance;
+  auto str = [&](const ResKey& k) {
+    std::string s = text ? text(k.group, k.instance) : std::string();
+    if (s.empty() && k.group == file.header.stringTable) { auto it = file.strings.find(k.instance); if (it != file.strings.end()) s = it->second; }
+    return s;
+  };
+  if (rp.neighbour >= 0) c.pic.name = neighbourMayor ? neighbourMayor(rp.neighbour) : std::string();
+  else if (rp.nameString.instance) c.pic.name = str(rp.nameString);
+  return c;
+}
+
 ScenarioGoalsView makeScenarioGoalsView(const std::function<std::string(uint32_t, uint32_t)>& text,
                                         const ScenarioState& st, const ScenarioFile* file,
-                                        const ScenarioTextContext& ctx) {
+                                        const ScenarioTextContext& ctx, const std::function<std::string(int)>& neighbourMayor) {
   ScenarioGoalsView v;
   v.inScenario = st.active;
   auto lbl = [&](uint32_t id, const char* fb) {
@@ -44,7 +62,10 @@ ScenarioGoalsView makeScenarioGoalsView(const std::function<std::string(uint32_t
     v.goals.push_back(g);
   }
   v.status = std::to_string(met) + " of " + std::to_string(v.goals.size()) + " goals met";
-  if (file) v.presenterAdvisor = file->header.effectivePresenter();
+  if (file) {
+    PresenterChoice pc = resolvePresenterChoice(text, neighbourMayor, *file, file->header.presenter, file->header.presenterKind);
+    v.presenterAdvisor = pc.advisor; v.presenterPic = pc.pic;
+  }
   v.presenterMood = st.presenterMood ? int(st.presenterMood) : 3;
   v.mayor = ctx.mayor;
   return v;
