@@ -141,6 +141,8 @@ int64_t BudgetConfig::placementCostFor(uint32_t t, const AgentHierarchy& h, bool
   return cost;
 }
 
+bool Budget::tireRecyclingEnacted() const { return ordinances && ordinances->enacted(0xC2F6E81Fu); }
+
 // ================================================================ TaxDemandTable
 std::array<float, 23> TaxDemandTable::entryTable(const TaxEffectEntry& e) {
   std::array<float, 23> t{};

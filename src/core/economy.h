@@ -174,8 +174,11 @@ class Budget {
   // Treasury operations (spec 19 s2).
   bool spend(int64_t amount);
   void add(int64_t amount);
-  int64_t placementCost(uint32_t agentType, const AgentHierarchy& h, bool tireOrdEnacted) const {
-    return freePlacement ? 0 : cfg.placementCostFor(agentType, h, tireOrdEnacted);
+  // `ordinances` (set by City) supplies the Tire Recycling state, so callers need not pass it; `tireOrdEnacted` forces it on.
+  const class Ordinances* ordinances = nullptr;
+  bool tireRecyclingEnacted() const;
+  int64_t placementCost(uint32_t agentType, const AgentHierarchy& h, bool tireOrdEnacted = false) const {
+    return freePlacement ? 0 : cfg.placementCostFor(agentType, h, tireOrdEnacted || tireRecyclingEnacted());
   }
   int64_t specialCost(int index) const { return freePlacement ? 0 : cfg.specialCostFor(index); }
 

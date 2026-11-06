@@ -491,6 +491,7 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   budget = Budget(BudgetConfig::fromIni(cfg_.ini.budgetLayer, &cfg_.ini.advisorBudget));
   budget.newCity(20000);
   ordinances = Ordinances();
+  budget.ordinances = &ordinances;
   if (cfg_.ini.ordinances.has("ListOfOrdinances")) ordinances.loadCatalogue(cfg_.ini.ordinances);
   ordinances.newCity();
   neighbours = NeighbourDeals();
@@ -1282,7 +1283,12 @@ void City::setFallbackRoadPiece(int x, int z) {
 namespace {
 PlacementCosts makeCosts(const Budget& b, const CityConfig& cfg) {
   PlacementCosts pc;
-  for (const auto& kv : b.cfg.placementCost) pc.byType[kv.first] = int(kv.second);
+  for (const auto& kv : b.cfg.placementCost) {
+    int64_t c = kv.second;
+    // Tire Recycling discount on the listed road/rail/highway/bridge types (spec 19 s13).
+    if (b.tireRecyclingEnacted() && b.cfg.tireRecyclingTypes.count(kv.first)) c -= c * b.cfg.tireRecyclingPct / 100;
+    pc.byType[kv.first] = int(c);
+  }
   pc.parent = cfg.parent;
   pc.demolish = int(b.cfg.specialCostFor(7));
   pc.demolishRubble = int(b.cfg.specialCostFor(12));
