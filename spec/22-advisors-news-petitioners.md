@@ -1353,7 +1353,7 @@ entry that is not a deal and not owned, with N = population, Y = current year:
 | 14003 national park | `0x88` | park measure PM > `PARKS_NEEDED_FOR_NATIONAL_PARK` (PM defined below; CORRECTION: not a count of agent type 14310); the population test uses a different population measure [OPEN] |
 | 14325 theme park | `0x8D` | number of airport buildings (12310) > 5 and ordinance `0x62F6E7CF` (tourism promotion) enacted |
 | 14550 lighthouse | `0x8B` | population test uses the same alternative measure as national park [OPEN: likely coastal/seaport related] |
-| 20001 haunted house (Holidays) | `0x12C` | Holidays building set enabled; calendar month m (1 = January) with 6 < m < 10, i.e. July–September [STATIC; CORRECTION of the earlier 0-based reading]; not when a game-state value (a getter on the application object) is 0x1E, 0x1F, 0x20, 0x22 or 0x31 [OPEN: meaning, probably game modes] |
+| 20001 haunted house (Holidays) | `0x12C` | Holidays building set enabled; calendar month m (1 = January) with 6 < m < 10, i.e. July–September [STATIC; CORRECTION of the earlier 0-based reading]; not offered when the player's **country** (`27-platform.md` §1) is 30 Italy, 31 Japan, 32 Korea, 34 Netherlands or 49 Taiwan [STATIC: the values and the country-name table; INFERRED: that the application getter returns the country index] |
 | 20002 skating rink (Holidays) | `0x12F` | Holidays building set enabled; calendar month 8 < m < 12, i.e. September–November [STATIC]; park measure PM > 29 |
 
 **Park measure PM** [STATIC]: a weighted sum of park buildings by agent type, counting each type
