@@ -1,5 +1,7 @@
 #include "core/network_tools.h"
 #include <algorithm>
+#include <map>
+#include <string>
 #include <cstdlib>
 
 namespace m3k {
@@ -70,6 +72,7 @@ struct StripGrade {
   std::vector<GradeVertex> verts;   // changed vertices only
   int raised = 0, lowered = 0;
   size_t failFrom = size_t(-1);     // first tile index of the failing run, -1 = none
+  std::string why;                  // debug text of the failure
 };
 
 static StripGrade planStripGrade(const INetworkMap& m, const std::vector<std::pair<int, int>>& tiles, const std::vector<char>& skip) {
@@ -106,7 +109,7 @@ static StripGrade planStripGrade(const INetworkMap& m, const std::vector<std::pa
     const bool alongZ = tiles[a].first == tiles[b].first;
     if (alongZ) { for (size_t k = a; k <= b; k++) if (tiles[k].first != tiles[a].first) collinear = false; }
     else { for (size_t k = a; k <= b; k++) if (tiles[k].second != tiles[a].second) collinear = false; }
-    if (!collinear) { g.failFrom = a; return g; }
+    if (!collinear) { g.failFrom = a; g.why = "run not collinear"; return g; }
     // all tiles already a valid slope (or flat): nothing to grade
     bool allValid = true;
     for (size_t k = a; k <= b; k++) { int c[4]; m.tileCorners(tiles[k].first, tiles[k].second, c); if (!(isValidSlope(c) || (c[0] == c[1] && c[1] == c[2] && c[2] == c[3]))) allValid = false; }
@@ -127,7 +130,7 @@ static StripGrade planStripGrade(const INetworkMap& m, const std::vector<std::pa
       int lo = std::max(0, endH - 2 - 2 * (last - k)), hi = std::min(255, endH + 2 + 2 * (last - k));
       if (k == s) { lo = std::max(lo, startH); hi = std::min(hi, startH); }
       else { lo = std::max(lo, prev - 2); hi = std::min(hi, prev + 2); }
-      if (hi < lo) { fail = true; break; }
+      if (hi < lo) { fail = true; g.why = "window empty at k=" + std::to_string(k) + " lo " + std::to_string(lo) + " hi " + std::to_string(hi); break; }
       const int mx = alongZ ? tiles[a].first + 1 : minX + k, mz = alongZ ? minZ + k : tiles[a].second;
       const int qx = alongZ ? tiles[a].first : minX + k, qz = alongZ ? minZ + k : tiles[a].second + 1;
       if (mx < 0 || mz < 0 || mx > m.width() || mz > m.height()) { prev = std::max(lo, std::min(hi, prev)); continue; }
@@ -139,7 +142,7 @@ static StripGrade planStripGrade(const INetworkMap& m, const std::vector<std::pa
     if (!fail) {
       std::vector<GradeVertex> all = main; all.insert(all.end(), mirror.begin(), mirror.end());
       for (const auto& v : all)
-        if (v.h != m.cornerHeight(v.x, v.z) && !m.canChangeCorner(v.x, v.z)) { fail = true; break; }   // permission: occupants around every changed vertex
+        if (v.h != m.cornerHeight(v.x, v.z) && !m.canChangeCorner(v.x, v.z)) { fail = true; g.why = "occupant next to vertex (" + std::to_string(v.x) + "," + std::to_string(v.z) + ") " + std::to_string(m.cornerHeight(v.x, v.z)) + "->" + std::to_string(v.h); break; }   // permission: occupants around every changed vertex
       if (!fail) for (const auto& v : all) target[{v.x, v.z}] = v.h;
     }
     if (fail) { g.failFrom = a; return g; }
@@ -152,7 +155,17 @@ static StripGrade planStripGrade(const INetworkMap& m, const std::vector<std::pa
   }
   return g;
 }
+
 }  // namespace
+
+std::string describeStripGrade(const INetworkMap& m, const std::vector<std::pair<int, int>>& tiles) {
+  StripGrade g = planStripGrade(m, tiles, {});
+  std::string out = "strip grade: ";
+  if (g.failFrom != size_t(-1)) out += "FAILS from tile " + std::to_string(g.failFrom) + " (" + g.why + ")\n";
+  else out += "ok, raised " + std::to_string(g.raised) + " lowered " + std::to_string(g.lowered) + "\n";
+  for (const auto& v : g.verts) out += "  vertex (" + std::to_string(v.x) + "," + std::to_string(v.z) + ") " + std::to_string(m.cornerHeight(v.x, v.z)) + " -> " + std::to_string(v.h) + "\n";
+  return out;
+}
 
 RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std::pair<int, int> E) {
   const ToolParams& P = toolParams(tool);

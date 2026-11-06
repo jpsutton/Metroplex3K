@@ -1400,6 +1400,11 @@ std::string City::describeRoute(NetworkKind k, int x0, int z0, int x1, int z1) c
                   map.isWaterTile(t.x, t.z) ? " water" : "", o.present ? " occupied" : "");
     out += buf;
   }
+  if (tool != TOOL_HIGHWAY) {
+    std::vector<std::pair<int, int>> all;
+    for (const auto& t : rp.tiles) all.push_back({t.x, t.z});
+    out += describeStripGrade(map, all);   // planned grade over every routed tile (debug)
+  }
   return out;
 }
 

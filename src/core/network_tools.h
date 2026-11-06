@@ -60,6 +60,8 @@ struct RoutedPath {
 };
 constexpr int kMaxPathTiles = 512;
 RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> start, std::pair<int, int> end);
+// Debug text of the strip grade planned for these tiles (vertex changes or the failure reason); non-highway kinds.
+std::string describeStripGrade(const INetworkMap& m, const std::vector<std::pair<int, int>>& tiles);
 
 // Placement / crossing filters of a tool (section 6.2.1; sets are the crossing lists, INFERRED).
 bool placementAccepts(int kind, const TileOcc& o);
