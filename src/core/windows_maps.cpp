@@ -499,7 +499,9 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   // Frame: dark top/left (123,142,255), white right/bottom [OBSERVED].
   ui.fill({box.x, box.y, box.w, 1}, rgb(123, 142, 255)); ui.fill({box.x, box.y, 1, box.h}, rgb(123, 142, 255));
   ui.fill({box.x + box.w - 1, box.y, 1, box.h}, rgb(255, 255, 255)); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, rgb(255, 255, 255));
-  const int x0 = r.x + 46, x1 = r.x + 300, yTop = r.y + 65, yBot = r.y + 217;   // 0..max over y243..112 on the original (131 px) [OBSERVED]
+  // Vertical mapping fitted on 14 line ends of London and Berlin captures: original y = 1.0308 * ours - 7.5 (ours was right at the bottom, 3..5 px too low at the top).
+  const int origY0 = r.y - 34;   // the original's window top is y34 at 800 x 600
+  const int x0 = r.x + 46, x1 = r.x + 300, yTop = origY0 + 95, yBot = origY0 + 251;   // old rows 99 / 251 mapped through the fit (94.5 / 251.2)
   struct Lab { std::string text; int endY; uint32_t col; int y = 0; float endYf = 0; int top = 0; };
   std::vector<Lab> labs;
   int nPts = 0;
@@ -513,7 +515,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     if (hi == 0) { lo = *std::min_element(s.begin(), s.end()); hi = *std::max_element(s.begin(), s.end()); }   // [OPEN] scaling
     int px = 0, py = 0; float yfEnd = 0;
     for (size_t k = 0; k < s.size(); k++) {
-      int x = x0 + int(k) * (x1 - x0) / int(s.size() - 1);
+      int x = x0 + int(k) * (x1 - 1 - x0) / int(s.size() - 1);   // the line stops at x339; the leader starts at x340
       float t = hi <= lo ? 0.5f : std::max(0.f, std::min(1.f, float(int64_t(s[k]) - int64_t(lo)) / float(hi - lo)));
       int y = yBot - int(t * float(yBot - yTop));
       yfEnd = float(yBot) - t * float(yBot - yTop);
@@ -544,7 +546,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     l.y = l.top - 2;   // text origin
   }
   for (auto& l : labs) {
-    line(ui, x1, l.endY, r.x + 304, l.top + 5, l.col, 1);
+    line(ui, x1 - 1, l.endY, r.x + 304, l.top + 5, l.col, 1);
     ui.text(r.x + 306, l.y, l.text, "system9", l.col);
   }
   // ticks along y ~ 220 and the current year in grey

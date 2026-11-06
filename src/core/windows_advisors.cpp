@@ -181,7 +181,9 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
   } else if (tab == 1) {
     for (uint32_t t : briefingIds(selected)) rows.push_back({t, E.text(0x82B85965, t, hexName("Help ", t))});
   } else {
-    for (uint32_t t : topicsFor(list, tab)) rows.push_back({t, E.text(kTblAdvisorHeading, t, hexName("Topic ", t))});
+    auto ids = topicsFor(list, tab);
+    std::stable_sort(ids.begin(), ids.end());   // the news topics are listed by ascending topic id, not in raise order [OBSERVED: Transportation, Public Safety, Health pages]
+    for (uint32_t t : ids) rows.push_back({t, E.text(kTblAdvisorHeading, t, hexName("Topic ", t))});
   }
   const bool onPage = topicSel >= 0;
   // Title: the advisor role on the news pages; "Financial Briefings" (029541F4 0x2C3..) / "Financial Ordinances" (0x2BC..) on the other tabs [OBSERVED / STATIC].
