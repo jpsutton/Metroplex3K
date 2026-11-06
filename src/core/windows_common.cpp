@@ -723,14 +723,14 @@ void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t,
   int px = 0;
   while (accumMs >= TickerScroll::kStepMs) { accumMs -= TickerScroll::kStepMs; px += TickerScroll::kStepPixels; }
   if (px) for (auto& i : items) i.x -= px;
-  items.erase(std::remove_if(items.begin(), items.end(), [&](const Item& i) { return i.x + ui.textWidth(i.n.text) < 0; }), items.end());
+  items.erase(std::remove_if(items.begin(), items.end(), [&](const Item& i) { return i.x + ui.textWidth(i.n.text, "main9") < 0; }), items.end());
   if (paused) {
     // Repeat the paused message across the whole strip at a 132 px period (107 px text + 25 px gap) [OBSERVED].
     static const char* kMsg = "Simulation Paused";
-    const int gap = std::max(4, 132 - ui.textWidth(kMsg));
+    const int gap = std::max(4, 132 - ui.textWidth(kMsg, "main9"));
     for (int guard = 0; guard < 16; guard++) {
       int right = 0;
-      for (auto& i : items) right = std::max(right, i.x + ui.textWidth(i.n.text) + i.gap);
+      for (auto& i : items) right = std::max(right, i.x + ui.textWidth(i.n.text, "main9") + i.gap);
       if (!items.empty() && right > width) break;
       Item it; it.n.text = kMsg; it.n.cls = 1; it.n.number = 0; it.gap = gap;
       it.n.r = pauseR; it.n.g = pauseG; it.n.b = pauseB;
@@ -741,7 +741,7 @@ void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t,
   }
   for (int guard = 0; guard < 4 && t && rng; guard++) {
     int right = 0;
-    for (auto& i : items) right = std::max(right, i.x + ui.textWidth(i.n.text) + i.gap);
+    for (auto& i : items) right = std::max(right, i.x + ui.textWidth(i.n.text, "main9") + i.gap);
     if (!items.empty() && right > width) break;
     NewsItem n = t->next(today, *rng);
     if (n.text.empty()) break;
@@ -761,12 +761,12 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
   int fh = ui.fonts->ui().height();
   int ty = (r.h - fh) / 2;
   for (auto& it : items) {
-    int w = ui.textWidth(it.n.text);
+    int w = ui.textWidth(it.n.text, "main9");
     if (it.x > r.w || it.x + w < 0) continue;
     uint32_t col = rgb(it.n.r, it.n.g, it.n.b);
-    sub.text(it.x, ty, it.n.text, "main10", col);
+    sub.text(it.x, ty, it.n.text, "main9", col);   // main9 (9-row capitals) [OBSERVED]
     if (it.n.hasLoc) {
-      if (ty + fh < r.h) for (int x = std::max(0, it.x); x < std::min(r.w, it.x + w); x++) buf[size_t(ty + fh) * r.w + x] = col;
+      if (19 < r.h) for (int x = std::max(0, it.x); x < std::min(r.w, it.x + w + 1); x++) buf[size_t(19) * r.w + x] = col;   // underline row y563, 1 px past the glyphs [OBSERVED]
       Rect ir{r.x + it.x, r.y, w, r.h};
       if (ui.clicked(ir) && r.contains(ui.in.mx, ui.in.my)) {
         R.add(Act::TickerClick, it.n.number, it.n.locX, it.n.locZ);

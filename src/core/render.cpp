@@ -491,22 +491,23 @@ void blendTri(const Ctx& c, const float* p0, const float* p1, const float* p2, i
   });
 }
 
-void darken(const Ctx& c, int x, int y, int delta) {
+void darken(const Ctx& c, int x, int y, int delta, uint32_t fixedCol = 0) {
   if (x < std::max(0, c.XS) || y < c.Y0 || x >= std::min(c.XE, c.W) || y >= c.H) return;
   uint32_t& p = c.fb[size_t(y) * c.W + x];
+  if (fixedCol) { p = fixedCol; return; }   // City Layer Views: the ground tiles' edge lines are one constant colour
   p = pack(clamp255(int(p & 255) + delta), clamp255(int((p >> 8) & 255) + delta), clamp255(int((p >> 16) & 255) + delta));
 }
 
 // Grid delta on one polygon edge (spec 6.3 step 5): first |dx/dy|+1 pixels of each span.
-void gridEdge(const Ctx& c, float ax, float ay, float bx, float by, bool leftEdge, int delta) {
+void gridEdge(const Ctx& c, float ax, float ay, float bx, float by, bool leftEdge, int delta, uint32_t fixedCol = 0) {
   if (by < ay) { std::swap(ax, bx); std::swap(ay, by); }
   if (by == ay) return;
   int n = int(std::fabs((bx - ax) / (by - ay))) + 1;
   for (int y = std::max(c.Y0, int(std::ceil(ay))); y < std::min(c.H, int(std::ceil(by))); y++) {
     float t = (float(y) - ay) / (by - ay);
     int x = int(std::ceil(ax + (bx - ax) * t));
-    if (leftEdge) for (int k = 0; k < n; k++) darken(c, x + k, y, delta);
-    else for (int k = 1; k <= n; k++) darken(c, x - k, y, delta);
+    if (leftEdge) for (int k = 0; k < n; k++) darken(c, x + k, y, delta, fixedCol);
+    else for (int k = 1; k <= n; k++) darken(c, x - k, y, delta, fixedCol);
   }
 }
 
@@ -757,8 +758,9 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, 
       }
       if (opt.grid) {
         int delta = z <= 1 ? -8 : -16;
-        gridEdge(ctx, P[0][0], P[0][1], P[2][0], P[2][1], true, delta);   // upper-left edge
-        gridEdge(ctx, P[0][0], P[0][1], P[1][0], P[1][1], false, delta);  // upper-right edge
+        const uint32_t gc = opt.overlay ? pack(74, 97, 57) : 0u;   // with a layer view on, untinted ground edges are the constant (74,97,57) [OBSERVED]
+        gridEdge(ctx, P[0][0], P[0][1], P[2][0], P[2][1], true, delta, gc);   // upper-left edge
+        gridEdge(ctx, P[0][0], P[0][1], P[1][0], P[1][1], false, delta, gc);  // upper-right edge
       }
     }
   }
@@ -963,8 +965,10 @@ void Renderer::drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int 
       } else if (!anyDry) {
         for (int i = 0; i < 4; i++) py[i] = qy[i] - float(wat[i]) * A;
       }
-      gridEdge(ctx, qx[0], py[0], qx[2], py[2], true, delta);
-      gridEdge(ctx, qx[0], py[0], qx[1], py[1], false, delta);
+      uint32_t gc = 0;
+      if (opt.overlay && opt.overlay->row.size() == size_t(w.W) * w.H && opt.overlay->row[size_t(w.tIdx(tx0, tz0))] == 0xFF) gc = pack(74, 97, 57);   // untinted ground in a layer view
+      gridEdge(ctx, qx[0], py[0], qx[2], py[2], true, delta, gc);
+      gridEdge(ctx, qx[0], py[0], qx[1], py[1], false, delta, gc);
     }
   }
 }
