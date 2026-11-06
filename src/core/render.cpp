@@ -607,6 +607,8 @@ void Renderer::prepareTerrain(const RenderOptions& opt) {
   const bool netSprites = opt.objects && (data_ || spriteFn_);
   if (opt.zonePaint && !opt.underground && !netSprites)
     for (const auto& np : w.surface) if (w.inTiles(np.x, np.z)) roadMask_[w.tIdx(np.x, np.z)] = 1;
+  netTileMask_.assign(opt.overlay ? size_t(w.W) * w.H : 0, 0);
+  if (opt.overlay) for (const auto& np : w.surface) if (w.inTiles(np.x, np.z)) netTileMask_[w.tIdx(np.x, np.z)] = 1;
 }
 
 void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, int y1, int xs, int xe) {
@@ -758,9 +760,14 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, 
       }
       if (opt.grid) {
         int delta = z <= 1 ? -8 : -16;
-        const uint32_t gc = opt.overlay ? pack(74, 97, 57) : 0u;   // with a layer view on, untinted ground edges are the constant (74,97,57) [OBSERVED]
-        gridEdge(ctx, P[0][0], P[0][1], P[2][0], P[2][1], true, delta, gc);   // upper-left edge
-        gridEdge(ctx, P[0][0], P[0][1], P[1][0], P[1][1], false, delta, gc);  // upper-right edge
+        // With a layer view on, only the tiles holding a (hidden) network piece keep an outline, in the constant (74,97,57); plain ground has none [OBSERVED: 71 % of
+        // the original's line pixels sit on road tiles; INFERRED rule].
+        const bool lv = opt.overlay != nullptr;
+        if (!lv || (netTileMask_.size() == size_t(w.W) * w.H && netTileMask_[tIdx])) {
+          const uint32_t gc = lv ? pack(74, 97, 57) : 0u;
+          gridEdge(ctx, P[0][0], P[0][1], P[2][0], P[2][1], true, delta, gc);   // upper-left edge
+          gridEdge(ctx, P[0][0], P[0][1], P[1][0], P[1][1], false, delta, gc);  // upper-right edge
+        }
       }
     }
   }
@@ -966,7 +973,11 @@ void Renderer::drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int 
         for (int i = 0; i < 4; i++) py[i] = qy[i] - float(wat[i]) * A;
       }
       uint32_t gc = 0;
-      if (opt.overlay && opt.overlay->row.size() == size_t(w.W) * w.H && opt.overlay->row[size_t(w.tIdx(tx0, tz0))] == 0xFF) gc = pack(74, 97, 57);   // untinted ground in a layer view
+      if (opt.overlay) {   // layer view: only untinted tiles holding a network piece keep an outline, constant colour
+        if (opt.overlay->row.size() == size_t(w.W) * w.H && opt.overlay->row[size_t(w.tIdx(tx0, tz0))] != 0xFF) continue;
+        if (netTileMask_.size() != size_t(w.W) * w.H || !netTileMask_[size_t(w.tIdx(tx0, tz0))]) continue;
+        gc = pack(74, 97, 57);
+      }
       gridEdge(ctx, qx[0], py[0], qx[2], py[2], true, delta, gc);
       gridEdge(ctx, qx[0], py[0], qx[1], py[1], false, delta, gc);
     }
@@ -1848,7 +1859,10 @@ uint64_t Renderer::terrainLayerKey(const Camera& cam, const RenderOptions& opt) 
   // The road mask (grey network paint) is drawn from the surface pieces only in this mode.
   if (opt.zonePaint && !opt.underground && !netSprites)
     for (const auto& np : w.surface) { mix(uint64_t(uint32_t(np.x)) << 32 | uint32_t(np.z)); }
-  if (opt.overlay) { mix(uint64_t(opt.overlay->slot) + 1); h = hashVec(h, opt.overlay->row); h = hashVec(h, opt.overlay->slots); } else mix(0);
+  if (opt.overlay) {
+    mix(uint64_t(opt.overlay->slot) + 1); h = hashVec(h, opt.overlay->row); h = hashVec(h, opt.overlay->slots);
+    for (const auto& np : w.surface) mix(uint64_t(uint32_t(np.x)) << 32 | uint32_t(np.z));   // the ground edge lines follow the network tiles
+  } else mix(0);
   return h;
 }
 

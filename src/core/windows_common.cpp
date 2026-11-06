@@ -764,7 +764,7 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
     int w = ui.textWidth(it.n.text, "main9");
     if (it.x > r.w || it.x + w < 0) continue;
     uint32_t col = rgb(it.n.r, it.n.g, it.n.b);
-    sub.text(it.x, ty, it.n.text, "main9", col);   // main9 (9-row capitals) [OBSERVED]
+    sub.text(it.x, ty + 1, it.n.text, "main9", col);   // main9 (9-row capitals) [OBSERVED]
     if (it.n.hasLoc) {
       if (19 < r.h) for (int x = std::max(0, it.x); x < std::min(r.w, it.x + w + 1); x++) buf[size_t(19) * r.w + x] = col;   // underline row y563, 1 px past the glyphs [OBSERVED]
       Rect ir{r.x + it.x, r.y, w, r.h};

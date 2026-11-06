@@ -120,7 +120,7 @@ uint32_t zoneTint(const Image* pal, int cat, int lvl) {
     default: return categoryColour(pal, DataLayer::Zones, cat);   // seaports, airports: palette row 8 [unobserved on the map]
   }
 }
-const uint32_t kBandBlue = rgb(123, 146, 255), kLabelInk = rgb(123, 125, 181), kInkBlue = rgb(0x31, 0x38, 0x84);
+const uint32_t kBandBlue = rgb(123, 146, 255), kLabelInk = rgb(123, 125, 181), kInkBlue = rgb(49, 52, 123);   // label ink (49,52,123) [OBSERVED]
 
 // Inset legend box (spec 09 7.1.1): left/top lines (123,138,255), right/bottom highlight (255,243,255); `cut` = 18 px diagonal at the top left.
 void insetBox(Ui& ui, Rect b, bool cut) {
@@ -779,14 +779,15 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     const int step = tab == 0 ? 20 : tab == 1 ? 10 : 5, top = tab == 0 ? 140 : tab == 1 ? 90 : 10;
     const float pxPerUnit = tab == 2 ? 10.2f : 142.f / float(top);
     for (int v = 0; v <= top; v += step) {
-      const int cy = plot.y + plot.h - int(pxPerUnit * float(v) + 0.5f);
-      rightText(ui, r.x + 138, cy - 5, std::to_string(v), "main9", kInkBlue);
+      // Label tops 235 - round(v * 143 / top) on the original (Education: 235, 215, 194, 174, 153, 133, 112, 92), right-aligned at x 160.
+      const int ly = 198 - int(143.f * float(v) / float(top) + 0.5f);
+      rightText(ui, r.x + 120, r.y + ly, std::to_string(v), "main9", kInkBlue);
     }
     for (int n = 10; n <= 90; n += 10) {   // x labels, 26 px per 10 years, "10" at x ~ 164
       const std::string t = std::to_string(n);
-      ui.text(r.x + 138 + 26 * n / 10 - ui.textWidth(t, "system9") / 2, r.y + 210, t, "system9", kInkBlue);
+      ui.text(r.x + 138 + 26 * n / 10 - ui.textWidth(t, "system9") / 2 - (n > 10 ? 1 : 0), r.y + 208, t, "system9", kInkBlue);   // row y244, lefts 199 / 223 / 249 ... [OBSERVED]
     }
-    ui.textCentered({r.x + 176, r.y + 220, 200, 12}, E.win(0x1E6, "Resident Age"), "system9", kInkBlue);
+    ui.text(r.x + 217, r.y + 218, E.win(0x1E6, "Resident Age"), "main9", kInkBlue);   // bold, ink from x257 [OBSERVED]
     {   // vertical axis caption, rotated: Education Quotient on two lines, Health and Population on one
       const std::string t = E.win(tab == 0 ? 0x1E4u : tab == 1 ? 0x1E0u : 0x1E1u, tab == 0 ? "Education Quotient" : tab == 1 ? "Health" : "Population");
       const size_t sp = tab == 0 ? t.find(' ') : std::string::npos;
@@ -853,8 +854,8 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(!el && d.garbageProduced >= 0 ? int64_t(std::llround(d.garbageProduced / 10.0)) : int64_t(total)));
   }
   const int capDy = -6;   // the caption lines sit 6 px higher on every chart page (observed)
-  ui.textCentered({r.x + 55, r.y + 249 + capDy, 340, 14}, cap1, agePage ? "main10" : "main9", kInkBlue);   // the pie pages' caption is MAIN9 [OBSERVED]
-  if (!cap2.empty()) ui.textCentered({r.x + 55, r.y + 265 + capDy, 340, 14}, cap2, "main10", rgb(247, 142, 90));
+  ui.textCentered({r.x + 55, r.y + 249 + capDy, 340, 14}, cap1, "main9", kInkBlue);   // the caption lines are MAIN9 [OBSERVED on the pie pages; the age pages' text starts 2 px right of main10's]
+  if (!cap2.empty()) ui.textCentered({r.x + 55, r.y + 265 + capDy, 340, 14}, cap2, "main9", rgb(247, 142, 90));
   static const uint32_t tid[5] = {0x1DD, 0x1E0, 0x1E1, 0x1DE, 0x1DF};
   static const char* const tfb[5] = {"Education", "Health", "Population", "Electricity", "Garbage"};
   for (int i = 0; i < 5; i++)
@@ -875,6 +876,8 @@ WindowResult ViewDataWindow::draw(Ui& ui, const WinEnv& E, const MapSource& src,
                       : E.win(dataMapDefs()[size_t(mode)].titleId, "Data Map");
   if (frame(ui, E, r, title) || ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
   ui.fill({r.x + 5, r.y + 30, 32, 405}, kBandBlue);   // mode strip, joined to the title bar in an L
+  { const uint32_t ring = rgb(173, 182, 255);   // 1 px ring just outside the strip: columns x44 / x77 (y69..468) and the row y469 [OBSERVED]
+    ui.fill({r.x + 4, r.y + 35, 1, 400}, ring); ui.fill({r.x + 37, r.y + 35, 1, 400}, ring); ui.fill({r.x + 4, r.y + 435, 34, 1}, ring); }
   // Mode buttons: 26 x 26 at x = 8; data maps at y = 38 + 28 k, then after a two-slot gap Charts (374) and Graphs (402). Each image is a
   // 104 x 26 strip of four cells; the active mode shows the pressed cell.
   static const uint32_t img[12] = {0x01, 0x04, 0x10, 0x11, 0x07, 0x0C, 0x0F, 0x15, 0x17, 0x19, 0x03, 0x0B};

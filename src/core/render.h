@@ -404,6 +404,7 @@ class Renderer : public ICityRasterizer {
   bool shadeValid_ = false;
   int maxAlt_ = 255;
   std::vector<uint8_t> roadMask_;
+  std::vector<uint8_t> netTileMask_;   // tiles holding a surface network piece, filled while a layer-view overlay is active (ground edge lines)
   std::vector<uint8_t> tint_;
   std::vector<uint8_t> pollutedWater_;
   TerrainPalettes pal_;
