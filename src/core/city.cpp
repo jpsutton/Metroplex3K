@@ -343,6 +343,8 @@ class GrowthAdapter : public growth::GrowthCity {
     o.sizeX = b.sizeX; o.sizeZ = b.sizeZ; o.occId = b.occId; o.keyType = b.port ? T_OCC_ATTR_PORT : T_OCC_ATTR;
     o.agentType = b.agentType; o.state = 4;
     c_.addOccupant(o);
+    // A new lot starts with its trip result cleared (untried), as the original's construction does (dirty-side data: its under-construction lots are untried).
+    if (c_.traffic) c_.traffic->clearLot(TripRect{x, z, x + int(b.sizeX) - 1, z + int(b.sizeZ) - 1});
   }
   bool waterTile(int x, int z) const override {
     if (!c_.inMap(x, z)) return false;
@@ -382,6 +384,8 @@ class GrowthAdapter : public growth::GrowthCity {
   void setLotState(const growth::LotInfo& lot, uint32_t st) override {
     int oi = c_.occupantAt(lot.ax, lot.az);
     if (oi < 0) return;
+    const Occupant& lo = c_.world_->occupants[size_t(oi)];
+    if (c_.traffic && lo.state != st) c_.traffic->clearLot(TripRect{lo.x, lo.z, lo.x + int(lo.sizeX) - 1, lo.z + int(lo.sizeZ) - 1});   // a state change clears the trip result
     c_.world_->occupants[size_t(oi)].state = st;
     c_.occDirty_ = true;
   }
@@ -1964,7 +1968,7 @@ void City::rebuildTraffic() {
     b.category = categoryOfTypeChain(usHier_.chain(o.agentType));
     auto it = tripSlot_.find(o.agentType);
     b.slot = it != tripSlot_.end() ? it->second : 0;
-    b.functional = (o.state & ~0x200u) == 1;
+    b.functional = (o.state & 1u) != 0;   // lot vf4c: bit 0 of the low byte of the state word
     if (b.makesTrips()) tripBuildings_.push_back(b);
   }
   traffic->rebuildDestinations(tripBuildings_);
