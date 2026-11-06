@@ -74,7 +74,7 @@ void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::strin
           float cov = float(16 - idx) / 15.f;
           if (overlay && (d >> 24) != 255) { d = overlayOver(d, float(cr), float(cg), float(cb), cov); continue; }
           uint32_t dr = d & 255, dg = (d >> 8) & 255, db = (d >> 16) & 255;
-          dr = uint32_t(dr + (float(cr) - dr) * cov); dg = uint32_t(dg + (float(cg) - dg) * cov); db = uint32_t(db + (float(cb) - db) * cov);
+          dr = uint32_t(dr + (float(cr) - dr) * cov + 0.5f); dg = uint32_t(dg + (float(cg) - dg) * cov + 0.5f); db = uint32_t(db + (float(cb) - db) * cov + 0.5f);   // rounds to nearest, as the original does (observed 1-step differences)
           d = 0xFF000000u | (db << 16) | (dg << 8) | dr;
         }
       }

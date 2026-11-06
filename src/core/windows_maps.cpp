@@ -541,10 +541,15 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
       const Rect cb{r.x + colX[c], r.y + 253 + 24 * row, 12, 12};
       const Rect hit{cb.x, cb.y, 112, 14};
       E.spot("series." + std::to_string(idx), hit);
-      ui.fill(cb, rgb(255, 255, 255)); sunkenLines(ui, cb);
-      if (on) {
-        for (int k = 0; k < 3; k++) ui.fill({cb.x + 2 + k, cb.y + 5 + k, 1, 2}, kInkBlue);
-        for (int k = 0; k < 5; k++) ui.fill({cb.x + 4 + k, cb.y + 7 - k, 1, 2}, kInkBlue);
+      // The same check-box art as the Preferences window (dark outline, dark check mark) [OBSERVED].
+      const Image* checkArt = ui.skin ? ui.skin->get("check") : nullptr;
+      const bool hot = ui.hover(hit);
+      if (!(ui.skin && ui.skin->drawCheck(ui, checkArt, cb.x, cb.y, on, true, hot, hot && ui.in.down))) {
+        ui.fill(cb, rgb(255, 255, 255)); sunkenLines(ui, cb);
+        if (on) {
+          for (int k = 0; k < 3; k++) ui.fill({cb.x + 2 + k, cb.y + 5 + k, 1, 2}, kInkBlue);
+          for (int k = 0; k < 5; k++) ui.fill({cb.x + 4 + k, cb.y + 7 - k, 1, 2}, kInkBlue);
+        }
       }
       ui.text(cb.x + 14, cb.y + (12 - ui.fonts->get("system9").height()) / 2, E.win(series[idx].labelId, series[idx].fallback), "system9", kInkBlue);
       if (ui.clicked(hit)) { if (on) enabledMask &= ~(1u << idx); else enabledMask |= 1u << idx; }

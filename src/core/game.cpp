@@ -1083,9 +1083,9 @@ void Game::drawHud() {
   };
   if (skinBar) {
     centredField(place.fieldA, world_.info.cityName, 0);
-    centredField(place.fieldB, groupDigits(hud.pop), 0);
+    centredField(place.fieldB, "Pop: " + groupDigits(hud.pop), 0);
     centredField(place.fieldC, funds, fundsCol);
-    centredField(place.fieldD, date, 0);
+    centredField(place.fieldD, std::to_string(hud.month) + "/" + std::to_string(hud.day) + "/" + std::to_string(hud.year), 0);   // m/d/yyyy, no leading zeros [OBSERVED]
   } else {
     ui_.text(8, H_ - bh + 8, world_.info.cityName);
     ui_.text(180, H_ - bh + 8, date);

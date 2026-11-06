@@ -164,7 +164,7 @@ const MainRow kIncRows[] = {
 };
 
 // Funding slider geometry: knob 18x15 travels x 150..247 for 0..kMaxFundingUi (100% sits on the marker bar).
-constexpr int kKnobX0 = 150, kKnobTravel = 97;
+constexpr int kKnobX0 = 148, kKnobTravel = 97;   // knob travel starts 2 px left of the first measurement (observed at 800 x 600)
 
 }  // namespace
 
@@ -216,7 +216,7 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
   // Rows.
   const MainRow* rows = incomeTab ? kIncRows : kExpRows;
   int nRows = incomeTab ? int(std::size(kIncRows)) : int(std::size(kExpRows));
-  if (!incomeTab) ui.fillAlpha(at(235, 177, 8, 139), kWhite, 0.33f);   // 100% funding marker behind the sliders
+  if (!incomeTab) ui.fillAlpha(at(233, 177, 8, 139), kWhite, 0.33f);   // 100% funding marker behind the sliders
   for (int k = 0; k < nRows; k++) {
     const MainRow& row = rows[k];
     if (!row.key) continue;

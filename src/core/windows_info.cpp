@@ -47,7 +47,7 @@ WindowResult PreferencesDialog::draw(Ui& ui, const WinEnv& E, PrefsState& s) {
   Rect r = centered(ui, 480, 472);
   if (startResolution < 0) startResolution = s.resolution;
   const Skin* sk = ui.skin;
-  const uint32_t label = rgb(0x7B, 0x82, 0xB5), ink = rgb(0x31, 0x34, 0x7B), white = rgb(255, 255, 255);
+  const uint32_t label = rgb(0x7B, 0x7D, 0xB5), ink = rgb(0x31, 0x34, 0x7B), white = rgb(255, 255, 255);
   const uint32_t dark = rgb(0x7B, 0x8A, 0xFF), light = rgb(0xFF, 0xF3, 0xFF), blue = rgb(0x7B, 0x92, 0xFF);
   if (frame(ui, E, r, E.win(0x14E, "Preferences"))) { R.close = true; R.add(Act::Close); }
   auto changed = [&](const char* key) { R.add(Act::PrefsChanged, 0, 0, 0, key); };
@@ -439,12 +439,20 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
   const uint32_t ink = rgb(0x31, 0x36, 0x7C);
   // Upper-left panel: heading, (start dialog: the mayor's name), the scrollable text.
   ui.fill(at(13, 34, 328, 178), kPanelFill);
+  {   // light heading box: top line (173,182,255), vertical gradient (239,239,255) -> (231,227,255), bottom line (123,138,255) [OBSERVED]
+    const Rect hb = at(13, 34, 328, 37);
+    for (int i = 1; i < hb.h - 1; i++) {
+      const float t = float(i - 1) / float(hb.h - 3);
+      ui.fill({hb.x, hb.y + i, hb.w, 1}, rgb(uint8_t(239 - 8 * t + 0.5f), uint8_t(239 - 12 * t + 0.5f), 255));
+    }
+    ui.fill({hb.x, hb.y, hb.w, 1}, rgb(173, 182, 255)); ui.fill({hb.x, hb.y + hb.h - 1, hb.w, 1}, rgb(123, 138, 255));
+  }
   const std::string head = v.startMode ? E.se(3, "Greetings Mayor:") : (v.statusLabel.empty() ? std::string("Scenario Status:") : v.statusLabel);
-  ui.text(r.x + 20, r.y + 36, head, "title12", ink);
+  ui.text(r.x + 20, r.y + 39, head, "title12", ink);
   int textTop = 56;
   if (v.startMode) {
     if (!mayorInit) { mayorEdit = v.mayor; mayorInit = true; }
-    editField(ui, E, "mayor", at(146, 44, 181, 17), mayorEdit, 0x53434D59, 31);
+    editField(ui, E, "mayor", at(160, 46, 180, 14), mayorEdit, 0x53434D59, 31);
     textTop = 71;
   } else mayorInit = false;
   textBox(ui, E, at(18, textTop - 1, 323, 211 - textTop), v.briefing, scroll);   // frame (181,154)-(503,293) on the start dialog
