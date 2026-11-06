@@ -326,7 +326,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   WindowResult R;
   Rect r = placedAt(ui, 32, 32, 296, 336);
   const Skin* sk = ui.skin;
-  const uint32_t ink = rgb(0x31, 0x38, 0x84), grey = rgb(0x9C, 0xA2, 0xBD), white = rgb(255, 255, 255);
+  const uint32_t ink = rgb(49, 52, 123), grey = rgb(0x9C, 0xA2, 0xBD), white = rgb(255, 255, 255);   // label ink (49,52,123) [OBSERVED]
   if (frame(ui, E, r, E.win(0x269, "View City Layers"))) { R.close = true; R.add(Act::Close); }
   blueBand(ui, {r.x + 4, r.y + 39, 142, 34});
   blueBand(ui, {r.x + 150, r.y + 39, 142, 34});
@@ -360,7 +360,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   // Check box (GZCheckBox) / radio (GZRadioBtn) with a label; greyed out while its group's mode is not selected.
   const Image* checkArt = sk ? sk->get("check") : nullptr;
   const Image* radioArt = sk ? sk->get("radio") : nullptr;
-  auto control = [&](const std::string& name, bool radio, int x, int y, const std::string& label, bool value, bool enabled) {
+  auto control = [&](const std::string& name, bool radio, int x, int y, const std::string& label, bool value, bool enabled, int labelDx = -1) {
     const int box = radio ? 12 : 13;
     Rect hit{r.x + x, r.y + y, box + 4 + ui.textWidth(label, "system9"), box + 2};
     E.spot(name, hit);
@@ -370,7 +370,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
       ui.frame({r.x + x, r.y + y, box, box}, false);
       if (value) ui.fill({r.x + x + 3, r.y + y + 3, box - 6, box - 6}, enabled ? ink : grey);
     }
-    ui.text(r.x + x + box + 3, r.y + y + (box - ui.fonts->get("system9").height()) / 2, label, "system9", enabled ? ink : grey);
+    ui.text(r.x + x + box + 3 + labelDx, r.y + y + (box - ui.fonts->get("system9").height()) / 2, label, "system9", enabled ? ink : grey);   // labels 1 px further left [OBSERVED]
     return enabled && ui.clicked(hit);
   };
 
@@ -396,13 +396,13 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   const bool layers = edit.mode == CityLayers::LayerView;
   const auto& views = cityLayerViews();
   for (size_t i = 0; i < views.size(); i++)
-    if (control("layer." + std::to_string(i), true, 157, 76 + 16 * int(i), E.win(views[i].labelId, views[i].fallback), edit.layer == int(i), layers))
+    if (control("layer." + std::to_string(i), true, 156, 76 + 16 * int(i), E.win(views[i].labelId, views[i].fallback), edit.layer == int(i), layers, 0))   // the whole radio 1 px left [OBSERVED]
       edit.layer = int(i);
 
   // ---- Buttons
   auto pill = [&](const char* name, Rect b, const std::string& label) { E.spot(name, b); return ui.button(b, label, true, false, "title9"); };
-  if (pill("apply", {r.x + 9, r.y + 262, 102, 33}, E.win(0x26D, "Apply"))) R.add(Act::ApplyLayers);
-  if (pill("default", {r.x + 9, r.y + 295, 102, 33}, E.win(0x26C, "Default View"))) { edit = CityLayers(); R.add(Act::ApplyLayers); }
+  if (pill("apply", {r.x + 8, r.y + 265, 102, 33}, E.win(0x26D, "Apply"))) R.add(Act::ApplyLayers);
+  if (pill("default", {r.x + 9, r.y + 298, 102, 33}, E.win(0x26C, "Default View"))) { edit = CityLayers(); R.add(Act::ApplyLayers); }
   Rect grid{r.x + 247, r.y + 260, 36, 35};
   E.spot("grid", grid);
   { bool c = false;

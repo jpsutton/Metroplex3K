@@ -586,8 +586,11 @@ bool Skin::drawButton3(Ui& ui, const Image* s, int cells, int cell, Rect r, cons
     int off = cell == CELL_PRESSED ? 1 : 0;
     // Centre on the pill, not the whole cell: the art carries a drop shadow on the right and bottom (measured on the
     // original's prompt buttons: caption sits 2 px left and 1 px up of the cell centre).
+    const Font& fnt = ui.fonts->get(font);
+    if (ui.buttonLabelRamp) fnt.setRampOverride(ui.buttonLabelRamp);
     ui.textCentered({r.x + off, r.y + off + ui.buttonLabelDy, r.w - 4, r.h - 2}, label, font,
                     cell == CELL_DISABLED ? rgb(0x90, 0x94, 0xA0) : textCol ? textCol : ui.textCol);
+    fnt.setRampOverride(nullptr);
   }
   return true;
 }

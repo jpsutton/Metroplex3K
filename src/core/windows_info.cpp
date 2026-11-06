@@ -307,9 +307,15 @@ WindowResult CityPropertiesDialog::draw(Ui& ui, const WinEnv& E, CityPropsState&
   Rect sel{r.x + 434, r.y + 282, 78, 33};
   ui.fill(sel, rgb(0x7B, 0x92, 0xFF));
   E.spot("select", sel);
+  // The original's 15 caption levels on this button (565 r,g,b) [OBSERVED: 13 AA colours + ink + the pill face; no single ramp fits]
+  static const uint16_t kSelectRamp[15] = {
+      uint16_t(5 << 11 | 12 << 5 | 14), uint16_t(6 << 11 | 14 << 5 | 16), uint16_t(8 << 11 | 18 << 5 | 17), uint16_t(9 << 11 | 20 << 5 | 17), uint16_t(10 << 11 | 22 << 5 | 18),
+      uint16_t(12 << 11 | 25 << 5 | 20), uint16_t(13 << 11 | 27 << 5 | 21), uint16_t(16 << 11 | 34 << 5 | 22), uint16_t(17 << 11 | 36 << 5 | 24), uint16_t(18 << 11 | 39 << 5 | 25),
+      uint16_t(20 << 11 | 42 << 5 | 26), uint16_t(22 << 11 | 43 << 5 | 26), uint16_t(22 << 11 | 46 << 5 | 28), uint16_t(25 << 11 | 50 << 5 | 29), uint16_t(26 << 11 | 54 << 5 | 31)};
+  ui.buttonLabelRamp = kSelectRamp;
   ui.buttonLabelDy = -1;   // this caption sits 1 px higher than the other pill buttons [OBSERVED]
   if (ui.button(sel, E.se(0x2F, "Select"), true, false, "title9")) R.add(Act::OpenUserBuildings);
-  ui.buttonLabelDy = 0;
+  ui.buttonLabelDy = 0; ui.buttonLabelRamp = nullptr;
   // Check mark.
   Rect done{r.x + 589, r.y + 331, 42, 32};
   E.spot("ok", done);

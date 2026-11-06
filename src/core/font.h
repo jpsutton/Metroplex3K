@@ -27,10 +27,13 @@ class Font {
   bool multicolour() const { return multi_; }
   uint16_t keyEntry() const { return atlas_.empty() ? uint16_t(0) : pal_[atlas_[0]]; }   // the 565 palette entry of the colour key (background)
   void setRecolourBackground(uint16_t p565) { recBgSet_ = true; recBg_ = p565; }
+  // One-shot explicit 565 palette for the 15 ramp levels (entry 1..15) of the next recoloured draws, nullptr = the computed ramp. Const: set around a single caption.
+  void setRampOverride(const uint16_t* t15) const { rampOverride_ = t15; }
  private:
   int w_ = 0, h_ = 0, glyphH_ = 0;
   bool multi_ = false;
   bool recBgSet_ = false; uint16_t recBg_ = 0;   // recolour background override (565)
+  mutable const uint16_t* rampOverride_ = nullptr;
   bool ramp_ = false;     // the atlas uses indices 2..15 (a pre-mixed anti-aliasing ramp: the title fonts)
   std::vector<uint8_t> atlas_;
   uint16_t pal_[256] = {};

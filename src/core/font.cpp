@@ -73,6 +73,7 @@ void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::strin
       const int r8 = tr + (br - tr) * i / 16, g8 = tg + (bg - tg) * i / 16, b8 = tb + (bb - tb) * i / 16;
       rampPx[i + 1] = expand16(uint16_t(((r8 >> 3) << 11) | ((g8 >> 2) << 5) | (b8 >> 3)), 7);
     }
+    if (rampOverride_) for (int i = 0; i < 15; i++) rampPx[i + 1] = expand16(rampOverride_[i], 7);
   }
   for (unsigned char c : s) {
     if (c == '\n') { x = x0; y += glyphH_ + 1; continue; }
