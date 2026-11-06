@@ -310,11 +310,18 @@ grammar of §4.5 (all rules have key 256) `[DATA]`; they are loaded by the zone 
 
 **Exposed sides for the final-pass mask** (§4.6 step 2) [DATA: reproduces the stored pieces of
 all 14 shipped cities]:
-* Take the low 16 bits of the piece's matrix: 0x136 for road and highway, 0x137 for rail, 0x138
-  for subway. This is the spec 18 §5.4 turn matrix, half B = true.
+* Take all 32 bits of the piece's matrix: 0x136 for road and highway, 0x137 for rail, 0x138
+  for subway. These are both halves of the spec 18 §5.4 turn matrix.
 * The piece exposes side k (0 W/−x, 1 N/−z, 2 E/+x, 3 S/+z) at rotation r iff some set bit b
-  satisfies ((b mod 4) + r) mod 4 = k. In other words: OR the four nibbles, then rotate that 4-bit
-  mask left by r.
+  satisfies ((b mod 4) + r) mod 4 = k. In other words: OR the eight nibbles, then rotate that
+  4-bit mask left by r.
+* Correction: an earlier revision used only the low 16 bits. That gives the same result for every
+  piece whose two halves expose the same sides. It is wrong for the highway on-ramp pieces
+  15130–15141. These are in the road set and the road protected list. Their low half exposes the
+  ramp's highway side, and their high half the road side. Example: 15141 has matrix 0x20000080.
+  Its low half gives side 3, its high half side 1, so at r = 2 it exposes N and S. With the low
+  half only, the road tile beside the ramp counts the ramp as closed and becomes 39 or 29
+  instead of 43 or 39 [DATA].
 * Examples at r = 0:
   * 29, 32, 69, 11202, 11204: W, E
   * 31, 11201: N, S
@@ -324,9 +331,17 @@ all 14 shipped cities]:
   * 11258: W, E, S
   * 43: all four sides
 * A piece without a matrix is treated as open on all sides.
-* Re-tiling the stored networks with this rule and the neighbour connections gives identical pieces
-  for 99.7 % of road and 99.97 % of rail tiles. Without it (every neighbour counted as open) the
-  figures are 99.3 % and 99.4 %.
+* Re-tiling the stored networks of the 14 shipped cities with this rule and the neighbour
+  connections gives identical pieces for:
+  * road: 99.85 % of 121 189 tiles (99.74 % with the low half only);
+  * rail: 99.97 %;
+  * highway: 99.12 % (99.10 %).
+  Without it (every neighbour counted as open), road and rail give 99.36 % and 99.40 % [DATA].
+* Remaining road differences, about 100 tiles in total, all at pairs of 11204 pieces:
+  * stored 29 where the re-tile gives 11204: 16 in Berlin, 18 in Liverpool, 11 in London;
+  * stored 39 where it gives 11204, and the reverse.
+  No neighbour-exposure rule explains them. `[INFERRED]` They depend on the order in which the
+  pieces were drawn.
 * `networkIntesection.txt`: a 3×3 matrix of quoted hexadecimal packed pieces, row/column 0 = road,
   1 = rail, 2 = power line; diagonal `"0"`. Road×rail = occupant 0x45 (69), road×power = 0x43 (67),
   rail×power = 0x47 (71); rotation 0 or 1 depending on which network runs along the first axis
@@ -581,9 +596,40 @@ before building, and also refuses if the price exceeds funds `[STATIC]`.
 1. Validate: walk the tile list and determine the buildable prefix (straight runs longer than 2
    tiles are checked as a unit) `[INFERRED]`.
 2. Check funds ≥ total price; otherwise nothing is built.
-3. Endpoint levelling: for each end of the path, if the end tile and the tile beyond it in the
-   drag direction are not both valid slopes and neither holds a network piece, the terrain between
-   them is levelled so the network can end there `[INFERRED]` from the call pattern.
+3. Endpoint levelling [STATIC unless marked]. It is done once at the start of the path and once at
+   the end. The end call is made only on the non-bridge branch, and only when no tunnel was
+   built.
+   * **Tiles.** A is the first (or last) path tile that will hold a piece. B is the next path
+     tile in the drag direction (at the end: the previous one), but only for the highway. For
+     every other kind, B = A, so a single tile is levelled. `[INFERRED]` For the highway, B is
+     the second tile of the two-tile end.
+   * **Occupant test.**
+     * At the start, an occupant on A or B that is removable and has the tested flag set is
+       removed, and the tile counts as empty. Any other occupant counts as present.
+     * At the end, any occupant counts as present, and none is removed.
+     * Levelling is skipped if A or B holds an occupant.
+   * **Slope test.** Levelling is skipped if both A and B pass the valid-slope test of §6.3
+     (flat, or a straight ramp of rise ≤ 2). A tile off the map fails the test.
+   * **Level.** If both tiles are already flat, nothing happens. Otherwise the corner rectangle
+     covering A and B is levelled with the terrain level operation (`11-world-terrain.md`):
+     * 4 corners for one tile, 6 for the highway's two tiles.
+     * Target height = (sum of the rectangle's perimeter corners + n/2) / n, with integer
+       division (the average rounded half up). For one tile, (c0 + c1 + c2 + c3 + 2) / 4.
+     * Every corner of the rectangle is set to the target, with no offset or clamp.
+     * Surrounding corners are re-sloped outward ring by ring, as for the level tool, so that no
+       step between neighbouring corners exceeds 4.
+     * The level is refused if two consecutive perimeter corners differ by more than 4.
+   * **Permission.** For every corner the operation would change, each of the up to four tiles
+     sharing the corner is checked in the layer of the network kind: surface for road, rail,
+     power and highway; pipe layer; subway layer. An empty tile passes. An occupant passes only
+     if it is in the network manager's terrain-change filter set (filter 0xA1C085DB, entry 10).
+     `[INFERRED]` That set holds network pieces and flora. If any tile fails, the whole levelling
+     is dropped: no corner changes, no message, and the network is still built on the unchanged
+     terrain.
+   * **Cost.** The terrain operation computes a cost, but the network manager charges nothing
+     for it.
+   * **Not yet decoded.** One more call argument, and the exact flag tested at the start-side
+     occupant removal.
 4. Bridge attempt (road, rail, power, highway only; path length ≥ 4 tiles): §6.4.
 5. Tunnel attempt (road, rail, and highway): §6.4.
 6a. Neighbour-connection offer for path ends on the map edge: §8.
@@ -692,15 +738,77 @@ following terrain corners are then set (start side shown; the far side mirrors i
 
 | Corners | New height |
 |---------|------------|
-| W0 − 3a, W0 − 3a + p, W0 − 4a, W0 − 4a + p | B |
+| W0 − 3a, W0 − 3a + p, W0 − 4a, W0 − 4a + p | B (start side: see the defect below) |
 | W0 − a, W0 − a + p | h_w + D |
 | W0, W0 + p | h_w + R |
+
+**Start-bank defect** [STATIC, checked in the disassembly at 0x10001744, 0x100018D1 and
+0x10001A98]. The start-side B is stored in a one-byte variable, and the permission checks use it.
+The first far-bank corner read, h(E0 + 3a), then writes into the same byte. As a result, the
+start-side corners in the B row are **set** to the raw, unaveraged, unclamped height of corner
+E0 + 3a, or 23 if that corner is off the map. The far side's own B is not affected. The highway
+builder has the same defect (0x10002D69, 0x10002FB2, then the start-side sets from 0x10003241).
+The W0 − 4a approach altitude uses the same byte.
 
 Every corner change is first checked: a corner may change only if none of the up to four tiles
 that share it holds an occupant that forbids terrain changes (buildings or other network pieces).
 If any check fails, nothing is changed, the "construction discontinued" message (instance `0x285`)
-is shown and the drag is cancelled. The highway variant averages three corners across its
-two-tile width and clamps B only from below (≥ h_w − 2) `[STATIC]`; its exact corner list is `[OPEN]`.
+is shown and the drag is cancelled.
+
+**5a. Highway abutments** [STATIC]. The highway builder runs two passes, one per carriageway.
+Record direction: pass 0 uses dir 0 for an x axis and 3 for a z axis; pass 1 uses 2 and 1. A
+record is chosen by direction only; its length field is not compared. The price is the cost of
+agent type 16004 × W, asked once in pass 0 (prompt instance `0x28B`; not enough funds `0x2E0`).
+Differences from the road/rail/power builder:
+
+* h_w = the lowest first corner over both carriageway tiles of every water tile.
+* Each corner row has three corners across the carriageway (+0, +p, +2p) instead of two.
+* Bank height B = ⌊(h(W0 − 3a) + h(W0 − 3a + p) + h(W0 − 3a + 2p)) / 3⌋. It defaults to 20 if a
+  read fails. B is then raised to at least h_w − 2 and lowered to at most h_w + 6. Correction:
+  the previous revision said there is no upper clamp. The far bank uses E0 + 3a, +p, +2p, with
+  the same clamp, and defaults to the clamped start B.
+* Corners set (start side; the far side mirrors with E0 and +a):
+
+  | Corners | New height |
+  |---|---|
+  | W0 − 3a, W0 − 4a, each at +0, +p, +2p | B |
+  | W0 − a, each at +0, +p, +2p | h_w + 2 |
+  | W0, each at +0, +p, +2p | h_w + 2 |
+
+* River bed: for k = 1 … W − 1, the corners W0 + k·a, +p and +2p are lowered to h_w where they are
+  higher. The road builder lowers +0 and +p only.
+* Order: check all 12 start and 12 far corners; set the start corners; lay the start approach;
+  lower the river bed; set the far corners; lay the far approach; place the deck. Any failed check
+  shows `0x285` and cancels before anything changes.
+* Approach tiles (altitude 0 = follow the terrain):
+
+  | Tiles | Altitude |
+  |---|---|
+  | W0 − 4a and W0 − 4a + p | B |
+  | W0 − 3a, W0 − 2a, each at +0 and +p | 0 |
+  | W0 − a and W0 − a + p | h_w + 2 |
+  | Far side: E0 + 3a; E0 + 2a, E0 + a; E0, each at +0 and +p | B_far; 0; h_w + 2 |
+
+  Unlike the road builder, it places no slope or flat pieces on the approach tiles itself.
+* Deck: start ramp at W0 − a and end ramp at E0, both at altitude h_w + 2 (road: +5 / +7). The
+  fillers and body are at h_w. Pass 0 pieces go in row W0, pass 1 pieces in row W0 + p.
+* Shipped `HWAY_GRND_Bridges.txt` records (id, rotation); every record has n = 1 and k = 3:
+
+  | dir | start ramp | filler | body | end ramp |
+  |---|---|---|---|---|
+  | 0 | 16055 r0 | 16045 r0 | 16045 r0, 16043 r2, 16045 r0 | 16054 r2 |
+  | 2 | 16054 r0 | 16045 r2 | 16045 r2, 16043 r0, 16045 r2 | 16055 r2 |
+  | 3 | 16046 r2 | 16044 r2 | 16044 r2, 16042 r2, 16044 r2 | 16047 r0 |
+  | 1 | 16047 r2 | 16044 r0 | 16044 r0, 16042 r0, 16044 r0 | 16046 r0 |
+
+* The highway builder never sets the pier map flag, so 16042 and 16043 in the pier list are
+  never flagged by highway bridges.
+* Defects [STATIC, checked in the disassembly]:
+  * The far-bank average reads three corners, but the second and third reads write the same byte
+    (0x10002FD8, 0x10002FFB) and the sum uses the start side's third byte. So the far
+    B = ⌊(h(E0 + 3a) + h(E0 + 3a + 2p) + h(W0 − 3a + 2p)) / 3⌋, clamped as above.
+  * The start-bank defect of the road builder (step 5) applies too. The start-side B corners and
+    the W0 − 4a approach altitude get the raw h(E0 + 3a).
 
 **6. Pieces.** Placed along the axis, with occupant altitude given in terrain height units
 (segments are the record's five segments; only the first piece of segments 1, 2, 4 and 5 is used):
@@ -1066,10 +1174,10 @@ recomputed after load `[INFERRED]`.
 ## Open questions
 
 1. Drag routing (§6.2): the meaning of the on-ramp's lot occupant and whether the 17202 price key
-   is used; the network manager's validation rule for the buildable prefix (§6.2.6 step 1) and the
-   endpoint terrain levelling (step 3) are only partly decoded.
-2. Highway bridge abutment corner list (§6.4 step 5) and the exact meaning of the map flag set by
-   bridge pier pieces.
+   is used; the network manager's validation rule for the buildable prefix (§6.2.6 step 1). Endpoint
+   levelling (step 3) is decoded except one call argument.
+2. The exact meaning of the map flag set by bridge pier pieces. The highway abutment corner list
+   and the bank-height defects are closed (§6.4 steps 5 and 5a).
 3. The meaning of the piece-word bits 16–27 in the persisted lists (`10-save-format.md` §6.2.6).
 4. Neighbour-exists test used before offering a connection (believed: the neighbour city on that
    edge exists, see `19-sim-economy.md`).
