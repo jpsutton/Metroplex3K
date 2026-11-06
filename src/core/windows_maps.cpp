@@ -505,11 +505,15 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   struct Lab { std::string text; int endY; uint32_t col; int y = 0; float endYf = 0; int top = 0; int natY = 0; };
   std::vector<Lab> labs;
   int nPts = 0;
-  // The original draws (and slots the labels of) Funds before City Size and Power % [OBSERVED on Berlin: green and orange cross over purple; the full
-  // series-loop order is not decoded, so Funds goes first and the others keep the grid order].
+  // Series loop order = the check-box grid read row by row (i -> column i % 3, row i / 3, the last one in the middle column) [STATIC]; the draw and the
+  // label slotting both follow it.
+  static const char* const kRowMajor[16] = {"Approval Rating", "Pollution", "Crime", "Residents", "Education", "Health", "Land Value", "Traffic",
+                                            "Funds", "City Size", "Commerce", "Industry", "Unemployment", "Nat'l Pop", "Power %", "Water %"};
   std::vector<size_t> order;
-  for (size_t i = 0; i < series.size() && i < 16; i++) if (series[i].fallback == "Funds") order.push_back(i);
-  for (size_t i = 0; i < series.size() && i < 16; i++) if (series[i].fallback != "Funds") order.push_back(i);
+  std::vector<uint8_t> inOrder(series.size(), 0);
+  for (const char* nm : kRowMajor)
+    for (size_t i = 0; i < series.size() && i < 16; i++) if (!inOrder[i] && series[i].fallback == nm) { order.push_back(i); inOrder[i] = 1; }
+  for (size_t i = 0; i < series.size() && i < 16; i++) if (!inOrder[i]) order.push_back(i);
   for (size_t i : order) {
     if (!(enabledMask & (1u << i)) || !series[i].chart) continue;
     auto s = samples(*series[i].chart, range);
@@ -564,7 +568,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   ui.fill({r.x + 300, box.y + 1, 1, box.h - 2}, rgb(173, 178, 222));
   for (int ly = 65; ly <= 184; ly += 17) ui.fill({r.x + 300, r.y + ly, 1, 1}, rgb(173, 174, 222));
   for (auto& l : labs) {
-    line(ui, x1, l.endY, x1 + 4, l.top + 6, l.col);   // 2 px thick, from the line end at x340 to the label's ink top + 6 at x344 [OBSERVED]
+    line(ui, x1 - 1, l.endY, x1 + 3, l.top + 5, l.col);   // the plot-line primitive (2 x 2 stamp) from the last point's stamp column x339 to x343: pixels x340..344, ending at the ink top + 5 [OBSERVED]
     ui.text(r.x + 306, l.y, l.text, "system9", l.col);
   }
   ui.fill({r.x + 44, r.y + 218, 256, 2}, rgb(173, 178, 222));         // axis, 2 px
