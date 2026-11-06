@@ -439,7 +439,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
 // ================================================================ graphs (7.3)
 std::vector<uint32_t> GraphsWindow::samples(const Chart& c, int range) {
   std::vector<uint32_t> v;
-  if (range == 0) for (int i = 10; i >= 0; i--) v.push_back(c.monthly[i]);   // the 12-month plot skips the oldest slot and ends on the live value [OBSERVED: Berlin and London]
+  if (range == 0) for (int i = 11; i >= 0; i--) v.push_back(c.monthly[i]);   // the 12 stored samples, oldest first [OBSERVED: London]
   else if (range == 1) for (int i = 9; i >= 0; i--) v.push_back(c.yearly[i]);
   else for (int i = 9; i >= 0; i--) v.push_back(c.decade[i]);
   return v;
@@ -508,7 +508,6 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   for (size_t i = 0; i < series.size() && i < 16; i++) {
     if (!(enabledMask & (1u << i)) || !series[i].chart) continue;
     auto s = samples(*series[i].chart, range);
-    if (range == 0) s.push_back(uint32_t(series[i].live >= 0 ? series[i].live : int64_t(series[i].chart->monthly[0])));   // 12th point = the live current value (the newest saved sample when unknown)
     if (s.size() < 2) continue;
     nPts = int(s.size());
     uint32_t lo = 0, hi = series[i].chart->max;
