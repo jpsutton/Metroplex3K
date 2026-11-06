@@ -39,19 +39,32 @@ PowerParams PowerParams::fromIni(const IniFile& f) {
   for (uint32_t t : powerPlantTypes()) {
     PlantTunables pt;
     pt.section = plantSection(t);
-    pt.capacity = int(r.num("PowerPlantCapacities", std::to_string(t), 0));
-    int64_t ml = r.num(pt.section, "MaxLifeSpan", 0);
+    // Defaults are the shipped SC3PowerLayer.ini values (spec 16).
+    int dCap = 0, dMax = 840, dDecline = 672;
+    switch (t) {
+      case 12111: dCap = 6000; break;
+      case 12112: dCap = 7000; break;
+      case 12113: dCap = 3000; dMax = 960; dDecline = 768; break;
+      case 12114: dCap = 14000; dMax = 960; dDecline = 768; break;
+      case 12115: dCap = 16000; dMax = 720; dDecline = 576; break;
+      case 12116: dCap = 50000; dMax = 720; dDecline = 576; break;
+      case 12117: dCap = 5000; dMax = 1200; dDecline = 960; break;
+      case 12118: dCap = 200; dMax = 1440; dDecline = 1152; break;
+      case 12853: dCap = 5000; break;
+    }
+    pt.capacity = int(r.num("PowerPlantCapacities", std::to_string(t), dCap));
+    int64_t ml = r.num(pt.section, "MaxLifeSpan", dMax);
     pt.maxLife = ml == 0 ? 1 : int(ml);
-    pt.declineAge = int(r.num(pt.section, "DeclineAge", 0));
+    pt.declineAge = int(r.num(pt.section, "DeclineAge", dDecline));
     if (pt.declineAge >= pt.maxLife) pt.declineAge = pt.maxLife / 2;
-    pt.variationPct = int(r.num(pt.section, "PercentageVariationInLongevity", 0));
+    pt.variationPct = int(r.num(pt.section, "PercentageVariationInLongevity", 15));
     p.plants[t] = pt;
   }
-  p.savingConservationPct = int(r.num("MiscPowerLayerTunables", "SavingDueToPowerConservationOrdinance", 0));
-  p.savingStairwellPct = int(r.num("MiscPowerLayerTunables", "SavingDueToStairwellLightingOrdinance", 0));
+  p.savingConservationPct = int(r.num("MiscPowerLayerTunables", "SavingDueToPowerConservationOrdinance", 10));
+  p.savingStairwellPct = int(r.num("MiscPowerLayerTunables", "SavingDueToStairwellLightingOrdinance", 5));
   p.minOverwork = int(r.num("MiscPowerPlantTunables", "MinOverworkMonths", p.minOverwork));
   p.maxOverwork = int(r.num("MiscPowerPlantTunables", "MaxOverworkMonths", p.maxOverwork));
-  p.wteOptimalGarbageCap = int(r.num("WasteToEnergyPowerPlant", "OptimalGarbageCap", 0));
+  p.wteOptimalGarbageCap = int(r.num("WasteToEnergyPowerPlant", "OptimalGarbageCap", 1750));
   return p;
 }
 
@@ -335,17 +348,17 @@ WaterParams WaterParams::fromIni(const IniFile& f) {
   WaterParams p;
   IniReader r{&f};
   const char* S = "TuningParameters";
-  p.waterFromPipe = int(uint16_t(r.num(S, "WaterFromPipe", 0)));
+  p.waterFromPipe = int(uint16_t(r.num(S, "WaterFromPipe", 7)));
   if (p.waterFromPipe == 0) p.waterFromPipe = 3;
-  p.pumpDistanceFactor = int(r.num(S, "WaterPumpDistanceFactor", 0));
-  p.towerCapa = int(r.num(S, "WaterTowerCapa", 0));
-  p.pumpCapa = int(r.num(S, "WaterPumpCapa", 0));
-  p.desaltCapa = int(r.num(S, "DesaltPlantCapa", 0));
-  p.towerLifeYears = int(r.num(S, "WaterTowerLife", 0));
-  p.pumpLifeYears = int(r.num(S, "WaterPumpLife", 0));
-  p.desaltLifeYears = int(r.num(S, "DesaltPlantLife", 0));
-  p.conservationFactor = int(r.num(S, "WaterConservationFactor", 0));
-  p.meterFactor = int(r.num(S, "WaterMeterFactor", 0));
+  p.pumpDistanceFactor = int(r.num(S, "WaterPumpDistanceFactor", 20));
+  p.towerCapa = int(r.num(S, "WaterTowerCapa", 600));
+  p.pumpCapa = int(r.num(S, "WaterPumpCapa", 1500));
+  p.desaltCapa = int(r.num(S, "DesaltPlantCapa", 5000));
+  p.towerLifeYears = int(r.num(S, "WaterTowerLife", 130));
+  p.pumpLifeYears = int(r.num(S, "WaterPumpLife", 110));
+  p.desaltLifeYears = int(r.num(S, "DesaltPlantLife", 100));
+  p.conservationFactor = int(r.num(S, "WaterConservationFactor", 10));
+  p.meterFactor = int(r.num(S, "WaterMeterFactor", 5));
   p.defaultConsumption = int(r.num(S, "DefaultConsumption", 0));
   // Spec 16 §3.1 / Q-BT [STATIC]: DefaultLeak is loaded and never read (shipped 0).
   p.defaultLeak = int(r.num(S, "DefaultLeak", 0));

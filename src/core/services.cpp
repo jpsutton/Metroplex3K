@@ -1018,28 +1018,28 @@ const int AuraLayer::kPhases[16][2] = {{4, 8}, {0, 12}, {4, 0}, {8, 12}, {12, 8}
 AuraParams AuraParams::fromIni(const IniFile& f) {
   IniReader r{&f};
   const char* S = "TuningParameters";
-  AuraParams p;
+  AuraParams p;   // defaults: shipped SC3Aura.ini
   auto q = [&](const char* k, uint32_t d = 0) { return r.quirky(S, k, d); };
   uint16_t up = uint16_t(q("UpdatePeriod", 50));
   p.updatePeriod = up == 0 ? 1 : up;
-  p.optimalPolice = uint8_t(q("OptimalPoliceCoverage"));
-  p.optimalPoliceEffect = int8_t(q("OptimalPoliceCoverageEffect"));
-  p.oppressiveEffect = int8_t(q("OppressivePoliceCoverageEffect"));
+  p.optimalPolice = uint8_t(q("OptimalPoliceCoverage", uint32_t(100)));
+  p.optimalPoliceEffect = int8_t(q("OptimalPoliceCoverageEffect", uint32_t(20)));
+  p.oppressiveEffect = int8_t(q("OppressivePoliceCoverageEffect", uint32_t(-10)));
   p.inadequateEffect = int8_t(q("InadequatePoliceCoverageEffect"));
-  p.crimeFactor = int8_t(q("CrimeFactor", uint32_t(-1)));
+  p.crimeFactor = int8_t(q("CrimeFactor", uint32_t(-4)));
   if (p.crimeFactor == 0) p.crimeFactor = -1;
-  p.fireFactor = int8_t(q("FireCoverageFactor"));
-  p.airFactor = int16_t(q("AirPollutionFactor"));
-  p.waterFactor = int16_t(q("WaterPollutionFactor"));
-  p.garbageEffect = int8_t(q("StandingGarbageFactor"));
-  p.radiationEffect = int8_t(q("RadiationFactor"));
-  p.highEQFactor = int8_t(q("HighEQFactor")); p.lowEQFactor = int8_t(q("LowEQFactor"));
-  p.highEQThreshold = uint8_t(q("HighEQThreshold")); p.lowEQThreshold = uint8_t(q("LowEQThreshold"));
-  p.highLEFactor = int8_t(q("HighLEFactor")); p.lowLEFactor = int8_t(q("LowLEFactor"));
-  p.highLEThreshold = uint8_t(q("HighLEThreshold")); p.lowLEThreshold = uint8_t(q("LowLEThreshold"));
-  p.parkingFine = int8_t(q("ParkingFineOrdEffect"));
-  p.altDriving = int8_t(q("AltDrivingOrdEffect"));
-  p.nukeFree = int8_t(q("NukeFreeOrdEffect"));
+  p.fireFactor = int8_t(q("FireCoverageFactor", uint32_t(10)));
+  p.airFactor = int16_t(q("AirPollutionFactor", uint32_t(-300)));
+  p.waterFactor = int16_t(q("WaterPollutionFactor", uint32_t(-200)));
+  p.garbageEffect = int8_t(q("StandingGarbageFactor", uint32_t(20)));
+  p.radiationEffect = int8_t(q("RadiationFactor", uint32_t(-100)));
+  p.highEQFactor = int8_t(q("HighEQFactor", uint32_t(40))); p.lowEQFactor = int8_t(q("LowEQFactor", uint32_t(-80)));
+  p.highEQThreshold = uint8_t(q("HighEQThreshold", uint32_t(120))); p.lowEQThreshold = uint8_t(q("LowEQThreshold", uint32_t(70)));
+  p.highLEFactor = int8_t(q("HighLEFactor", uint32_t(60))); p.lowLEFactor = int8_t(q("LowLEFactor", uint32_t(-120)));
+  p.highLEThreshold = uint8_t(q("HighLEThreshold", uint32_t(75))); p.lowLEThreshold = uint8_t(q("LowLEThreshold", uint32_t(60)));
+  p.parkingFine = int8_t(q("ParkingFineOrdEffect", uint32_t(-5)));
+  p.altDriving = int8_t(q("AltDrivingOrdEffect", uint32_t(-5)));
+  p.nukeFree = int8_t(q("NukeFreeOrdEffect", uint32_t(5)));
   for (const auto& kv : f.section("AgentIDModifiers")) {
     uint32_t id = parseQuirky(kv.first);
     size_t comma = kv.second.find(',');

@@ -63,7 +63,7 @@ static void testPowerParams() {
   CHECK(p.plants.at(12111).declineAge == 300);  // 700 >= 600 -> 600/2
   CHECK(p.plants.at(12117).maxLife == 1);       // 0 -> 1
   CHECK(p.plants.at(12117).variationPct == 20);
-  CHECK(p.plants.at(12112).capacity == 0);      // absent -> 0
+  CHECK(p.plants.at(12112).capacity == 7000);   // absent -> the shipped default
   CHECK(p.savingConservationPct == 10 && p.savingStairwellPct == 5);
   CHECK(p.wteOptimalGarbageCap == 90);
   CHECK(powerCategory(12853) == 8 && powerCategory(12111) == 0 && powerCategory(5) == -1);
