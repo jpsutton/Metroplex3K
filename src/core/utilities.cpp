@@ -238,6 +238,9 @@ void PowerLayer::distribute(int sx, int sz, const PowerEnv& env, std::vector<uin
   // shared in proportion to plant output [OBSERVED: the row sums to the month's consumed power, Berlin 158,254; the sharing rule is INFERRED].
   {
     const int64_t supplied = std::max<int64_t>(0, stats_.consumed - consumedBefore - drawn);
+    ComponentInfo ci; ci.sx = sx; ci.sz = sz; ci.plants = int(here.size()); ci.rawS = rawS; ci.S = S; ci.supplied = supplied; ci.tiles = int(K.size()); ci.brownOut = brown;
+    for (auto* p : here) ci.types.push_back(p->agentType);
+    components_.push_back(ci);
     for (auto* p : here) {
       int c = powerCategory(p->agentType);
       if (c >= 0 && rawS > 0) catProduced[c] += supplied * p->output / rawS;
@@ -266,6 +269,7 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
   for (int c = 0; c < 10; c++) { annualTotal[c] -= production[monthIndex][c]; production[monthIndex][c] = 0; }
 
   stats_ = PowerStats();
+  components_.clear();
   std::fill(powered_.begin(), powered_.end(), 0);
   for (auto c : cons_) if (c) stats_.consumerTiles++;
 
@@ -320,8 +324,9 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
   else stats_.spareCapacityPct = 0;
   stats_.unpoweredConsumers = std::max(0, stats_.consumerTiles - stats_.poweredConsumerTiles);
 
-  // power % graph sample: consumption as a percentage of production, clamped 0..100 [OPEN].
-  uint32_t pct = stats_.produced > 0 ? uint32_t(std::min<int64_t>(100, 100 * stats_.consumed / stats_.produced)) : 0;
+  // power % graph sample = SPARE capacity: (100 S - 100 consumed) / S with S the raw sum of plant output, 0 when consumed >= S
+  // [STATIC FUN_10004c1f; OBSERVED Berlin saved samples 17-18, London 51-54].
+  uint32_t pct = stats_.produced > stats_.consumed ? uint32_t((100 * stats_.produced - 100 * stats_.consumed) / stats_.produced) : 0;
   chart.pushMonthly(pct);
   chart.recomputeAutoMax();
   return events;
@@ -342,6 +347,7 @@ void PowerLayer::recomputeCoverage(const PowerEnv& env, bool rollover) {
   deals_.clear();
   for (size_t i = 0; i < env.deals.size() && i < 4; i++) { deals_.push_back(env.deals[i]); deals_.back().reached = false; deals_.back().active = false; deals_.back().unused = 0; }
   stats_ = PowerStats();
+  components_.clear();
   std::fill(powered_.begin(), powered_.end(), 0);
   for (auto c : cons_) if (c) stats_.consumerTiles++;
   std::vector<uint8_t> visited(size_t(W_) * H_, 0);

@@ -392,6 +392,11 @@ int main(int argc, char** argv) {
         std::map<uint32_t, std::pair<int, long long>> byType;   // agent type -> plants, summed output
         for (const auto& p : c.power.plants()) { byType[p.agentType].first++; byType[p.agentType].second += p.output; }
         for (const auto& kv : byType) std::printf("   type %u: %d plants, output %lld\n", kv.first, kv.second.first, kv.second.second);
+        for (const auto& k : c.power.components()) {
+          std::printf("   component seed (%d,%d): %d tiles, %d plants, raw S %lld, S' %lld, supplied %lld, r %.4f%s  types:", k.sx, k.sz, k.tiles, k.plants, (long long)k.rawS, (long long)k.S, (long long)k.supplied, k.rawS > 0 ? double(k.supplied) / double(k.rawS) : 0.0, k.brownOut ? " BROWNOUT" : "");
+          for (auto t : k.types) std::printf(" %u", t);
+          std::printf("\n");
+        }
         std::printf("   production row (our category order, 9 = neighbours):");
         for (int k = 0; k < 10; k++) std::printf(" %d", c.power.production[c.power.monthIndex][k]);
         std::printf("   (slot %d)\n", c.power.monthIndex);

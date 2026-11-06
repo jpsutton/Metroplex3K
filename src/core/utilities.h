@@ -95,6 +95,9 @@ class PowerLayer {
   PowerLayer() = default;
   PowerLayer(int W, int H, PowerParams p) { init(W, H, std::move(p)); }
   void init(int W, int H, PowerParams p);
+  // Diagnostics: one entry per distribution (network component) of the last month update / load recompute.
+  struct ComponentInfo { int sx = 0, sz = 0, plants = 0, tiles = 0; int64_t rawS = 0, S = 0, supplied = 0; bool brownOut = false; std::vector<uint32_t> types; };
+  const std::vector<ComponentInfo>& components() const { return components_; }
   void applySiteFactors(const PowerEnv& env);   // wind turbines' terrain factor
 
   int addPlant(int x, int z, uint32_t agentType, int buildAbsMonth, SimRng& rng);  // returns id (-1 if unknown type)
@@ -140,6 +143,7 @@ class PowerLayer {
   int W_ = 0, H_ = 0, nextId_ = 1;
   PowerParams params_;
   std::vector<PlantState> plants_;
+  std::vector<ComponentInfo> components_;
   std::vector<uint8_t> cons_, powered_;
   std::vector<PowerDeal> deals_;
   PowerStats stats_;
