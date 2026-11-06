@@ -322,8 +322,12 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   q.landValue = c.landValue.lv.empty() ? -1 : c.landValue.landValueAtTile(x, z);
   if (!c.crime.crime.empty()) q.crime = c.crime.crimeAt(x, z);
   if (ti < c.flammability.grid.size()) q.flammability = c.flammability.grid[ti];
-  q.airPollution = clamp8(c.pollution.airAt(x, z) / 16);       // 15-bit state scaled to the 6-band byte [INFERRED]
-  q.waterPollution = clamp8(c.pollution.waterAt(x, z) / 16);
+  {   // Query bands (spec 17 7.2.5 [STATIC]): 0 for v = 0, then v < M/8, M/4, M/2, 4M/5, else the top band; M = Max{Air,Water}PolluteForUI.
+    auto band = [](int v, int M) { return v <= 0 ? 0 : v < M / 8 ? 1 : v < M / 4 ? 2 : v < M / 2 ? 3 : v < 4 * M / 5 ? 4 : 5; };
+    const auto& pp = c.pollution.params();
+    q.airPollution = band(c.pollution.airAt(x, z), pp.maxAir > 0 ? pp.maxAir : 11000);
+    q.waterPollution = band(c.pollution.waterAt(x, z), pp.maxWater > 0 ? pp.maxWater : 11000);
+  }
   // Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: one query line = trunc(G × s); G = standing garbage.
   if (!c.pollution.standing.empty()) q.garbageScaled = c.pollution.queryGarbageScaled(x, z);
   q.powered = c.powered(x, z);
@@ -450,7 +454,7 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
         // This facility's share of the water used [INFERRED]: citywide use split by capacity.
         q.v[4] = c.water.stats.supply > 0 ? double(c.water.stats.used) * f.output / double(c.water.stats.supply) : 0;
         q.band[0] = clamp8(c.water.stats.supply > 0 ? int(c.water.stats.used * 255 / c.water.stats.supply) : 0);
-        q.band[2] = q.waterPollution >= 0 ? uint8_t(std::min(255, q.waterPollution)) : 0;   // "Effect of Water Pollution"
+        q.band[2] = uint8_t(clamp8(c.pollution.waterAt(x, z) / 16));   // "Effect of Water Pollution"
         q.v[2] = f.status == us::WaterFacility::Good || f.status == us::WaterFacility::Far;
         q.ageYears = std::max(0, (absMonth(c.clock) - f.buildAbsMonth) / 12);
         q.maxAgeYears = f.lmax > 0 ? f.lmax / 12 : 0;

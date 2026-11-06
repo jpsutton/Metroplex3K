@@ -633,9 +633,9 @@ void PollutionLayer::init(int W, int H, const PollutionParams& p, const AgentHie
 }
 
 int PollutionLayer::queryGarbageScaled(int x, int z) const {
-  // Spec 16 §4.1 / 17 §7.2.2 / Q-BT [STATIC]: trunc(G × s) for the pollution query UI line.
+  // Spec 17 7.2.5 [STATIC]: G × s rounded to nearest (an earlier reading said truncate) for the pollution query UI line.
   if (x < 0 || z < 0 || x >= W_ || z >= H_) return 0;
-  return int(std::trunc(double(standingGarbageAt(x, z)) * params_.garbageScale));
+  return int(std::llround(double(standingGarbageAt(x, z)) * params_.garbageScale));
 }
 
 PollutionEntry PollutionLayer::lookup(uint32_t type) {

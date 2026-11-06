@@ -477,7 +477,7 @@ struct QueryInfo {
   int landValue = -1;                // byte, -1 = not shown
   int crime = -1, flammability = -1; // bytes, -1 = not shown
   int pollution = -1, pollutionBaseline = 100;   // generated vs baseline b
-  int airPollution = -1, waterPollution = -1;    // bytes (6-band strings 188-18D / 18F-194)
+  int airPollution = -1, waterPollution = -1;    // band index 0..5 (strings 188-18D / 18F-194), -1 = not shown
   int garbageScaled = -1;                        // Spec 16/17 Q-BT: trunc(G × GarbageScalingFactor×0.001); -1 = hide
   bool powered = false, showPower = false;
   std::string name;                  // building name (string table / design name); empty = bare ground

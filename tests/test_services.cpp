@@ -416,9 +416,11 @@ static void testGarbageScalingQuery() {
   CHECK(p.garbageScale == 100 * 0.001);
   AgentHierarchy h;
   PollutionLayer L; L.init(8, 8, p, &h);
-  L.setStandingGarbage(2, 3, 157);   // trunc(157 × 0.1) = 15
-  CHECK(L.queryGarbageScaled(2, 3) == 15);
-  L.setStandingGarbage(2, 3, 9);     // trunc(0.9) = 0
+  L.setStandingGarbage(2, 3, 157);   // round(15.7) = 16 (spec 17 7.2.5: nearest, not truncated)
+  CHECK(L.queryGarbageScaled(2, 3) == 16);
+  L.setStandingGarbage(2, 3, 9);     // round(0.9) = 1
+  CHECK(L.queryGarbageScaled(2, 3) == 1);
+  L.setStandingGarbage(2, 3, 4);     // round(0.4) = 0
   CHECK(L.queryGarbageScaled(2, 3) == 0);
   CHECK(L.queryGarbageScaled(-1, 0) == 0);
 }

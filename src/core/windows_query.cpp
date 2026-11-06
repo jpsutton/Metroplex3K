@@ -214,8 +214,8 @@ std::vector<QueryLine> buildQueryLines(const WinEnv& E, const QueryInfo& q) {
     l.red = id == 0x28;   // "Extreme" is drawn red
     return l;
   };
-  auto airPollution = [&] { int i = std::min(5, std::max(0, q.airPollution) * 6 / 256); return QueryLine{E.query(0x187, "Air Pollution:"), band(E, 0x188, i, kU6[i])}; };
-  auto waterPollution = [&] { int i = std::min(5, std::max(0, q.waterPollution) * 6 / 256); return QueryLine{E.query(0x18E, "Water Pollution:"), band(E, 0x18F, i, kU6[i])}; };
+  auto airPollution = [&] { int i = std::clamp(q.airPollution, 0, 5); return QueryLine{E.query(0x187, "Air Pollution:"), band(E, 0x188, i, kU6[i])}; };
+  auto waterPollution = [&] { int i = std::clamp(q.waterPollution, 0, 5); return QueryLine{E.query(0x18E, "Water Pollution:"), band(E, 0x18F, i, kU6[i])}; };
   auto pollutionGenerated = [&] {
     uint32_t id = pollutionBandId(q.pollution, q.pollutionBaseline);
     static const char* fb[] = {"None", "Low", "Medium", "High", "Very High", "Hazardous"};
