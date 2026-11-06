@@ -391,12 +391,13 @@ int32_t ScriptInterpreter::execLeaf(const ScriptCommand& c, int id, int depth) {
       return 1;
     }
     case cmdMakeDialogText: case cmdSetResultsDlgText: {
+      // Each call replaces the dialog's single text; the third argument is the presenter mood (shared by both commands, last write wins,
+      // used only when the presenter is an advisor), not a slot (spec 23).
       StringRef r{uint32_t(argv(c, 0)), uint32_t(argv(c, 1))};
-      int slot = argv(c, 2);
-      bool dlg = id == cmdMakeDialogText;
-      StringRef& main = dlg ? st_.dialogText : st_.resultsText;
-      auto& extra = dlg ? st_.dialogExtra : st_.resultsExtra;
-      if (slot == 2) extra.push_back(r); else { main = r; extra.clear(); }
+      const bool dlg = id == cmdMakeDialogText;
+      (dlg ? st_.dialogText : st_.resultsText) = r;
+      (dlg ? st_.dialogExtra : st_.resultsExtra).clear();
+      st_.presenterMood = uint32_t(argv(c, 2));
       return 1;
     }
     case cmdPopUpMsg: {

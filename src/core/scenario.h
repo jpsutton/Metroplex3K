@@ -100,9 +100,12 @@ struct ScenarioTextContext {
   std::string paradeName;        // %PARADENAME%: text for the player's country (empty -> token kept)
   std::string anyNeighbor;       // %ANYNEIGHBOR%: name of one neighbour city (empty -> token kept)
   int population = 0, year = 2000;
+  int language = 1;   // original language code: picks the separators and currency of %SCNV (1 = US English)
   const std::vector<int32_t>* vars = nullptr;
 };
 std::string expandScenarioTokens(const std::string& s, const ScenarioTextContext& c);
+// %SCNV<M|N|Y> number formatting (spec 23): Y plain, N grouped with the language's separator, M grouped with its currency symbol.
+std::string formatScenarioNumber(char kind, int32_t value, int language);
 
 // Presenter shown with a pop-up or the start dialog (spec 23 sections 2.3, 2.6, 4.6).
 struct ResolvedPresenter {

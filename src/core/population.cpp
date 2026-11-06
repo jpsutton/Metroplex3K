@@ -243,7 +243,7 @@ PopulationResult Population::monthly(const PopulationInput& in) {
     }
     if (sports && a >= cfg.jrSportsMinAge && a <= cfg.jrSportsMaxAge) dord += cfg.monthlyJrSportsOrdEffect;
     eq[a] += dord + dfac;
-    if (a >= 7 && a <= 18) { Gschool += dfac; schoolPop += uint32_t(std::nearbyint(people)); }
+    if (a >= 6 && a <= 18) { Gschool += dfac; schoolPop += uint32_t(std::nearbyint(people)); }
     if (a >= 19 && a <= 24) { Gcollege += dfac; collegePop += uint32_t(std::nearbyint(people)); }
     if (a < cfg.ageOfRebellion) eq[a] += Epar;
     if (a <= 26) {

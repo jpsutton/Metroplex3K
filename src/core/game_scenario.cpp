@@ -17,7 +17,9 @@ struct Stats : ICityStats {
     int64_t s = 0; for (int8_t v : g) s += v; return int32_t(s / int64_t(g.size()));
   }
   int32_t pollution(int kind) const override {
-    return kind == 0 ? int32_t(c->pollution.avgAir) : kind == 1 ? int32_t(c->pollution.avgWater) : int32_t(c->pollution.totalStanding);
+    // Kind 2: floor(sum of standing garbage / N) as u16, with the divisor of kinds 0 and 1 (spec 23, held between sweeps).
+    if (kind == 2) return c->pollution.pollutedCount ? int32_t(uint16_t(c->pollution.totalStanding / c->pollution.pollutedCount)) : 0;
+    return kind == 0 ? int32_t(c->pollution.avgAir) : int32_t(c->pollution.avgWater);
   }
   int32_t funds() const override { return int32_t(std::max<int64_t>(-2000000000, std::min<int64_t>(2000000000, c->budget.funds))); }
   int32_t totalDebt() const override { return int32_t(c->budget.totalPrincipal); }

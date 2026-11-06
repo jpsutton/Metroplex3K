@@ -276,6 +276,36 @@ bool readStringRecord(const IxfFile& f, const ResKey& k, std::string& out) {
   return true;
 }
 
+std::string formatScenarioNumber(char kind, int32_t value, int lang) {
+  if (kind == 'Y') return std::to_string(value);
+  const bool neg = value < 0;
+  const std::string digits = std::to_string(neg ? -int64_t(value) : int64_t(value));
+  // Digit separator by language [STATIC, spec 23]: ',' 1 2 12 15 17-20; '.' 3-9 13 14; ' ' 10 11 16.
+  char sep = ',';
+  if ((lang >= 3 && lang <= 9) || lang == 13 || lang == 14) sep = '.';
+  else if (lang == 10 || lang == 11 || lang == 16) sep = ' ';
+  std::string g;
+  for (size_t i = 0; i < digits.size(); i++) {
+    if (i && (digits.size() - i) % 3 == 0) g.push_back(sep);
+    g.push_back(digits[i]);
+  }
+  if (kind == 'N') {
+    if (!neg) return g;
+    if (lang == 0 || lang == 14 || lang > 20) return std::string();   // original quirk: negatives give an empty string
+    return lang == 11 ? g + "-" : "-" + g;
+  }
+  // 'M': currency symbol before or after, with or without a space.
+  const char* sym = "";
+  switch (lang) { case 1: sym = "$"; break; case 2: sym = "\xA3"; break; case 3: case 7: sym = "F"; break; case 4: sym = "DM"; break;
+                  case 5: sym = "L."; break; case 6: sym = "Pts"; break; case 8: sym = "kr"; break; default: break; }
+  static const int before[] = {1, 2, 9, 11, 14, 16, 21, 22, 23, 24, 25, 29, 31, 32};
+  static const int spaced[] = {3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 16};
+  auto in = [&](const int* a, size_t n) { for (size_t i = 0; i < n; i++) if (a[i] == lang) return true; return false; };
+  const bool symBefore = in(before, sizeof before / sizeof *before), space = in(spaced, sizeof spaced / sizeof *spaced);
+  std::string out = symBefore ? std::string(sym) + (space && *sym ? " " : "") + g : g + (space && *sym ? " " : "") + sym;
+  return neg ? "-" + out : out;
+}
+
 std::string expandScenarioTokens(const std::string& s, const ScenarioTextContext& c) {
   std::string out;
   size_t i = 0;
@@ -294,14 +324,14 @@ std::string expandScenarioTokens(const std::string& s, const ScenarioTextContext
     else if (up == "PARADENAME" && !c.paradeName.empty()) rep = c.paradeName;
     else if (up == "ANYNEIGHBOR" && !c.anyNeighbor.empty()) rep = c.anyNeighbor;
     else if (up == "SCNNAME" || up == "SCN_NAME") rep = c.scenarioName;
-    else if (up.size() > 5 && up.compare(0, 4, "SCNV") == 0 && up[5] == ' ') {
+    else if (tok.size() > 5 && tok.compare(0, 4, "SCNV") == 0 && tok[5] == ' ') {   // case-sensitive prefix and letter; the space is required
       size_t p = 6;
       int64_t n;
-      char f = up[4];
-      if (!parseLeadingInt(up, p, n) || (f != 'M' && f != 'N' && f != 'Y')) ok = false;
+      const char f = tok[4];
+      if (!parseLeadingInt(tok, p, n) || (f != 'M' && f != 'N' && f != 'Y')) ok = false;
       else {
         int32_t val = (c.vars && n >= 0 && size_t(n) < c.vars->size()) ? (*c.vars)[size_t(n)] : 0;
-        rep = f == 'M' ? "$" + groupDigits(val) : std::to_string(val);
+        rep = formatScenarioNumber(f, val, c.language);
       }
     } else ok = false;
     if (ok) { out += rep; i = e + 1; }

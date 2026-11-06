@@ -137,7 +137,14 @@ int main() {
   {
     std::vector<int32_t> vars(512, 0); vars[3] = 1234;
     ScenarioTextContext c; c.scenarioName = "Test"; c.vars = &vars; c.mayor = "Bob"; c.year = 1999;
-    CHECK(expandScenarioTokens("%SCNNAME% by %MAYOR% %SCNVN 3% %YEAR% 100%", c) == "Test by Bob 1234 1999 100%");
+    CHECK(expandScenarioTokens("%SCNNAME% by %MAYOR% %SCNVN 3% %YEAR% 100%", c) == "Test by Bob 1,234 1999 100%");
+    // %SCNV formatting (spec 23): Y plain, N grouped, M grouped with the currency; US English examples
+    vars[4] = 1234567; vars[5] = -1500; vars[6] = 25000; vars[7] = -750; vars[8] = 2010;
+    CHECK(expandScenarioTokens("%SCNVN 4% %SCNVN 5% %SCNVM 6% %SCNVM 7% %SCNVY 8%", c) == "1,234,567 -1,500 $25,000 -$750 2010");
+    CHECK(expandScenarioTokens("%SCNVN5% %SCNVX 3% %scnvn 3%", c) == "%SCNVN5% %SCNVX 3% %scnvn 3%");   // space required, letter case-sensitive
+    CHECK(formatScenarioNumber('N', 1234567, 3) == "1.234.567" && formatScenarioNumber('N', 1234567, 10) == "1 234 567");
+    CHECK(formatScenarioNumber('N', -5, 14).empty() && formatScenarioNumber('N', -1234, 11) == "1 234-");
+    CHECK(formatScenarioNumber('M', 25000, 4) == "25.000 DM" && formatScenarioNumber('M', -750, 2) == "-\xA3""750");
     CHECK(expandScenarioTokens("%FOO% x", c) == "%FOO% x");
   }
   // file round trip

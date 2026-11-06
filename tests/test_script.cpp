@@ -205,10 +205,11 @@ int main() {
     CHECK(in2.run(mk({C(cmdMarkGoalStatus, {L(9), L(1)})})) == 0);
     CHECK(in2.run(mk({C(cmdGoalStatusIs, {L(1), L(0)})})) == 1 && in2.run(mk({C(cmdGoalStatusIs, {L(1), L(1)})})) == 0);
     CHECK(in2.run(mk({C(cmdAddRankInfo, {L(1), L(100), L(4)}), C(cmdAddRankInfo, {L(1), L(100), L(5)})})) == 1 && s2.ranks.at(1).id == 5);
-    // dialog text: slot 1 main, slot 2 appended paragraphs
-    in2.run(mk({C(cmdMakeDialogText, {L(100), L(7), L(1)}), C(cmdMakeDialogText, {L(100), L(8), L(2)}),
-                C(cmdSetResultsDlgText, {L(100), L(9), L(1)}), C(cmdSetResultsDlgText, {L(100), L(10), L(2)})}));
-    CHECK(s2.dialogText.id == 7 && s2.dialogExtra.size() == 1 && s2.resultsText.id == 9 && s2.resultsExtra.size() == 1);
+    // dialog text: every call replaces the text; the third argument is the presenter mood, shared by both commands (spec 23)
+    in2.run(mk({C(cmdMakeDialogText, {L(100), L(7), L(1)}), C(cmdMakeDialogText, {L(100), L(8), L(2)})}));
+    CHECK(s2.dialogText.id == 8 && s2.dialogExtra.empty() && s2.presenterMood == 2);
+    in2.run(mk({C(cmdSetResultsDlgText, {L(100), L(9), L(5)})}));
+    CHECK(s2.resultsText.id == 9 && s2.resultsExtra.empty() && s2.presenterMood == 5 && s2.dialogText.id == 8);
     // side effects reach the host with their arguments
     h2.log.clear(); h2.params.clear();
     in2.run(mk({C(cmdPopUpMsg, {L(1), L(2), L(1), L(0x628D0C45), L(0), L(4)}), C(cmdShowNewsticker, {L(5), L(6)}), C(cmdPlaySound, {L(33)}),
