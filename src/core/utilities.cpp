@@ -163,11 +163,10 @@ void PowerLayer::distribute(int sx, int sz, const PowerEnv& env, std::vector<uin
     if (inK[p.x * H_ + p.z]) {
       here.push_back(&p);
       S += p.output;
-      int c = powerCategory(p.agentType);
-      if (c >= 0) catProduced[c] += p.output;
     }
   }
   stats_.produced += S;
+  const int64_t consumedBefore = stats_.consumed;
 
   std::vector<PowerDeal*> active;
   for (auto& d : deals_) {
@@ -223,7 +222,18 @@ void PowerLayer::distribute(int sx, int sz, const PowerEnv& env, std::vector<uin
       d->unused += u; rem -= u;
     }
   }
-  for (auto* d : active) catProduced[9] += std::max<int64_t>(0, int64_t(d->amount) - d->unused);   // power drawn from neighbours
+  int64_t drawn = 0;
+  for (auto* d : active) drawn += std::max<int64_t>(0, int64_t(d->amount) - d->unused);   // power drawn from neighbours
+  catProduced[9] += drawn;
+  // The saved production row holds what each plant type actually supplied: the network's consumed power (less the part drawn from neighbours),
+  // shared in proportion to plant output [OBSERVED: the row sums to the month's consumed power, Berlin 158,254; the sharing rule is INFERRED].
+  {
+    const int64_t supplied = std::max<int64_t>(0, stats_.consumed - consumedBefore - drawn);
+    for (auto* p : here) {
+      int c = powerCategory(p->agentType);
+      if (c >= 0 && rawS > 0) catProduced[c] += supplied * p->output / rawS;
+    }
+  }
 
   // Overwork bookkeeping (load assignment is INFERRED: demand shared in proportion to output).
   int64_t demand = std::max<int64_t>(0, int64_t(double(demandSum) * k) - D);

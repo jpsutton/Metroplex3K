@@ -388,6 +388,14 @@ int main(int argc, char** argv) {
       for (const auto& p : c.power.plants())
         std::printf("     plant %u at (%d,%d) cap %d output %d age %d lmax %d ld %d expired %d\n", p.agentType, p.x, p.z, p.capacity, p.output, now - p.buildAbsMonth, p.lmax, p.ld, p.expired ? 1 : 0);
       std::printf("   produced %lld consumed %lld\n", (long long)c.power.stats().produced, (long long)c.power.stats().consumed);
+      {
+        std::map<uint32_t, std::pair<int, long long>> byType;   // agent type -> plants, summed output
+        for (const auto& p : c.power.plants()) { byType[p.agentType].first++; byType[p.agentType].second += p.output; }
+        for (const auto& kv : byType) std::printf("   type %u: %d plants, output %lld\n", kv.first, kv.second.first, kv.second.second);
+        std::printf("   production row (our category order, 9 = neighbours):");
+        for (int k = 0; k < 10; k++) std::printf(" %d", c.power.production[c.power.monthIndex][k]);
+        std::printf("   (slot %d)\n", c.power.monthIndex);
+      }
       continue;
     }
     if (const char* tl = std::getenv("M3K_LVTILES")) {   // land value at "x,z;x,z;..." after N days (M3K_LVDAYS, default 40)
