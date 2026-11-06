@@ -293,13 +293,13 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
     { const uint32_t blk = rgb(0, 0, 0);
       ui.fill({dd.x, dd.y, dd.w, 1}, blk); ui.fill({dd.x, dd.y + dd.h - 1, dd.w, 1}, blk); ui.fill({dd.x, dd.y, 1, dd.h}, blk); ui.fill({dd.x + dd.w - 1, dd.y, 1, dd.h}, blk);
       ui.fill({dd.x + 1, dd.y + 1, 1, dd.h - 2}, rgb(189, 190, 189)); ui.fill({dd.x + 1, dd.y + dd.h - 2, dd.w - 2, 1}, rgb(189, 190, 189)); ui.fill({dd.x + dd.w - 2, dd.y + 1, 1, dd.h - 2}, rgb(140, 142, 140));
-      ui.fill({dd.x, dd.y + dd.h, dd.w, 2}, rgb(49, 52, 123)); }
+      }
     for (int t = 0; t < 3; t++) {
       Rect row{dd.x + 1, dd.y + 14 * t, dd.w - 2, 14};
       E.spot("tab." + std::to_string(t), row);
       bool hot = ui.hover(row) || (t == tab && !ui.hover(dd));
       if (hot) ui.fill({row.x, row.y + (t == 0 ? 1 : 0), row.w, row.h - (t == 0 ? 1 : 0) - (t == 2 ? 1 : 0)}, rgb(0, 0, 255));   // inside the frame's black rows [OBSERVED]
-      ui.text(row.x + 3, row.y, E.win(tabIds[t], tabFb[t]), "main9", hot ? kWhite : kInk);
+      ui.text(row.x + 2, row.y, E.win(tabIds[t], tabFb[t]), "main9", hot ? kWhite : kInk);
       if (ui.clicked(row)) { tab = t; topicSel = -1; scroll = 0; comboOpen = false; }
     }
     if (ui.in.released && !dd.contains(ui.in.mx, ui.in.my) && !combo.contains(ui.in.mx, ui.in.my) && !Rect{r.x + 239, r.y + 44, 16, 16}.contains(ui.in.mx, ui.in.my)) comboOpen = false;

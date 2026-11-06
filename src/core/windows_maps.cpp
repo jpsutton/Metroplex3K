@@ -786,16 +786,16 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     }
     for (int n = 10; n <= 90; n += 10) {   // x labels, 26 px per 10 years, "10" at x ~ 164
       const std::string t = std::to_string(n);
-      ui.text(r.x + 138 + 26 * n / 10 - ui.textWidth(t, "main9") / 2 - (n > 10 ? 0 : 0), r.y + 208, t, "main9", kAxisInk);   // the bold face like the y ticks   // row y244, lefts 199 / 223 / 249 ... [OBSERVED]
+      ui.text(r.x + 138 + 26 * n / 10 - ui.textWidth(t, "main9") / 2 - (n > 10 ? 0 : -1), r.y + 207, t, "main9", kAxisInk);   // the bold face like the y ticks   // row y244, lefts 199 / 223 / 249 ... [OBSERVED]
     }
     ui.text(r.x + 237, r.y + 219, E.win(0x1E6, "Resident Age"), "main9", kAxisInk);   // "R" ink from x277, rows y256..264 [OBSERVED]   // bold, ink from x257 [OBSERVED]
     {   // vertical axis caption, rotated: Education Quotient on two lines, Health and Population on one
       const std::string t = E.win(tab == 0 ? 0x1E4u : tab == 1 ? 0x1E0u : 0x1E1u, tab == 0 ? "Education Quotient" : tab == 1 ? "Health" : "Population");
       const size_t sp = tab == 0 ? t.find(' ') : std::string::npos;
       const int hgt = ui.fonts->get("system9").height();
-      auto put = [&](const std::string& s, int x) { verticalText(ui, x, r.y + 170 - ui.textWidth(s, "main9") / 2, s, "main9", kAxisInk); };
+      auto put = [&](const std::string& s, int x, int dy = 0) { verticalText(ui, x, r.y + 170 - ui.textWidth(s, "main9") / 2 + dy, s, "main9", kAxisInk); };
       if (sp == std::string::npos) put(t, r.x + 80 - hgt / 2);
-      else { put(t.substr(0, sp), r.x + 67); put(t.substr(sp + 1), r.x + 81); }   // ink columns x110 and x124 [OBSERVED]
+      else { put(t.substr(0, sp), r.x + 67); put(t.substr(sp + 1), r.x + 81, 4); }   // ink columns x110 and x124 [OBSERVED]
     }
     for (int i = 0; i < 15; i++) {   // one bar per 5-year bucket, ages 0-4 .. 70-74
       float sum = 0; int n = 0;
@@ -814,6 +814,8 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
         ui.fill({fx0 - 1, plot.y + plot.h - h, 1, h}, rgb(173, 178, 222)); ui.fill({fx0 + fw, plot.y + plot.h - h, 1, h}, rgb(173, 178, 222));
       }
     }
+    // The axis lines are drawn over the bars [OBSERVED: the bottom axis rows y238/240/241 across the bars].
+    ui.fill({r.x + 143, r.y + 204, plot.w + 1, 2}, rgb(173, 178, 222));
     if (tab == 0) { cap1 = capText(E, 0x1E2, "Population EQ = %s", whole(d.populationEQ)); cap2 = capText(E, 0x1E3, "Workforce EQ = %s", whole(d.workforceEQ)); }
     else if (tab == 1) { cap1 = capText(E, 0x1F9, "Population Life Expectancy = %s Years", whole(d.populationLE)); cap2 = capText(E, 0x1FA, "Workforce Life Expectancy = %s Years", whole(d.workforceLE)); }
     else { cap1 = capText(E, 0x1FC, "Total Population = %s", groupDigits(d.totalPopulation)); cap2 = capText(E, 0x1FD, "Workforce = %s%% of Population", std::to_string(d.workforcePercent)); }
