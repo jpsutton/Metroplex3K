@@ -166,7 +166,7 @@ void Game::buildBudgetView(BudgetView& v) {
   in.population = uint32_t(std::max(0, c.population()));
   in.avgLV = c.config().synthetic ? 128 : c.landValue.cityAverage();
   in.zoneTotals[0] = int32_t(c.valves.resUnits); in.zoneTotals[1] = int32_t(c.valves.comUnits); in.zoneTotals[2] = int32_t(c.valves.indUnits);
-  OrdinanceMoneyInput om; om.population = in.population; om.world = c.footprintTiles();
+  OrdinanceMoneyInput om = c.ordinanceMoneyInput(); om.population = in.population;
   Ordinances::Money m = c.ordinances.monthlyMoney(om);
   in.ordIncome = m.income; in.ordCost = m.cost;
   NeighbourDeals::Money dm = c.neighbours.monthlyMoney();
@@ -650,7 +650,7 @@ void Game::drawWindows(uint32_t dtMs) {
   }
   if (showNeigh_ && budgetOpen) drawNeighbours();
   if (showOrd_) {
-    OrdinanceMoneyInput money; money.population = uint32_t(std::max(0, city.population())); money.world = city.footprintTiles();
+    OrdinanceMoneyInput money = city.ordinanceMoneyInput();
     finish(ordWin_.draw(ui_, E, city.ordinances, money), showOrd_);
   }
   if (showDeals_) {

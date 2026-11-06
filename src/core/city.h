@@ -247,6 +247,8 @@ class City {
   // Sum of every occupant's footprint tiles, filler lots included: the quantity W behind the world-based ordinance costs (spec 19 s9.5
   // [INFERRED]; Berlin 25,598 gives Power Conservation 11, Smoke Detectors 27, Earthquake 29 as in the original).
   int64_t footprintTiles() const;
+  // Inputs of the ordinance monthly values (spec 19 s9.4): population, W, and the facility counts of the cost-plus-facility ordinances.
+  OrdinanceMoneyInput ordinanceMoneyInput() const;
   void flush() { if (world_) flush(*world_); }
 
   // ---- persistence ----

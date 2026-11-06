@@ -329,15 +329,15 @@ void insetBevel(Ui& ui, Rect b) {
 
 // Vertical scroll bar from the skin strip Sys 82B9B75B:E2B99E01 (192 x 16: twelve 16 x 16 cells; 6/7 up arrow normal/pressed, 8 vertical thumb,
 // 9 vertical groove, 10/11 down arrow) [OBSERVED 800 x 600: up arrow at the top of r, thumb below it, groove tiled, down arrow at the bottom].
-// Scrolls by item. r is 16 px wide.
-void scenarioScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int total, int visible, int& scroll) {
+// Scrolls by `step` units per arrow click / wheel notch (1 = one item; the Ordinances list scrolls in pixels, 14 per click). r is 16 px wide.
+void scenarioScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int total, int visible, int& scroll, int step) {
   const Image* strip = ui.skin ? ui.skin->image(skin_group::Sys, 0xE2B99E01) : nullptr;
   ui.fill(r, rgb(123, 146, 255));
   const Rect up{r.x, r.y, 16, 16}, dn{r.x, r.y + r.h - 16, 16, 16};
   E.spot("scroll.up", up); E.spot("scroll.down", dn);
-  if (ui.hover(wheelArea) && ui.in.wheel) scroll -= ui.in.wheel;
-  if (ui.clicked(up)) scroll--;
-  if (ui.clicked(dn)) scroll++;
+  if (ui.hover(wheelArea) && ui.in.wheel) scroll -= ui.in.wheel * step;
+  if (ui.clicked(up)) scroll -= step;
+  if (ui.clicked(dn)) scroll += step;
   const int range = std::max(0, total - visible);
   const Rect track{r.x, r.y + 16, 16, r.h - 32};
   const int th = 16;

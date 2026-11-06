@@ -2366,9 +2366,8 @@ void City::monthlyBudget() {
   in.population = uint32_t(std::max(0, residents_));
   in.avgLV = cfg_.synthetic ? 128 : landValue.cityAverage();
   in.zoneTotals[0] = int32_t(valves.resUnits); in.zoneTotals[1] = int32_t(valves.comUnits); in.zoneTotals[2] = int32_t(valves.indUnits);
-  OrdinanceMoneyInput om;
+  OrdinanceMoneyInput om = ordinanceMoneyInput();
   om.population = in.population;
-  om.world = footprintTiles();
   Ordinances::Money om2 = ordinances.monthlyMoney(om);
   in.ordIncome = om2.income; in.ordCost = om2.cost;
   NeighbourDeals::Money dm = neighbours.monthlyMoney();
@@ -2653,6 +2652,21 @@ void City::loadRecords() {
       }
     }
   }
+}
+
+OrdinanceMoneyInput City::ordinanceMoneyInput() const {
+  OrdinanceMoneyInput om;
+  om.population = uint32_t(std::max(0, population()));
+  om.world = footprintTiles();
+  // N of "cost plus facility count" = occupants of that type; operating lots only [INFERRED]. Berlin's Youth Curfew reads -118 in the original
+  // against -(P / 8000 + 1) = -100 without the police stations [OBSERVED].
+  for (const auto& o : world_->occupants) {
+    if ((o.state & ~0x300u) != 1) continue;
+    if (o.agentType == 13130) om.policeStations++;
+    else if (o.agentType == 14130) om.libraries++;
+    else if (o.agentType == kAgentRecycling) om.recyclingCenters++;
+  }
+  return om;
 }
 
 int64_t City::footprintTiles() const {

@@ -555,13 +555,15 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   // Layout: a band 26 rows tall, its first row 28 below the band top, rows 18 apart, the next band 16 below the last row's top.
   auto advance = [&](size_t i) { const bool nextHeader = i + 1 < items.size() && items[i + 1].header; return items[i].header ? 28 : (nextHeader ? 16 : 18); };
   const int top = list.y + 5, bottom = list.y + list.h - 1;   // interior rows 67..292 on the original
-  int visible = 0;
-  { int h = 0; for (size_t i = size_t(scroll); i < items.size(); i++) { h += advance(i); if (h > bottom - top) break; visible++; } }
-  const bool bar = int(items.size()) > std::max(1, visible);
+  // The list scrolls in pixels, 14 per arrow click (6 clicks = 84 px) [OBSERVED]; `scroll` is the pixel offset of the content.
+  int content = 0;
+  for (size_t i = 0; i < items.size(); i++) content += advance(i);
+  const int viewH = bottom - top;
+  const bool bar = content > viewH;
   if (bar) {
     const Rect br{list.x + 356, list.y + 5, 16, 218};   // the down arrow occupies y 271..286 [OBSERVED]
     ui.fill({br.x, br.y, 16, 218}, band);
-    scenarioScrollBar(ui, E, br, list, int(items.size()), std::max(1, visible), scroll);
+    scenarioScrollBar(ui, E, br, list, content, viewH, scroll, 14);
   } else scroll = 0;
   const int bodyR = list.x + (bar ? 360 : 372);   // right limit of the band
   const Image* checkArt = ui.skin ? ui.skin->get("check") : nullptr;
@@ -570,10 +572,16 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   const int clipY = list.y + list.h - 1, clipRows = 40;
   for (int yy = 0; yy < clipRows; yy++)
     for (int xx = list.x; xx < list.x + list.w; xx++) below.push_back(clipY + yy < ui.H && xx < ui.W ? ui.at(xx, clipY + yy) : 0u);
-  int y = top;
-  for (size_t i = size_t(scroll); i < items.size(); i++) {
+  // Rows that start above the interior are drawn whole and the pixels above it restored afterwards.
+  const int clipTopY = list.y + 1;
+  std::vector<uint32_t> above;
+  for (int yy = 0; yy < clipRows; yy++)
+    for (int xx = list.x; xx < list.x + list.w; xx++) above.push_back(clipTopY - clipRows + yy >= 0 && xx < ui.W ? ui.at(xx, clipTopY - clipRows + yy) : 0u);
+  int y = top - scroll;
+  for (size_t i = 0; i < items.size(); i++) {
     const Item& it = items[i];
     if (y >= bottom) break;
+    if (y + (it.header ? 26 : 18) <= clipTopY) { y += advance(i); continue; }
     if (it.header) {
       const Rect bd{list.x + 4, y, 349, 26};   // x 16..364
       ui.fill(bd, bandEdge); ui.fill({bd.x + 1, bd.y + 1, bd.w - 2, bd.h - 2}, band);
@@ -601,19 +609,22 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
       }
       ui.text(list.x + 19, y, it.name, "system9", ink);   // SYSTEM9 (not bold), ink x 31, cap top 101
       const int64_t val = en ? o.monthlyValue(it.id, money) : o.ifEnactedValue(it.id, money);   // not enacted: the cost it would have, in grey
-      rightText(ui, list.x + 352, y, E.money(val), "main9", en ? (val < 0 ? rgb(0xC0, 0, 0) : 0) : grey);
+      rightText(ui, list.x + 352, y, E.money(val), "main9", en ? (val < 0 ? rgb(255, 0, 0) : 0) : grey);
     }
     y += advance(i);
   }
   for (int yy = 0; yy < clipRows; yy++)
     for (int xx = list.x; xx < list.x + list.w; xx++)
       if (clipY + yy < ui.H && xx < ui.W) ui.at(xx, clipY + yy) = below[size_t(yy) * size_t(list.w) + size_t(xx - list.x)];
+  for (int yy = 0; yy < clipRows; yy++)
+    for (int xx = list.x; xx < list.x + list.w; xx++)
+      if (clipTopY - clipRows + yy >= 0 && xx < ui.W) ui.at(xx, clipTopY - clipRows + yy) = above[size_t(yy) * size_t(list.w) + size_t(xx - list.x)];
   const auto m = o.monthlyMoney(money);
   const int64_t net = m.income - m.cost;
   { // Footer: "Monthly Total" from x 255, the amount from x 343, cap top y 298.
     const std::string lab = E.win(0x1C4, "Monthly Total"), val = E.money(net);
     ui.text(r.x + 247, r.y + 288, lab, "main9", ink);
-    ui.text(r.x + 335, r.y + 288, val, "main9", net < 0 ? rgb(0xC0, 0, 0) : rgb(0, 0, 0));   // black, not the ink colour [OBSERVED]
+    ui.text(r.x + 335, r.y + 288, val, "main9", net < 0 ? rgb(255, 0, 0) : rgb(0, 0, 0));   // negative amounts are pure red, positive black [OBSERVED]
   }
   const Rect done{r.x + r.w - 52, r.y + r.h - 44, 44, 34};
   blueBand(ui, done);   // 1 px ring (173,182,255) around the blue plate [OBSERVED]
