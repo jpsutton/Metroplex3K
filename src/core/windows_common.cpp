@@ -447,7 +447,7 @@ void schemePreview(Ui& ui, GameData* gd, int x, int y, uint32_t land, uint32_t f
   // Right tree, behind the house [OBSERVED top-left positions: pine x657 y258, NW x657 y250]: the other sets use the pine place until observed.
   if (flora == 0x3FBB0000) put(flora, 546, 90);
   else if (flora == 0x3FC60000) put(flora, 537, 131);
-  else put(flora, 557, 81);
+  else put(flora, 546, 91);   // pine: trunk column 673, top y260 [OBSERVED]; the original's right tree is probably not the left tree's image (sparser crown), see #57
   put(building, 470, 145);
   put(flora, 445, 110);
 }
