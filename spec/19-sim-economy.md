@@ -628,8 +628,11 @@ The utilities side reports the current quantity for each deal type (one active d
   before the rest of that month's deal processing [STATIC].
 * Terminated deals (age −1) are excluded from the deal list shown to the player. No sweep removes
   them: they are erased only by the remove operation below, or by accepting a new deal of the same
-  type. Billing ignores the age, so a terminated deal keeps paying until it is erased [STATIC,
-  SIMMISC FUN_10018f95; cost side not checked].
+  type. Billing ignores the age on both sides, so a terminated deal keeps billing until it is erased:
+  income (odd types) and cost (even types, with the minimum cost) are both summed over every
+  deal in the list without an age test [STATIC, SIMMISC 0x10018F95 income, 0x10019000 cost]. No
+  terminated deal occurs in any shipped city or in the 89 W5 saves (84 deals, all with age ≥ 0)
+  [DATA].
 * **Deal-made flag** [STATIC, SIMMISC]: one byte per (neighbour, deal type).
   * Accepting a deal sets it to 1 (FUN_10017d45). Accepting also erases any existing deal of the
     same type, without clearing that deal's flag.

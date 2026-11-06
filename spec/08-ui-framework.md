@@ -504,7 +504,7 @@ in the original table.) Points P1–P4 are the **top-left corners** of the bar's
 |---|---|---|---|
 | P2 | Pause | `02F78C6D:52FB06E0`/`E1` | 22 × 22 |
 | P1 | Run | `52FB06E2`/`E3` (two 13-px halves) | 26 × 22 |
-| P4 | Speed bar, four 12-px cells | `52FB06E4`–`E7` (state variants, 48 × 23) | 48 × 23 |
+| P4 | Speed bar, four 10 × 11 cells at (4 + 10·i, 5) | `52FB06E4`–`E7` (running, speeds 1–4), `E8` hover cell, `E9` paused cell (`09-ui-screens.md` §4.2) | 48 × 23 |
 | P3 | Query "?" | `52FB06EA` (four 40 × 39 cells) | 40 × 39 |
 
 The bar is anchored at the window's bottom-left. Its top is at window height − bar height
