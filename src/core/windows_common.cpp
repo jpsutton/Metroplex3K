@@ -756,7 +756,7 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
   if (alarm) { alarm = false; R.add(Act::PlaySound, 0, 54); }
   std::vector<uint32_t> buf(size_t(r.w) * r.h);
   for (int y = 0; y < r.h; y++)
-    for (int x = 0; x < r.w; x++) buf[size_t(y) * r.w + x] = rgb(20, 24, 60);
+    for (int x = 0; x < r.w; x++) buf[size_t(y) * r.w + x] = rgb(0, 0, 0);   // the ticker strip is pure black [OBSERVED]
   Ui sub = ui; sub.setTarget(&buf, r.w, r.h);
   int fh = ui.fonts->ui().height();
   int ty = (r.h - fh) / 2;

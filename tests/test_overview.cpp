@@ -43,9 +43,9 @@ int main() {
   w.zone[w.tIdx(3, 3)] = 4;
   w.alt[w.vIdx(2, 2)] = 30;
   CHECK(overviewTileColour(w, 1, 1) == rgba(0, 255, 0));
-  CHECK(overviewTileColour(w, 2, 2) == rgba(238, 90, 0));
+  CHECK(overviewTileColour(w, 2, 2) == rgba(239, 93, 0));
   CHECK(overviewTileColour(w, 3, 3) == overviewTerrainColour(w, 3, 3));
-  CHECK(overviewZoneColour(0) == 0 && overviewZoneColour(11) == rgba(148, 148, 0));
+  CHECK(overviewZoneColour(0) == 0 && overviewZoneColour(11) == rgba(148, 150, 0));
 
   // Neighbour region image (spec 11 section 9).
   CHECK(neighbourRegionColourIndex(-20) == 0 && neighbourRegionColourIndex(0) == 0);

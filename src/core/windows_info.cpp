@@ -144,9 +144,9 @@ WindowResult PreferencesDialog::draw(Ui& ui, const WinEnv& E, PrefsState& s) {
     int y = 69 + 24 * i;
     check(std::string(vo.key) + ".on", 222, y, E.win(vo.id, vo.fb), *vo.on, vo.key);
     // Groove from x 379 to 454 (dark, darker, darker, white rows); the 20 px knob is centred on the value.
-    const int x0 = r.x + 379, x1 = r.x + 454, gy = r.y + y + 6;
-    ui.fill({x0, gy, x1 - x0 + 1, 1}, rgb(0x39, 0x38, 0x7B)); ui.fill({x0, gy + 1, x1 - x0 + 1, 2}, rgb(0x08, 0x0C, 0x18));
-    ui.fill({x0, gy + 3, x1 - x0 + 1, 1}, white);
+    const int x0 = r.x + 379, x1 = r.x + 454, gy = r.y + y + 6, xe = x1 + 1;   // the groove ends 1 px further right (12 px total) [OBSERVED]
+    ui.fill({x0, gy, xe - x0 + 1, 1}, rgb(0x39, 0x38, 0x7B)); ui.fill({x0, gy + 1, xe - x0 + 1, 2}, rgb(0x08, 0x0C, 0x18));
+    ui.fill({x0, gy + 3, xe - x0 + 1, 1}, white);
     Rect sl{x0, r.y + y - 2, x1 - x0 + 1, 20};
     E.spot(std::string(vo.key) + ".slider", sl);
     if (ui.in.pressed && ui.hover(sl)) dragSlider = i;

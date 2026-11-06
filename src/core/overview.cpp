@@ -97,21 +97,22 @@ uint32_t overviewTerrainColour(const World& w, int x, int z) {
   return lb.c[std::min(band, lb.n - 1)];
 }
 
+// Zone colours as the original's minimap shows them [OBSERVED: the frame's exact values]; matches the spec's pure zone colours.
 uint32_t overviewZoneColour(int zoneType) {
   switch (zoneType) {
     case 1: return rgba(0, 255, 0);       // residential low / medium / high
-    case 2: return rgba(0, 205, 0);
-    case 3: return rgba(0, 148, 0);
+    case 2: return rgba(0, 203, 0);
+    case 3: return rgba(0, 150, 0);
     case 5: return rgba(0, 0, 255);       // commercial
-    case 6: return rgba(0, 0, 205);
+    case 6: return rgba(0, 0, 206);
     case 7: return rgba(0, 0, 148);
-    case 9: return rgba(255, 255, 0);     // industrial
-    case 10: return rgba(205, 205, 0);
-    case 11: return rgba(148, 148, 0);
+    case 9: return rgba(255, 251, 0);     // industrial
+    case 10: return rgba(206, 203, 0);
+    case 11: return rgba(148, 150, 0);
     case 14: return rgba(49, 206, 255);   // airport
     case 15: return rgba(49, 255, 156);   // seaport
-    case 17: return rgba(156, 98, 49);    // landfill
-    case 22: return rgba(238, 90, 0);     // civic / government buildings
+    case 17: return rgba(156, 101, 49);    // landfill
+    case 22: return rgba(239, 93, 0);     // civic / government buildings
     default: return 0;
   }
 }
