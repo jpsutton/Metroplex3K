@@ -548,8 +548,33 @@ The industrial developer follows §4.3 with these changes (in addition to the se
   is instead removed from the city (only if it is a developer-removable building and not
   flagged `0x200`); they are exempt from the demand abandonment of step 3 and from the
   "services missing" test (they are processed as if services were present).
-* **Filler lots** (bit `0x100`): the developer keeps the lot's `0x100` state flag in step with a
-  per-tile flag of the pollution/hazard layer [INFERRED; exact meaning OPEN].
+* **Filler lots** (bit `0x100`): see §4.3.3; all three developers do this.
+
+### 4.3.3 Filler-lot garbage flag (all three developers) [STATIC]
+
+Residential 0x10028F12, commercial 0x1000FD53 and industrial 0x10017FC0 all do this on a visit to
+the anchor of an existing lot. If the building's type has flag-word bit `0x100` (a filler lot:
+garden, parking, vacant lot):
+
+1. g = the pollution layer's "garbage polluted" test at the visited tile: standing garbage ≥
+   `SC3Pollution.ini GarbagePollutedThreshold` (shipped 1; `17-sim-services.md` §7.2.5).
+2. f = the lot's state flag `0x100`.
+3. If g and f differ, a re-sync is due:
+   * g false, f set: the extra flags word E is unchanged (it has no `0x100`).
+   * g true, f clear: E gets `0x100`.
+4. E also carries `0x200` when the lot already has it.
+
+The lot's state word changes only by replacing the occupant (§4.3 "every developer state
+change replaces the occupant").
+* If the step ends with no other state change, a due re-sync replaces the occupant with
+  state = current base state | E. The flag then follows g.
+* If the step changes the state (abandon, reoccupy, completion), the new state is base | E
+  instead.
+* Original quirk: when g is true and f is already set, E does **not** contain `0x100`. A state
+  change on that visit clears the flag, and the next visit sets it again.
+
+`[INFERRED]` State flag `0x100` selects the littered appearance of the filler lot.
+Committed demand is not affected: the base state does not change.
 
 ### 4.4 Category selection rules
 
