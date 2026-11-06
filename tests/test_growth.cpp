@@ -14,6 +14,7 @@ struct TestCity : GrowthCity {
   std::map<int, ValveReading> valves;
   std::set<uint32_t> ords;
   std::map<std::pair<int, int>, int> garbage;
+  std::set<std::pair<int, int>> litter;   // tiles whose standing garbage is at or above the polluted threshold
   int64_t pending = 0;
   int returned = 0, credited = 0, runwaySide = -1, runwayCalls = 0, eqv = 100, yr = 1900, mo = 1;
   std::vector<std::pair<int, int>> landfillPieces;
@@ -41,6 +42,7 @@ struct TestCity : GrowthCity {
   ValveReading valve(int id) const override { auto it = valves.find(id); return it == valves.end() ? ValveReading() : it->second; }
   bool radioactive(int x, int z) const override { return rad[ix(x, z)]; }
   bool tripFailed(int x, int z) const override { return trip[ix(x, z)]; }
+  bool garbagePolluted(int x, int z) const override { return litter.count({x, z}) != 0; }
   bool ordinanceEnacted(uint32_t id) const override { return ords.count(id) != 0; }
   int year() const override { return yr; }
   int month() const override { return mo; }
@@ -177,7 +179,16 @@ int main() {
       LotInfo l; l.present = true; l.ax = 5; l.az = 5; l.state = state; l.agentType = agent; c.lots.push_back(l);
       c.lv[c.ix(5, 5)] = lvv; c.road[c.ix(4, 5)] = 1; return c; };
     { TestCity c = setup(1); c.rad[c.ix(5, 5)] = 1; CHECK(zm.visitTile(c, rng, 5, 5) == kAbRadioactive && c.lots[0].state == 2); }
-    { TestCity c = setup(1); c.pw[c.ix(5, 5)] = 0; CHECK(zm.visitTile(c, rng, 5, 5) == kAbNoPower && c.lots[0].state == 2); }
+    // Filler-lot garbage flag (spec 15 4.3.3): 0x100 follows the garbage test; both set drops it on a state change (original quirk).
+    SimRand rngF(5);   // own stream: the later cases depend on the shared one
+    auto filler = [&](uint32_t state, bool g) { TestCity c = setup(state, 3100, 60); c.lots[0].flagWord = 0x100; if (g) c.litter.insert({5, 5}); return c; };
+    { TestCity c = filler(1, true); zm.visitTile(c, rngF, 5, 5); CHECK(c.lots[0].state == (1 | 0x100)); }          // g set, f clear: re-sync adds the flag
+    { TestCity c = filler(1 | 0x100, false); zm.visitTile(c, rngF, 5, 5); CHECK(c.lots[0].state == 1); }          // g clear, f set: flag dropped
+    { TestCity c = filler(1 | 0x100, true); zm.visitTile(c, rngF, 5, 5); CHECK(c.lots[0].state == (1 | 0x100)); } // g == f: untouched
+    { TestCity c = filler(1 | 0x100, true); c.rad[c.ix(5, 5)] = 1; zm.visitTile(c, rngF, 5, 5); CHECK(c.lots[0].state == 2); }   // quirk: state change with g and f set drops it
+    { TestCity c = filler(1, true); c.rad[c.ix(5, 5)] = 1; zm.visitTile(c, rngF, 5, 5); CHECK(c.lots[0].state == (2 | 0x100)); }  // state change carries E
+    { TestCity c = filler(1, false); zm.visitTile(c, rngF, 5, 5); CHECK(c.lots[0].state == 1); }
+    { TestCity c = setup(1); c.pw[c.ix(5, 5)] = 0; CHECK(zm.visitTile(c, rngF, 5, 5) == kAbNoPower && c.lots[0].state == 2); }
     { TestCity c = setup(1); c.trip[c.ix(5, 5)] = 1; CHECK(zm.visitTile(c, rng, 5, 5) == kAbNoAccess); }
     { TestCity c = setup(1, 3200); c.wt[c.ix(5, 5)] = 0; CHECK(zm.visitTile(c, rng, 5, 5) == kAbNoWater); }   // density 2 without water
     { TestCity c = setup(1, 3100, 10); CHECK(zm.visitTile(c, rng, 5, 5) == kAbLowLV && c.lots[0].state == 2); } // minLV 30 / 2 = 15 > 10 [OBSERVED threshold]
