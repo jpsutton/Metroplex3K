@@ -147,7 +147,7 @@ The map is W × H tiles. The traffic subsystem keeps the following grids [STATIC
 | 0x0008 | subway occupant, subway station, subway–rail station | Subway |
 | 0x0010 | transit station building | Station / stop tile |
 | 0x0020 | subway–rail station | Rail↔subway transfer |
-| 0x0040 | highway on-ramp piece: every network piece whose class word carries 0x200000 (`13-buildings-occupants.md`) [STATIC]. These are the agent type 17202 "OffRamp" pieces: 15107–15110, 15115–15128 and 15130–15141 [INFERRED: class from agent type]. CORRECTION: the earlier text listed only 15130–15141, which shipped cities use for about 60 % of their ramp tiles | Road/highway junction tile |
+| 0x0040 | highway on-ramp piece: network piece IDs 15130–15141 ("Highway Onramp", agent type 17202) [STATIC]. The other agent-type-17202 pieces (15107–15110, 15115–15128: mainline fork lanes) do **not** carry it [DATA: giving them 0x40 drops London highway density from 60.1 to 55.0 and Berlin's from 19.6 to 10.4 against the original's 58.3 / 28.5; a briefly published revision of this row said otherwise and is withdrawn] | Road/highway junction tile |
 | 0x0080 | road/highway piece reports itself damaged: its damaged flag (piece word bit 27, `10-save-format.md` §6.2.6) is set [STATIC] | Damaged (adds `DamagedCostAddToStep`) |
 | 0x0100 | road/highway/rail piece whose record has bit 0 of attribute 0x12D set [STATIC] | Step cost × 0.7. The pieces with the bit are the diagonal ones (highway 11223, 11224, 15052, 15106; road 35, 11207, 11209, 18004; rail 50, 51) [DATA; "diagonal" INFERRED from the 0.7 ≈ 1/√2] |
 | 0x0200 | subway piece with the same bit (subway 11621, 11622, 18015, 18018) | Subway step cost × 0.7 |
