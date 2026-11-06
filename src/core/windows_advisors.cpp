@@ -108,7 +108,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
     // Petitioner Issues list (spec 09 6.5 [OBSERVED]): inset box (19,164)-(377,347), 14 px rows from text top y = 167, a drawn 4 px triangle at
     // x ~ 23 and the title in the small bold font from x ~ 34. One click selects (blue bar from x ~ 28, white text); a double click opens the page.
     frameNo++;
-    Rect lr{r.x + 19, r.y + 164, 358, 183};
+    Rect lr{r.x + 19, r.y + 164, 359, 184};   // light right/bottom lines at x 385 / y 355 on the original (observed)
     ui.fill(lr, kLav); sunkenLines(ui, lr);
     auto has = [&](uint32_t t, uint32_t i) { return E.has(t, i); };
     int k = 0;
@@ -125,7 +125,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
       const bool sel = petSel == int(p->id);
       if (sel) ui.fill({r.x + 28, ty, lr.x + lr.w - 1 - (r.x + 28), 13}, rgb(0, 0, 255));
       for (int c = 0; c < 4; c++) ui.fill({r.x + 23 + c, ty + 6 - (3 - c), 1, 2 * (3 - c) + 1}, sel ? kWhite : kInk);
-      ui.text(r.x + 34, ty, ellipsize(ui, h, lr.x + lr.w - (r.x + 34) - 6), "main10", sel ? kWhite : kInk);
+      ui.text(r.x + 34, ty - 2, ellipsize(ui, h, lr.x + lr.w - (r.x + 34) - 6), "main9", sel ? kWhite : kInk);   // main9: first ink row 175 (observed)
       if (ui.clicked(row)) {
         if (sel && frameNo - petClickFrame <= 30) R.add(Act::OpenPetitioner, p->id);
         petSel = int(p->id); petClickFrame = frameNo;
