@@ -118,10 +118,12 @@ static StripGrade planStripGrade(const INetworkMap& m, const std::vector<std::pa
     m.tileCorners(tiles[a].first, tiles[a].second, c0);
     m.tileCorners(tiles[b].first, tiles[b].second, c1);
     const bool sFlat = c0[0] == c0[1] && c0[1] == c0[2] && c0[2] == c0[3], eFlat = c1[0] == c1[1] && c1[1] == c1[2] && c1[2] == c1[3];
-    // Height of a non-flat end tile: the value shared by three of its corners, else the truncated mean. [INFERRED: the decompiled "truncated mean" gives 91 for
-    // the hill road's end tile 92/90/92/92 where the original pins 92, and agrees with the Mount Herrang (2,79) tile 92/94/92/92 only through the same value.]
+    // Height of a non-flat start/end tile. The grader itself uses the truncated mean; the original then re-grades a failing tile alone with FLATTEN
+    // [STATIC FUN_10008064 fix-up loop]: h = a if a == b or a == d, else c if c == b or c == d, else the truncated mean. Using the FLATTEN height here
+    // reproduces both observed ends (hill road 92/90/92/92 -> 92; Mount Herrang (2,79) 92/94/92/92 -> 92). The re-grade trigger is not understood.
     auto tileH = [](const int c[4]) {
-      for (int i = 0; i < 4; i++) { int same = 0; for (int j = 0; j < 4; j++) if (c[j] == c[i]) same++; if (same >= 3) return c[i]; }
+      if (c[0] == c[1] || c[0] == c[3]) return c[0];
+      if (c[2] == c[1] || c[2] == c[3]) return c[2];
       return (c[0] + c[1] + c[2] + c[3]) / 4;
     };
     int startH = sFlat ? c0[0] : tileH(c0), endH = eFlat ? c1[0] : tileH(c1);
@@ -329,6 +331,36 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
   rp.validPrefix = 0;
   for (auto& t : rp.tiles) { if (!t.valid) break; rp.validPrefix++; }
   return rp;
+}
+
+int rippleRing(INetworkMap& m, const std::vector<std::pair<int, int>>& changed, int levelTerrain) {
+  std::set<std::pair<int, int>> ring(changed.begin(), changed.end());
+  int charge = 0;
+  for (int round = 0; round < 100; round++) {
+    bool any = false;
+    std::set<std::pair<int, int>> cand;
+    for (const auto& v : ring)
+      for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+        const std::pair<int, int> n{v.first + dx, v.second + dz};
+        if ((dx || dz) && n.first >= 0 && n.second >= 0 && n.first <= m.width() && n.second <= m.height() && !ring.count(n)) cand.insert(n);
+      }
+    for (const auto& v : cand) {
+      int mx = -1, mn = 1 << 30;
+      for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+        const std::pair<int, int> n{v.first + dx, v.second + dz};
+        if ((dx || dz) && ring.count(n)) { const int h = m.cornerHeight(n.first, n.second); mx = std::max(mx, h); mn = std::min(mn, h); }
+      }
+      if (mx < 0 || mx - 4 > mn + 4) continue;
+      const int cur = m.cornerHeight(v.first, v.second), tgt = std::max(mx - 4, std::min(mn + 4, cur));
+      if (tgt == cur || !m.canChangeCorner(v.first, v.second)) continue;
+      m.setCornerHeight(v.first, v.second, tgt);
+      charge += (levelTerrain * std::abs(tgt - cur)) >> 2;
+      ring.insert(v);
+      any = true;
+    }
+    if (!any) break;
+  }
+  return charge;
 }
 
 PathPrice previewPrice(RoutedPath& p, int tileCost, long funds, int buildablePrefix) {
@@ -1007,7 +1039,13 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
     std::vector<std::pair<int, int>> ts; std::vector<char> sk;
     for (const PathTile& t : path) { ts.push_back({t.x, t.z}); sk.push_back(skip.count({t.x, t.z}) ? 1 : 0); }
     StripGrade g = planStripGrade(m, ts, sk);
-    if (g.failFrom == size_t(-1)) for (const auto& v : g.verts) m.setCornerHeight(v.x, v.z, v.h);
+    if (g.failFrom == size_t(-1)) {
+      for (const auto& v : g.verts) m.setCornerHeight(v.x, v.z, v.h);
+      std::vector<std::pair<int, int>> ch;
+      for (const auto& v : g.verts) ch.push_back({v.x, v.z});
+      const int rc = rippleRing(m, ch, costs.levelTerrain);
+      if (rc > 0) { host.charge(rc); extraSpent += rc; }
+    }
     levelK += g.raised + g.lowered;
   }
   // tunnel attempt (road, rail, highway; spec 12 s6.4 / Q-AN): road and rail try it on every drag where no bridge was built, the entrance being the last tile

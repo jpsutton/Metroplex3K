@@ -345,6 +345,17 @@ static void testStripGradeEndHeight() {
   CHECK(d.find("vertex (9,2) 90 -> 92") != std::string::npos && d.find("(9,3)") == std::string::npos);
 }
 
+// Ripple pass: a changed vertex pulls its neighbours into [max - 4, min + 4] of the changed neighbours and the pull cascades; each moved vertex is
+// charged on its own (the hill road's outer corners, 60 = 5 x (25 x 2 >> 2)).
+static void testRipple() {
+  SimpleNetworkMap m(12, 12);
+  m.setCornerHeight(5, 5, 40);
+  const int c = rippleRing(m, {{5, 5}}, 25);
+  CHECK(m.cornerHeight(4, 4) == 36 && m.cornerHeight(6, 6) == 36 && m.cornerHeight(5, 4) == 36);   // 40 - 4
+  CHECK(m.cornerHeight(3, 3) == 32 && m.cornerHeight(7, 5) == 32);                                  // 36 - 4: the cascade
+  CHECK(m.cornerHeight(2, 2) == 30 && c > 0);
+}
+
 // Highway commit: every vertex row across the two carriageways is set to its minimum (interim rule), and terrain levelling is charged
 // LevelTerrain x sum|dh| >> 2.
 static void testHighwayCrossRows() {
@@ -763,6 +774,7 @@ int main() {
   testEndOddCorner();
   testStripGradePermission();
   testStripGradeEndHeight();
+  testRipple();
   testTunnel();
   testConnections();
   testOnRamp();

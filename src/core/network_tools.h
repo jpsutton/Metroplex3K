@@ -74,6 +74,10 @@ struct PathPrice {
 };
 // 6.2.5: marks tiles after `buildablePrefix` invalid, price = valid tiles * tileCost, whole path
 // invalid when price > funds.
+// Ripple pass after a strip grade [STATIC FUN_100076E0; the clamp rule fits the hill road's five outer corners]: every vertex next to a changed vertex is
+// clamped into [max - 4, min + 4] of its changed neighbours' heights, and a vertex that moves joins the changed set (cascade). Each moved vertex is charged
+// LevelTerrain x |dh| >> 2 on its own. Returns the total charge; vertices with an occupant next to them are left alone.
+int rippleRing(INetworkMap& m, const std::vector<std::pair<int, int>>& changed, int levelTerrain);
 PathPrice previewPrice(RoutedPath& p, int tileCost, long funds, int buildablePrefix = -1);
 
 std::vector<PathTile> toPathTiles(const RoutedPath& p, bool onlyValid = true);
