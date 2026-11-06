@@ -276,7 +276,7 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
       if (ui.activeId == id && !ui.in.down) ui.activeId = 0;
       int val = std::max(0, std::min(kMaxFundingUi, int(dp->funding)));
       if (ui.activeId == id && ui.in.down) {
-        int nv = int(std::lround(double(ui.in.mx - (track.x + 9)) * kMaxFundingUi / kKnobTravel));
+        int nv = int(std::lround(double(ui.in.mx - (track.x + 10)) * kMaxFundingUi / kKnobTravel   /* the knob's left edge lands 10 px left of the click [OBSERVED: click x347 -> knob x337] */));
         nv = std::max(0, std::min(kMaxFundingUi, nv));
         if (nv != dp->funding) { b.setFunding(dr.id, nv); R.add(Act::SetFunding, dr.id, nv); val = nv; }
       }

@@ -405,7 +405,11 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
   }
 
   // Occupant
-  std::string nm = haveData_ ? str(kTblOccName, o->occId) : std::string();
+  std::string nm;
+  // A city with a non-default building set (Berlin: European) names its buildings from SC3MBEStringsBuildings, instance 400000 + occupant id, when the table has the entry
+  // ("Nachbar's Laden" for occupant FA0 instead of "Marky Market") [OBSERVED Berlin; INFERRED that the saved scheme's building set != 0 selects it].
+  if (haveData_ && world_.scheme.buildingSet != 0) nm = str(0x453BBDE0u, 400000u + o->occId);
+  if (nm.empty()) nm = haveData_ ? str(kTblOccName, o->occId) : std::string();
   if (nm.empty()) nm = o->name;
   if (nm.empty()) nm = "Building " + std::to_string(o->agentType);
   q.name = nm;
