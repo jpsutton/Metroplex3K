@@ -118,7 +118,13 @@ static StripGrade planStripGrade(const INetworkMap& m, const std::vector<std::pa
     m.tileCorners(tiles[a].first, tiles[a].second, c0);
     m.tileCorners(tiles[b].first, tiles[b].second, c1);
     const bool sFlat = c0[0] == c0[1] && c0[1] == c0[2] && c0[2] == c0[3], eFlat = c1[0] == c1[1] && c1[1] == c1[2] && c1[2] == c1[3];
-    int startH = sFlat ? c0[0] : (c0[0] + c0[1] + c0[2] + c0[3]) / 4, endH = eFlat ? c1[0] : (c1[0] + c1[1] + c1[2] + c1[3]) / 4;
+    // Height of a non-flat end tile: the value shared by three of its corners, else the truncated mean. [INFERRED: the decompiled "truncated mean" gives 91 for
+    // the hill road's end tile 92/90/92/92 where the original pins 92, and agrees with the Mount Herrang (2,79) tile 92/94/92/92 only through the same value.]
+    auto tileH = [](const int c[4]) {
+      for (int i = 0; i < 4; i++) { int same = 0; for (int j = 0; j < 4; j++) if (c[j] == c[i]) same++; if (same >= 3) return c[i]; }
+      return (c[0] + c[1] + c[2] + c[3]) / 4;
+    };
+    int startH = sFlat ? c0[0] : tileH(c0), endH = eFlat ? c1[0] : tileH(c1);
     const int s = sFlat ? 1 : 0, last = int(n) - 1 - (eFlat ? 1 : 0);
     const bool negative = alongZ ? tiles[b].second < tiles[a].second : tiles[b].first < tiles[a].first;
     if (negative) std::swap(startH, endH);

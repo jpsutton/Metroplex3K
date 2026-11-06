@@ -330,6 +330,21 @@ static void testStripGradePermission() {
   CHECK(rp.blocked && rp.validPrefix == 0);
 }
 
+// Strip grade end height of a tile with three equal corners is that value, not the mean: the hill road's end tile 92/90/92/92 pins its far vertex column to 92
+// (observed: (81,90) 90 -> 92, (81,91) stays 92).
+static void testStripGradeEndHeight() {
+  SimpleNetworkMap m(20, 6);
+  setupRoadFlags(m);
+  for (int x = 0; x <= 12; x++) for (int z = 0; z <= 6; z++) m.setCornerHeight(x, z, 92);
+  m.setCornerHeight(9, 2, 90);   // end tile (8,2): corners (8,2)=92 (9,2)=90 (9,3)=92 (8,3)=92
+  RoutedPath rp = routePath(m, TOOL_ROAD, {2, 2}, {8, 2});
+  CHECK(!rp.blocked && rp.validPrefix == 7);
+  std::vector<std::pair<int, int>> ts;
+  for (const auto& t : rp.tiles) ts.push_back({t.x, t.z});
+  const std::string d = describeStripGrade(m, ts);
+  CHECK(d.find("vertex (9,2) 90 -> 92") != std::string::npos && d.find("(9,3)") == std::string::npos);
+}
+
 // Highway commit: every vertex row across the two carriageways is set to its minimum (interim rule), and terrain levelling is charged
 // LevelTerrain x sum|dh| >> 2.
 static void testHighwayCrossRows() {
@@ -747,6 +762,7 @@ int main() {
   testHighwayCrossRows();
   testEndOddCorner();
   testStripGradePermission();
+  testStripGradeEndHeight();
   testTunnel();
   testConnections();
   testOnRamp();
