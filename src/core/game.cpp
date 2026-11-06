@@ -1701,12 +1701,28 @@ void Game::drawInCity(uint32_t dtMs) {
   else { hoverValid_ = false; buildScene(); }
 }
 
+// The original's cheat entry is not a window: a bare 312 x 28 text field at the screen's top-left, no title, the city visible around it [OBSERVED]:
+// 4 px outer bevel (top/left (255,0,0) x2 + (255,130,66) x2, bottom/right (132,65,0) x2 + (132,0,0) x2), inner frame (123,138,255) top/left and
+// (255,243,255) bottom/right around a (222,223,255) interior, 1 px caret (49,52,123) at x 6 from row 5.
 void Game::drawCheatBox() {
   if (!cheatOpen_) return;
-  Rect r{W_ / 2 - 200, H_ / 2 - 40, 400, 70};
-  ui_.panel(r, "Cheat");
-  ui_.textBox({r.x + 10, r.y + 34, r.w - 20, 24}, cheatBuf_, 60);
+  const int w = 312, h = 28;
+  const uint32_t kRed = rgb(255, 0, 0), kOrange = rgb(255, 130, 66), kBrown = rgb(132, 65, 0), kDark = rgb(132, 0, 0);
+  const uint32_t kTL = rgb(123, 138, 255), kBR = rgb(255, 243, 255), kInside = rgb(222, 223, 255), kInk = rgb(49, 52, 123);
+  ui_.fill({0, 0, w, h}, kInside);
+  // outer bevel: rows/cols 0-1 and 2-3 from each side (the corners follow the top/left and bottom/right pairs)
+  ui_.fill({0, 0, w, 2}, kRed); ui_.fill({0, 0, 2, h}, kRed);
+  ui_.fill({2, 2, w - 4, 2}, kOrange); ui_.fill({2, 2, 2, h - 4}, kOrange);
+  ui_.fill({0, h - 2, w, 2}, kDark); ui_.fill({w - 2, 0, 2, h}, kDark);
+  ui_.fill({2, h - 4, w - 4, 2}, kBrown); ui_.fill({w - 4, 2, 2, h - 4}, kBrown);
+  ui_.fill({4, 4, w - 8, h - 8}, kInside);
+  ui_.fill({4, 4, w - 8, 1}, kTL); ui_.fill({4, 4, 1, h - 8}, kTL);
+  ui_.fill({4, h - 5, w - 8, 1}, kBR); ui_.fill({w - 5, 4, 1, h - 8}, kBR);
   if (ui_.focusId == 0) ui_.focusId = 1;
+  for (char c : ui_.in.text) if (c >= 32 && cheatBuf_.size() < 60) cheatBuf_.push_back(c);
+  if (ui_.in.key[K_BACKSPACE] && !cheatBuf_.empty()) cheatBuf_.pop_back();
+  ui_.text(6, 7, cheatBuf_, "main10", kInk);
+  ui_.fill({6 + ui_.textWidth(cheatBuf_, "main10"), 5, 1, h - 10}, kInk);
   if (ui_.in.key[K_ENTER]) { typeCheat(cheatBuf_); cheatBuf_.clear(); cheatOpen_ = false; ui_.focusId = 0; }
   else if (ui_.in.key[K_ESC]) { cheatBuf_.clear(); cheatOpen_ = false; ui_.focusId = 0; }
   uiHit_ = true;

@@ -997,7 +997,7 @@ void testTicker() {
     for (auto& i : p.items) allMsg = allMsg && i.n.text == "Simulation Paused";
     CHECK(allMsg);
     int w = h.ui.textWidth("Simulation Paused");
-    CHECK(p.items[1].x - (p.items[0].x + w) == h.ui.textWidth("0000"));
+    CHECK(p.items[1].x - p.items[0].x == 132);   // period 132 px (observed)
     int px0 = p.items[0].x;
     for (int k = 0; k < 4; k++) p.update(16, strip.w, h.ui, nullptr, 0, nullptr, true, 255, 248, 0);
     CHECK(p.items[0].x < px0);                 // still scrolling while paused

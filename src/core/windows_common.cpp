@@ -694,16 +694,15 @@ void TickerWidget::push(const NewsItem& n, int width, const Ui& ui) {
 void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t, int32_t today, GameRng* rng, bool paused,
                           uint8_t pauseR, uint8_t pauseG, uint8_t pauseB) {
   accumMs += int(dtMs);
-  int px = TickerScroll::advance(accumMs);
-  if (px) {
-    accumMs = 0;
-    for (auto& i : items) i.x -= px;
-  }
+  // 2 px every 50 ms (40 px/s; the original measured about 39): the remainder carries over so 16 ms frames do not stretch the step to 64 ms.
+  int px = 0;
+  while (accumMs >= TickerScroll::kStepMs) { accumMs -= TickerScroll::kStepMs; px += TickerScroll::kStepPixels; }
+  if (px) for (auto& i : items) i.x -= px;
   items.erase(std::remove_if(items.begin(), items.end(), [&](const Item& i) { return i.x + ui.textWidth(i.n.text) < 0; }), items.end());
   if (paused) {
-    // Repeat the paused message across the whole strip; 4 glyph widths between copies.
+    // Repeat the paused message across the whole strip at a 132 px period (107 px text + 25 px gap) [OBSERVED].
     static const char* kMsg = "Simulation Paused";
-    const int gap = ui.textWidth("0000");
+    const int gap = std::max(4, 132 - ui.textWidth(kMsg));
     for (int guard = 0; guard < 16; guard++) {
       int right = 0;
       for (auto& i : items) right = std::max(right, i.x + ui.textWidth(i.n.text) + i.gap);
