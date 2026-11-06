@@ -1180,7 +1180,7 @@ void Game::drawHud() {
   if (skinRci) {   // R / C / I labels in the gap between the two bar slots (225872FE:41..43)
     // Bold MAIN9 letters, ink (24,40,140), 9 rows tall: R at x602, C at x608, I at x620 (indicator x = 599) [OBSERVED].
     static const char* fb[3] = {"R", "C", "I"};
-    static const int lx[3] = {3, 9, 21};
+    static const int lx[3] = {3, 13, 25};   // each letter centred on its bar: ink x602..610, 612..619, 624..625 (indicator x = 599)
     const uint32_t ink = rgb(24, 40, 140);
     for (int i = 0; i < 3; i++) {
       std::string t = str(0x225872FE, 0x41 + i);

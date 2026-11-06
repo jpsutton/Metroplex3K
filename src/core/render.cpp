@@ -217,11 +217,19 @@ void hsv(float h, float s, float v, float& r, float& g, float& b) {
   r = (rr + m) * 255; g = (gg + m) * 255; b = (bb + m) * 255;
 }
 
+// palBasic overlay colour (Zones layer, Traffic zone tints): the row's own colour scaled by a 64-step cos ramp, column k = 36 + shade / 2 (flat tile = 43,
+// f = 0.878) [OBSERVED: two zone colours fit f in [0.878, 0.884) with truncation; the relief mapping is INFERRED].
+inline void fetchBasicOverlay(const Image& im, int row, int shade, int& r, int& g, int& b);
 inline void fetch(const Image& im, int row, int col, int& r, int& g, int& b) {
   if (im.empty()) { r = g = b = 128; return; }
   row = std::max(0, std::min(im.h - 1, row)); col = std::max(0, std::min(im.w - 1, col));
   uint32_t c = im.px[size_t(row) * im.w + col];
   r = c & 255; g = (c >> 8) & 255; b = (c >> 16) & 255;
+}
+inline void fetchBasicOverlay(const Image& im, int row, int shade, int& r, int& g, int& b) {
+  fetch(im, row, 31, r, g, b);   // column 31 is the row colour itself
+  const float f = std::cos(float(63 - (36 + shade / 2)) * 3.14159265f / 126.0f);
+  r = int(float(r) * f); g = int(float(g) * f); b = int(float(b) * f);
 }
 
 }  // namespace
@@ -671,7 +679,7 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, 
         const Image& im = ovSlot == 0 ? pal_.basic : pal_.data[std::max(0, std::min(2, ovSlot - 1))];
         for (int i = 0; i < 4; i++) {
           int r, g, b;
-          fetch(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])] / 2 + (ovSlot == 0 ? 16 : 0), r, g, b);   // palBasic: the lit half of the cos ramp, flat tile = column 23 [INFERRED from the Traffic view's zone tints]
+          if (ovSlot == 0) fetchBasicOverlay(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])], r, g, b); else fetch(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])] / 2, r, g, b);
           farZoomAdjust(z, r, g, b);
           P[i][2] = float(r); P[i][3] = float(g); P[i][4] = float(b);
         }
@@ -841,7 +849,7 @@ void Renderer::collectTerrainTris(const Camera& cam, const RenderOptions& opt, s
         const Image& im = ovSlot == 0 ? pal_.basic : pal_.data[std::max(0, std::min(2, ovSlot - 1))];
         for (int i = 0; i < 4; i++) {
           int r, g, b;
-          fetch(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])] / 2 + (ovSlot == 0 ? 16 : 0), r, g, b);   // palBasic: the lit half of the cos ramp, flat tile = column 23 [INFERRED from the Traffic view's zone tints]
+          if (ovSlot == 0) fetchBasicOverlay(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])], r, g, b); else fetch(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])] / 2, r, g, b);
           farZoomAdjust(z, r, g, b);
           P[i][2] = float(r); P[i][3] = float(g); P[i][4] = float(b);
         }

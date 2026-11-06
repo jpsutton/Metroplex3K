@@ -444,7 +444,10 @@ void schemePreview(Ui& ui, GameData* gd, int x, int y, uint32_t land, uint32_t f
   // (3FBB0000). Other sets use the pine position until observed (the sprite spans do not explain the difference).
   // Each flora choice has two sprites; the second (xxxx0001, fmt 0x03) decodes as a plane, not a tree, so the same tree sprite is drawn twice [the 79fe354
   // attempt to draw it as the right tree left that tree missing].
-  if (flora == 0x3FBB0000) put(flora, 546, 90); else put(flora, 554, 133);
+  // Right tree, behind the house [OBSERVED top-left positions: pine x657 y258, NW x657 y250]: the other sets use the pine place until observed.
+  if (flora == 0x3FBB0000) put(flora, 546, 90);
+  else if (flora == 0x3FC60000) put(flora, 537, 131);
+  else put(flora, 557, 81);
   put(building, 470, 145);
   put(flora, 445, 110);
 }
