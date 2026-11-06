@@ -369,6 +369,25 @@ Further observations, round 4 [OBSERVED]:
 | W5_Berlin_s14 | 459 | 2068/134 | 808947 | 1120/44 | 840/58 | 1700/16 | 847424 | 328947/451462 | 109131/115820 | 523659/423712 | 9 | 9971/73/325/0/0 | 2:2 6:2 / 9:80 16:2 | 0,59928,0,0,0,93219,0,5310,0,828 | 181789/132336 | 311954,47592,0,105652,0,0,207740 |
 | W5_Berlin_s15 | 491 | 2068/166 | 806102 | 1120/44 | 840/58 | 1680/16 | 859512 | 331126/450209 | 113325/115450 | 522025/429756 | 9 | 9932/67/363/0/0 | 2:3 5:1 6:2 / 9:80 16:2 | 0,60180,0,0,0,93625,0,5312,0,833 | 181590/132386 | 334521,51558,0,114422,0,0,219222 |
 
+*Run-to-run spread from one save* `[OBSERVED]`. `W5_Berlin_s06` (8/6/2067) was loaded a second
+time in the original and run without changes to 12/20/2067, with a save about every 15 days
+(files `R2_Berlin_from_s06_c01` … `c09`). The two original runs differ by as much as the engine
+differs from either of them. Developer state changes over one month can differ by a factor of 5
+between two original runs, so month-level counts from one trajectory cannot be used to check
+growth rules.
+
+| Measure, from s06 | W5 run | Second run |
+|---|---|---|
+| R lots replaced, state 1 → 4, to 9/12 (W5) / 9/18 (second run) | 131 | 13 |
+| R lots removed from state 1, same period | 70 | 14 |
+| I lots abandoned (1 → 2), same period | 41 | 12 |
+| I valve V at 9/12 (W5) / 9/3 and 9/18 (second run) | −966 | 0, 0 |
+| R lots in state 4 at 10/15 (W5) / 10/19 (second run) | 222 | 135 |
+| I lots in state 2 at 10/15 (W5) / 10/19 (second run) | 439 | 358 |
+
+In the second run, the committed R demand P (spec 15 §4) went from 872 at load to 1240 by
+8/10/2067. That is above V = 1160, so R demand is used up early in each pass, as in the engine.
+
 #### London, England
 
 | File | Day | Date | Pop | R V/cap | C V/cap | I V/cap | R D | C S/D | I S/D | Jobs S/D | Unemp | Lots 1/2/4/8/16 | Codes prev pass (1-8 / 9-18) | Power row | Water S/U | Garbage month [0..6] |
