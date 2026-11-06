@@ -623,8 +623,8 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   const int64_t net = m.income - m.cost;
   { // Footer: "Monthly Total" from x 255, the amount from x 343, cap top y 298.
     const std::string lab = E.win(0x1C4, "Monthly Total"), val = E.money(net);
-    ui.text(r.x + 247, r.y + 288, lab, "main9", ink);
-    ui.text(r.x + 335, r.y + 288, val, "main9", net < 0 ? rgb(255, 0, 0) : rgb(0, 0, 0));   // negative amounts are pure red, positive black [OBSERVED]
+    ui.text(r.x + 219, r.y + 288, lab, "main9", ink);
+    ui.text(r.x + 307, r.y + 288, val, "main9", net < 0 ? rgb(255, 0, 0) : rgb(0, 0, 0));   // negative amounts are pure red, positive black [OBSERVED]
   }
   const Rect done{r.x + r.w - 52, r.y + r.h - 44, 44, 34};
   blueBand(ui, done);   // 1 px ring (173,182,255) around the blue plate [OBSERVED]

@@ -484,7 +484,7 @@ const uint32_t kSeriesCol[16] = {rgb(222, 97, 165), rgb(0, 146, 0), rgb(198, 146
 // 3-column check-box grid (x 58 / 178 / 298, rows y = 253 + 24 r) and the range radios at x ~322.
 WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::vector<GraphSeries>& series) {
   WindowResult R;
-  if (!maskInit) {   // defaults: City Size, Funds, Power %
+  if (!maskInit && !series.empty()) {   // defaults: City Size, Funds, Power % (not on a frame whose series list is still empty: the mode button was clicked inside draw())
     enabledMask = 0;
     for (size_t i = 0; i < series.size() && i < 16; i++)
       if (series[i].fallback == "City Size" || series[i].fallback == "Funds" || series[i].fallback == "Power %") enabledMask |= 1u << i;
@@ -502,7 +502,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   // Vertical mapping fitted on 14 line ends of London and Berlin captures: original y = 1.0308 * ours - 7.5 (ours was right at the bottom, 3..5 px too low at the top).
   const int origY0 = r.y - 34;   // the original's window top is y34 at 800 x 600
   const int x0 = r.x + 46, x1 = r.x + 300, yTop = origY0 + 94, yBot = origY0 + 251;   // value 0 at y251, the saved max 157 rows above [OBSERVED: y = 251 - floor(v * 157 / max), 20 of 33 points exact]
-  struct Lab { std::string text; int endY; uint32_t col; int y = 0; float endYf = 0; int top = 0; };
+  struct Lab { std::string text; int endY; uint32_t col; int y = 0; float endYf = 0; int top = 0; int natY = 0; };
   std::vector<Lab> labs;
   int nPts = 0;
   for (size_t i = 0; i < series.size() && i < 16; i++) {
@@ -530,19 +530,28 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     std::string t = subst(E.win(series[i].tmplId, series[i].tmplFb), {val});
     while (!t.empty() && t.back() == ' ') t.pop_back();
     labs.push_back({t, py, kSeriesCol[i], 0, yfEnd, 0});
+    // Label position before slotting, plot-relative: round((1 - newest / max) * 157) + 10 [STATIC].
+    labs.back().natY = hi <= lo ? 10 + 78 : int(std::nearbyint((1.0 - double(int64_t(s.back()) - int64_t(lo)) / double(hi - lo)) * 157.0)) + 10;
   }
-  // Label slots [OBSERVED on London / Berlin captures, 1 Year view]: label ink tops sit on a 10 px grid (99, 109, ... 239, i.e. = 9 mod 10), the slot being
-  // floor((line end y - 4) / 10) * 10 - 1 in the original's screen rows; labels are placed bottom-up and a label that would share or lie below the slot of the one
-  // under it moves up whole slots. The leader runs from the line end (x340) to x344 at about the label's middle (top + 5).
+  // Label slots [STATIC, confirmed on Berlin]: y = round((1 - newest / max) * 157) + 10 (plot-relative); outside 10..167 the label stays where it is.
+  // Otherwise slot = (y - 10) / 10 of 16; a label takes its slot if free, else the first free of slot - i, slot + i (< 16) for i = 1..5 (upward first), else it
+  // stays unslotted. Labels are placed in series order, first come first served. The label's ink top (screen, 800 x 600) is 79 + slot * 10 + 10.
+  // The leader runs from the line end (x340) to x344 at about the label's middle (top + 5).
   const int origY = r.y - 34;   // the original's window top is y34 at 800 x 600
-  std::sort(labs.begin(), labs.end(), [](const Lab& a, const Lab& b) { return a.endYf > b.endYf; });
-  int prevTop = 1 << 30;
+  bool slotUsed[16] = {};
   for (auto& l : labs) {
-    const int endAbs = int(std::floor(l.endYf)) - origY;   // in the original's coordinates
-    int top = int(std::floor(float(endAbs - 4) / 10.f)) * 10 - 1;
-    top = std::min(top, prevTop - 10);
-    prevTop = top;
-    l.top = top + origY;
+    int placed = l.natY;
+    if (l.natY >= 10 && l.natY <= 167) {
+      const int slot = (l.natY - 10) / 10;
+      int pick = -1;
+      if (!slotUsed[slot]) pick = slot;
+      for (int i = 1; i <= 5 && pick < 0; i++) {
+        if (slot - i >= 0 && !slotUsed[slot - i]) pick = slot - i;
+        else if (slot + i < 16 && !slotUsed[slot + i]) pick = slot + i;
+      }
+      if (pick >= 0) { slotUsed[pick] = true; placed = pick * 10 + 10; }
+    }
+    l.top = 79 + placed + origY;
     l.y = l.top - 2;   // text origin
   }
   for (auto& l : labs) {
