@@ -326,7 +326,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   WindowResult R;
   Rect r = placedAt(ui, 32, 32, 296, 336);
   const Skin* sk = ui.skin;
-  const uint32_t ink = rgb(49, 52, 123), grey = rgb(0x9C, 0xA2, 0xBD), white = rgb(255, 255, 255);   // label ink (49,52,123) [OBSERVED]
+  const uint32_t ink = rgb(49, 52, 123), grey = rgb(123, 130, 181), white = rgb(255, 255, 255);   // disabled label ink (123,130,181); label ink (49,52,123) [OBSERVED]
   if (frame(ui, E, r, E.win(0x269, "View City Layers"))) { R.close = true; R.add(Act::Close); }
   blueBand(ui, {r.x + 4, r.y + 39, 142, 34});
   blueBand(ui, {r.x + 150, r.y + 39, 142, 34});
@@ -340,11 +340,15 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
     E.spot(name, f);
     const bool on = edit.mode == mode, down = ui.hover(f) && ui.in.down;
     if (on || down) {
-      ui.fill(f, white);
-      ui.frame({f.x + 2, f.y + 2, f.w - 4, f.h - 4}, false);
-      ui.fill({f.x + 2, f.y + 2, f.w - 4, 1}, rgb(0x7B, 0x7D, 0xBD)); ui.fill({f.x + 2, f.y + 2, 1, f.h - 4}, rgb(0x7B, 0x7D, 0xBD));
-      ui.fill({f.x + 2, f.y + f.h - 3, f.w - 4, 1}, rgb(0x7B, 0x7D, 0xBD)); ui.fill({f.x + f.w - 3, f.y + 2, 1, f.h - 4}, rgb(0x7B, 0x7D, 0xBD));
-      ui.fill({f.x + 1, f.y + f.h, f.w, 1}, rgb(0xC6, 0xC7, 0xDE)); ui.fill({f.x + 2, f.y + f.h + 1, f.w, 1}, rgb(0xA5, 0xA6, 0xB5));
+      // The original's plate art [OBSERVED, column x = 100]: a 3-row darkening ring above (and a 1 px one left of) the white field, the field one row lower, its
+      // inner top line 2 rows below that and the inner bottom line on its last row, then the two shadow rows and a 3-row light glow.
+      ui.fill({f.x, f.y - 2, f.w, 1}, rgb(123, 138, 247)); ui.fill({f.x, f.y - 1, f.w, 1}, rgb(107, 130, 231)); ui.fill({f.x, f.y, f.w, 1}, rgb(99, 113, 198));
+      ui.fill({f.x - 1, f.y + 1, 1, f.h - 1}, rgb(107, 130, 231));
+      ui.fill({f.x, f.y + 1, f.w, f.h - 1}, white);
+      ui.fill({f.x + 2, f.y + 3, f.w - 4, 1}, rgb(123, 125, 189)); ui.fill({f.x + 2, f.y + f.h - 1, f.w - 4, 1}, rgb(123, 125, 181));
+      ui.fill({f.x + 2, f.y + 3, 1, f.h - 3}, rgb(123, 125, 189)); ui.fill({f.x + f.w - 3, f.y + 3, 1, f.h - 3}, rgb(123, 125, 189));
+      ui.fill({f.x + 1, f.y + f.h, f.w, 1}, rgb(0xC6, 0xCB, 0xDE)); ui.fill({f.x + 2, f.y + f.h + 1, f.w, 1}, rgb(0xA5, 0xA6, 0xB5));
+      ui.fill({f.x + 1, f.y + f.h + 2, f.w, 1}, rgb(173, 186, 255)); ui.fill({f.x + 1, f.y + f.h + 3, f.w, 1}, rgb(156, 170, 255)); ui.fill({f.x + 1, f.y + f.h + 4, f.w, 1}, rgb(140, 154, 255));
     } else {
       ui.fill({f.x + 3, f.y + 3, f.w, f.h}, rgb(0x18, 0x20, 0x39));   // drop shadow
       ui.fill(f, rgb(0xD6, 0xDB, 0xFF));
@@ -396,13 +400,13 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   const bool layers = edit.mode == CityLayers::LayerView;
   const auto& views = cityLayerViews();
   for (size_t i = 0; i < views.size(); i++)
-    if (control("layer." + std::to_string(i), true, 156, 76 + 16 * int(i), E.win(views[i].labelId, views[i].fallback), edit.layer == int(i), layers, 0))   // the whole radio 1 px left [OBSERVED]
+    if (control("layer." + std::to_string(i), true, 158, 76 + 16 * int(i), E.win(views[i].labelId, views[i].fallback), edit.layer == int(i), layers))   // glyph x 191..199, label x 204 [OBSERVED]
       edit.layer = int(i);
 
   // ---- Buttons
   auto pill = [&](const char* name, Rect b, const std::string& label) { E.spot(name, b); return ui.button(b, label, true, false, "title9"); };
-  if (pill("apply", {r.x + 8, r.y + 265, 102, 33}, E.win(0x26D, "Apply"))) R.add(Act::ApplyLayers);
-  if (pill("default", {r.x + 9, r.y + 298, 102, 33}, E.win(0x26C, "Default View"))) { edit = CityLayers(); R.add(Act::ApplyLayers); }
+  if (pill("apply", {r.x + 9, r.y + 260, 106, 33}, E.win(0x26D, "Apply"))) R.add(Act::ApplyLayers);
+  if (pill("default", {r.x + 9, r.y + 293, 106, 33}, E.win(0x26C, "Default View"))) { edit = CityLayers(); R.add(Act::ApplyLayers); }
   Rect grid{r.x + 247, r.y + 260, 36, 35};
   E.spot("grid", grid);
   { bool c = false;

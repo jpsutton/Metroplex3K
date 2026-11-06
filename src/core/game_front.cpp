@@ -746,11 +746,11 @@ void Game::drawNewCity() {
   { std::string t = cap(0x041F2625, 0x2B, "User-Made Buildings:"); lab(306, 294, t); }
   Rect sel{r.x + 434, r.y + 282, 78, 33};
   ui_.fill(sel, rgb(0x7B, 0x92, 0xFF));
-  // The original's 15 caption levels on this button (565 r,g,b) [OBSERVED: 13 AA colours + ink + the pill face; no single ramp fits]
+  // The original's caption levels on this button by glyph level i = 0..14 (565 r,g,b; blue = 15 + i) [OBSERVED; i = 7 is an interpolated gap]
   static const uint16_t kSelectRamp[15] = {
-      uint16_t(5 << 11 | 12 << 5 | 14), uint16_t(6 << 11 | 14 << 5 | 16), uint16_t(8 << 11 | 18 << 5 | 17), uint16_t(9 << 11 | 20 << 5 | 17), uint16_t(10 << 11 | 22 << 5 | 18),
-      uint16_t(12 << 11 | 25 << 5 | 20), uint16_t(13 << 11 | 27 << 5 | 21), uint16_t(16 << 11 | 34 << 5 | 22), uint16_t(17 << 11 | 36 << 5 | 24), uint16_t(18 << 11 | 39 << 5 | 25),
-      uint16_t(20 << 11 | 42 << 5 | 26), uint16_t(22 << 11 | 43 << 5 | 26), uint16_t(22 << 11 | 46 << 5 | 28), uint16_t(25 << 11 | 50 << 5 | 29), uint16_t(26 << 11 | 54 << 5 | 31)};
+      uint16_t(6 << 11 | 13 << 5 | 15), uint16_t(7 << 11 | 15 << 5 | 16), uint16_t(8 << 11 | 18 << 5 | 17), uint16_t(10 << 11 | 20 << 5 | 18), uint16_t(11 << 11 | 23 << 5 | 19),
+      uint16_t(12 << 11 | 26 << 5 | 20), uint16_t(14 << 11 | 28 << 5 | 21), uint16_t(15 << 11 | 31 << 5 | 22), uint16_t(16 << 11 | 34 << 5 | 23), uint16_t(18 << 11 | 36 << 5 | 24),
+      uint16_t(19 << 11 | 39 << 5 | 25), uint16_t(20 << 11 | 42 << 5 | 26), uint16_t(22 << 11 | 44 << 5 | 27), uint16_t(23 << 11 | 47 << 5 | 28), uint16_t(25 << 11 | 50 << 5 | 29)};
   ui_.buttonLabelRamp = kSelectRamp;
   ui_.buttonLabelDy = -1;   // this caption sits 1 px higher than the other pill buttons [OBSERVED]
   if (ui_.button(sel, cap(0x041F2625, 0x2F, "Select"), true, false, "title9")) openUserBuildings();
