@@ -693,10 +693,14 @@ bool pieChartArt(Ui& ui, const WinEnv& E, int ox, int oy, const std::vector<PieS
       if (d == kNone) continue;
       if (d == kBase) d = labs.empty() ? kBase : labs.back().col;
       const int sg = int(shade->px[size_t(y) * shade->w + x] & 255);
-      int ch[3] = {int(d & 255), int((d >> 8) & 255), int((d >> 16) & 255)};
-      for (int& c : ch) {
+      // The original's canvas is RGB565: unpack c8 = c5 * 255 / 31 (g6 * 255 / 63), shade, pack by truncation, unpack again [OBSERVED, 1153/1153 px].
+      int ch[3] = {int(d & 255) >> 3, int((d >> 8) & 255) >> 2, int((d >> 16) & 255) >> 3};
+      const int mx[3] = {31, 63, 31};
+      for (int i = 0; i < 3; i++) {
+        int c = ch[i] * 255 / mx[i];
         if (sg < 125) c = c * sg / 128;
         else if (sg >= 132) c = c + (sg - 128) * (255 - c) / 128;
+        ch[i] = (c >> (i == 1 ? 2 : 3)) * 255 / mx[i];
       }
       d = 0xFF000000u | (uint32_t(ch[2]) << 16) | (uint32_t(ch[1]) << 8) | uint32_t(ch[0]);
     }
@@ -815,7 +819,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     // heading at the top left of the box, then one colour bar per category present
     { std::string head = E.win(el ? 0x28A : 0x1F3, el ? "Annually Averaged" : "% Garbage Goes To:");
       auto lines = wrap(ui, head, 168, "main10");
-      ui.text(box.x + 6, box.y + 4, lines.empty() ? head : lines[0], "main10", kInkBlue); }   // the first line only; the legend bars cover the rest
+      ui.text(box.x + 7, box.y + 5, lines.empty() ? head : lines[0], "main10", kInkBlue); }   // the first line only; the legend bars cover the rest
     std::vector<PieSlice> slices;
     int by = box.y + 20;
     const int barH = el ? 14 : 23, barPitch = el ? 16 : 25;   // legend bars x 98..264: 14 rows at a 16 px pitch (electricity), 23 rows at 25 (garbage) [OBSERVED]
@@ -823,14 +827,14 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
       if (c.v <= 0) continue;
       ui.fill({box.x + 6, by, 167, barH}, c.col);
       const uint32_t lum = ((c.col & 255) * 30 + ((c.col >> 8) & 255) * 59 + ((c.col >> 16) & 255) * 11) / 100;
-      ui.text(box.x + 10, by + (barH - 12) / 2, E.win(c.id, c.fb), "main10", lum > 140 ? rgb(0, 0, 0) : rgb(255, 255, 255));
+      ui.text(box.x + 8, by + (barH - 12) / 2 - 1, E.win(c.id, c.fb), "main10", lum > 140 ? rgb(0, 0, 0) : rgb(255, 255, 255));
       by += barPitch;
       slices.push_back({"", c.v, c.col});
     }
-    if (!pieChartArt(ui, E, r.x + 232, r.y + 90, slices)) pieChart(ui, r.x + 318, r.y + 138, slices);   // art at (272, 124) in the 800 x 600 window [OBSERVED]
+    if (!pieChartArt(ui, E, r.x + 231, r.y + 90, slices)) pieChart(ui, r.x + 318, r.y + 138, slices);   // art origin (271, 124) in the 800 x 600 window [OBSERVED]
     cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(!el && d.garbageProduced >= 0 ? int64_t(std::llround(d.garbageProduced / 10.0)) : int64_t(total)));
   }
-  const int capDy = agePage ? -6 : 0;   // the bar pages' caption lines sit 6 px higher (observed)
+  const int capDy = -6;   // the caption lines sit 6 px higher on every chart page (observed)
   ui.textCentered({r.x + 55, r.y + 249 + capDy, 340, 14}, cap1, "main10", kInkBlue);
   if (!cap2.empty()) ui.textCentered({r.x + 55, r.y + 265 + capDy, 340, 14}, cap2, "main10", rgb(247, 142, 90));
   static const uint32_t tid[5] = {0x1DD, 0x1E0, 0x1E1, 0x1DE, 0x1DF};

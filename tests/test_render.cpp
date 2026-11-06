@@ -305,7 +305,7 @@ int main() {
   {  // default overlay mapping
     std::vector<uint8_t> vals = {0, 7, 8, 255, 100};
     DataOverlay o = makeDataOverlay(DataLayer::Crime, vals, 5, 1);
-    CHECK(o.slot == 2 && o.row[0] == 31 && o.row[1] == 31 && o.row[2] == 30 && o.row[3] == 0 && o.row[4] == 19);
+    CHECK(o.slot == 2 && o.row[0] == 0 && o.row[1] == 0 && o.row[2] == 1 && o.row[3] == 31 && o.row[4] == 12);
     DataOverlay z = makeDataOverlay(DataLayer::Zones, {0, 1, 255}, 3, 1);
     CHECK(z.slot == 1 && z.row[1] == 4 && z.row[2] == 0xFF);
   }

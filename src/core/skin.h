@@ -67,6 +67,7 @@ struct BottomBarPlace {
 
 // RCI indicator geometry (spec/09 4.5). Bars are R, C, I.
 struct RciGeometry {
+  static constexpr int bottomClip = 8;   // rows of the art below the screen edge (800 x 600)
   static constexpr int imgW = 41, imgH = 88, zeroY = 51, clipBottom = 62, unitPx = 16;
   // The art has two 16-px slots per bar: positive demand fills upward from the zero line inside y 35..50, negative
   // fills downward inside y 62..77, with the R/C/I label row between (y 51..61) [measured on the art].

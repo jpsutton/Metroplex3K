@@ -122,6 +122,7 @@ std::vector<uint8_t> computeVertexShade(const World& w) {
 DataOverlay makeDataOverlay(DataLayer layer, const std::vector<uint8_t>& values, int W, int H) {
   DataOverlay o;
   bool categorical = layer == DataLayer::Zones || layer == DataLayer::Power || layer == DataLayer::Water;
+  const bool grey_on_top = layer == DataLayer::Crime || layer == DataLayer::Fire || layer == DataLayer::Traffic;
   switch (layer) {
     // spec 25 9.2 [OBSERVED]: land value, density, power and aura use data1Pal; crime, pollution,
     // flammability (fire) and traffic use data2Pal. (Aura's negative half on data2Pal is not split out.)
@@ -134,6 +135,7 @@ DataOverlay makeDataOverlay(DataLayer layer, const std::vector<uint8_t>& values,
   for (size_t i = 0; i < o.row.size() && i < values.size(); i++) {
     int v = values[i];
     if (categorical) o.row[i] = v == 0xFF ? 0xFF : uint8_t(std::min(31, v * 4));
+    else if (grey_on_top) o.row[i] = uint8_t(std::min(31, v / 8));   // data2Pal: zero is the grey top row, 31 the dark red [OBSERVED: Berlin zero crime/traffic tiles are grey]
     else o.row[i] = uint8_t(31 - std::min(31, v / 8));  // low values on the grey bottom row [INFERRED]
   }
   return o;

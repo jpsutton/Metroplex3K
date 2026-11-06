@@ -1169,7 +1169,7 @@ void Game::drawHud() {
   drawNavigator(bh);
 
   // RCI bars: bottom-anchored, just left of the navigator.
-  int rx = navX - RciGeometry::imgW, ry = H_ - RciGeometry::imgH;
+  int rx = navX - RciGeometry::imgW, ry = H_ - RciGeometry::imgH + RciGeometry::bottomClip;   // the art's last 8 rows fall below the screen [OBSERVED]
   const Valve* v[3] = {&hud.valveR, &hud.valveC, &hud.valveI};
   uint32_t cols[3] = {rgb(0, 192, 0), rgb(0, 0, 192), rgb(192, 192, 0)};
   const char* nm[3] = {"R", "C", "I"};
@@ -1178,25 +1178,14 @@ void Game::drawHud() {
                  skin_.drawRciIndicator(ui_, rx, ry, v[0]->value / 2000.0, v[1]->value / 2000.0, v[2]->value / 2000.0);
   if (skinRci && ui_.hover({rx, ry, RciGeometry::imgW, RciGeometry::imgH})) uiHit_ = true;
   if (skinRci) {   // R / C / I labels in the gap between the two bar slots (225872FE:41..43)
-    // Hand-drawn 5x7 pixel glyphs: scaling the 9 px font down turns the R into an A. Other languages' letters fall
-    // back to the (scaled) text font.
+    // Bold MAIN9 letters, ink (24,40,140), 9 rows tall: R at x602, C at x608, I at x620 (indicator x = 599) [OBSERVED].
     static const char* fb[3] = {"R", "C", "I"};
-    static const char* glyph[3][7] = {
-        {"XXXX.", "X...X", "X...X", "XXXX.", "X.X..", "X..X.", "X...X"},
-        {".XXX.", "X...X", "X....", "X....", "X....", "X...X", ".XXX."},
-        {"XXXXX", "..X..", "..X..", "..X..", "..X..", "..X..", "XXXXX"}};
+    static const int lx[3] = {3, 9, 21};
     const uint32_t ink = rgb(24, 40, 140);
     for (int i = 0; i < 3; i++) {
       std::string t = str(0x225872FE, 0x41 + i);
-      if (t.empty() || t == fb[i]) {
-        const int gx = rx + RciGeometry::barX[i], gy = ry + RciGeometry::labelTop + (RciGeometry::labelH - 7) / 2;   // 5 px = bar width
-        for (int row = 0; row < 7; row++)
-          for (int col = 0; col < 5; col++)
-            if (glyph[i][row][col] == 'X') ui_.fill({gx + col, gy + row, 1, 1}, ink);
-      } else {
-        Rect lr{rx + RciGeometry::barX[i] - 4, ry + RciGeometry::labelTop, RciGeometry::barW + 8, RciGeometry::labelH};
-        ui_.textCentered(lr, t, "system9", ink);
-      }
+      if (t.empty()) t = fb[i];
+      ui_.text(rx + lx[i], ry + RciGeometry::labelTop + 1, t, "main9", ink);
     }
   }
   for (int i = 0; i < 3 && !skinRci; i++) {
