@@ -48,6 +48,7 @@ class ScenarioController {
   void minuteTick();
   bool active() const;
   bool started() const;
+  bool resumed() const;   // the file carried saved scenario state (a city saved mid-scenario)
   void setPopupOpen(bool open);
   ScenarioGoalsView goalsView() const;
   struct Outcome {
@@ -55,7 +56,7 @@ class ScenarioController {
     std::vector<std::string> ranks;   // every rank line (cmdAddRankInfo), in id order
     int achieved = -1;                // index of the achieved rank in `ranks`
     uint32_t presenterAdvisor = 0; int mood = 3;
-    std::string title, mayor;
+    std::string title, mayor, resultsFor;
   };
   Outcome outcome() const;
   std::string title() const;

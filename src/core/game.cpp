@@ -591,7 +591,7 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
     drawPitch_ = outPitchBytes > 0 ? outPitchBytes / int(sizeof(uint32_t)) : w;
   }
   // Dialogs opened from a city (Load / Save As) keep the city view and HUD behind them, frozen.
-  const bool cityBackdrop = (scr_ == Screen::LoadList || scr_ == Screen::NewCity) && world_.W && simReady_;
+  const bool cityBackdrop = (scr_ == Screen::LoadList || scr_ == Screen::NewCity || scr_ == Screen::ScenarioEnd) && world_.W && simReady_;
   bool world3d = (scr_ == Screen::InCity || scr_ == Screen::TerrainEdit || cityBackdrop) && world_.W;
   const bool gpuTry = world3d && citySink_ && ext && scr_ == Screen::InCity;
   bool cityOnGpu = false;
@@ -710,7 +710,15 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
       break;
     case Screen::Credits: drawCredits(dtMs); break;
     case Screen::InCity: drawInCity(dtMs); break;
-    case Screen::ScenarioEnd: drawScenarioEnd(); break;
+    case Screen::ScenarioEnd:   // the results dialog stands over the city view (the original draws it so)
+      if (cityBackdrop && !panelsHidden_) {
+        Input live = ui_.in;
+        ui_.in = Input(); ui_.in.mx = ui_.in.my = -1;
+        drawToolMenu(); drawHud();
+        ui_.in = live; ui_.tooltip.clear();
+      }
+      drawScenarioEnd();
+      break;
   }
   if (ubOpen) { ui_.in = ubLive; drawUserBuildings(); }
   drawMessage();

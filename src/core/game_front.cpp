@@ -1144,7 +1144,7 @@ void Game::drawScenarioEnd() {
   v.title = o.title.empty() ? str(0x041F2625, 4) : o.title;
   const std::string head = str(0x041F2625, 7);   // "Scenario Completed!" (spec 09, string 7)
   v.heading = head.empty() ? std::string(o.win ? "Scenario Completed!" : "Scenario Failed") : head;
-  v.resultsFor = (str(0x041F2625, 0x25).empty() ? std::string("Results for Mayor ") : str(0x041F2625, 0x25) + " ") + o.mayor;
+  v.resultsFor = o.resultsFor.empty() ? "Results for Mayor " + o.mayor : o.resultsFor;
   v.ranks = o.ranks; v.achieved = o.achieved; v.text = o.text;
   v.presenterAdvisor = o.presenterAdvisor; v.mood = o.mood;
   v.captions[0] = str(0x041F2625, 8); v.captions[1] = str(0x041F2625, 9); v.captions[2] = str(0x041F2625, 0xA);

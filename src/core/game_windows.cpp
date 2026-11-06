@@ -533,7 +533,9 @@ void Game::drawWindows(uint32_t dtMs) {
   if (showGoals_) {
     ScenarioGoalsView v;
     if (scen_) v = scen_->goalsView(); else v.inScenario = false;
+    v.startMode = scenStartDialog_;
     finish(goalsWin_.draw(ui_, E, v), showGoals_);
+    if (!showGoals_) scenStartDialog_ = false;
   }
   drawQueryPopup();
   if (!scenPopups_.empty()) {   // scenario pop-ups: one at a time in the same place, until OK or the close box

@@ -475,6 +475,7 @@ class Game {
   ScenarioGoalsWindow goalsWin_;
   fs::path lastScenarioFile_;   // for "Replay Scenario" on the results dialog
   ScenarioPopupWindow scenPopupWin_;
+  bool scenStartDialog_ = false;   // the goals window is showing as the scenario start dialog
   ScenarioEndWindow scenEndWin_;
   std::deque<ScenarioPopupView> scenPopups_;   // cmdPopUpMsg pop-ups waiting for OK, shown one at a time (spec 23 4.7.1)
   ViewDataWindow viewData_;   // data maps, charts and graphs in one window (spec 09 7.1)

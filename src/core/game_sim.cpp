@@ -780,6 +780,8 @@ void Game::startScenarioHooks() {
   h.setDisastersEnabled = [this](bool on) { setDisastersOn(on); };
   h.text = [this](uint32_t g, uint32_t i) { return str(g, i); };
   scen_->start(city(), world_.info.mayorName, world_.info.cityName, h);
+  // A new scenario opens its start dialog before the first tick and pauses the simulation until OK (spec 23 4.7.1, observed).
+  if (!scen_->resumed()) { scenStartDialog_ = true; showGoals_ = true; }
 }
 
 void Game::applyPetitionEffect(const PetitionEffect& e) {

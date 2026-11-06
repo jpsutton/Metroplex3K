@@ -152,12 +152,15 @@ void ScenarioController::dayTick() { if (p_->rt) p_->rt->dayTick(); }
 void ScenarioController::minuteTick() { if (p_->rt) p_->rt->minuteTick(); }
 bool ScenarioController::active() const { return p_->rt && p_->rt->active(); }
 bool ScenarioController::started() const { return p_->rt != nullptr; }
+bool ScenarioController::resumed() const { return p_->loaded && p_->file.hasState; }
 void ScenarioController::setPopupOpen(bool o) { if (p_->rt) p_->rt->setPopupOpen(o); }
 
 ScenarioGoalsView ScenarioController::goalsView() const {
   ScenarioState empty;
   const ScenarioState& st = p_->rt ? p_->rt->state() : empty;
   ScenarioGoalsView v = makeScenarioGoalsView(p_->hooks.text, st, &p_->file, p_->ctx());
+  v.startMode = false;
+  v.title = title();   // the title bar shows the scenario's title (spec 23 4.7.1)
   return v;
 }
 
@@ -177,6 +180,7 @@ ScenarioController::Outcome ScenarioController::outcome() const {
   o.presenterAdvisor = p_->file.header.effectivePresenter();
   o.mood = p_->rt->state().presenterMood ? int(p_->rt->state().presenterMood) : 3;   // the mood of cmdSetResultsDlgText
   o.title = title(); o.mayor = c.mayor;
+  o.resultsFor = expandScenarioTokens(p_->res(0x041F2625, 0x25), c);   // "Results for Mayor %YOURNAME%"
   return o;
 }
 

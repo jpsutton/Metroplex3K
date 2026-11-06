@@ -28,7 +28,7 @@ ScenarioGoalsView makeScenarioGoalsView(const std::function<std::string(uint32_t
   v.title = lbl(0x24, "Scenario goals");
   v.briefingLabel = lbl(3, "Briefing");
   v.goalsLabel = lbl(4, "Goals");
-  v.statusLabel = lbl(5, "Status");
+  v.statusLabel = lbl(5, "Scenario Status:");   // the string already ends in a colon
   v.briefing = resolve(text, file, st.dialogText, ctx);
   for (auto& extra : st.dialogExtra) {
     std::string e = resolve(text, file, extra, ctx);

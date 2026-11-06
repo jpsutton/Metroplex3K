@@ -316,6 +316,8 @@ WindowResult CityPropertiesDialog::draw(Ui& ui, const WinEnv& E, CityPropsState&
 // ================================================================ Scenario dialogs (6.10, spec 23 4.7.1)
 namespace {
 const uint32_t kPanelFill = 0xFFFF927Bu;   // (123,146,255) in the frame's 0xAABBGGRR order
+const uint32_t kInset = 0xFFFFDFDEu;       // (222,223,255): every inset area (text boxes, goals list, results panel, button panels)
+const int kPitch = 14;                      // body, goal and rank text pitch
 
 // Presenter panel: the advisor portrait (92 x 115 cells) in a 1 px frame, and the person's name centred below it.
 void presenterPanel(Ui& ui, const WinEnv& E, Rect panel, int portraitX, int portraitY, int nameY, uint32_t advisor, int mood) {
@@ -339,8 +341,8 @@ bool checkButton(Ui& ui, const WinEnv& E, const char* spot, Rect r) {
 
 // A white text box with an optional scroll bar (only when the text overflows).
 void textBox(Ui& ui, const WinEnv& E, Rect box, const std::string& text, int& scroll) {
-  ui.fill(box, rgb(255, 255, 255));
-  const int lh = lineHeight(ui);
+  ui.fill(box, kInset);
+  const int lh = kPitch;
   const auto lines = wrap(ui, text, box.w - 24, "main10");
   const int visible = std::max(1, box.h / lh);
   const bool overflow = int(lines.size()) > visible;
@@ -358,8 +360,8 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
   const uint32_t ink = rgb(0x31, 0x36, 0x7C);
   // Upper-left panel: heading, (start dialog: the mayor's name), the scrollable text.
   ui.fill(at(13, 34, 328, 178), kPanelFill);
-  const std::string head = v.startMode ? E.se(0x20, "Greetings Mayor:") : (v.statusLabel.empty() ? std::string("Scenario Status") : v.statusLabel) + ":";
-  ui.text(r.x + 20, r.y + 40, head, "title12", ink);
+  const std::string head = v.startMode ? E.se(0x20, "Greetings Mayor:") : (v.statusLabel.empty() ? std::string("Scenario Status:") : v.statusLabel);
+  ui.text(r.x + 20, r.y + 36, head, "title12", ink);
   int textTop = 56;
   if (v.startMode) {
     const Rect nm = at(146, 44, 181, 17);
@@ -372,22 +374,21 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
   // Goals: one row per goal on a 40 px pitch, a 28 px status icon, the text wrapped on two lines.
   ui.text(r.x + 18, r.y + 224, v.goalsLabel.empty() ? "Scenario Goals:" : v.goalsLabel, "title12", ink);
   const Rect lb = at(18, 245, 452, 141);
-  ui.fill(lb, rgb(255, 255, 255)); ui.frame(lb, false);
+  ui.fill(lb, kInset); ui.frame(lb, false);
   const int rows = std::max(1, (lb.h - 4) / 40);
   for (int i = 0; i < rows && goalScroll + i < int(v.goals.size()); i++) {
     const auto& g = v.goals[size_t(goalScroll + i)];
     const int y = r.y + 249 + i * 40;
     const int ix = r.x + 22;
-    if (g.met) {   // green disc with a white tick
-      for (int yy = 0; yy < 28; yy++) for (int xx = 0; xx < 28; xx++) { const int dx = xx - 14, dy = yy - 14; if (dx * dx + dy * dy <= 196) ui.fill({ix + xx, y + yy, 1, 1}, rgb(0, 150, 0)); }
-      for (int k = 0; k < 5; k++) ui.fill({ix + 7 + k, y + 14 + k, 2, 3}, rgb(255, 255, 255));
-      for (int k = 0; k < 9; k++) ui.fill({ix + 11 + k, y + 18 - k, 2, 3}, rgb(255, 255, 255));
-    } else {       // white triangle with a black "!"
-      for (int yy = 0; yy < 26; yy++) { const int half = yy / 2 + 1; ui.fill({ix + 14 - half, y + 1 + yy, half * 2, 1}, rgb(255, 255, 255)); }
-      ui.fill({ix + 13, y + 9, 3, 10}, 0xFF000000u); ui.fill({ix + 13, y + 21, 3, 3}, 0xFF000000u);
+    const Image* icon = E.img(0xC2BF3646u, g.met ? 0xE50ED85Au : 0x252A754Fu);   // DLG.IXF: the red SimCity stamp (met) / the "!" triangle (unmet)
+    if (icon) ui.blit(*icon, r.x + 21 - (g.met ? 3 : 0), y + (g.met ? -2 : 0));
+    else {   // no art: flat stand-ins
+      if (g.met) { for (int k = 0; k < 5; k++) ui.fill({ix + 7 + k, y + 14 + k, 2, 3}, rgb(0, 150, 0)); for (int k = 0; k < 9; k++) ui.fill({ix + 11 + k, y + 18 - k, 2, 3}, rgb(0, 150, 0)); }
+      else { for (int yy = 0; yy < 26; yy++) { const int half = yy / 2 + 1; ui.fill({ix + 14 - half, y + 1 + yy, half * 2, 1}, rgb(255, 255, 255)); }
+             ui.fill({ix + 13, y + 9, 3, 10}, 0xFF000000u); ui.fill({ix + 13, y + 21, 3, 3}, 0xFF000000u); }
     }
     const auto lines = wrap(ui, g.text, lb.w - 60, "main10");
-    for (size_t k = 0; k < lines.size() && k < 2; k++) ui.text(r.x + 57, y + 4 + int(k) * lineHeight(ui), lines[k], "main10", g.met ? rgb(0, 110, 0) : 0xFF000000u);
+    for (size_t k = 0; k < lines.size() && k < 2; k++) ui.text(r.x + 57, y + 4 + int(k) * kPitch, lines[k], "main10", rgb(49, 52, 123));
   }
   if (int(v.goals.size()) > rows) scrollBar(ui, E, {lb.x + lb.w - 16, lb.y, 16, lb.h}, int(v.goals.size()), rows, goalScroll);
   if (checkButton(ui, E, "ok", at(426, 395, 42, 32))) { R.close = true; R.add(Act::Close); }
@@ -404,8 +405,8 @@ WindowResult ScenarioPopupWindow::draw(Ui& ui, const WinEnv& E, const ScenarioPo
   auto at = [&](int x, int y, int w, int h) { return Rect{r.x + x, r.y + y, w, h}; };
   const Rect tp = at(23, 41, 236, 150);
   ui.fill(tp, kPanelFill);
-  if (ui.skin) Skin::drawCell(ui, ui.skin->image(skin_group::Sys, 0x42E55FD4), 4, 1, r.x + 30, r.y + 56);   // the yellow warning triangle
-  const int lh = lineHeight(ui);
+  if (ui.skin) Skin::drawCell(ui, ui.skin->image(skin_group::Sys, 0x42E55FD4), 4, 1, r.x + 31, r.y + 58);   // the yellow warning triangle (MBIcons cell 1)
+  const int lh = kPitch;
   const auto lines = wrap(ui, v.text, 167, "main10");
   const int visible = std::max(1, 138 / lh);
   const bool overflow = int(lines.size()) > visible;
@@ -423,20 +424,19 @@ int ScenarioEndWindow::draw(Ui& ui, const WinEnv& E, const ScenarioEndView& v) {
   ui.panel(r, v.title);
   auto at = [&](int x, int y, int w, int h) { return Rect{r.x + x, r.y + y, w, h}; };
   const uint32_t ink = rgb(0x31, 0x36, 0x7C);
-  ui.fill(at(13, 34, 308, 154), kPanelFill);
+  ui.fill(at(13, 34, 308, 154), kInset);
   ui.text(r.x + 20, r.y + 39, v.heading.empty() ? "Scenario Completed!" : v.heading, "title12", ink);
   ui.text(r.x + 20, r.y + 61, v.resultsFor, "main10", ink);
-  int y = r.y + 92;
+  int y = r.y + 84;   // the first rank line (the original: y 193 on screen at 800 x 600)
   for (size_t i = 0; i < v.ranks.size(); i++) {
     const bool got = int(i) == v.achieved;
-    if (got) {   // the red stamp left of the achieved rank
-      const Rect st = at(18, int(y - r.y) - 12, 40, 26);
-      ui.fill(st, rgb(200, 30, 30)); ui.frame(st, true);
-      ui.textCentered(st, "SimCity", "main9", rgb(255, 255, 255));
+    if (got) {   // the red SimCity stamp left of the achieved rank (the same image as a met goal)
+      if (const Image* st = E.img(0xC2BF3646u, 0xE50ED85Au)) ui.blit(*st, r.x + 20, r.y + 142);
+      else { const Rect st2 = at(18, 142, 40, 26); ui.fill(st2, rgb(200, 30, 30)); ui.textCentered(st2, "SimCity", "main9", rgb(255, 255, 255)); }
     }
     const auto lines = wrap(ui, v.ranks[i], 250, "main10");
-    for (size_t k = 0; k < lines.size() && k < 2; k++) ui.text(r.x + 61, y + int(k) * lineHeight(ui), lines[k], "main10", got ? rgb(0x10, 0x20, 0x90) : rgb(150, 150, 150));
-    y += 19 + (lines.size() > 1 ? lineHeight(ui) : 0);
+    for (size_t k = 0; k < lines.size() && k < 2; k++) ui.text(r.x + 61, y + int(k) * kPitch, lines[k], "main10", got ? rgb(49, 52, 123) : rgb(165, 162, 165));
+    y += 19 + (lines.size() > 1 ? kPitch : 0);
   }
   presenterPanel(ui, E, at(321, 34, 119, 154), r.x + 334, r.y + 34, r.y + 163, v.presenterAdvisor, v.mood);
   int scr = 0;
@@ -445,11 +445,14 @@ int ScenarioEndWindow::draw(Ui& ui, const WinEnv& E, const ScenarioEndView& v) {
   static const char* kDefault[3] = {"Replay Scenario", "Play Another Scenario", "Return to Main Menu"};
   for (int i = 0; i < 3; i++) {
     const Rect bp = at(12 + i * 142, 305, 134, 76);
-    ui.fill(bp, kPanelFill);
-    paragraph(ui, {bp.x + 4, bp.y + 10, bp.w - 8, 32}, v.captions[i].empty() ? kDefault[i] : v.captions[i], "main10", ink);
-    const Rect logo{bp.x + 34, bp.y + 43, 66, 30};
+    ui.fill(bp, kInset);
+    const auto cap = wrap(ui, v.captions[i].empty() ? kDefault[i] : v.captions[i], bp.w - 16, "main10");
+    for (size_t k = 0; k < cap.size() && k < 2; k++) ui.textCentered({bp.x, bp.y + 10 + int(k) * kPitch, bp.w, kPitch}, cap[k], "main10", ink);
+    const Rect logo{bp.x + 31, bp.y + 40, 73, 34};   // the 292 x 34 strip of 4 cells: disabled, normal, pressed, hover
     E.spot("end." + std::to_string(i), logo);
-    if (ui.button(logo, "SimCity")) choice = i;
+    bool clicked = false;
+    if (ui.skin && ui.skin->imageButtonCells(ui, E.img(0xC2BF3646u, 0xC5171C41u), 4, logo, "", false, true, clicked)) { if (clicked) choice = i; }
+    else if (ui.button(logo, "SimCity")) choice = i;
   }
   return choice;
 }
