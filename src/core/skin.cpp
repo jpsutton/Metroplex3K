@@ -143,7 +143,7 @@ static void keyButtonPlate(Image& im) {
     for (int c = 0; c < 3; c++) { r[c] = float((p >> (8 * c)) & 255) / plate[c]; lo = std::min(lo, r[c]); hi = std::max(hi, r[c]); sum += r[c]; }
     if (hi > 1.02f || hi - lo > 0.1f) continue;   // pill pixel: keep
     float a = 1.f - sum / 3.f;
-    p = a < 0.1f ? 0u : (uint32_t(std::lround(a * 255.f)) << 24);   // black + alpha; plate vignette (<10% dark) vanishes
+    p = a < 0.004f ? 0u : (uint32_t(std::lround(a * 255.f)) << 24);   // black + alpha; the faint plate vignette stays too (the original draws it: the soft ring 1-2 px outside the outline) [OBSERVED]
   }
 }
 
