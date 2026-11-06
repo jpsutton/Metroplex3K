@@ -253,6 +253,10 @@ class Renderer : public ICityRasterizer {
   void centreOnWorld(Camera& cam, float x, float z) const override;
 
   void invalidateShade() override { shadeValid_ = false; }
+  // Number of missing-sprite placeholder boxes in the last draw-list build (a complete asset set gives 0).
+  int placeholderCount() const { return placeholdersBuilt_; }
+  // Shaded box standing in for a missing building sprite (cached per zoom, footprint, colour and height).
+  const SpriteImage* placeholderBox(int zoom, int su, int sv, uint32_t col, int hgtUnits);
   // Number of horizontal bands render() rasterises in parallel; 0 = automatic (by height and pool size).
   void setBandCount(int n) override { bands_ = n; }
   // Where the last render() spent its time. setup/bandsWall/tail are wall-clock; the *Cpu values are summed over
@@ -386,6 +390,8 @@ class Renderer : public ICityRasterizer {
   void drawSprite(const Item& it, const RenderOptions& opt, int y0, int y1);
   void tileQuad(const Camera& cam, int u, int v, float sx[4], float sy[4], int wx[4], int wz[4]) const;
   const SpriteImage* getSprite(uint32_t c, uint32_t i);
+  std::unordered_map<uint64_t, std::unique_ptr<SpriteImage>> placeholders_;
+  int placeholdersBuilt_ = 0;   // placeholders in the last item-list build (0 with a complete asset set)
   const Plane* getPlane(uint32_t c, uint32_t i);
   void quadPoly(const Vtx p[4]);
 

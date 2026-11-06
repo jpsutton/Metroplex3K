@@ -91,6 +91,24 @@ int main() {
     CHECK(w.surfaceDrawY(edge, 16000) == 5 && w.surfaceTopY(edge, 16000) == 5);
   }
 
+  // ---- missing-sprite placeholder box (issue #56) ----
+  {
+    Renderer pr;
+    const int zoom = 3, Wh = 4 << zoom, Hh = 2 << zoom;
+    const uint32_t col = rgba(90, 200, 90);
+    const SpriteImage* b = pr.placeholderBox(zoom, 2, 2, col, 6);
+    CHECK(b && b->ok && b == pr.placeholderBox(zoom, 2, 2, col, 6));   // cached
+    const int h = 6 * (1 << zoom) / 2;
+    CHECK(b->img.w == 4 * Wh && b->img.h == h + 4 * Hh && b->L == 0 && b->T == h + 2 * Hh);
+    auto px = [&](int x, int y) { return b->img.px[size_t(y) * b->img.w + x]; };
+    CHECK(px(b->L + 1, b->T) != 0);                         // just right of the anchor (left vertex)
+    CHECK(px(b->img.w / 2, b->img.h / 2) != 0);             // body
+    CHECK(px(b->img.w / 2, 0) == col);                      // roof apex row is the roof colour
+    CHECK(px(0, 0) == 0 && px(b->img.w - 1, 0) == 0 && px(0, b->img.h - 1) == 0);   // transparent corners
+    const SpriteImage* c = pr.placeholderBox(zoom, 1, 3, col, 6);
+    CHECK(c != b && c->img.w == 4 * Wh && c->T == h + Hh);   // other footprint, other sprite
+  }
+
   // ---- far-zoom adjustment (spec 6.2) ----
   {
     int r = 0, g = 0, b = 0;

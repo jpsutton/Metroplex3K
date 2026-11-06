@@ -1083,7 +1083,70 @@ bool Renderer::siteOccupant(uint32_t state, int size, uint32_t agent, ResKey& ou
 namespace {
 uint64_t mix64(uint64_t h, uint64_t v) { h = (h ^ v) * 0x9E3779B97F4A7C15ull; return h ^ (h >> 29); }
 int slotZoomOf(const CsAttrib* cs, int zoom) { return cs->zoomCount < 5 ? zoom - (5 - cs->zoomCount) : zoom; }
+
+// Stand-in box of an occupant that has no sprite: colour by agent type and lot state, height in half altitude steps per
+// zoom unit (shared by the data-less demo view and the missing-sprite placeholders).
+void fallbackLook(const Occupant& o, uint32_t& col, int& hgt) {
+  const int tiles = std::max<int>(1, o.sizeX);
+  const uint32_t t = o.agentType;
+  uint32_t r = 170, g = 170, bl = 170;
+  hgt = 4 * tiles;
+  if (t >= 3000 && t < 5000) { r = 90; g = 200; bl = 90; hgt = 3 * tiles + (t >= 4300 ? 8 : t >= 3700 ? 4 : 0); }
+  else if (t >= 5000 && t < 8000) { r = 90; g = 130; bl = 230; hgt = 4 * tiles + (t >= 6300 ? 10 : 2); }
+  else if (t >= 8000 && t < 10000) { r = 220; g = 200; bl = 70; hgt = 3 * tiles + 2; }
+  else if (t >= 12000 && t < 13000) { r = 200; g = 90; bl = 90; hgt = 6 * tiles; }
+  if (o.state == 4) { r /= 2; g /= 2; bl /= 2; hgt = 2; }
+  else if (o.state == 2) { r = g = bl = 120; }
+  else if (o.state == 8) { r = 110; g = 80; bl = 60; hgt = 1; }
+  else if (o.state == 16) { r = 230; g = 90; bl = 20; hgt = 2; }
+  col = rgba(uint8_t(r), uint8_t(g), uint8_t(bl));
+}
+
+// Scan-fill of a convex polygon into a w x h pixel buffer.
+void fillConvexBuf(uint32_t* buf, int w, int h, const float* px, const float* py, int n, uint32_t col) {
+  float ymin = py[0], ymax = py[0];
+  for (int i = 1; i < n; i++) { ymin = std::min(ymin, py[i]); ymax = std::max(ymax, py[i]); }
+  for (int y = std::max(0, int(std::ceil(ymin))); y <= std::min(h - 1, int(std::floor(ymax))); y++) {
+    float xl = 1e9f, xr = -1e9f;
+    for (int i = 0; i < n; i++) {
+      int j = (i + 1) % n;
+      float y0 = py[i], y1 = py[j];
+      if ((y0 <= y && y1 >= y) || (y1 <= y && y0 >= y)) {
+        float x = (y1 == y0) ? px[i] : px[i] + (px[j] - px[i]) * (float(y) - y0) / (y1 - y0);
+        xl = std::min(xl, x); xr = std::max(xr, x);
+        if (y1 == y0) { xl = std::min(xl, px[j]); xr = std::max(xr, px[j]); }
+      }
+    }
+    for (int x = std::max(0, int(std::ceil(xl))); x <= std::min(w - 1, int(std::floor(xr))); x++) buf[size_t(y) * w + x] = col;
+  }
+}
+uint32_t shadeColour(uint32_t c, float f) { return rgba(uint8_t((c & 255) * f), uint8_t(((c >> 8) & 255) * f), uint8_t(((c >> 16) & 255) * f)); }
 }  // namespace
+
+// Placeholder sprite for an object whose sprite is missing: a shaded box standing on a footprint of su x sv view tiles,
+// anchored at the footprint's left vertex like a building sprite (L = 0, T = box height + su half-diamonds).
+const SpriteImage* Renderer::placeholderBox(int zoom, int su, int sv, uint32_t col, int hgtUnits) {
+  const uint64_t key = (uint64_t(uint32_t(zoom)) << 56) ^ (uint64_t(uint32_t(su)) << 48) ^ (uint64_t(uint32_t(sv)) << 40) ^ (uint64_t(uint32_t(hgtUnits)) << 32) ^ col;
+  auto it = placeholders_.find(key);
+  if (it != placeholders_.end()) return it->second.get();
+  const int Wh = 4 << zoom, Hh = 2 << zoom, A = 1 << zoom;
+  const int h = std::max(1, hgtUnits * A / 2);
+  auto sp = std::make_unique<SpriteImage>();
+  sp->img.w = (su + sv) * Wh; sp->img.h = h + (su + sv) * Hh;
+  sp->img.px.assign(size_t(sp->img.w) * size_t(sp->img.h), 0u);
+  sp->L = 0; sp->T = h + su * Hh; sp->R = sp->img.w; sp->B = sp->img.h - sp->T; sp->ok = true; sp->hasSpan = true;
+  const float H = float(h);
+  // Ground diamond corners relative to the image: top, right, bottom, left.
+  const float tx[4] = {float(su * Wh), float((su + sv) * Wh), float(sv * Wh), 0.f};
+  const float ty[4] = {H, H + float(sv * Hh), H + float((su + sv) * Hh), H + float(su * Hh)};
+  uint32_t* buf = sp->img.px.data(); const int W = sp->img.w, HH = sp->img.h;
+  { float px[4] = {tx[3], tx[2], tx[2], tx[3]}, py[4] = {ty[3], ty[2], ty[2] - H, ty[3] - H}; fillConvexBuf(buf, W, HH, px, py, 4, shadeColour(col, 0.7f)); }
+  { float px[4] = {tx[2], tx[1], tx[1], tx[2]}, py[4] = {ty[2], ty[1], ty[1] - H, ty[2] - H}; fillConvexBuf(buf, W, HH, px, py, 4, shadeColour(col, 0.5f)); }
+  { float px[4] = {tx[0], tx[1], tx[2], tx[3]}, py[4] = {ty[0] - H, ty[1] - H, ty[2] - H, ty[3] - H}; fillConvexBuf(buf, W, HH, px, py, 4, col); }
+  const SpriteImage* r = sp.get();
+  placeholders_[key] = std::move(sp);
+  return r;
+}
 
 void Renderer::bindAnim(AnimInst& a, const AnimCand& c, int zoom, int rot, int dateMD) {
   a.slotZoom = zoom; a.slotRot = rot;
@@ -1349,6 +1412,24 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
 
   auto ownFlag = [&]() { return (opt.ownImageFlags & (0x10 << z)) != 0; };
 
+  // A building the data describes (occupant record with an appearance, not a filler of a larger lot) but whose sprite
+  // could not be found is drawn as a coloured box, so a partial asset pack shows where things are (issue #56).
+  auto addPlaceholder = [&](const Occupant& o) {
+    const OccAttr* oa = data_->occupant(o.occId, false, o.keyType == T_OCC_ATTR_PORT);
+    if (!oa || oa->filler() || oa->appearance.type == 0) return;
+    Item it;
+    setGeometry(it, o.x, o.z, o.y, o.sizeX, o.sizeZ);
+    uint32_t col; int hgt;
+    fallbackLook(o, col, hgt);
+    const SpriteImage* sp = placeholderBox(z, it.u1 - it.u0, it.v1 - it.v0, col, hgt);
+    if (!sp) return;
+    it.cAx = it.ax; it.cAy = it.ay; it.cL = sp->L; it.cT = sp->T; it.cW = sp->img.w; it.cH = sp->img.h;
+    it.spr = sp; it.dbl = false; it.groundLevel = false; it.deck = false;
+    placeholdersBuilt_++;
+    if (!itemCacheOn_ && cullOut(originX_ + it.ax, originY_ + it.ay, sp->img.w, sp->img.h, sp->L, sp->T)) return;
+    statics.push_back(it);
+  };
+
   auto addOccupant = [&](uint32_t occId, bool net, bool port, int x, int zz, int y, int rot, int sizeX, int sizeZ, bool ground) {
     if (!data_) return;
     const OccAttr* oa = data_->occupant(occId, net, port);
@@ -1366,6 +1447,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     statics = cachedStatics_;
     animCands = cachedAnim_;
   } else {
+    placeholdersBuilt_ = 0;
     const bool net = true;
     // Surface pieces on the terrain are registered to a corner fixed in the piece's own frame (World::surfaceDrawY, spec 25 5.1).
     auto surfaceY = [&](const NetPiece& np) {
@@ -1391,7 +1473,9 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
           ResKey rk;
           if (siteOccupant(ost, std::max(o.sizeX, o.sizeZ), o.agentType, rk)) { id = rk.instance; port = rk.type == T_OCC_ATTR_PORT; }
         }
+        const size_t n0 = statics.size() + flat.size();
         addOccupant(id, false, port, o.x, o.z, o.y, o.rot, o.sizeX, o.sizeZ, false);
+        if (data_ && statics.size() + flat.size() == n0) addPlaceholder(o);
       }
       for (int x = 0; x < w.W && opt.flora; x++)
         for (int zz = 0; zz < w.H; zz++) {
@@ -1675,23 +1759,7 @@ void Renderer::drawPreviews(const Camera& cam, const RenderScene& scene) {
 void Renderer::drawFallbackBoxes(const Camera& cam) {
   const World& w = *world_;
   const int z = cam.zoom, Wh = 4 << z, Hh = 2 << z, A = 1 << z;
-  auto fillConvex = [&](const float* px, const float* py, int n, uint32_t col) {
-    float ymin = py[0], ymax = py[0];
-    for (int i = 1; i < n; i++) { ymin = std::min(ymin, py[i]); ymax = std::max(ymax, py[i]); }
-    for (int y = std::max(0, int(std::ceil(ymin))); y <= std::min(fbH_ - 1, int(std::floor(ymax))); y++) {
-      float xl = 1e9f, xr = -1e9f;
-      for (int i = 0; i < n; i++) {
-        int j = (i + 1) % n;
-        float y0 = py[i], y1 = py[j];
-        if ((y0 <= y && y1 >= y) || (y1 <= y && y0 >= y)) {
-          float x = (y1 == y0) ? px[i] : px[i] + (px[j] - px[i]) * (float(y) - y0) / (y1 - y0);
-          xl = std::min(xl, x); xr = std::max(xr, x);
-          if (y1 == y0) { xl = std::min(xl, px[j]); xr = std::max(xr, px[j]); }
-        }
-      }
-      for (int x = std::max(0, int(std::ceil(xl))); x <= std::min(fbW_ - 1, int(std::floor(xr))); x++) fb_[size_t(y) * fbW_ + x] = col;
-    }
-  };
+  auto fillConvex = [&](const float* px, const float* py, int n, uint32_t col) { fillConvexBuf(fb_.data(), fbW_, fbH_, px, py, n, col); };
   struct Box { int u0, u1, v0, v1, y, hgt; uint32_t col; int key; };
   std::vector<Box> boxes;
   for (const Occupant& o : w.occupants) {
@@ -1702,20 +1770,10 @@ void Renderer::drawFallbackBoxes(const Camera& cam) {
     b.u0 = *std::min_element(us, us + 4); b.u1 = *std::max_element(us, us + 4);
     b.v0 = *std::min_element(vs, vs + 4); b.v1 = *std::max_element(vs, vs + 4);
     b.y = o.y;
-    int tiles = o.sizeX;
-    uint32_t t = o.agentType;
-    uint32_t r = 170, g = 170, bl = 170;
-    int hgt = 4 * tiles;
-    if (t >= 3000 && t < 5000) { r = 90; g = 200; bl = 90; hgt = 3 * tiles + (t >= 4300 ? 8 : t >= 3700 ? 4 : 0); }
-    else if (t >= 5000 && t < 8000) { r = 90; g = 130; bl = 230; hgt = 4 * tiles + (t >= 6300 ? 10 : 2); }
-    else if (t >= 8000 && t < 10000) { r = 220; g = 200; bl = 70; hgt = 3 * tiles + 2; }
-    else if (t >= 12000 && t < 13000) { r = 200; g = 90; bl = 90; hgt = 6 * tiles; }
-    if (o.state == 4) { r /= 2; g /= 2; bl /= 2; hgt = 2; }
-    else if (o.state == 2) { r = g = bl = 120; }
-    else if (o.state == 8) { r = 110; g = 80; bl = 60; hgt = 1; }
-    else if (o.state == 16) { r = 230; g = 90; bl = 20; hgt = 2; }
+    uint32_t col; int hgt;
+    fallbackLook(o, col, hgt);
     b.hgt = hgt * A / 2;
-    b.col = rgba(uint8_t(r), uint8_t(g), uint8_t(bl));
+    b.col = col;
     b.key = b.u1 + b.v1;
     boxes.push_back(b);
   }
@@ -1726,7 +1784,7 @@ void Renderer::drawFallbackBoxes(const Camera& cam) {
     auto sy = [&](int u, int v) { return float(originY_ + (u + v) * Hh - b.y * A); };
     float tx[4] = {sx(b.u0, b.v0), sx(b.u0, b.v1), sx(b.u1, b.v1), sx(b.u1, b.v0)};
     float ty[4] = {sy(b.u0, b.v0), sy(b.u0, b.v1), sy(b.u1, b.v1), sy(b.u1, b.v0)};
-    auto shade = [](uint32_t c, float f) { return rgba(uint8_t((c & 255) * f), uint8_t(((c >> 8) & 255) * f), uint8_t(((c >> 16) & 255) * f)); };
+    auto shade = shadeColour;
     float h = float(b.hgt);
     // Left face (left->bottom edge), right face (bottom->right edge), then the roof.
     { float px[4] = {tx[3], tx[2], tx[2], tx[3]}, py[4] = {ty[3], ty[2], ty[2] - h, ty[3] - h}; fillConvex(px, py, 4, shade(b.col, 0.7f)); }
