@@ -271,7 +271,8 @@ void Game::fillAdvisorInputs(AdvisorInputs& in) {
   in.aura = int(c.aura.cityAura);
   in.plan.demand[0] = sim_.valveR.value; in.plan.demand[1] = sim_.valveC.value; in.plan.demand[2] = sim_.valveI.value;
   in.plan.treasury = sim_.funds;
-  in.plan.monthIndex = c.clock.date().month - 1;
+  in.plan.month = c.clock.date().month;
+  in.plan.holidaysEnabled = haveData_ && !str(0x549B17B2u, 0x12C).empty();   // the Holidays content is installed (its petitioner strings exist)
   in.trans.nRoad = c.roadCount();
   int64_t totalB = 0;
   int unpowered = 0, needPower = 0;

@@ -186,7 +186,9 @@ struct AdvisorInputs {
     int64_t totalBuildings = 0;                    // B
     bool farmersMarketAvailable = false, proReadingEnacted = false, tourismEnacted = false;
     int64_t treasury = 0;
-    bool holidaysEnabled = false; int monthIndex = 0;   // 0-based month
+    bool holidaysEnabled = false; int month = 1;   // calendar month 1..12 (rewards 20001 / 20002)
+    // Weighted park measure of the rewards 14003 and 20002 and the planner's park ratio (14310 itself is not part of it) [STATIC, spec 22 6.2].
+    int64_t parkMeasure() const { return int64_t(n14311) + 9 * n14312 + 16 * n14313 + 4 * n14314 + 4 * n14315 + n14316; }
   } plan;
 
   struct Demographics {

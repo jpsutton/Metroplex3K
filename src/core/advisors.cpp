@@ -324,11 +324,13 @@ void RewardTable::evaluate(const AdvisorInputs& in, PetitionerManager& pm) {
         case 13871: ok = P.eq > param("EQ_NEEDED_FOR_UNIVERSITY") && P.proReadingEnacted; break;
         case 13872: ok = P.lifeExpectancy > param("LE_NEEDED_FOR_MEDICAL_CENTER"); break;
         case 13874: ok = P.eq > param("EQ_NEEDED_FOR_SCIENCE_CENTER"); break;
-        case 14003: ok = P.n14310 > param("PARKS_NEEDED_FOR_NATIONAL_PARK"); break;   // [OPEN] alt. population measure
+        case 14003: ok = P.parkMeasure() > param("PARKS_NEEDED_FOR_NATIONAL_PARK"); break;
         case 14325: ok = P.airportCount > 5 && P.tourismEnacted; break;
         case 14550: break;                                                           // [OPEN] alt. population measure
-        case 20001: ok = P.holidaysEnabled && P.monthIndex >= 7 && P.monthIndex <= 9; break;
-        case 20002: ok = P.holidaysEnabled && P.monthIndex >= 9 && P.monthIndex <= 11 && P.n14310 > 29; break;
+        // Calendar month 1-12: 20001 in July-September, 20002 in September-November with a park measure above 29 [STATIC]; 20001 is
+        // also skipped in some game modes (game-state getter 0x1E/0x1F/0x20/0x22/0x31) [OPEN].
+        case 20001: ok = P.holidaysEnabled && P.month > 6 && P.month < 10; break;
+        case 20002: ok = P.holidaysEnabled && P.month > 8 && P.month < 12 && P.parkMeasure() > 29; break;
         default: break;
       }
     }
@@ -794,7 +796,7 @@ void AdvisorManager::planPetitions(const AdvisorInputs& in, GameRng& rng) {
     if (rng.rand(2) == 0) { Pm.request(0x27, 0, 30); Pm.request(0x28, 0, 30); }
     else Pm.request(0x28, 0, 30);
   }
-  int64_t Pk = int64_t(P.n14311) + 9 * P.n14312 + 16 * P.n14313 + 4 * P.n14314 + 4 * P.n14315 + P.n14316;
+  int64_t Pk = P.parkMeasure();
   int64_t B = P.totalBuildings, F = P.farms;
   if (thr.get("PARK_RATIO") * Pk < B - F - Pk && in.aura < thr.get("PARK_AURA_CUTOFF") && !Pm.pending(0x49) && draw(100, 2))
     Pm.request(0x49, 0, 120);

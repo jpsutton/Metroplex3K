@@ -413,17 +413,35 @@ static void testAdvisors() {
   am.rewards.load(cp);
   CHECK(am.rewards.entries().size() == 4 && am.rewards.entries()[3].isDeal);
   CHECK(am.rewards.param("PARKS_NEEDED_FOR_NATIONAL_PARK") == 3);
-  in.plan.n14310 = 2; in.plan.eq = 50;
+  in.plan.n14311 = 2; in.plan.eq = 50;   // park measure = n14311 + 9 n14312 + ... = 2
   am.evaluate(kAdvPlanner, in, rng, out);
   CHECK(pm.pending(5));                    // mayor's house petition, persistent
   CHECK(am.rewards.find(10110)->available);
   CHECK(!pm.pending(136) && !pm.pending(132));
-  in.plan.n14310 = 4; in.plan.eq = 95;
+  in.plan.n14311 = 4; in.plan.eq = 95;   // park measure 4 > 3
   am.evaluate(kAdvPlanner, in, rng, out);
   CHECK(pm.pending(136) && pm.pending(132));
   CHECK(!pm.pending(149));                 // deals are skipped by the reward logic
   am.rewards.markAvailable(14003); am.rewards.markOwned(14003);
   CHECK(am.rewards.find(14003)->owned);
+  {  // Holidays rewards (spec 22 6.2): calendar month, weighted park measure
+    AdvisorManager hm; PetitionerManager hp; hm.petitioners = &hp;
+    hm.rewards.load(IniFile::fromText("[REWARD_BUILDINGS]\n20001=Haunted;0;0;300;1\n20002=Skating;0;0;303;1\n[REWARD_BUILDINGS_2]\n"));
+    AdvisorInputs hi; hi.population = 1000; hi.year = 2000; hi.plan.holidaysEnabled = true;
+    hi.plan.n14312 = 4;                       // park measure 36 > 29
+    for (int m = 1; m <= 12; m++) {
+      hp.clear(); hi.plan.month = m;
+      hm.rewards.evaluate(hi, hp);
+      CHECK(hp.pending(300) == (m >= 7 && m <= 9));
+      CHECK(hp.pending(303) == (m >= 9 && m <= 11));
+    }
+    hp.clear(); hi.plan.month = 9; hi.plan.n14312 = 3;   // 27: no skating rink
+    hm.rewards.evaluate(hi, hp);
+    CHECK(hp.pending(300) && !hp.pending(303));
+    hp.clear(); hi.plan.holidaysEnabled = false; hi.plan.n14312 = 4;
+    hm.rewards.evaluate(hi, hp);
+    CHECK(!hp.pending(300) && !hp.pending(303));
+  }
 
   // Demographics
   in.demo.nHospital = 0; in.demo.nSchool = 0;
