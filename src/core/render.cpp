@@ -671,7 +671,7 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, 
         const Image& im = ovSlot == 0 ? pal_.basic : pal_.data[std::max(0, std::min(2, ovSlot - 1))];
         for (int i = 0; i < 4; i++) {
           int r, g, b;
-          fetch(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])] / 2, r, g, b);
+          fetch(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])] / 2 + (ovSlot == 0 ? 16 : 0), r, g, b);   // palBasic: the lit half of the cos ramp, flat tile = column 23 [INFERRED from the Traffic view's zone tints]
           farZoomAdjust(z, r, g, b);
           P[i][2] = float(r); P[i][3] = float(g); P[i][4] = float(b);
         }
@@ -841,7 +841,7 @@ void Renderer::collectTerrainTris(const Camera& cam, const RenderOptions& opt, s
         const Image& im = ovSlot == 0 ? pal_.basic : pal_.data[std::max(0, std::min(2, ovSlot - 1))];
         for (int i = 0; i < 4; i++) {
           int r, g, b;
-          fetch(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])] / 2, r, g, b);
+          fetch(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])] / 2 + (ovSlot == 0 ? 16 : 0), r, g, b);   // palBasic: the lit half of the cos ramp, flat tile = column 23 [INFERRED from the Traffic view's zone tints]
           farZoomAdjust(z, r, g, b);
           P[i][2] = float(r); P[i][3] = float(g); P[i][4] = float(b);
         }

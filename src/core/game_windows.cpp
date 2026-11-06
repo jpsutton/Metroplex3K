@@ -400,13 +400,15 @@ void Game::applyLayers() {
   ropt_.subways = L.underground == 0;
   ropt_.pipes = L.underground == 1;
   // Data layers hide buildings, flora and automata; networks stay (spec 25 9.2). Traffic keeps the zone tint.
-  ropt_.flora = above && L.flora;
+  ropt_.flora = above ? L.flora : view && (cityLayerViews()[li].layer == DataLayer::Crime || cityLayerViews()[li].layer == DataLayer::Fire);
   ropt_.automata = above && L.transport;
   // The Zones layer is a flat palBasic overlay (buildZoneOverlay); the translucent road tint stays only for the Traffic layer.
   ropt_.zonePaint = false;   // the Traffic view's zone tint is part of the layer overlay
   if (above && (!L.transport || !L.powerLines)) {
     const bool t = L.transport, p = L.powerLines;
     ropt_.showNet = [this, t, p](const NetPiece& np) { return sim_.city().kindOf(np) == uint32_t(NetworkKind::Power) ? p : t; };
+  } else if (view && (cityLayerViews()[li].layer == DataLayer::Crime || cityLayerViews()[li].layer == DataLayer::Fire)) {
+    ropt_.showNet = nullptr;   // the 0x4800 filter passes roads and street trees (only the buildings are hidden) [OBSERVED]
   } else if (view && cityLayerViews()[li].layer == DataLayer::Power) {
     ropt_.showNet = [this](const NetPiece& np) { return sim_.city().kindOf(np) == uint32_t(NetworkKind::Power); };   // only power lines and plants (flag 0x400000)
   } else if (view && (cityLayerViews()[li].layer == DataLayer::Aura || cityLayerViews()[li].layer == DataLayer::LandValue ||

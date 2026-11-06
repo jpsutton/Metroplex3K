@@ -726,7 +726,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
   const bool agePage = tab <= 2;
   const uint32_t frameTL = agePage ? rgb(123, 142, 255) : rgb(123, 138, 255), frameBR = agePage ? rgb(255, 255, 255) : rgb(255, 243, 255);   // the pie pages' frame colours differ [OBSERVED]
   ui.fill({box.x, box.y, 1, box.h}, frameTL); ui.fill({box.x, box.y, box.w, 1}, frameTL);
-  ui.fill({box.x + box.w - 1, box.y, 1, box.h}, frameBR); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, frameBR);
+  ui.fill({box.x + box.w - (agePage ? 1 : 2), box.y, 1, box.h}, frameBR); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, frameBR);
   // Stripe bands (spec 09 7.1.1): each page has its band period and the row of the first edge, counted from the plot top (y = 51); the Workforce
   // band draws them from the page's pink tile (5E5:31 Health 15 px, 33 Education 17 px, 35 Population 12 px), the rest of the plot draws the
   // same bands in lavender. The pie pages keep the Education pattern.
@@ -820,7 +820,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     // heading at the top left of the box, then one colour bar per category present
     { std::string head = E.win(el ? 0x28A : 0x1F3, el ? "Annually Averaged" : "% Garbage Goes To:");
       auto lines = wrap(ui, head, 168, "main10");
-      ui.text(box.x + 7, box.y + 5, lines.empty() ? head : lines[0], "main10", kInkBlue); }   // the first line only; the legend bars cover the rest
+      ui.text(box.x + 7, box.y + 5, lines.empty() ? head : lines[0], "main10", rgb(49, 52, 123)); }   // the first line only; the legend bars cover the rest
     std::vector<PieSlice> slices;
     int by = box.y + 20;
     const int barH = el ? 14 : 23, barPitch = el ? 16 : 25;   // legend bars x 98..264: 14 rows at a 16 px pitch (electricity), 23 rows at 25 (garbage) [OBSERVED]
@@ -835,7 +835,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(!el && d.garbageProduced >= 0 ? int64_t(std::llround(d.garbageProduced / 10.0)) : int64_t(total)));
   }
   const int capDy = -6;   // the caption lines sit 6 px higher on every chart page (observed)
-  ui.textCentered({r.x + 55, r.y + 249 + capDy, 340, 14}, cap1, "main10", kInkBlue);
+  ui.textCentered({r.x + 55, r.y + 249 + capDy, 340, 14}, cap1, agePage ? "main10" : "main9", kInkBlue);   // the pie pages' caption is MAIN9 [OBSERVED]
   if (!cap2.empty()) ui.textCentered({r.x + 55, r.y + 265 + capDy, 340, 14}, cap2, "main10", rgb(247, 142, 90));
   static const uint32_t tid[5] = {0x1DD, 0x1E0, 0x1E1, 0x1DE, 0x1DF};
   static const char* const tfb[5] = {"Education", "Health", "Population", "Electricity", "Garbage"};
