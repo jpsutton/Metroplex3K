@@ -375,6 +375,8 @@ class NeighbourDeals {
   // Register a network piece on an edge tile; returns neighbour index or -1.
   int registerConnection(ConnKind kind, int x, int z, int w, int h);
   int connectionCount(int neighbour, ConnKind kind) const;
+  // Bulldozing a network tile removes every connection of every kind there; the edge neighbour's counters drop with them.
+  void removeConnectionsAt(int x, int z, int w, int h);
 
   // Monthly step (neighbours subsystem): January growth, then age += 1 for all non-terminated deals
   // and removal of terminated ones. `month` is the month of the run.

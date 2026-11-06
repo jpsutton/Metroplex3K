@@ -1544,23 +1544,20 @@ bool City::buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& p
     if (r.status == COMMIT_OK) any = true;
   }
   {  // write back new connections
-    std::set<int> kindsAdded[4];
     for (const auto& t : map.connections()) {
       if (before.count(t)) continue;
       const int nk = std::get<0>(t), x = std::get<1>(t), z = std::get<2>(t);
       if (nk < 1 || nk > 6) continue;
       neighbours.conn[setOfKind[nk]].insert((uint32_t(x) << 16) | uint32_t(z));
-      int edge = edgeNeighbour(x, z, world_->W, world_->H);
-      if (edge >= 0 && edge < 4) kindsAdded[edge].insert(nk);
-    }
-    for (int e = 0; e < 4; e++)
-      for (int nk : kindsAdded[e]) {
-        Neighbour& nb = neighbours.neighbours[e];
-        switch (nk) {
-          case 1: nb.nRoad++; break; case 2: nb.nRail++; break; case 3: nb.nPower++; break;
-          case 4: nb.nHighway++; break; case 5: nb.nPipe++; break; case 6: nb.nSubway++; break;
-        }
+      // One count per connection tile, as NeighbourDeals::registerConnection counts (and as bulldozing removes them).
+      const int edge = edgeNeighbour(x, z, world_->W, world_->H);
+      if (edge < 0 || edge >= 4) continue;
+      Neighbour& nb = neighbours.neighbours[edge];
+      switch (nk) {
+        case 1: nb.nRoad++; break; case 2: nb.nRail++; break; case 3: nb.nPower++; break;
+        case 4: nb.nHighway++; break; case 5: nb.nPipe++; break; case 6: nb.nSubway++; break;
       }
+    }
   }
   if (any) rebuildIndex();
   return any;
@@ -1587,7 +1584,7 @@ bool City::bulldoze(int x0, int z0, int x1, int z1) {
   // Bulldozing a network piece removes every connection of every kind at that tile (spec 12 s8 "Removal") [STATIC].
   for (auto& kv : netTiles)
     for (auto& t : kv.second)
-      for (auto& set : neighbours.conn) set.erase((uint32_t(t.first) << 16) | uint32_t(t.second));
+      neighbours.removeConnectionsAt(t.first, t.second, world_->W, world_->H);
   // Spec 18 §11 [STATIC]: each removed piece clears its flag bits and zeroes its own network layer's
   // live + snapshot density on the footprint (span 0x4000 is never cleared here).
   if (traffic) {

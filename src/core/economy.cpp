@@ -798,6 +798,17 @@ int NeighbourDeals::registerConnection(ConnKind kind, int x, int z, int w, int h
   return n;
 }
 
+void NeighbourDeals::removeConnectionsAt(int x, int z, int w, int h) {
+  const uint32_t packed = (uint32_t(x) << 16) | uint32_t(z);
+  static const ConnKind kindOfSet[6] = {ConnRail, ConnRoad, ConnPipe, ConnPower, ConnHighway, ConnSubway};   // saved set order
+  const int n = edgeNeighbour(x, z, w, h);
+  for (int i = 0; i < 6; i++)
+    if (conn[i].erase(packed) && n >= 0 && n < kNeighbours) {
+      uint32_t& c = countRef(neighbours[n], kindOfSet[i]);
+      if (c > 0) c--;
+    }
+}
+
 int NeighbourDeals::connectionCount(int n, ConnKind kind) const {
   Neighbour tmp = neighbours[n];
   return int(countRef(tmp, kind));

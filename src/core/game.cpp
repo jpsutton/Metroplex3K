@@ -892,7 +892,7 @@ bool Game::drawSkinnedToolMenu() {
     if (!enabled) return;
     flyCurrent_[flyId] = bid;
     execute(eb.item);
-    if (tool_ != ToolKind::Unavailable) { openFly_ = 0; openRoot_ = 0; }
+    openFly_ = 0;   // the sub-menu column stays open (observed)
   };
   for (int k = 0; k < int(sm->second.buttons.size()); k++) {
     const MenuButton& b = menu_.buttons[sm->second.buttons[k]];
@@ -902,18 +902,13 @@ bool Game::drawSkinnedToolMenu() {
     if (tip.empty() && b.sub) tip = menuTitle(b.sub);   // a button with a fly-out is named after the fly-out
     const Image* strip = skin_.toolStrip(b.id);
     bool clicked = false;
-    // A button that owns a fly-out (spec 08 7 [OBSERVED]): a plain click activates the fly-out's checked entry at once; pressing and holding
-    // for about a second opens the fly-out, and releasing on one of its entries selects it.
-    const int64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    if (b.sub) {
-      if (ui_.in.pressed && ui_.hover(r)) { flyHoldBtn_ = b.id; flyHoldStartMs_ = nowMs; }
-      if (flyHoldBtn_ == b.id && ui_.in.down && ui_.hover(r) && openFly_ != b.sub && nowMs - flyHoldStartMs_ >= 1000) openFly_ = b.sub;
-    }
+    // A button that owns a fly-out (spec 08 7 [OBSERVED, 50 fps capture]): the fly-out appears on mouse-down, within one frame, and stays only
+    // while the button is held. Releasing on one of its entries selects it; releasing on the button itself runs the checked entry; releasing
+    // elsewhere dismisses it and changes nothing. There is no hold delay.
+    if (b.sub && ui_.in.pressed && ui_.hover(r)) openFly_ = b.sub;
     auto onClick = [&]() {
       if (!b.sub) { execute(b.item); if (tool_ != ToolKind::Unavailable) openRoot_ = 0; return; }
-      if (openFly_ == b.sub || flyHoldBtn_ != b.id) return;   // released after a hold that opened the fly-out, or a press that began elsewhere
-      flyHoldBtn_ = 0;
-      activateFlyEntry(b.sub, 0);
+      if (openFly_ == b.sub) activateFlyEntry(b.sub, 0);   // released over the button after a press (or a hold)
     };
     if (strip && skin_.imageButtonCells(ui_, strip, 4, r, tip, openFly_ == b.sub && b.sub, true, clicked, Ui::kTipLeft)) {
       if (clicked) onClick();
@@ -963,8 +958,8 @@ bool Game::drawSkinnedToolMenu() {
         if (enabled && ui_.clicked(row)) activateFlyEntry(flyOpen, bid);
         fy += 16;
       }
-      // Releasing the mouse away from the fly-out and its button dismisses it.
-      if (openFly_ && ui_.in.released && !ui_.hover(fr) && !ui_.hover(flyAnchor)) openFly_ = 0;
+      // The fly-out lives only while the mouse button is down: any release ends it (an entry released on was run above).
+      if (openFly_ && (ui_.in.released || !ui_.in.down)) openFly_ = 0;
     }
   }
   return true;
