@@ -631,6 +631,85 @@ void pieChart(Ui& ui, int cx, int cy, const std::vector<PieSlice>& sl) {
     ui.text(px - ui.textWidth(t, "main10") / 2, py - 6, t, "main10", 0);
   }
 }
+// The original's pie control (spec 09 7.1.1 [STATIC, SIMUI 0x100749E5]): a 172 x 86 ellipse mask stamped 23 times (ellipse plus 22 px of rim), radial lines in the
+// slice colours, each slice flood-filled from its label anchor, then the 172 x 108 grey shading image applied per channel (the dither is baked into it), then the
+// percentages. Counter-clockwise from 12 o'clock. Returns false when the art is missing.
+bool pieChartArt(Ui& ui, const WinEnv& E, int ox, int oy, const std::vector<PieSlice>& sl) {
+  const Image* mask = E.img(0xC2BF3646u, 0x62D32734u);
+  const Image* shade = E.img(0xC2BF3646u, 0x02D32710u);
+  if (!mask || mask->empty() || !shade || shade->empty() || sl.empty()) return false;
+  const int W = 172, H = 108, kRim = 22, cx = 86, cy = 43;
+  double total = 0; for (const auto& s : sl) total += s.value;
+  if (total <= 0) return false;
+  total = std::max(total, 1e-4);
+  const uint32_t kBase = 0x01010100u, kNone = 0u;
+  std::vector<uint32_t> buf(size_t(W) * H, kNone);
+  for (int k = 0; k <= kRim; k++)
+    for (int y = 0; y < mask->h && y + k < H; y++)
+      for (int x = 0; x < mask->w && x < W; x++)
+        if (mask->px[size_t(y) * mask->w + x] >> 24) buf[size_t(y + k) * W + x] = kBase;
+  auto put = [&](int x, int y, uint32_t c) { if (x >= 0 && y >= 0 && x < W && y < H && buf[size_t(y) * W + x] != kNone) buf[size_t(y) * W + x] = c; };
+  auto line = [&](int x0, int y0, int x1, int y1, uint32_t c) {
+    int dx = std::abs(x1 - x0), dy = -std::abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+    for (int g = 0; g < 1000; g++) {
+      put(x0, y0, c);
+      if (x0 == x1 && y0 == y1) break;
+      const int e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+  };
+  auto fill = [&](int sx, int sy, uint32_t c) {
+    if (sx < 0 || sy < 0 || sx >= W || sy >= H || buf[size_t(sy) * W + sx] != kBase) return;
+    std::vector<std::pair<int, int>> st{{sx, sy}};
+    while (!st.empty()) {
+      auto [x, y] = st.back(); st.pop_back();
+      if (x < 0 || y < 0 || x >= W || y >= H || buf[size_t(y) * W + x] != kBase) continue;
+      buf[size_t(y) * W + x] = c;
+      st.push_back({x + 1, y}); st.push_back({x - 1, y}); st.push_back({x, y + 1}); st.push_back({x, y - 1});
+    }
+  };
+  const double kTwoPi = 6.2831855, kHalfPi = 1.5707964;
+  auto edge = [&](double f, int& ex, int& ey) { const double th = f * kTwoPi + kHalfPi; ex = cx + int(86.0 * std::cos(th)); ey = cy - int(43.0 * std::sin(th)); };
+  struct Lab { int ax, ay; double frac; uint32_t col; };
+  std::vector<Lab> labs;
+  double acc = 0;
+  for (const auto& s : sl) {
+    const double f = s.value / total, f0 = acc, f1 = acc + f;
+    acc = f1;
+    int sx, sy, ex, ey, mx, my;
+    edge(f0, sx, sy); edge(f1, ex, ey); edge((f0 + f1) / 2, mx, my);
+    const double k = f > 0.1 ? 0.6 : 0.8;
+    const int ax = cx + int(double(mx - cx) * k), ay = cy + int(double(my - cy) * k);
+    line(cx, cy, sx, sy, s.col); line(cx, cy, ex, ey, s.col);
+    for (auto p : {std::pair<int, int>{sx, sy}, std::pair<int, int>{ex, ey}}) if (p.second > cy) for (int d = 1; d <= kRim; d++) put(p.first, p.second + d, s.col);
+    if (ax != ex || ay != ey) fill(ax, ay, s.col);
+    labs.push_back({ax, ay, f, s.col});
+  }
+  // Shading: per channel, s < 125 darkens, 125..131 unchanged, >= 132 lightens.
+  for (int y = 0; y < H && y < shade->h; y++)
+    for (int x = 0; x < W && x < shade->w; x++) {
+      uint32_t& d = buf[size_t(y) * W + x];
+      if (d == kNone) continue;
+      if (d == kBase) d = labs.empty() ? kBase : labs.back().col;
+      const int sg = int(shade->px[size_t(y) * shade->w + x] & 255);
+      int ch[3] = {int(d & 255), int((d >> 8) & 255), int((d >> 16) & 255)};
+      for (int& c : ch) {
+        if (sg < 125) c = c * sg / 128;
+        else if (sg >= 132) c = c + (sg - 128) * (255 - c) / 128;
+      }
+      d = 0xFF000000u | (uint32_t(ch[2]) << 16) | (uint32_t(ch[1]) << 8) | uint32_t(ch[0]);
+    }
+  for (int y = 0; y < H; y++)
+    for (int x = 0; x < W; x++)
+      if (buf[size_t(y) * W + x] != kNone && ox + x >= 0 && oy + y >= 0 && ox + x < ui.W && oy + y < ui.H) ui.at(ox + x, oy + y) = buf[size_t(y) * W + x];
+  for (const Lab& l : labs) {
+    const std::string t = std::to_string(int(std::lround(l.frac * 100))) + "%";
+    const int sum = int(l.col & 255) + int((l.col >> 8) & 255) + int((l.col >> 16) & 255);
+    ui.text(ox + l.ax - ui.textWidth(t, "main10") / 2, oy + l.ay - 6, t, "main10", sum < 385 ? rgb(255, 255, 255) : rgb(0, 0, 0));   // white on dark slices
+  }
+  return true;
+}
 }  // namespace
 
 // Charts mode (spec 09 7.1.1 [OBSERVED], coordinates relative to the window). Chart box (52,50)-(408,238), plot x 144..408 y 52..205, 15 five-year
@@ -720,11 +799,12 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     std::vector<Cat> cats;
     double total = 0;
     if (el) {
-      const Cat L[10] = {{0x1E8, "Coal Power", rgb(132, 65, 66), d.electricity[0]}, {0x1E9, "Oil Power", rgb(90, 60, 110), d.electricity[1]},
-                         {0x1EA, "Gas Power", rgb(200, 200, 255), d.electricity[2]}, {0x1EB, "Wind Power", rgb(255, 130, 0), d.electricity[3]},
-                         {0x1EC, "Solar Power", rgb(0, 255, 0), d.electricity[4]}, {0x1ED, "Nuclear Power", rgb(255, 255, 0), d.electricity[5]},
-                         {0x1EE, "Microwave Power", rgb(255, 0, 255), d.electricity[6]}, {0x1EF, "Fusion Power", rgb(0, 255, 255), d.electricity[7]},
-                         {0x1F0, "Waste-to-Energy", rgb(120, 200, 80), d.electricity[8]}, {0x1F1, "Neighbor Deals", rgb(180, 180, 180), d.electricity[9]}};
+      // Legend order, strings and colours [STATIC spec 09 7.1.1]; the neighbour-deal share is 1 - the sum of the others, shown only when it is positive.
+      const Cat L[10] = {{0x1E8, "Coal Power", rgb(0x80, 0x40, 0x40), d.electricity[0]}, {0x1E9, "Oil Power", rgb(0xFF, 0x7E, 0x7E), d.electricity[1]},
+                         {0x1EA, "Gas Power", rgb(0x00, 0x80, 0xFF), d.electricity[2]}, {0x1EB, "Wind Power", rgb(0xFF, 0x80, 0x00), d.electricity[3]},
+                         {0x1EC, "Solar Power", rgb(0x00, 0xFF, 0x00), d.electricity[4]}, {0x1ED, "Nuclear Power", rgb(0xFF, 0xFF, 0x00), d.electricity[5]},
+                         {0x1EE, "Microwave Power", rgb(0xFF, 0x00, 0x00), d.electricity[6]}, {0x1EF, "Fusion Power", rgb(0x00, 0xFF, 0xFF), d.electricity[7]},
+                         {0x1F0, "Waste-to-Energy", rgb(0x00, 0x00, 0xFF), d.electricity[8]}, {0x1F1, "Neighbor Deals", rgb(0xF0, 0x3A, 0xE6), d.electricity[9]}};
       for (const Cat& c : L) { cats.push_back(c); total += c.v; }
     } else {
       const Cat L[5] = {{0x1F4, "Landfill", rgb(247, 56, 231), d.garbage[0]}, {0x1F1, "Neighbor Deals", rgb(150, 150, 150), d.garbage[1]},
@@ -747,7 +827,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
       by += barPitch;
       slices.push_back({"", c.v, c.col});
     }
-    pieChart(ui, r.x + 318, r.y + 138, slices);   // ellipse + rim span y 124..231 [OBSERVED]
+    if (!pieChartArt(ui, E, r.x + 232, r.y + 90, slices)) pieChart(ui, r.x + 318, r.y + 138, slices);   // art at (272, 124) in the 800 x 600 window [OBSERVED]
     cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(int64_t(total)));
   }
   const int capDy = agePage ? -6 : 0;   // the bar pages' caption lines sit 6 px higher (observed)

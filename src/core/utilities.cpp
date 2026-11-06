@@ -327,12 +327,16 @@ void PowerLayer::recomputeCoverage(const PowerEnv& env) {
   stats_.unpoweredConsumers = std::max(0, stats_.consumerTiles - stats_.poweredConsumerTiles);
 }
 
+// Column order of the saved production table (spec 09 7.1.1 electricity chart [STATIC]): saved column -> our category (powerPlantTypes() order, 9 = neighbour
+// deals): 0 deals, 1 coal, 2 fusion, 3 gas, 4 microwave, 5 nuclear, 6 oil, 7 solar, 8 waste-to-energy, 9 wind.
+static const int kSavedColToCat[10] = {9, 0, 5, 2, 3, 4, 1, 6, 8, 7};
+
 Bytes PowerLayer::serialize() const {
   Bytes b;
   writeRecHeader(b, 1);
   putS32(b, monthIndex);
-  for (int m = 0; m < 12; m++) for (int c = 0; c < 10; c++) putS32(b, production[m][c]);
-  for (int c = 0; c < 10; c++) putS32(b, annualTotal[c]);
+  for (int m = 0; m < 12; m++) for (int c = 0; c < 10; c++) putS32(b, production[m][kSavedColToCat[c]]);
+  for (int c = 0; c < 10; c++) putS32(b, annualTotal[kSavedColToCat[c]]);
   chart.write(b);
   put32(b, tail);
   return b;
@@ -343,8 +347,8 @@ void PowerLayer::parse(const uint8_t* p, size_t n) {
   RecHeader h = readRecHeader(r);
   if (h.version > 1) throw FormatError("power layer version");
   monthIndex = r.s32();
-  for (int m = 0; m < 12; m++) for (int c = 0; c < 10; c++) production[m][c] = r.s32();
-  for (int c = 0; c < 10; c++) annualTotal[c] = r.s32();
+  for (int m = 0; m < 12; m++) for (int c = 0; c < 10; c++) production[m][kSavedColToCat[c]] = r.s32();
+  for (int c = 0; c < 10; c++) annualTotal[kSavedColToCat[c]] = r.s32();
   chart.parse(r);
   tail = r.u32();
   if (r.remaining() != 0) throw FormatError("power layer trailing bytes");

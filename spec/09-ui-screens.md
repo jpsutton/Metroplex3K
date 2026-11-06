@@ -1665,8 +1665,11 @@ at a fixed position (§6.0).
   (`1E5`) is drawn in orange at the top of the band.
 * The plot background is horizontal stripes in alternating pinks. The band colour is about (231, 199, 198).
 * Bars (observed, Berlin): one bar per 5-year age bucket, 15 bars from age 0–4 to 70–74. Each bar
-  is 7 px wide in green (0, 211, 140) with a 1 px outline (173, 178, 222) on each side. The first
-  bar fill starts at x = 149 and the pitch is 13 px. Bars rise from the x axis at y = 205; their
+  is a green (0, 211, 140) fill with a 1 px outline (173, 178, 222) on each side. The pitch is
+  13 px, but the bars are not uniform [OBSERVED, all three bar pages, 800×600]: with k = 0..14 the
+  right outline is at x = 156 + 13k (window-local) and the left outline at 148 + 13k for k < 3 but
+  147 + 13k for k ≥ 3, so the first three fills are 7 px wide (from x = 149) and the rest 8 px.
+  Bars rise from the x axis at y = 205; their
   height is about value × 142 / 140, since the 140 label sits at y ≈ 63. The axis scale is fixed at
   0–140 [INFERRED from one city].
 * Captions: centred at x ≈ 225. The first line, y ≈ 249, is dark blue and bold (`1E2`). The second,
@@ -1681,7 +1684,9 @@ at a fixed position (§6.0).
   band and the 15 green bars. Only the y axis, its caption and the two caption lines change.
   * Health: y axis 0–90 in steps of 10. Axis caption "Health" is a single vertical line. Captions:
     "Population Life Expectancy = 87 Years" and "Workforce Life Expectancy = 88 Years".
-  * Population: y axis 0, 5, 10 (people per age bucket in thousands [INFERRED]). Axis caption
+  * Population: y axis 0, 5, 10, the **percentage of the population in each age bucket**
+    [INFERRED: the 15 observed bars of Berlin sum to about 97–100]. The scale is about 10.2 px per
+    unit (0 at y ≈ 204, 10 at y ≈ 102, window-local), so the plot top is about 15 %. Axis caption
     "Population" is a single vertical line. Captions: "Total Population = 794,278" and
     "Workforce = 65% of Population".
   * Education: the axis caption "Education Quotient" is two vertical lines (text rotated 90°, read
@@ -1694,6 +1699,36 @@ at a fixed position (§6.0).
   * The chart box background on the pie pages is plain (222, 223, 255) with no stripes.
   * The pie is on the right, centred at about (318, 117), roughly 175 × 110 px, with a dark rim
     below it. Percentages are drawn in black on the slices.
+  * **Pie renderer** [STATIC, SIMUI pie control 0x100749E5]. The control sits at (0xC1, 0x32) in
+    the chart box, 185 × 135. Two images from group `C2BF3646` (type `62B9DA24`): mask `62D32734`
+    (172 × 86 solid ellipse on a magenta key) and shading `02D32710` (172 × 108, 8-bit grey).
+    1. Ellipse box = the mask's non-key extent (0..171 × 0..85): centre (ox + 86, oy + 43), radii
+       86 × 43; rim depth = 108 − 86 = 22 px.
+    2. Fractions are renormalised by their sum (minimum 1e-4). With f the running cumulative
+       fraction, θ = f·6.2831855 + 1.5707964 and the edge point is
+       (cx + trunc(86·cos θ), cy − trunc(43·sin θ)): slices start at 12 o'clock and run
+       counter-clockwise on screen.
+    3. The mask is blitted 23 times at y = oy … oy + 22 (ellipse plus rim). For each slice,
+       1-px lines in the slice colour go from the centre to its start and end edge points; an
+       edge point below the centre also gets a 22-px vertical line down (splitting the rim). The
+       slice is then flood-filled from its label anchor (skipped if that equals the end point).
+       The top/rim boundary is never drawn, so a fill spreads into its rim segment.
+    4. Shading, after all fills, 16-bit canvases only: the shading image is laid over the same
+       origin; for grey s, per channel c: s < 125 → c·s/128; 125 ≤ s ≤ 131 → unchanged;
+       s ≥ 132 → c + (s − 128)(255 − c)/128 (integer). The dither is baked into the image.
+    5. Label anchor: the edge point P at the mid angle; anchor = C + trunc((P − C)·k), k = 0.6 if
+       the fraction is > 0.1, else 0.8. Text `"%.0f%%"` of the fraction × 100, centred on the
+       anchor, drawn after shading. Text (and legend label) colour: white if R + G + B < 385 of
+       the slice colour, else black [INFERRED for the font, id 0xF].
+  * **Electricity data** [STATIC]: each slice is the annual total (rolling 12-month sum) of one
+    column of the power record over the sum of all 10 columns. Legend order, string, column and
+    colour: coal `1E8` col 1 (80,40,40)hex; oil `1E9` col 6 (FF,7E,7E); gas `1EA` col 3
+    (00,80,FF); wind `1EB` col 9 (FF,80,00); solar `1EC` col 7 (00,FF,00); nuclear `1ED` col 5
+    (FF,FF,00); microwave `1EE` col 4 (FF,00,00); fusion `1EF` col 2 (00,FF,FF); WtE `1F0` col 8
+    (00,00,FF); neighbour deals `1F1` = 1 − Σ others (column 0 is the deal power), shown only
+    if > 0.0001, colour (F0,3A,E6). Zero categories are omitted from the pie and the legend; the
+    visible legend bars are re-stacked at 16-px pitch. The caption total is the sum of all 10
+    columns (deals included).
   * Electricity colours: Coal Power (132, 65, 66), Wind Power (255, 130, 0), Solar Power
     (0, 255, 0), Nuclear Power (255, 255, 0). Caption: "Total Electricity Usage Annually = 1,906,937
     MW-h" (`289`).

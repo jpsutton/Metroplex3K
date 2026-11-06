@@ -31,9 +31,9 @@ string ID; see `05-text-and-fonts.md`). The file names below are those shipped u
 | `0x825ADC5A` | `Sc3StringsAdvisorHeading.IXF`, `Sc3MBEStringsAdvisorHeading.IXF` | topic ID | Advisor topic heading (title line) |
 | `0x225ADC6B` | `Sc3StringsAdvisorMessage.IXF`, `Sc3MBEStringsAdvisorMessage.IXF` | topic ID | Advisor topic body |
 | `0xC25B11C3` | `Sc3StringsAdvisorTicker.IXF`, `Sc3MBEStringsAdvisorTicker.IXF` | topic ID | Ticker line for the topic (optional — a topic without an entry here posts no ticker line) |
-| `0x82B85965` | `SC3StringsAdvisorHelpTitles.IXF` | help ID | Advisor "help/briefing" titles |
-| `0xE26EC3B8` | `SC3StringsAdvisorHelp.IXF` | help ID | Advisor "help/briefing" bodies |
-| `0xA26EC340` | `SC3StringsAdvisorHelpHeadings.IXF` | help ID | Help headings |
+| `0x82B85965` | `SC3StringsAdvisorHelpTitles.IXF` | help ID | Advisor briefing and ordinance-page titles; also the page heading (§3.14) |
+| `0xE26EC3B8` | `SC3StringsAdvisorHelp.IXF` | help ID | Advisor briefing and ordinance-page bodies (§3.14) |
+| `0xA26EC340` | `SC3StringsAdvisorHelpHeadings.IXF` | help ID | Help headings. Not referenced by any code [STATIC]; unused |
 | `0x42C1ED2D` | `SC3StringsNewstickerTriggered.IXF`, `SC3HolidaysStringsNewstickerTriggered.IXF` | message ID | Event ("triggered") ticker news |
 | `0x547BA060` | `SC3MBEStringsNewstickerTriggered.IXF` | message ID | Event ticker news added by Unlimited ("MBE" strings) |
 | `0xC2498F0E` | `SC3StringsNewstickerMessages.IXF` | message ID | Random filler ticker news |
@@ -957,6 +957,35 @@ Per category, each cycle, in the order of the table:
 The draws here come from a generator seeded separately for each evaluation (not the shared
 simulation LCG) [STATIC; seed source OPEN]. Answers to `0xA5`–`0xCA`, `0xE9`–`0xEE`, `0xF7`,
 `0xF8` go to the utilities deal handler (section 5.5).
+
+### 3.14 Discuss lists: topics, briefings, ordinances [STATIC; DATA]
+
+Each advisor keeps three lists, one per Discuss mode (dropdown table `029541F4`: 600 "News
+Topics", `0x1BF` "Briefings", `0x76` "Ordinances"; dropdown index = mode): mode 0 the news topics
+(heading `825ADC5A`, body `225ADC6B`, ticker `C25B11C3`), mode 1 the briefings and mode 2 the
+ordinance announcements of §3.6 (heading and list text `82B85965`, body `E26EC3B8`; the heading
+of a page is the title string of the same ID).
+
+The briefing list is a fixed list appended by each advisor's builder, in this order (no loop, no
+end marker; display order = insertion order):
+
+| Advisor | Help IDs (titles) |
+|---|---|
+| Finance `0x628D0C45` | `BB8` Simoleons, `BB9` Setting Tax Rates, `BBA` Funding City Departments, `BBB` Budget Window, `BBC` Neighbor Deals, `BBD` Business Deals, `BBE` Loans, `BBF` Strategies for Increasing Cash, `BC0` Petitioner Files |
+| City planner `0xC28D0B6E` | `3E9` Types of Zones, `3EA` How To Zone, `3EB` RCI Demand, `3EC` When Zones Fail to Grow, `3ED` Petitioner Files; plus one starter-town entry when the city object reports kind 5 ([INFERRED] started from a starter town): index 1–10 → `2715`, `2719`, `2716`, `2713`, `2718`, `2714`, `2712`, `2717`, `2711`, `271A` ("Starter Town:  name") |
+| Environment `0x828D04EB` | `7D0`–`7D7`: Dealing With Garbage, Landfills, Incinerators, Recycling Centers, Neighbor Deals for Garbage, Air Pollution, Water Pollution, Petitioner Files |
+| Health/education `0xC28D0F40` | `FA0`–`FA5`: Improving Sim Health, How Sims Learn, Raising Education Levels, Keeping Sims Happy - Aura, Petitioner Files - 1, Petitioner Files - 2 |
+| Public safety `0x828D0A2F` | `1388`–`1391`: Police Protection, Jails, Lowering Crime, Dispatching Police, Fire Protection, Flammability, Dispatching Firefighters, Disasters, Early Warning Siren, Petitioner Files |
+| Transportation `0x028D0FC5` | `1770` Building A Transportation System, `1772` Roads, Intersections, and On-Ramps, `1773` Bridges, `1774` Tunnels, `177A` Petitioner Files |
+| Utilities `0x022E288E` | `1B59`–`1B64`: Getting Power To Your Sims, High-Tension Power Lines, Power Plants, Blackouts and Brownouts, Your City Needs Water, Getting Water To Your Sims, Three Types of Pumps, Water Pipes, Water Pollution, Buying Power and Water, Selling Power and Water, Petitioner Files |
+
+[OBSERVED] Berlin shows exactly these lists for all seven advisors. Page titles come from table
+`029541F4`: briefings `0x2C3`–`0x2C9`, ordinances `0x2BC`–`0x2C2`, each in the order Financial,
+Transportation, City Planning, Environmental, Public Safety, HEA, Utilities.
+
+Reading a topic hides it: the topic text getters set the hidden flag and withdraw its ticker item,
+but only for topics with L ≠ 0, P or E (§3.4) [STATIC; that opening the page calls them is
+INFERRED]. There is no dismiss button on an advisor page.
 
 ### 3.15 Other advisors
 
