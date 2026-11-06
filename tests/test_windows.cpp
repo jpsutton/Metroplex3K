@@ -982,6 +982,17 @@ void testTicker() {
   CHECK(t.items[0].x == x0 - 2);             // 64 ms > 50: one 2 px step
   TickerScroll ts;
   CHECK(ts.advance(50) == 0 && ts.advance(51) == 2);
+  {  // the strip is one (99,109,198) top row (y549) over 16 black rows (y550..565), nothing else inside
+    Harness g; TickerWidget t2; const Rect sr{8, 544, 480, 24};
+    g.drawFn = [&] { return t2.draw(g.ui, g.E, sr); };
+    g.frame();
+    CHECK(g.fb[size_t(549) * g.W + 20] == rgb(99, 109, 198));
+    for (int y = 550; y <= 565; y++) CHECK(g.fb[size_t(y) * g.W + 20] == rgb(0, 0, 0));
+    NewsItem pa; pa.number = 3; pa.text = "Simulation Paused"; pa.r = 255; pa.g = 251; pa.b = 0;
+    t2.push(pa, sr.w); t2.items[0].x = 10;
+    g.frame();
+    for (int x = 300; x < 460; x++) for (int y = 550; y <= 565; y++) CHECK(g.fb[size_t(y) * g.W + x] == rgb(0, 0, 0));   // away from the text
+  }
   // Paused: keeps scrolling and fills the strip with "Simulation Paused" copies ~4 glyphs apart.
   {
     TickerWidget p;

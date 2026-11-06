@@ -786,9 +786,9 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     }
     for (int n = 10; n <= 90; n += 10) {   // x labels, 26 px per 10 years, "10" at x ~ 164
       const std::string t = std::to_string(n);
-      ui.text(r.x + 138 + 26 * n / 10 - ui.textWidth(t, "system9") / 2 - (n > 10 ? 0 : 0), r.y + 208, t, "system9", kAxisInk);   // row y244, lefts 199 / 223 / 249 ... [OBSERVED]
+      ui.text(r.x + 138 + 26 * n / 10 - ui.textWidth(t, "main9") / 2 - (n > 10 ? 0 : 0), r.y + 208, t, "main9", kAxisInk);   // the bold face like the y ticks   // row y244, lefts 199 / 223 / 249 ... [OBSERVED]
     }
-    ui.text(r.x + 219, r.y + 218, E.win(0x1E6, "Resident Age"), "main9", kAxisInk);   // bold, ink from x257 [OBSERVED]
+    ui.text(r.x + 237, r.y + 219, E.win(0x1E6, "Resident Age"), "main9", kAxisInk);   // "R" ink from x277, rows y256..264 [OBSERVED]   // bold, ink from x257 [OBSERVED]
     {   // vertical axis caption, rotated: Education Quotient on two lines, Health and Population on one
       const std::string t = E.win(tab == 0 ? 0x1E4u : tab == 1 ? 0x1E0u : 0x1E1u, tab == 0 ? "Education Quotient" : tab == 1 ? "Health" : "Population");
       const size_t sp = tab == 0 ? t.find(' ') : std::string::npos;
@@ -855,12 +855,12 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(!el && d.garbageProduced >= 0 ? int64_t(std::llround(d.garbageProduced / 10.0)) : int64_t(total)));
   }
   const int capDy = -6;   // the caption lines sit 6 px higher on every chart page (observed)
-  ui.textCentered({r.x + 56, r.y + 249 + capDy, 340, 14}, cap1, "main9", kInkBlue);   // the caption lines are MAIN9 [OBSERVED on the pie pages; the age pages' text starts 2 px right of main10's]
+  ui.textCentered({r.x + 56, r.y + 248 + capDy, 340, 14}, cap1, "main9", agePage ? kAxisInk : kInkBlue);   // the caption lines are MAIN9 [OBSERVED on the pie pages; the age pages' text starts 2 px right of main10's]
   if (!cap2.empty()) ui.textCentered({r.x + 56, r.y + 264 + capDy, 340, 14}, cap2, "main9", rgb(247, 142, 90));
   static const uint32_t tid[5] = {0x1DD, 0x1E0, 0x1E1, 0x1DE, 0x1DF};
   static const char* const tfb[5] = {"Education", "Health", "Population", "Electricity", "Garbage"};
   for (int i = 0; i < 5; i++)
-    if (radio(ui, E, "tab." + std::to_string(i), {r.x + 192, r.y + 314 + 20 * i - 6, 140, 12}, E.win(tid[i], tfb[i]), tab == i, "system9")) tab = i;
+    if (radio(ui, E, "tab." + std::to_string(i), {r.x + 192, r.y + 314 + 20 * i - 6, 140, 12}, E.win(tid[i], tfb[i]), tab == i, "main10")) tab = i;
   return R;
 }
 

@@ -218,10 +218,10 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
     const bool help = tab >= 1;   // briefings and ordinances read the help tables 82B85965 / E26EC3B8
     const std::string head = help ? E.text(0x82B85965, uint32_t(topicSel), hexName("Help ", uint32_t(topicSel)))
                                   : E.text(kTblAdvisorHeading, uint32_t(topicSel), hexName("Topic ", uint32_t(topicSel)));
-    ui.text(r.x + 13, r.y + 51, ellipsize(ui, head, 232), "main10", kInk);   // bold heading: ink x 21, rows 61..73
+    ui.text(r.x + 13, r.y + 50, ellipsize(ui, head, 232), "main10", kInk);   // bold heading: ink x 21, rows 61..73
     const std::string raw = help ? E.text(0xE26EC3B8, uint32_t(topicSel), "(no text)") : E.text(kTblAdvisorMessage, uint32_t(topicSel), "(no text)");
     const std::string body = topicText(raw, E.tc, ti ? ti->args : std::vector<TopicArg>{});
-    auto lines = wrapKeepSpaces(ui, body, 228, "main9");
+    auto lines = wrapKeepSpaces(ui, body, 230, "main9");   // a line fits while its ink is <= 228 px [OBSERVED]
     const int bodyTop = r.y + 78, visible = std::max(1, (P.y + P.h - 4 - bodyTop) / 14);
     const bool overflow = int(lines.size()) > visible;
     if (overflow) { lines = wrapKeepSpaces(ui, body, 212, "main9"); scenarioScrollBar(ui, E, {r.x + 238, r.y + 78, 16, 265}, P, int(lines.size()), visible, scroll); }
@@ -295,7 +295,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
       ui.fill({dd.x + 1, dd.y + 1, 1, dd.h - 2}, rgb(189, 190, 189)); ui.fill({dd.x + 1, dd.y + dd.h - 2, dd.w - 2, 1}, rgb(189, 190, 189)); ui.fill({dd.x + dd.w - 2, dd.y + 1, 1, dd.h - 2}, rgb(140, 142, 140));
       ui.fill({dd.x, dd.y + dd.h, dd.w, 2}, rgb(49, 52, 123)); }
     for (int t = 0; t < 3; t++) {
-      Rect row{dd.x + 1, dd.y + 1 + 14 * t, dd.w - 2, 14};
+      Rect row{dd.x + 1, dd.y + 14 * t, dd.w - 2, 14};
       E.spot("tab." + std::to_string(t), row);
       bool hot = ui.hover(row) || (t == tab && !ui.hover(dd));
       if (hot) ui.fill(row, rgb(0, 0, 255));
