@@ -435,6 +435,7 @@ class Game {
   MenuTree menu_;
   bool menuLoaded_ = false;
   uint32_t openRoot_ = 0, openFly_ = 0;
+  std::map<uint32_t, uint32_t> flyCurrent_;   // fly-out menu id -> button id of its checked (last chosen) entry; absent = first entry
   ToolKind tool_ = ToolKind::None;
   int toolArg_ = 0; uint32_t toolOcc_ = 0;
   std::string toolName_;

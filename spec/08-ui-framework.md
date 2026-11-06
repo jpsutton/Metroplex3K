@@ -497,10 +497,36 @@ The text line window is as wide as its rect and is vertically centred in it:
 Field roles `[STATIC]`: **A = city name**, **B = population**, **C = funds**, **D = date**. Each
 field is its own child surface the size of its rect, and the text is centred in the rect
 `[INFERRED]` from the centring arithmetic. (C and D overlap by a few pixels at 640 and 800; this is
-in the original table.) Points P1–P4 are the anchors of the remaining bar widgets (speed
-controls, view controls, RCI indicator, help button). `[OPEN]` Which point anchors which widget,
-and is each point the widget's top-left corner? Until resolved, place the widgets left to right in
-the order P2, P4 (below P2), P1, P3, which is the order of the points on the bar `[INFERRED]`.
+in the original table.) Points P1–P4 are the **top-left corners** of the bar's buttons
+`[OBSERVED 800×600 and 1024×768; images located by template match]`:
+
+| Point | Widget | Image | Size |
+|---|---|---|---|
+| P2 | Pause | `02F78C6D:52FB06E0`/`E1` | 22 × 22 |
+| P1 | Run | `52FB06E2`/`E3` (two 13-px halves) | 26 × 22 |
+| P4 | Speed bar, four 12-px cells | `52FB06E4`–`E7` (state variants, 48 × 23) | 48 × 23 |
+| P3 | Query "?" | `52FB06EA` (four 40 × 39 cells) | 40 × 39 |
+
+The bar is anchored at the window's bottom-left. Its top is at window height − bar height
+(640: 64, 800: 56, 1024: 64). Absolute positions: 800 × 600 pause (488,553), run (511,553),
+speed (489,573), query (547,555); 1024 × 768 pause (712,714), run (735,714), speed (713,733),
+query (773,713).
+
+**Right-hand cluster** `[OBSERVED, identical offsets at 800 and 1024]`. Offsets are from the
+window's bottom-right corner (W, H) unless noted:
+
+| Widget | Image | Top-left | Size |
+|---|---|---|---|
+| Layer Views | `22F96E35` (4 cells) | (W−46, H−158) | 36 × 35 |
+| Zoom In | `22F96E2D` | (W−146, H−64) | 26 × 29 |
+| Zoom Out | `22F96E2E` | (W−40, H−64) | 26 × 29 |
+| Rotate Clockwise | `22F96E2F` | (W−126, H−44) | 26 × 29 |
+| Rotate Counterclockwise | `22F96E30` | (W−60, H−44) | 26 × 29 |
+| Hide Toolbars | `53244586` | (W−26, H−26) | 26 × 26 |
+| RCI background | `42FB77F6` | (W−201, bar top − 24) | 41 × 88 |
+| Visit SimCity Exchange | `52FB06F0` | (W−194, bar top − 24) | 33 × 30 |
+
+640 × 480 was not measured.
 Update rules are in `09-ui-screens.md` §4.1.
 
 **Observed at 2048×1152** `[OBSERVED]`:
@@ -837,7 +863,15 @@ itself.
   row per entry, 16 px tall, in white. The current entry carries a check mark at the left.
 * **Example.** Hospital (checked by default), School, College, Library and Museum.
 
-The fly-out geometry at other resolutions is [OPEN]; assume the same rules.
+`[OBSERVED 800 × 600]` (Residential, Commercial, Health & Education):
+* The fly-out's right edge touches the sub-menu column: right = column x (704 at 800), exclusive.
+* Its top equals the pressed sub-button's top.
+* Rows are 16 px, plus 1 px padding at the top and the bottom: 3 entries → 50 px, 5 entries →
+  82 px.
+* Its width fits the longest label: Residential 112, Commercial 115, Health & Education 66.
+* The background is the sub-menu's strip colour: zones (148,174,90), civic (74,101,148). Text is
+  white; the current entry has a check mark.
+* Clamping at the screen top and bottom was not tested.
 
 **Column background pieces** `[STATIC]` (image sizes `[DATA]`). The tool-menu column is 96 px wide
 and is assembled from these instances, chosen by screen height:
@@ -1035,7 +1069,6 @@ Framed windows use the `WinGen` 256×256 frame-piece sheet (`SYS.IXF` `0xE2B1458
 
 ## Open questions
 
-* Which bottom-bar anchor point P1–P4 belongs to which widget (fields A–D are now resolved, §4.2).
 * Tooltip placement rules relative to the anchor rectangle (delay is now known: 750 ms tick, section 3.3).
 * Drawing rules and notifications of the slider, framed window, image window, graph/progress
   area and decoration controls (section 3.1); spinner and scroll-bar step logic.

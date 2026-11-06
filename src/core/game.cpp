@@ -896,21 +896,48 @@ bool Game::drawSkinnedToolMenu() {
   }
   if (flyOpen) {
     auto fm = menu_.menus.find(flyOpen);
-    if (fm != menu_.menus.end()) {
-      Rect fr{flyAnchor.x - 194, flyAnchor.y, 190, int(fm->second.buttons.size()) * 28 + 8};
-      ui_.panel(fr);
+    if (fm != menu_.menus.end() && !fm->second.buttons.empty()) {
+      // Third-level fly-out (spec 08 7, observed at 800 x 600): one rectangle in the menu's strip colour whose right edge touches the
+      // column (x = ox, exclusive) and whose top is the pressed sub-button's top; 16 px rows with 1 px padding above and below, as wide
+      // as the longest label; white text and a check mark on the current entry. Width margins are estimated.
+      const auto& ids = fm->second.buttons;
+      auto labelOf = [&](const MenuButton& b) {
+        auto ii = menu_.items.find(b.item);
+        return ii != menu_.items.end() ? str(ii->second.nameTable, ii->second.nameId) : std::string("(item)");
+      };
+      int textW = 0;
+      for (uint32_t bid : ids) textW = std::max(textW, ui_.textWidth(labelOf(menu_.buttons[bid]), "main9"));
+      const int checkW = 12, w = textW + checkW + 8, h = int(ids.size()) * 16 + 2;
+      Rect fr{ox - w, std::max(0, std::min(H_ - h, flyAnchor.y)), w, h};
+      const uint32_t c = fm->second.colour ? (0xFF000000u | ((fm->second.colour & 255) << 16) | (fm->second.colour & 0xFF00) | ((fm->second.colour >> 16) & 255))
+                                           : rgba(74, 101, 148);
+      ui_.fill(fr, c);
       if (ui_.hover(fr)) uiHit_ = true;
-      if (fm->second.colour) ui_.fill({fr.x + 2, fr.y + 2, 4, fr.h - 4}, 0xFF000000u | ((fm->second.colour & 255) << 16) | (fm->second.colour & 0xFF00) | ((fm->second.colour >> 16) & 255));
-      int fy = fr.y + 4;
-      for (uint32_t bid : fm->second.buttons) {
+      uint32_t cur = ids.front();
+      if (auto it = flyCurrent_.find(flyOpen); it != flyCurrent_.end() && std::find(ids.begin(), ids.end(), it->second) != ids.end()) cur = it->second;
+      int fy = fr.y + 1;
+      for (uint32_t bid : ids) {
         const MenuButton& b = menu_.buttons[bid];
         auto ii = menu_.items.find(b.item);
-        std::string label = ii != menu_.items.end() ? str(ii->second.nameTable, ii->second.nameId) : "(item)";
         bool enabled = ii == menu_.items.end() || ii->second.enabled;
         if (flyOpen == 0xD100A100 && !disastersOn_) enabled = false;
         if (!transportToolEnabled(b.item)) enabled = false;
-        if (ui_.button({fr.x + 10, fy, 176, 26}, label, enabled)) { execute(b.item); if (tool_ != ToolKind::Unavailable) { openFly_ = 0; openRoot_ = 0; } }
-        fy += 28;
+        const Rect row{fr.x, fy, fr.w, 16};
+        const bool hot = enabled && ui_.hover(row);
+        if (hot) ui_.fill(row, rgba(uint8_t(std::min<uint32_t>(255, (c & 255) + 40)), uint8_t(std::min<uint32_t>(255, ((c >> 8) & 255) + 40)), uint8_t(std::min<uint32_t>(255, ((c >> 16) & 255) + 40))));
+        const uint32_t ink = enabled ? rgba(255, 255, 255) : rgba(160, 160, 160);
+        if (bid == cur) {   // check mark
+          const int cx = fr.x + 3, cy = fy + 8;
+          for (int k = 0; k < 3; k++) ui_.fill({cx + k, cy + k, 1, 2}, ink);
+          for (int k = 0; k < 5; k++) ui_.fill({cx + 3 + k, cy + 2 - k, 1, 2}, ink);
+        }
+        ui_.text(fr.x + checkW + 2, fy + 2, labelOf(b), "main9", ink);
+        if (enabled && ui_.clicked(row)) {
+          flyCurrent_[flyOpen] = bid;
+          execute(b.item);
+          if (tool_ != ToolKind::Unavailable) { openFly_ = 0; openRoot_ = 0; }
+        }
+        fy += 16;
       }
     }
   }
