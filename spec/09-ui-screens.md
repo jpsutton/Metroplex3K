@@ -893,6 +893,11 @@ building (`13-buildings-occupants.md`).
 * A double click opens that petitioner's page inside the same window frame. The page shows the
   petition title as the window title, a back button (◄) next to the close box, the petitioner's
   portrait and group, the text, and a "Dismiss Petitioner" toggle.
+* `[OBSERVED, London, 15 pending]` With more than 13 rows the list gets a vertical scrollbar
+  inside the box's right edge (plate x ≈ 362..377, rows 165..346, window-relative), and the rows
+  move down 1 px (first text top y = 168). 13 rows stay visible either way.
+* Headings that contain `%NEIGHBOR%` (neighbour-deal petitions) are expanded with the deal's
+  neighbour in the list, as in the dialog.
 
 Opened by the Meet button (message `724A82D0`) or a portrait in another window. Left: advisor
 portraits (`52DB60A0`, instance `0x0AMM` — advisor A 1–7, mood M 1–5 from
@@ -912,6 +917,34 @@ with "return to petitioner" (`82`), "done" (`83`), "back" (`84`), "OK" (`85`); a
 petitioner" (`2DE`). Choosing a button applies the petition (enact ordinance, accept deal, …) and
 plays a crowd reaction (sounds 70–73: boo, disappointment, neutral, cheer — chosen by the
 petitioner's reaction field). [STATIC; reaction choice rule in `22`]
+
+`[OBSERVED, build 2.0.949, London]` Two page layouts, window at (8, 8), coordinates relative to
+the window:
+
+* **Information petition** (no choice buttons): the message box runs from (121, 58) to the
+  bottom of the window and the left plate holds the round "Dismiss Petitioner" button.
+* **Offer petition** (business deal, reward, neighbour deal, deal complaint, ordinance
+  complaint; any petition with *Button1*/*Button2* strings):
+  * Message box (121, 58)–(378, 259), 258 × 202, with a vertical scrollbar inside its right
+    edge (plate x 364..379, rows 58..259). Text from x = 133, first line top y = 65, 14 px line
+    pitch, 13 lines visible. A line fits when its ink width in the main 9 font is at most
+    216 px (observed: 216 fits, 217 wraps).
+  * "Take Action:" (`78`) plate, L-shaped: a band (5, 263)–(119, 286) and a strip below it
+    (5, 287)–(49, 348), plate colour (123, 146, 255), with a 1 px (173, 182, 255) ring just
+    outside the L on every side. The caption's ink is at (21, 271).
+  * Two big round buttons (the same round art as "Dismiss Petitioner"), ink boxes (20, 290)
+    and (20, 318), each 24 × 24. Labels are the petition's *Button1* / *Button2* strings at
+    x = 58 (e.g. Accept/Reject, Accept/Decline, Accept Deal/Reject Deal, Cancel Deal/Keep
+    Deal, Repeal Ordinance/Ignore Complaint). Neither is pre-selected.
+  * "Impact Analysis:" (`79`) plate (273, 294)–(377, 347), ringed the same way. Two-line caption
+    ink (278, 310)–(329, 334); round "?" button ink (344, 317)–(369, 340).
+  * There is no "Dismiss Petitioner" button on offer pages.
+* Message arguments (`TopicArg` entries saved with the petition) carry a format kind in their
+  index field: 2 = integer with thousands separators ("4,400"), 3 = money ("§396", "§9,900"),
+  4 = neighbour name of slot `a` (`%NEIGHBOR%`). The arguments are substituted before the generic
+  tokens. [DATA, saved London petitions 0x10, 0xBF; OBSERVED rendering]
+* Neighbour-deal petitions (portrait index 18 in the extra-info files) show portrait
+  `52DB60A0:FF10`. [OBSERVED, one neighbour]
 
 ### 6.7 Neighbours window and neighbour deals [STATIC]
 
