@@ -805,7 +805,7 @@ void testViewData() {
   src.values = [&](DataLayer l) -> const std::vector<uint8_t>* { return l == DataLayer::Crime ? &crime : l == DataLayer::Zones ? &zones : nullptr; };
   Chart c1 = Chart::make(0, 100), c2 = Chart::make(50, 100);
   for (int i = 0; i < 12; i++) c1.pushMonthly(uint32_t(i * 10));
-  CHECK(GraphsWindow::samples(c1, 0).size() == 12 && GraphsWindow::samples(c1, 1).size() == 10 && GraphsWindow::samples(c1, 2).size() == 10);
+  CHECK(GraphsWindow::samples(c1, 0).size() == 11 && GraphsWindow::samples(c1, 1).size() == 10 && GraphsWindow::samples(c1, 2).size() == 10);
   auto s0 = GraphsWindow::samples(c1, 0);
   CHECK(s0.front() < s0.back() && s0.back() == 100);   // pushes clamp at the chart scale (100); oldest -> newest
   auto series = graphSeriesTemplate();

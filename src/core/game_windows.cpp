@@ -583,6 +583,7 @@ void Game::drawWindows(uint32_t dtMs) {
         // The 12th point is the live value in the original. Funds: the chart's own sample of the current treasury (213..218 on Berlin); the other series' live formulas
         // are unknown, the newest saved sample stands in.
         series[13].live = int64_t(Budget::chartSample(sim_.funds));
+        series[15].live = int64_t(city.power.stats().spareCapacityPct);   // Power %: the live spare capacity (Berlin about 18) [OBSERVED]
       }
 
     } else if (viewData_.mode == int(ViewDataWindow::ModeCharts)) {
