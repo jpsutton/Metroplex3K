@@ -396,6 +396,13 @@ int main(int argc, char** argv) {
             if (!c.power.powered(x, z)) { lost += u; if (n++ < 60) std::printf("   unpowered consumer (%d,%d) use %d\n", x, z, u); }
           }
         std::printf("   consumption bytes: total %lld, on unpowered tiles %lld (%d tiles)\n", total, lost, n);
+        {  // the consumer list the layer was built from: per-occupant sum vs the per-anchor bytes (a difference = two occupants on one anchor or a u8 clamp)
+          long long listed = 0; int cnt = 0, over255 = 0;
+          std::map<std::pair<int, int>, int> perAnchor;
+          for (const auto& o : c.powerConsumers()) { listed += o.powerUse; cnt++; if (o.powerUse > 255) over255++; perAnchor[{o.x, o.z}]++; }
+          int shared = 0; for (const auto& kv : perAnchor) if (kv.second > 1) { shared++; if (shared <= 10) std::printf("   anchor (%d,%d) used by %d consumers\n", kv.first.first, kv.first.second, kv.second); }
+          std::printf("   consumer list: %d entries, sum use %lld, > 255: %d, anchors shared by several: %d\n", cnt, listed, over255, shared);
+        }
       }
       for (const auto& k : c.power.components())
         std::printf("   load component seed (%d,%d): %d tiles, %d plants, raw S %lld, supplied %lld, r %.4f\n", k.sx, k.sz, k.tiles, k.plants, (long long)k.rawS, (long long)k.supplied, k.rawS > 0 ? double(k.supplied) / double(k.rawS) : 0.0);

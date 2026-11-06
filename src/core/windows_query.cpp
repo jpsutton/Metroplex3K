@@ -437,6 +437,9 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
     ui.fill({r.x + 5, r.y + 5, 7, r.h - 10}, rgb(123, 146, 255));   // x 5..11: the right line starts below the title band (row 33)
     ui.fill({r.x + 4, r.y + 4, 1, r.h - 8}, lightEdge); ui.fill({r.x + 11, r.y + 33, 1, r.h - 37}, lightEdge);
     ui.fill({r.x + 4, r.y + r.h - 5, 8, 1}, lightEdge);
+    // The strip is drawn over the title band's left end in this build's order; the title's first glyph reaches into it (the Q's ink at x 8..9), so it is
+    // drawn again on top [OBSERVED: the original's Q is complete].
+    if (ui.skin) ui.text(r.x + 8, r.y + 8, E.query(1, "Query"), "title12", ui.titleRecolour ? rgb(222, 222, 255) : rgb(222, 223, 255));
   }
 
   // Picture (centred on (160, 97) for type 2, (77, 160) for type 3), framed by a 1 px #7B8AFF rectangle outside the image.
@@ -445,7 +448,7 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
     Rect box{r.x + cx - L.picW / 2, r.y + cy - L.picH / 2, L.picW, L.picH};
     // Picture box [OBSERVED]: flat (222,223,255) interior one pixel larger each way than the layout box, dark (123,138,255) left / top and light (255,243,255)
     // right / bottom lines just outside it.
-    ui.fill({box.x, box.y, box.w + 1, box.h + 1}, rgb(222, 223, 255));
+    ui.fill({box.x, box.y, box.w, box.h}, rgb(222, 223, 255));   // the last column and row inside the frame line show the window texture [OBSERVED]
     ui.fill({box.x - 1, box.y - 1, box.w + 3, 1}, rgb(123, 138, 255)); ui.fill({box.x - 1, box.y, 1, box.h + 2}, rgb(123, 138, 255));
     ui.fill({box.x + box.w + 1, box.y - 1, 1, box.h + 3}, rgb(255, 243, 255)); ui.fill({box.x - 1, box.y + box.h + 1, box.w + 3, 1}, rgb(255, 243, 255));
     // The interior's last row (above the bottom highlight): the original's exact, dither-like values from the box's left edge [OBSERVED].
@@ -512,11 +515,15 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
   }
   if (historical) {
     const int bx = r.x + (L.type == 3 ? 138 : 20), by = r.y + L.h - 23;
-    Rect box{bx, by, 13, 13};
-    ui.fill(box, rgb(0x31, 0x36, 0x7C)); ui.fill({bx + 1, by + 1, 11, 11}, rgb(255, 255, 255));
+    // Sunken 13 x 13 box [OBSERVED]: outer top / left (107,113,189), inner dark (49,52,123), white 9 x 9, inner right / bottom (123,130,189), outer right / bottom (181,182,231).
+    ui.fill({bx, by, 13, 13}, rgb(107, 113, 189));
+    ui.fill({bx + 1, by + 1, 11, 11}, rgb(49, 52, 123));
+    ui.fill({bx + 2, by + 2, 9, 9}, rgb(255, 255, 255));
+    ui.fill({bx + 11, by + 1, 1, 11}, rgb(123, 130, 189)); ui.fill({bx + 1, by + 11, 11, 1}, rgb(123, 130, 189));
+    ui.fill({bx + 12, by, 1, 13}, rgb(181, 182, 231)); ui.fill({bx, by + 12, 13, 1}, rgb(181, 182, 231));
     if (q.historical) { ui.fill({bx + 3, by + 3, 7, 7}, rgb(0x31, 0x36, 0x7C)); }
-    ui.text(bx + 27, by - 2, E.query(0x30, "Make Historical"), "main10");
-    Rect hit{bx, by - 2, 27 + ui.textWidth(E.query(0x30, "Make Historical")), 17};
+    ui.text(bx + 15, by - 2, E.query(0x30, "Make Historical"), "main10");
+    Rect hit{bx, by - 2, 15 + ui.textWidth(E.query(0x30, "Make Historical")), 17};
     E.spot("historical", hit);
     if (ui.clicked(hit)) R.add(Act::ToggleHistorical, 0, q.x, q.z);
   }
