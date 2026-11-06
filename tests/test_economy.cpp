@@ -635,7 +635,7 @@ static void testDeals() {
   s.monthly(2, rng);
   // No sweep: the terminated deal stays, keeps its flag and still occupies its type until it is removed or replaced.
   CHECK(s.active.size() == 1 && s.active[0].terminated() && s.dealOfType(1) && s.neighbours[s.active[0].neighbourIndex].dealMade[1]);
-  CHECK(s.monthlyMoney().income == 0);   // billing of terminated deals is not modelled (spec 19 10.5: cost side unchecked)
+  CHECK(s.monthlyMoney().income == 175);   // a terminated deal keeps billing (no age test, spec 19 10.5)
   s.removeType(1);
   CHECK(s.active.empty() && !s.dealOfType(1));
   for (int i = 0; i < 4; i++) CHECK(!s.neighbours[i].dealMade[1]);

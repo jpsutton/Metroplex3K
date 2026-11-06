@@ -313,6 +313,13 @@ BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, co
     Bs = h1;
   }
   side(pl.x0, pl.z0, -1, Bs);
+  // River bed: after the start side and before the far side, the interior corners of the water rows that stand above the water level go down
+  // to it (spec 12 6.4; k = 1 .. W-1 along the span, the same rows as the abutments).
+  for (int k = 1; k < pl.W; k++)
+    for (int q = 0; q < rows; q++) {
+      const int vx = pl.x0 + k * pl.ax + q * pl.px, vz = pl.z0 + k * pl.az + q * pl.pz;
+      if (vOn(vx, vz) && m.cornerHeight(vx, vz) > hw) addCorner(vx, vz, hw);
+    }
   side(ex, ez, +1, Bf);
   for (auto& c : pl.corners)
     if (!m.canChangeCorner(c.vx, c.vz)) { pl.terrainBlocked = true; break; }
