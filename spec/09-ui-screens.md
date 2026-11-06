@@ -1844,7 +1844,7 @@ on-map colours come from the renderer's data palettes `data1Pal`/`data2Pal`/`dat
 each, loaded from the user's installation). The renderer picks one palette row per tile and
 shades it by relief; see `25-rendering.md` §9.2. The legend image of each map (table above) shows
 the same ramp and is the reference for which palette and which row direction a map uses. The
-layer-value → row quantisation is [OPEN] (`25-rendering.md` §9.2 suggests row = ⌊value/8⌋).
+layer-value → row quantisation and the tiles each view tints are in `25-rendering.md` §9.2 [STATIC].
 
 ### 7.3 Graphs window [STATIC]
 
