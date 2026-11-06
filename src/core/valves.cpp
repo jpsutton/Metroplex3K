@@ -351,6 +351,7 @@ void ValveLayer::monthlyUpdate(const ValveCityInput& in) {
   }
   for (Valve* v : {&v3000, &v3001, &v5000, &v5001, &v8000, &v8001}) v->update();
   v7000.update();
+  v7000.V = 0;   // the original never moves the jobs valve: V = 0 in all 89 saved cities (its Slast / Dlast still feed the world layer)
   // Cap rule (spec 15 s3.2) [STATIC]: after the valve update, from Slast/Dlast of the amenity valve (3001, 5001, 8001);
   // takes effect at the next monthly update.
   v3000.capPct = capFromAmenity(v3001); v5000.capPct = capFromAmenity(v5001); v8000.capPct = capFromAmenity(v8001);

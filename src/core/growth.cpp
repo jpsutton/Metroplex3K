@@ -1160,7 +1160,7 @@ int ZoneManager::runRule(GrowthCity& c, SimRand& rng, const DevRule& rule, const
       if (canAt(*b, x, z)) placed += putAt(*b, x, z);
     }
   }
-  for (int z = r.z0; z <= r.z1; z++) for (int x = r.x0; x <= r.x1; x++) {
+  for (int x = r.x0; x <= r.x1; x++) for (int z = r.z0; z <= r.z1; z++) {   // x outer, z inner as in the original (draw order only)
     if (used[idx(x, z)]) continue;
     int p = nearTransport(c, x, z) ? 100 - rule.d : rule.d;
     const BuildingChoice* b = rng.rand(100) < p ? pickFrom(L.small) : pickFrom(L.filler);
