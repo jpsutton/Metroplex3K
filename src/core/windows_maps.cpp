@@ -490,7 +490,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
       if (series[i].fallback == "City Size" || series[i].fallback == "Funds" || series[i].fallback == "Power %") enabledMask |= 1u << i;
     maskInit = true;
   }
-  ui.fill({r.x + 4, r.y + 6, 1, 431}, rgb(173, 182, 255)); ui.fill({r.x + 37, r.y + 6, 1, 431}, rgb(173, 182, 255));   // icon column: borders at x 44 and x 77   // the frame's left line runs the full height [OBSERVED]
+  ui.fill({r.x + 4, r.y + 6, 1, 431}, rgb(173, 182, 255)); ui.fill({r.x + 37, r.y + 33, 1, 404}, rgb(173, 182, 255));   // icon column: borders at x 44 and x 77   // the frame's left line runs the full height [OBSERVED]
   const Rect box{r.x + 44, r.y + 50, 356, 189};
   // Stripes measured on the original (screen rows 85.. = local 51..): base (222,223,255) 51..64, then 17 px bands (edges 65, 82, ... 201) alternating
   // with (231,231,255) through local 217; below the 2 px axis (local 218..219) the base colour again to the frame (local 220..237).
@@ -505,7 +505,12 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   struct Lab { std::string text; int endY; uint32_t col; int y = 0; float endYf = 0; int top = 0; int natY = 0; };
   std::vector<Lab> labs;
   int nPts = 0;
-  for (size_t i = 0; i < series.size() && i < 16; i++) {
+  // The original draws (and slots the labels of) Funds before City Size and Power % [OBSERVED on Berlin: green and orange cross over purple; the full
+  // series-loop order is not decoded, so Funds goes first and the others keep the grid order].
+  std::vector<size_t> order;
+  for (size_t i = 0; i < series.size() && i < 16; i++) if (series[i].fallback == "Funds") order.push_back(i);
+  for (size_t i = 0; i < series.size() && i < 16; i++) if (series[i].fallback != "Funds") order.push_back(i);
+  for (size_t i : order) {
     if (!(enabledMask & (1u << i)) || !series[i].chart) continue;
     auto s = samples(*series[i].chart, range);
     if (s.size() < 2) continue;
@@ -554,12 +559,14 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     l.top = 79 + placed + origY;
     l.y = l.top - 2;   // text origin
   }
+  // The "now" line between the lines and their labels (axis colour; (173,174,222) on the stripe edges, local rows 65 + 17 k up to 184) [OBSERVED]; drawn
+  // before the leaders, which start on it at x340.
+  ui.fill({r.x + 300, box.y + 1, 1, box.h - 2}, rgb(173, 178, 222));
+  for (int ly = 65; ly <= 184; ly += 17) ui.fill({r.x + 300, r.y + ly, 1, 1}, rgb(173, 174, 222));
   for (auto& l : labs) {
-    for (int dx = 1; dx <= 5; dx++) ui.fill({x1 - 1 + dx, int(std::lround(double(l.endY) + double(l.top + 5 - l.endY) * dx / 5.0)), 1, 1}, l.col);   // x340..344 straight to the label middle [OBSERVED]
+    line(ui, x1, l.endY, x1 + 4, l.top + 6, l.col);   // 2 px thick, from the line end at x340 to the label's ink top + 6 at x344 [OBSERVED]
     ui.text(r.x + 306, l.y, l.text, "system9", l.col);
   }
-  // ticks along y ~ 220 and the current year in grey
-  ui.fill({r.x + 300, box.y + 1, 1, box.h - 2}, rgb(173, 178, 222));   // the "now" line between the lines and their labels (axis colour)
   ui.fill({r.x + 44, r.y + 218, 256, 2}, rgb(173, 178, 222));         // axis, 2 px
   // Ticks: 1 x 2 px at rows 254..255, one per sample from x 85 to the now line (12 ticks, ~23.2 px apart on a 1-year view) [OBSERVED].
   if (nPts > 1) for (int k = 0; k < nPts; k++) ui.fill({r.x + 45 + k * 255 / (nPts - 1), r.y + 220, 1, 2}, rgb(173, 178, 222));
