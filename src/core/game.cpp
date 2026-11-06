@@ -875,6 +875,25 @@ bool Game::drawSkinnedToolMenu() {
   Rect sp = skin_.subPanelRect(sel, ox, oy);
   if (sp.w > 0 && ui_.hover(sp)) uiHit_ = true;
   uint32_t flyOpen = 0; Rect flyAnchor;
+  // Runs a fly-out entry (bid 0 = the checked one, the first entry until another is chosen) and remembers it as the checked entry.
+  auto activateFlyEntry = [&](uint32_t flyId, uint32_t bid) {
+    auto fm = menu_.menus.find(flyId);
+    if (fm == menu_.menus.end() || fm->second.buttons.empty()) return;
+    const auto& ids = fm->second.buttons;
+    if (!bid) {
+      bid = ids.front();
+      if (auto it = flyCurrent_.find(flyId); it != flyCurrent_.end() && std::find(ids.begin(), ids.end(), it->second) != ids.end()) bid = it->second;
+    }
+    const MenuButton& eb = menu_.buttons[bid];
+    auto ii = menu_.items.find(eb.item);
+    bool enabled = ii == menu_.items.end() || ii->second.enabled;
+    if (flyId == 0xD100A100 && !disastersOn_) enabled = false;
+    if (!transportToolEnabled(eb.item)) enabled = false;
+    if (!enabled) return;
+    flyCurrent_[flyId] = bid;
+    execute(eb.item);
+    if (tool_ != ToolKind::Unavailable) { openFly_ = 0; openRoot_ = 0; }
+  };
   for (int k = 0; k < int(sm->second.buttons.size()); k++) {
     const MenuButton& b = menu_.buttons[sm->second.buttons[k]];
     Rect r = skin_.subButtonRect(sel, k, ox, oy);
@@ -883,14 +902,23 @@ bool Game::drawSkinnedToolMenu() {
     if (tip.empty() && b.sub) tip = menuTitle(b.sub);   // a button with a fly-out is named after the fly-out
     const Image* strip = skin_.toolStrip(b.id);
     bool clicked = false;
+    // A button that owns a fly-out (spec 08 7 [OBSERVED]): a plain click activates the fly-out's checked entry at once; pressing and holding
+    // for about a second opens the fly-out, and releasing on one of its entries selects it.
+    const int64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (b.sub) {
+      if (ui_.in.pressed && ui_.hover(r)) { flyHoldBtn_ = b.id; flyHoldStartMs_ = nowMs; }
+      if (flyHoldBtn_ == b.id && ui_.in.down && ui_.hover(r) && openFly_ != b.sub && nowMs - flyHoldStartMs_ >= 1000) openFly_ = b.sub;
+    }
+    auto onClick = [&]() {
+      if (!b.sub) { execute(b.item); if (tool_ != ToolKind::Unavailable) openRoot_ = 0; return; }
+      if (openFly_ == b.sub || flyHoldBtn_ != b.id) return;   // released after a hold that opened the fly-out, or a press that began elsewhere
+      flyHoldBtn_ = 0;
+      activateFlyEntry(b.sub, 0);
+    };
     if (strip && skin_.imageButtonCells(ui_, strip, 4, r, tip, openFly_ == b.sub && b.sub, true, clicked, Ui::kTipLeft)) {
-      if (clicked) {
-        if (b.sub) openFly_ = (openFly_ == b.sub) ? 0 : b.sub;
-        else { execute(b.item); if (tool_ != ToolKind::Unavailable) openRoot_ = 0; }
-      }
+      if (clicked) onClick();
     } else if (ui_.button(r, tip.empty() ? "?" : tip.substr(0, 6))) {
-      if (b.sub) openFly_ = (openFly_ == b.sub) ? 0 : b.sub;
-      else { execute(b.item); if (tool_ != ToolKind::Unavailable) openRoot_ = 0; }
+      onClick();
     }
     if (b.sub && openFly_ == b.sub) { flyOpen = b.sub; flyAnchor = r; }
   }
@@ -932,13 +960,11 @@ bool Game::drawSkinnedToolMenu() {
           for (int k = 0; k < 5; k++) ui_.fill({cx + 3 + k, cy + 2 - k, 1, 2}, ink);
         }
         ui_.text(fr.x + checkW + 2, fy + 2, labelOf(b), "main9", ink);
-        if (enabled && ui_.clicked(row)) {
-          flyCurrent_[flyOpen] = bid;
-          execute(b.item);
-          if (tool_ != ToolKind::Unavailable) { openFly_ = 0; openRoot_ = 0; }
-        }
+        if (enabled && ui_.clicked(row)) activateFlyEntry(flyOpen, bid);
         fy += 16;
       }
+      // Releasing the mouse away from the fly-out and its button dismisses it.
+      if (openFly_ && ui_.in.released && !ui_.hover(fr) && !ui_.hover(flyAnchor)) openFly_ = 0;
     }
   }
   return true;
