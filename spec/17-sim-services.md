@@ -246,7 +246,7 @@ value is non-zero add to `sweepSum` and `sweepCount`; zero tiles are excluded fr
 average is stored as a byte and is the value the fire strike compares with
 `MaxAcceptableFlam` [STATIC, SIMSERV 0x1000C523, strike chance 0x1000AF08]. Record trailer after
 the byte grid: u32 cursorX, u32 cursorZ, u32 sweepSum, u32 sweepCount, u8 average
-[STATIC for the fields, INFERRED order]. Tiles per run (⌊W·H/30⌋) are recomputed at load, not
+[STATIC for the fields, INFERRED order]. [DATA] The four u32 values agree with this reading. For example, W5_Berlin_s02 has cursor (104, 192), so 49 256 tiles visited, and count 23 511, which is 48 % (the map's non-zero share). The final byte is 0 in every W5 save, so the average is recomputed rather than read from the file. Tiles per run (⌊W·H/30⌋) are recomputed at load, not
 saved. The same cursor and
 running sum/count persist across daily runs, so a full map pass takes 30 simulated days on a
 square map.
