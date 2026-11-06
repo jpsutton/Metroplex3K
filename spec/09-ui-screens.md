@@ -1716,6 +1716,9 @@ at a fixed position (§6.0).
     4. Shading, after all fills, 16-bit canvases only: the shading image is laid over the same
        origin; for grey s, per channel c: s < 125 → c·s/128; 125 ≤ s ≤ 131 → unchanged;
        s ≥ 132 → c + (s − 128)(255 − c)/128 (integer). The dither is baked into the image.
+       [OBSERVED, exact on 1,153/1,153 sampled pixels, Berlin garbage pie] Channels are unpacked
+       from 565 as c5·255/31 and g6·255/63 (floored) and repacked by truncation; at 800 × 600 the
+       mask/shading origin is screen (271, 124).
     5. Label anchor: the edge point P at the mid angle; anchor = C + trunc((P − C)·k), k = 0.6 if
        the fraction is > 0.1, else 0.8. Text `"%.0f%%"` of the fraction × 100, centred on the
        anchor, drawn after shading. Text (and legend label) colour: white if R + G + B < 385 of
