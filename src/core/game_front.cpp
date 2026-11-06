@@ -660,6 +660,7 @@ void Game::drawNewCity() {
     ui_.fill({fr.x, fr.y, fr.w, 1}, rgb(0x6B, 0x71, 0xBD)); ui_.fill({fr.x, fr.y, 1, fr.h}, rgb(0x6B, 0x71, 0xBD));
     ui_.fill({fr.x + 1, fr.y + 1, fr.w - 2, 1}, ink); ui_.fill({fr.x + 1, fr.y + 1, 1, fr.h - 2}, ink);
     ui_.fill({fr.x + fr.w - 2, fr.y + 1, 1, fr.h - 2}, rgb(0x7B, 0x82, 0xBD));
+    ui_.fill({fr.x + 1, fr.y + fr.h - 2, fr.w - 2, 1}, rgb(0x7B, 0x82, 0xBD));   // inner dark bottom line (observed on the New City fields)
     ui_.fill({fr.x + fr.w - 1, fr.y, 1, fr.h}, rgb(0xB5, 0xB6, 0xE7)); ui_.fill({fr.x, fr.y + fr.h - 1, fr.w, 1}, rgb(0xB5, 0xB6, 0xE7));
     if (ui_.in.pressed) { if (fr.contains(ui_.in.mx, ui_.in.my)) ui_.focusId = id; else if (ui_.focusId == id) ui_.focusId = 0; }
     bool focus = ui_.focusId == id;

@@ -403,7 +403,7 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
   // Upper-left panel: heading, (start dialog: the mayor's name), the scrollable text.
   // The left panel is transparent (the dialog's cloud tile shows through) inside a 1 px border (173,182,255) that runs round the whole panel, x 13..349 and
   // y 34..211 of the dialog; the frame keeps its blue band to the left of it (light line at x 4, fill x 5..12, rows 16..425) [OBSERVED].
-  ui.fill(at(5, 16, 8, 410), rgb(123, 146, 255)); ui.fill(at(4, 16, 1, 410), rgb(173, 182, 255));
+  ui.fill(at(5, 34, 8, 392), rgb(123, 146, 255)); ui.fill(at(4, 34, 1, 392), rgb(173, 182, 255));   // starts below the title bar (y 118), so the title text stays on top
   { const uint32_t pe = rgb(173, 182, 255);
     ui.fill(at(13, 34, 337, 1), pe); ui.fill(at(13, 34, 1, 361), pe); ui.fill(at(349, 34, 1, 178), pe);   // left line runs down to the bottom band
     ui.fill(at(469, 4, 1, 31), pe); }   // the right column line starts at the title band (y 88)
