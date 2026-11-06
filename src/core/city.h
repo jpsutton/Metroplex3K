@@ -104,6 +104,8 @@ class City {
   bool buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path);
   // Spec 12 §6.2 drag router (highway dual carriageway, per-tool water/slope). Empty when tiling is off.
   std::vector<std::pair<int, int>> routeNetworkPath(NetworkKind k, int x0, int z0, int x1, int z1) const;
+  // The routed tiles that are not buildable (the blocked tail), drawn red in the preview.
+  std::vector<std::pair<int, int>> routeNetworkInvalid(NetworkKind k, int x0, int z0, int x1, int z1) const;
   // Text dump of the routed drag (every tile with carriage, validity, corner heights, water) for the probes.
   std::string describeRoute(NetworkKind k, int x0, int z0, int x1, int z1) const;
   // The last routeNetworkPath result: its valid tiles and the number of tiles of the whole route. A blocked drag still pays for every routed tile

@@ -1288,6 +1288,10 @@ void Game::buildScene() {
       }
       if (dragging_) {
         for (const auto& p : routePath(x0, z0, x1, z1)) { TilePreview t; t.x0 = t.x1 = p.first; t.z0 = t.z1 = p.second; scene_.previews.push_back(t); }
+        // The blocked tail is shown red (spec 12 6.2.5 [STATIC]) and still paid for [OBSERVED].
+        for (const auto& p : sim_.city().routeNetworkInvalid(NetworkKind(toolArg_ ? toolArg_ : 1), x0, z0, x1, z1)) {
+          TilePreview t; t.x0 = t.x1 = p.first; t.z0 = t.z1 = p.second; t.valid = false; scene_.previews.push_back(t);
+        }
         q = quoteTool(x0, z0, x1, z1);
       } else { pv.x0 = pv.x1 = x1; pv.z0 = pv.z1 = z1; scene_.previews.push_back(pv); q.valid = true; showCost = false; }
       break;

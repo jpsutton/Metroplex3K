@@ -1370,6 +1370,18 @@ std::vector<std::pair<int, int>> City::routeNetworkPath(NetworkKind k, int x0, i
   return path;
 }
 
+std::vector<std::pair<int, int>> City::routeNetworkInvalid(NetworkKind k, int x0, int z0, int x1, int z1) const {
+  std::vector<std::pair<int, int>> out;
+  if (!world_ || !cfg_.haveTiling) return out;
+  Tool tool = k == NetworkKind::Road ? TOOL_ROAD : k == NetworkKind::Rail ? TOOL_RAIL : k == NetworkKind::Power ? TOOL_POWER
+            : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
+  WorldNetworkMap map(*const_cast<World*>(world_), flagsFromRuleSets(cfg_.tiling));
+  configureMap(map);
+  RoutedPath rp = ::m3k::routePath(map, tool, {x0, z0}, {x1, z1});
+  for (const auto& t : rp.tiles) if (!t.valid) out.push_back({t.x, t.z});
+  return out;
+}
+
 std::string City::describeRoute(NetworkKind k, int x0, int z0, int x1, int z1) const {
   std::string out;
   if (!world_ || !cfg_.haveTiling) return "no tiling rules\n";
