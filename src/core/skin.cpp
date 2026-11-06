@@ -591,7 +591,15 @@ bool Skin::drawButton3(Ui& ui, const Image* s, int cells, int cell, Rect r, cons
     // Centre on the pill, not the whole cell: the art carries a drop shadow on the right and bottom (measured on the
     // original's prompt buttons: caption sits 2 px left and 1 px up of the cell centre).
     const Font& fnt = ui.fonts->get(font);
+    // TITLE9 captions on the skin's pill buttons follow one fixed 15-level palette (r, g, b in 565; blue = 15 + level) [OBSERVED on New City Select, Layers
+    // Apply / Default View: all levels identical]; other text colours (disabled, red) keep the computed ramp.
+    static const uint16_t kPillRamp[15] = {
+        uint16_t(6 << 11 | 13 << 5 | 15), uint16_t(7 << 11 | 15 << 5 | 16), uint16_t(8 << 11 | 18 << 5 | 17), uint16_t(10 << 11 | 20 << 5 | 18), uint16_t(11 << 11 | 23 << 5 | 19),
+        uint16_t(12 << 11 | 26 << 5 | 20), uint16_t(14 << 11 | 28 << 5 | 21), uint16_t(15 << 11 | 31 << 5 | 22), uint16_t(16 << 11 | 34 << 5 | 23), uint16_t(18 << 11 | 36 << 5 | 24),
+        uint16_t(19 << 11 | 39 << 5 | 25), uint16_t(20 << 11 | 42 << 5 | 26), uint16_t(22 << 11 | 44 << 5 | 27), uint16_t(23 << 11 | 47 << 5 | 28), uint16_t(25 << 11 | 50 << 5 | 29)};
+    const bool pillInk = cell != CELL_DISABLED && (textCol ? textCol : ui.textCol) == ui.textCol && std::string(font) == "title9";
     if (ui.buttonLabelRamp) fnt.setRampOverride(ui.buttonLabelRamp);
+    else if (pillInk) fnt.setRampOverride(kPillRamp);
     ui.textCentered({r.x + off, r.y + off + ui.buttonLabelDy, r.w - 4, r.h - 2}, label, font,
                     cell == CELL_DISABLED ? rgb(0x90, 0x94, 0xA0) : textCol ? textCol : ui.textCol);
     fnt.setRampOverride(nullptr);

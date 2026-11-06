@@ -410,7 +410,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   if (control("under.pipes", true, 12, 238, E.win(0x275, "Water Pipes"), edit.underground == 1, under)) edit.underground = 1;
 
   // ---- City Layer Views
-  header("mode.layers", 154, 45, E.win(0x26B, "City Layer Views:"), CityLayers::LayerView);
+  header("mode.layers", 154, 45, E.win(0x26B, "City Layer Views:"), CityLayers::LayerView, -1);
   const bool layers = edit.mode == CityLayers::LayerView;
   const auto& views = cityLayerViews();
   for (size_t i = 0; i < views.size(); i++)
