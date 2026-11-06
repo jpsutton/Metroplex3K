@@ -688,20 +688,22 @@ void City::configureMap(WorldNetworkMap& map) const {
     for (uint32_t p : neighbours.conn[setOfKind[nk]]) map.setConnection(nk, int(p >> 16), int(p & 0xFFFF), true);
   if (!game_ || !cfg_.haveTiling) return;
   GameData* g = game_;
-  const auto* tr = &cfg_.tiling;
-  auto cache = std::make_shared<std::unordered_map<uint32_t, unsigned>>();
-  map.setExitFn([g, tr, cache](uint32_t id, int rot) -> unsigned {
-    auto it = cache->find(id);
+  auto cache = std::make_shared<std::unordered_map<uint64_t, unsigned>>();
+  map.setExitFn([g, cache](uint32_t id, int rot, int kind) -> unsigned {
+    // The matrix follows the kind being tiled, not the neighbour's set membership: a crossing (e.g. 69, road x rail) is in several sets and
+    // re-tiling road must read its road matrix (spec 12 4.8 [DATA]).
+    const int which = kind == NK_RAIL ? 1 : kind == NK_SUBWAY ? 2 : 0;
+    const uint64_t key = (uint64_t(which) << 32) | id;
+    auto it = cache->find(key);
     unsigned base;
     if (it != cache->end()) base = it->second;
     else {
       base = 0xF;
       if (const OccAttr* a = g->occupant(id, true)) {
-        const int which = tr->inSet(netKindToTable(NK_RAIL), id) ? 1 : tr->inSet(netKindToTable(NK_SUBWAY), id) ? 2 : 0;
         const uint32_t m = a->netMatrix[which];
         if (m) base = (m | (m >> 4) | (m >> 8) | (m >> 12) | (m >> 16) | (m >> 20) | (m >> 24) | (m >> 28)) & 0xFu;   // all eight nibbles (the on-ramps 15130-15141 differ between the halves)
       }
-      (*cache)[id] = base;
+      (*cache)[key] = base;
     }
     const int r = rot & 3;
     return ((base << r) | (base >> (4 - r))) & 0xFu;

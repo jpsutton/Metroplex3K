@@ -90,7 +90,8 @@ class INetworkMap {
   virtual void setConnection(int kind, int x, int z, bool on) = 0;
   // Connection-side mask of a piece (bit0 west/-x, 1 north/-z, 2 east/+x, 3 south/+z) after
   // rotation. Default: exposes everything.
-  virtual unsigned exitMask(uint32_t id, int rot) const { (void)id; (void)rot; return 0xF; }
+  // `kind` is the NetKind being tiled: it picks the matrix (0x136 road/highway, 0x137 rail, 0x138 subway), since crossings belong to several sets.
+  virtual unsigned exitMask(uint32_t id, int rot, int kind) const { (void)id; (void)rot; (void)kind; return 0xF; }
   // May a terrain corner change? (no building / network piece on any of the up to 4 tiles)
   virtual bool canChangeCorner(int vx, int vz) const { (void)vx; (void)vz; return true; }
   // Network endpoint levelling (spec 12 6.2.6 step 3): level the tile rectangle to the average of its perimeter corners with the level
@@ -122,7 +123,7 @@ class SimpleNetworkMap : public INetworkMap {
   void removePiece(int x, int z, NetLayer layer) override;
   bool hasConnection(int kind, int x, int z) const override { return conns.count({kind, x, z}) != 0; }
   void setConnection(int kind, int x, int z, bool on) override;
-  unsigned exitMask(uint32_t id, int rot) const override;
+  unsigned exitMask(uint32_t id, int rot, int kind) const override;
   bool canChangeCorner(int vx, int vz) const override;
   void setPierFlag(int x, int z, bool on) override;
   std::vector<PlacedPiece> pieces(NetLayer layer) const override;

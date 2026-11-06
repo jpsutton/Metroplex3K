@@ -15,7 +15,7 @@ namespace m3k {
 class WorldNetworkMap : public INetworkMap {
  public:
   using FlagsFn = std::function<uint32_t(uint32_t occupantId)>;
-  using ExitFn = std::function<unsigned(uint32_t occupantId, int rot)>;
+  using ExitFn = std::function<unsigned(uint32_t occupantId, int rot, int kind)>;
 
   WorldNetworkMap(World& w, FlagsFn flagsOf) : w_(w), flagsOf_(std::move(flagsOf)) { rebuild(); }
   void setExitFn(ExitFn f) { exitFn_ = std::move(f); }
@@ -136,7 +136,7 @@ class WorldNetworkMap : public INetworkMap {
   void setConnection(int kind, int x, int z, bool on) override {
     if (on) conns_.insert({kind, x, z}); else conns_.erase({kind, x, z});
   }
-  unsigned exitMask(uint32_t id, int rot) const override { return exitFn_ ? exitFn_(id, rot) : 0xF; }
+  unsigned exitMask(uint32_t id, int rot, int kind) const override { return exitFn_ ? exitFn_(id, rot, kind) : 0xF; }
   bool canChangeCorner(int vx, int vz) const override {
     for (int dx = -1; dx <= 0; dx++)
       for (int dz = -1; dz <= 0; dz++) {

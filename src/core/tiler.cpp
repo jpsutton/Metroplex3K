@@ -109,7 +109,7 @@ void SimpleNetworkMap::setConnection(int kind, int x, int z, bool on) {
   if (on) conns.insert({kind, x, z}); else conns.erase({kind, x, z});
 }
 
-unsigned SimpleNetworkMap::exitMask(uint32_t id, int rot) const {
+unsigned SimpleNetworkMap::exitMask(uint32_t id, int rot, int) const {
   auto it = exits.find(id);
   if (it == exits.end()) return 0xF;
   unsigned m = it->second & 0xF, r = unsigned(rot) & 3;
@@ -348,7 +348,7 @@ void Tiler::describe(Ctx& c, int pass, int x, int z, std::vector<RuleCond>& entr
       bit = true;
       if (pass == 2 && dir < 4 && (c.kind == NK_ROAD || c.kind == NK_HIGHWAY || c.kind == NK_RAIL || c.kind == NK_SUBWAY)) {
         bool uncond = c.kind == NK_SUBWAY && (o.flags & 0x40100) == 0x40100;
-        if (!uncond) bit = (map_.exitMask(o.id, o.rot) >> ((dir + 2) & 3)) & 1;
+        if (!uncond) bit = (map_.exitMask(o.id, o.rot, c.kind) >> ((dir + 2) & 3)) & 1;
       }
     } else if (o.present) {
       e.id = 0; e.rot = (o.flags & OF_IGNORABLE) ? 5 : 0;
