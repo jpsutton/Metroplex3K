@@ -439,7 +439,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
 // ================================================================ graphs (7.3)
 std::vector<uint32_t> GraphsWindow::samples(const Chart& c, int range) {
   std::vector<uint32_t> v;
-  if (range == 0) for (int i = 10; i >= 0; i--) v.push_back(c.monthly[i]);   // the 12-month plot skips the oldest slot; the caller appends the live value [OBSERVED]
+  if (range == 0) for (int i = 11; i >= 0; i--) v.push_back(c.monthly[i]);   // the 12 stored samples, oldest first [OBSERVED: London]
   else if (range == 1) for (int i = 9; i >= 0; i--) v.push_back(c.yearly[i]);
   else for (int i = 9; i >= 0; i--) v.push_back(c.decade[i]);
   return v;
@@ -508,7 +508,6 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   for (size_t i = 0; i < series.size() && i < 16; i++) {
     if (!(enabledMask & (1u << i)) || !series[i].chart) continue;
     auto s = samples(*series[i].chart, range);
-    if (range == 0) s.push_back(uint32_t(series[i].live >= 0 ? series[i].live : int64_t(series[i].chart->monthly[0])));   // 12th point = the live current value (the newest saved sample when unknown)
     if (s.size() < 2) continue;
     nPts = int(s.size());
     uint32_t lo = 0, hi = series[i].chart->max;
@@ -588,12 +587,15 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   // range radios
   static const uint32_t rid[3] = {0x170, 0x171, 0x172};
   static const char* const rfb[3] = {"1 Year", "10 Years", "100 Years"};
-  static const int ry[3] = {387, 405, 423};
-  for (int i = 0; i < 3; i++)
-    if (radio(ui, E, "range." + std::to_string(i), {r.x + 316, r.y + ry[i] - 6, 90, 12}, E.win(rid[i], rfb[i]), range == i)) {
+  static const int ry[3] = {388, 406, 424};   // the group sits 1 px lower and the circles 1 px right of the label column [OBSERVED]
+  for (int i = 0; i < 3; i++) {
+    ui.radioLabelDx = -1;
+    if (radio(ui, E, "range." + std::to_string(i), {r.x + 317, r.y + ry[i] - 6, 90, 12}, E.win(rid[i], rfb[i]), range == i)) {
       range = i;
       R.add(Act::SetTimeRange, 0, i);
     }
+    ui.radioLabelDx = 0;
+  }
   return R;
 }
 
