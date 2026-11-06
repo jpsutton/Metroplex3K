@@ -87,13 +87,14 @@ bool artButton(Ui& ui, const WinEnv& E, const std::string& name, const Image* st
 
 // Up/down spinner (42DEC7D2:0B, 4 cells 12x18; the pressed cell shows both halves pressed, only the held half is used).
 // Returns +1 / -1 when the upper / lower half is clicked. Spots: name.plus (upper half) and name.minus (lower half).
-int spinner(Ui& ui, const WinEnv& E, const std::string& name, int x, int y) {
-  Rect up{x, y, 12, 9}, dn{x, y + 9, 12, 9};
+int spinner(Ui& ui, const WinEnv& E, const std::string& name, int x, int y, int gap = 0) {
+  Rect up{x, y, 12, 9}, dn{x, y + 9 + gap, 12, 9};
   E.spot(name + ".plus", up);
   E.spot(name + ".minus", dn);
   const Image* s = dlgArt(ui, 0x0B);
   if (s && !s->empty() && s->w >= 48) {
-    Skin::drawCell(ui, s, 4, CELL_NORMAL, x, y);
+    if (gap > 0) { ui.blitRect(*s, x, y, CELL_NORMAL * 12, 0, 12, 9); ui.blitRect(*s, dn.x, dn.y, CELL_NORMAL * 12, 9, 12, 9); }   // the two halves drawn apart
+    else Skin::drawCell(ui, s, 4, CELL_NORMAL, x, y);
     for (int h = 0; h < 2; h++) {
       Rect hr = h ? dn : up;
       if (ui.hover(hr)) ui.blitRect(*s, hr.x, hr.y, (ui.in.down ? CELL_PRESSED : CELL_HOVER) * 12, h * 9, 12, 9);
@@ -130,7 +131,7 @@ void splitHeading(Ui& ui, int cx, int y, const std::string& s, const char* font,
   }
   for (size_t i = 0; i < parts.size(); i++) {
     // The original centres these three lines 2 px off the ink-width centre (English strings, observed): "Expense" and "Estimate" 2 px right, "Meet" 2 px left.
-    const int adj = (parts[i] == "Expense" || parts[i] == "Estimate") ? 2 : parts[i] == "Meet" ? -2 : 0;
+    const int adj = (parts[i] == "Expense" || parts[i] == "Estimate" || parts[i] == "Mo/Yr") ? 2 : parts[i] == "Meet" ? -2 : 0;
     ui.text(cx - ui.textWidth(parts[i], font) / 2 + adj, y + int(i) * 14, parts[i], font, col);
   }
 }
@@ -322,7 +323,8 @@ void BudgetWindow::drawLoans(Ui& ui, const WinEnv& E, Budget& b, const BudgetVie
   bands(ui, r, {{28, 273, 40, 28}, {92, 312, 176, 82}, {310, 358, 46, 36}});
   // Loan table: 5 rows, white zebra on rows 0, 2, 4.
   sunkenLines(ui, at(6, 73, 348, 181));
-  auto rowY = [](int i) { return 74 + i * 179 / 5; };
+  static const int kRowY[5] = {74, 109, 146, 181, 218};   // stripe tops: heights 35 / 37 / 35 / 37 / 35 [OBSERVED]
+  auto rowY = [](int i) { return kRowY[i]; };
   for (int i = 0; i < 5; i += 2) ui.fill(at(7, rowY(i), 346, 35), kWhite);
   const int colC[4] = {46, 136, 224, 312};
   splitHeading(ui, r.x + colC[0], r.y + 41, E.win(0x1B3, "Maturity Date Mo/Yr"), F, kInkLabel);
@@ -352,7 +354,7 @@ void BudgetWindow::drawLoans(Ui& ui, const WinEnv& E, Budget& b, const BudgetVie
   ui.text(r.x + 180 - ui.textWidth(nl, F) / 2, r.y + 316, nl, F, kInkLabel);
   int maxK = std::max(5, b.cfg.maxBondAmt);
   newLoanThousands = std::max(5, std::min(maxK, newLoanThousands / 5 * 5));
-  int d = spinner(ui, E, "amount", r.x + 136, r.y + 335);
+  int d = spinner(ui, E, "amount", r.x + 136, r.y + 335, 3);   // a 3 row gap between the halves
   if (d) newLoanThousands = std::max(5, std::min(maxK, newLoanThousands + 5 * d));
   whiteField(ui, at(152, 334, 72, 24));
   rightText(ui, r.x + 220, r.y + 339, std::to_string(int64_t(newLoanThousands) * 1000), "system9", kInkDark);
@@ -396,7 +398,7 @@ WindowResult BudgetWindow::draw(Ui& ui, const WinEnv& E, Budget& b, const Budget
       incomeTab = inc;
       ui.in = saved;
     }
-    drawLoans(ui, E, b, v, [&] { Rect m = viewAreaCentre(ui, 500, 480); return placedAt(ui, m.x, m.y, 360, 400); }(), R);
+    drawLoans(ui, E, b, v, [&] { Rect m = viewAreaCentre(ui, 500, 480); return placedAt(ui, m.x + 70, m.y + 40, 360, 400); }(), R);   // centred on the Budget window (observed)
     return R;
   }
   int lh = lineHeight(ui);
@@ -533,13 +535,14 @@ std::string ordinanceName(const WinEnv& E, const OrdinanceDef& d) {
 // check-mark button at the bottom right.
 WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o, const OrdinanceMoneyInput& money, uint32_t advisorFilter) {
   WindowResult R;
-  const uint32_t ink = rgb(0x31, 0x34, 0x7B), grey = rgb(0x90, 0x94, 0xA0), band = rgb(0x7B, 0x92, 0xFF);
+  const uint32_t ink = rgb(0x31, 0x34, 0x7B), grey = rgb(132, 130, 132), band = rgb(123, 146, 255), bandEdge = rgb(173, 182, 255);
   Rect r = placedAt(ui, 8, 8, 384, 354);
   ui.panel(r, E.win(0x76, "Ordinances"));
-  ui.text(r.x + 14, r.y + 40, E.win(0x1C2, "Ordinance"), "main10", ink);
-  rightText(ui, r.x + r.w - 30, r.y + 40, E.win(0x1C3, "Current Monthly Cost"), "main10", ink);
-  const Rect list{r.x + 4, r.y + 62, 368, 223};
-  ui.fill(list, rgb(0xE6, 0xE8, 0xFF)); sunkenLines(ui, list);
+  // All positions below are measured on the original at 800 x 600 (window at 8, 8); main9 is the 9 pt UI face (cap height 9 rows).
+  ui.text(r.x + 6, r.y + 42, E.win(0x1C2, "Ordinance"), "main9", ink);
+  rightText(ui, r.x + 350, r.y + 42, E.win(0x1C3, "Current Monthly Cost"), "main9", ink);
+  const Rect list{r.x + 4, r.y + 58, 376, 228};   // frame: dark top / left, light bottom / right; flat interior
+  ui.fill(list, rgb(222, 223, 255)); insetBevel(ui, list);
   static const uint32_t order[7] = {kAdvUtilities, kAdvDemographics, kAdvSafety, kAdvEnvironment, kAdvPlanner, kAdvTransport, kAdvBudget};
   struct Item { bool header; uint32_t id; std::string name; };
   std::vector<Item> items;
@@ -552,59 +555,63 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
     items.push_back({true, adv, AdvisorWindow::advisorName(E, adv)});
     items.insert(items.end(), rows.begin(), rows.end());
   }
-  const int bodyW = list.w - 18;                       // the scroll bar takes the right edge
+  // Layout: a band 26 rows tall, its first row 28 below the band top, rows 18 apart, the next band 16 below the last row's top.
+  auto advance = [&](size_t i) { const bool nextHeader = i + 1 < items.size() && items[i + 1].header; return items[i].header ? 28 : (nextHeader ? 16 : 18); };
+  const int top = list.y + 5, bottom = list.y + list.h - 1;   // interior rows 67..292 on the original
   int visible = 0;
-  { int h = 0; for (size_t i = size_t(scroll); i < items.size(); i++) { h += items[i].header ? 24 : 18; if (h > list.h) break; visible++; } }
-  classicScrollBar(ui, E, {list.x + list.w - 17, list.y + 1, 16, list.h - 2}, list, int(items.size()), std::max(1, visible - 1), scroll);
-  int y = list.y;
+  { int h = 0; for (size_t i = size_t(scroll); i < items.size(); i++) { h += advance(i); if (h > bottom - top) break; visible++; } }
+  const bool bar = int(items.size()) > std::max(1, visible);
+  if (bar) {
+    const Rect br{list.x + 364, list.y + 5, 16, 216};
+    ui.fill({br.x, br.y, 16, 218}, band);
+    scenarioScrollBar(ui, E, br, list, int(items.size()), std::max(1, visible), scroll);
+  } else scroll = 0;
+  const int bodyR = list.x + (bar ? 360 : 372);   // right limit of the band
+  const Image* checkArt = ui.skin ? ui.skin->get("check") : nullptr;
+  int y = top;
   for (size_t i = size_t(scroll); i < items.size(); i++) {
     const Item& it = items[i];
-    const int h = it.header ? 24 : 18;
-    if (y + h > list.y + list.h) break;
+    if (y >= bottom) break;
     if (it.header) {
-      ui.fill({list.x, y, bodyW, h}, band);
-      ui.text(list.x + 8, y + (h - ui.fonts->get("main10").height()) / 2, it.name, "main10", ink);   // small bold dialog font, dark blue
+      if (y + 26 > bottom) break;
+      const Rect bd{list.x + 4, y, bodyR - (list.x + 4) - 8, 26};
+      ui.fill(bd, bandEdge); ui.fill({bd.x + 1, bd.y + 1, bd.w - 2, bd.h - 2}, band);
+      ui.text(bd.x + 4, bd.y + 7, it.name, "main9", ink);   // ink rows 80..88: 9 below the band top
       bool c = false;
-      const Rect q{list.x + bodyW - 38, y, 36, h};
+      const Rect q{bd.x + bd.w - 27, bd.y + 2, 23, 23};
       E.spot("adv." + std::to_string(it.id), q);
       if (ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Gonzo, 0x19), 4, q, "", false, true, c)) {}
       else c = ui.button(q, "?");
       if (c) R.add(Act::OpenAdvisor, it.id);
     } else {
       const bool en = o.enacted(it.id);
-      // 11 px check box
-      const Rect cb{list.x + 8, y + (h - 11) / 2, 11, 11};
-      const Rect hit{list.x + 4, y, bodyW - 8, h};
+      const Rect cb{list.x + 4, y, 13, 13};   // check box art 13 x 13 at (16, 99 + 18 k)
+      const Rect hit{list.x + 4, y, bodyR - (list.x + 4) - 8, 18};
       E.spot("ord." + std::to_string(it.id), hit);
-      ui.fill(cb, rgb(255, 255, 255));
-      ui.fill({cb.x, cb.y, cb.w, 1}, ink); ui.fill({cb.x, cb.y, 1, cb.h}, ink);   // bordered square
-      ui.fill({cb.x, cb.y + cb.h - 1, cb.w, 1}, ink); ui.fill({cb.x + cb.w - 1, cb.y, 1, cb.h}, ink);
-      if (en) {
-        for (int k = 0; k < 3; k++) ui.fill({cb.x + 2 + k, cb.y + 5 + k, 1, 2}, ink);
-        for (int k = 0; k < 5; k++) ui.fill({cb.x + 4 + k, cb.y + 7 - k, 1, 2}, ink);
+      const bool hot = ui.hover(hit);
+      if (!(ui.skin && ui.skin->drawCheck(ui, checkArt, cb.x, cb.y, en, true, hot, hot && ui.in.down))) {
+        ui.fill(cb, rgb(255, 255, 255));
+        ui.fill({cb.x, cb.y, cb.w, 1}, ink); ui.fill({cb.x, cb.y, 1, cb.h}, ink); ui.fill({cb.x, cb.y + cb.h - 1, cb.w, 1}, ink); ui.fill({cb.x + cb.w - 1, cb.y, 1, cb.h}, ink);
+        if (en) { for (int k = 0; k < 3; k++) ui.fill({cb.x + 2 + k, cb.y + 5 + k, 1, 2}, ink); for (int k = 0; k < 5; k++) ui.fill({cb.x + 4 + k, cb.y + 7 - k, 1, 2}, ink); }
       }
       if (ui.clicked(hit)) {
         const bool ok = en ? o.repeal(it.id) : o.enact(it.id);
         if (ok) R.add(Act::SetOrdinance, it.id, !en);
       }
-      const int th = ui.fonts->get("system9").height();
-      ui.text(list.x + 28, y + (h - th) / 2, it.name, "system9", ink);
+      ui.text(list.x + 20, y, it.name, "main9", ink);   // ink x 32, cap top y + 2
       const int64_t val = en ? o.monthlyValue(it.id, money) : o.ifEnactedValue(it.id, money);   // not enacted: the cost it would have, in grey
-      // An enacted cost is red and bold (black at zero); a row not enacted shows its would-be cost in grey, small regular.
-      if (en) rightText(ui, list.x + bodyW - 8, y + (h - ui.fonts->get("main10").height()) / 2, E.money(val), "main10", val < 0 ? rgb(0xC0, 0, 0) : 0);
-      else rightText(ui, list.x + bodyW - 8, y + (h - th) / 2, E.money(val), "system9", grey);
+      rightText(ui, list.x + 350, y, E.money(val), "main9", en ? (val < 0 ? rgb(0xC0, 0, 0) : 0) : grey);
     }
-    y += h;
+    y += advance(i);
   }
   const auto m = o.monthlyMoney(money);
   const int64_t net = m.income - m.cost;
-  { // Footer: "Monthly Total" in the small bold font, right-aligned next to the cost column, value in black.
+  { // Footer: "Monthly Total" from x 255, the amount from x 343, cap top y 298.
     const std::string lab = E.win(0x1C4, "Monthly Total"), val = E.money(net);
-    const int fh = ui.fonts->get("main10").height();
-    rightText(ui, list.x + bodyW - 8, r.y + 296 + (22 - fh) / 2, val, "main10", net < 0 ? rgb(0xC0, 0, 0) : 0);   // negative total: red bold
-    ui.text(list.x + bodyW - 8 - ui.textWidth(val, "main10") - 12 - ui.textWidth(lab, "main10"), r.y + 296 + (22 - fh) / 2, lab, "main10", ink);
+    ui.text(r.x + 247, r.y + 288, lab, "main9", ink);
+    ui.text(r.x + 335, r.y + 288, val, "main9", net < 0 ? rgb(0xC0, 0, 0) : 0);
   }
-  const Rect done{r.x + r.w - 56, r.y + r.h - 40, 44, 34};
+  const Rect done{r.x + r.w - 52, r.y + r.h - 44, 44, 34};
   E.spot("ok", done);
   bool c = false;
   if (!(ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Sys, 0xA2DEFD9A), 4, done, "", false, true, c))) c = ui.button(done, E.app(0xB4, "OK"));

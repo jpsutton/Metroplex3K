@@ -315,6 +315,47 @@ void classicScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int total
   }
 }
 
+// Bevelled frame of the scenario text box and goals list: dark (123,138,255) left/top, light (255,243,255) right/bottom [OBSERVED 800 x 600].
+void insetBevel(Ui& ui, Rect b) {
+  ui.fill({b.x, b.y, 1, b.h}, rgb(123, 138, 255)); ui.fill({b.x, b.y, b.w, 1}, rgb(123, 138, 255));
+  ui.fill({b.x + b.w - 1, b.y, 1, b.h}, rgb(255, 243, 255)); ui.fill({b.x, b.y + b.h - 1, b.w, 1}, rgb(255, 243, 255));
+}
+
+// Vertical scroll bar from the skin strip Sys 82B9B75B:E2B99E01 (192 x 16: twelve 16 x 16 cells; 6/7 up arrow normal/pressed, 8 vertical thumb,
+// 9 vertical groove, 10/11 down arrow) [OBSERVED 800 x 600: up arrow at the top of r, thumb below it, groove tiled, down arrow at the bottom].
+// Scrolls by item. r is 16 px wide.
+void scenarioScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int total, int visible, int& scroll) {
+  const Image* strip = ui.skin ? ui.skin->image(skin_group::Sys, 0xE2B99E01) : nullptr;
+  ui.fill(r, rgb(123, 146, 255));
+  const Rect up{r.x, r.y, 16, 16}, dn{r.x, r.y + r.h - 16, 16, 16};
+  E.spot("scroll.up", up); E.spot("scroll.down", dn);
+  if (ui.hover(wheelArea) && ui.in.wheel) scroll -= ui.in.wheel;
+  if (ui.clicked(up)) scroll--;
+  if (ui.clicked(dn)) scroll++;
+  const int range = std::max(0, total - visible);
+  const Rect track{r.x, r.y + 16, 16, r.h - 32};
+  const int th = 16;
+  if (range > 0) {
+    E.spot("scroll.track", track);
+    if (ui.hover(track) && ui.in.down) {
+      const int pos = ui.in.my - track.y - th / 2;
+      scroll = (pos * range + (track.h - th) / 2) / std::max(1, track.h - th);
+    }
+    scroll = std::max(0, std::min(scroll, range));
+  } else scroll = 0;
+  const int ty = track.y + (range > 0 ? (track.h - th) * scroll / range : 0);
+  if (!strip) {   // no art: flat stand-ins
+    ui.fill(up, rgb(214, 215, 255)); ui.fill(dn, rgb(214, 215, 255)); ui.fill({track.x, ty, 16, th}, rgb(214, 215, 255));
+    return;
+  }
+  for (int y = track.y; y < track.y + track.h; y += 16)   // groove, tiled (the last tile clipped to the track)
+    ui.blitRect(*strip, track.x, y, 9 * 16, 0, 16, std::min(16, track.y + track.h - y));
+  const bool upDown = ui.hover(up) && ui.in.down, dnDown = ui.hover(dn) && ui.in.down;
+  Skin::drawCell(ui, strip, 12, upDown ? 7 : 6, up.x, up.y);
+  Skin::drawCell(ui, strip, 12, dnDown ? 11 : 10, dn.x, dn.y);
+  if (range > 0) Skin::drawCell(ui, strip, 12, 8, track.x, ty);
+}
+
 void portrait(Ui& ui, Rect r, const Image* im, const std::string& letter, uint32_t col) {
   if (im && !im->empty()) {
     ui.fill(r, ui.panelDark);

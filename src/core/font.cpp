@@ -26,6 +26,8 @@ bool Font::load(const uint8_t* p, size_t n) {
   int mx = 0;
   for (uint8_t v : atlas_) mx = std::max<int>(mx, v);
   multi_ = mx > 17;
+  ramp_ = false;
+  for (uint8_t v : atlas_) if (v >= 2 && v <= 15) { ramp_ = true; break; }
   return true;
 }
 
@@ -65,6 +67,14 @@ void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::strin
         if (dx < 0 || dx >= fbW || gx < 0 || gx >= w_) continue;
         uint8_t idx = atlas_[size_t(gy) * w_ + gx];
         uint32_t& d = fb[size_t(dy) * pitch + dx];
+        // Title text in the title-bar colour (222,223,255): the original does no blending at all. The FBF's 565 palette holds the 16 shades pre-mixed
+        // against the title-bar background, glyphs are a plain blit of palette[index], and the index at pixel (0,0) is the colour key [STATIC; matches the
+        // measured levels exactly]. So the fringe keeps the stored background shade over any backdrop.
+        if (ramp_ && !multi_ && col == 0xFFFFDFDEu) {
+          if (idx == atlas_[0] || idx == 0 || idx > 16) continue;
+          d = expand16(pal_[idx], 7);
+          continue;
+        }
         if (multi_) {
           uint16_t pv = pal_[idx];
           if (pv == 0xF81F) continue;

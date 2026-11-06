@@ -259,7 +259,7 @@ void testOrdinances() {
   h.frame();
   Rect fr; CHECK(!h.find("close", fr));
   // Placement (spec 09 6.3 [OBSERVED]): 384 x 354 at (8, 8); grouped by advisor with one "?" band per group.
-  Rect okr; CHECK(h.find("ok", okr) && okr.x == 8 + 384 - 56 && okr.y == 8 + 354 - 40);
+  Rect okr; CHECK(h.find("ok", okr) && okr.x == 8 + 384 - 52 && okr.y == 8 + 354 - 44);
   size_t bands = 0; for (auto& s : h.spots) if (s.name.rfind("adv.", 0) == 0) bands++;
   CHECK(bands >= 1 && bands <= 7);
 }

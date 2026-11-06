@@ -28,6 +28,7 @@ class Font {
  private:
   int w_ = 0, h_ = 0, glyphH_ = 0;
   bool multi_ = false;
+  bool ramp_ = false;     // the atlas uses indices 2..15 (a pre-mixed anti-aliasing ramp: the title fonts)
   std::vector<uint8_t> atlas_;
   uint16_t pal_[256] = {};
   Glyph g_[256];

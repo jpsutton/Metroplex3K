@@ -163,7 +163,9 @@ bool stepper(Ui& ui, const WinEnv& E, const std::string& name, Rect r, int& v, i
 // Vertical scrolling helper: clamps `scroll`, handles the wheel and up/down arrow buttons at the right edge.
 // Returns the first visible row. `visible` rows fit in `r`.
 void scrollBar(Ui& ui, const WinEnv& E, Rect r, int total, int visible, int& scroll);
-void classicScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int total, int visible, int& scroll);   // spec 09 6.3
+void classicScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int total, int visible, int& scroll);
+void insetBevel(Ui& ui, Rect b);   // dark (123,138,255) left / top, light (255,243,255) right / bottom
+void scenarioScrollBar(Ui& ui, const WinEnv& E, Rect r, Rect wheelArea, int total, int visible, int& scroll);   // skin strip E2B99E01 scroll bar, 16 px wide   // spec 09 6.3
 // Portrait or filler box when no image is available.
 void portrait(Ui& ui, Rect r, const Image* im, const std::string& fallbackLetter, uint32_t col);
 // Original-look pieces measured on the shipped dialogs:
