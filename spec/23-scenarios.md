@@ -87,7 +87,7 @@ All text scenario records (header, scripts, style table, presenter table) are 8-
 | 2 | path | Path of the source city used by the Scenario Creator; informational only [DATA] |
 | 3 | `T G I` | Key of the entry-point script. Always `601861727 601861772 n` = `23DFAE5F:23DFAE8C:n` [DATA] |
 | 4 | `G I` | String reference of the scenario title (string table G, string I; I is 1 in all shipped files) [DATA] |
-| 5 | `P K` | Default **presenter** for the scenario's dialogs: P = presenter ID, K = presenter kind (1 = advisor, P is an advisor ID from §4.6; 0 = custom presenter, P is a row of the presenter table §2.6). If K = 1 and P is not a known advisor, the Utilities advisor `022E288E` is used. [STATIC] Values shipped: `828D04EB 1`, `828D0A2F 1`, `028D0FC5 1`, `C28D0B6E 1`, `628D0C45 1`, `2 0`. [DATA] |
+| 5 | `P K` | Default **presenter** for the scenario's dialogs: P = presenter ID, K = presenter kind, same codes as `cmdPopUpMsg` a4 [STATIC]: 0 = game-side presenter table (P looked up in a table that a city subsystem provides; it returns picture key, name and title) [OPEN: which subsystem]; 1 = advisor (P is an advisor ID from §4.6); 2 = scenario presenter table (P is a row key of §2.6). CORRECTION: earlier text called kind 0 the scenario table. Shipped `2 0` therefore means game-side presenter 2. If K = 1 and P is not a known advisor, the Utilities advisor `022E288E` is used. [STATIC] Values shipped: `828D04EB 1`, `828D0A2F 1`, `028D0FC5 1`, `C28D0B6E 1`, `628D0C45 1`, `2 0`. [DATA] |
 | 6 | `G` | Group of the scenario's string table (equals the G on line 4 in all shipped files) [DATA] |
 
 ### 2.4 Script record `23DFAE5F:23DFAE8C:n` — see §3.
@@ -125,9 +125,13 @@ Line 1: count N. Then N lines `P  NAME  TITLE` (three integers):
 * `P` presenter (picture) ID; `NAME`, `TITLE` string IDs in the scenario string table.
 * The first 12 rows are identical in all 13 files and correspond to the 12 standard presenter
   pictures; later rows (IDs 137+ / 150+ / 156+) add scenario-specific presenters (advisors). [DATA]
-* A custom presenter (kind 0, §2.3 line 5 and `cmdPopUpMsg`) with ID P is shown with picture
-  `62B9DA24:6504691D:P`, name string (scenario table, NAME) and title string (scenario table,
-  TITLE). [STATIC] No shipped file contains any `62B9DA24:6504691D` picture, and shipped scripts use
+* A scenario-table presenter (kind 2, §2.3 line 5 and `cmdPopUpMsg`) with ID P is shown with
+  picture `62B9DA24:6504691D:<row picture>`, name string (scenario table, NAME) and title string
+  (scenario table, TITLE). [STATIC] The row's picture field is the first integer, the same value as
+  the key P; it is a 32-bit hash written as a signed decimal (for example −1862531500). The lookup does not check that
+  the row exists; an implementation should show no portrait when it is missing. The 12 standard
+  rows are the Scenario Creator's built-in presenters (its `tblCustomPresenters`: ImageID, NameID,
+  TitleID, e.g. −1862531500/53/54 "Chester Checker", "Checkered flag"). [DATA] No shipped file contains any `62B9DA24:6504691D` picture, and shipped scripts use
   advisor presenters (kind 1) almost exclusively, so the standard rows are effectively unused. [DATA]
 * Parsing: each row is read as up to four integers of which exactly three must be present; a row
   that fails stops loading of the table. [STATIC]
@@ -370,9 +374,9 @@ marked.
 | cmdAllGoalsMet | 0 | — | 1 iff every defined goal is met (1 if none) |
 | cmdAddRankInfo | 3 | rankID, G, I | Adds/replaces rank with title text (G,I) |
 | cmdEndScenario | 1 | rankID | Result rank ← rankID if defined, else −1; scenario becomes inactive; simulation paused; results dialog shown (§4.7) |
-| cmdMakeDialogText | 3 | G, I, slot | Sets text of the start/progress dialog; slot 1 = main text, 2 = additional paragraphs (appended) `[INFERRED]` |
-| cmdSetResultsDlgText | 3 | G, I, slot | Same for the results dialog |
-| cmdPopUpMsg | 6 | G, I, a2, presenter, a4, mood | Modal message (§4.7). a2 = 1 makes the pop-up of the "important" style. presenter = advisor ID (see below) |
+| cmdMakeDialogText | 3 | G, I, mood | **Replaces** the single text of the start/progress dialog with string (G,I). Nothing is appended. The third argument is the presenter **mood**, stored in one field shared with `cmdSetResultsDlgText` (last write wins, no range check). It is used only when the dialog presenter is an advisor (kind 1), to pick the advisor portrait mood (§4.6). Default mood 3. CORRECTION: it is not a text slot. [STATIC] |
+| cmdSetResultsDlgText | 3 | G, I, mood | Same for the results dialog: replaces its single text; mood shared as above [STATIC] |
+| cmdPopUpMsg | 6 | G, I, a2, presenter, kind, mood | Modal message (§4.7). a2 = 1 makes the pop-up of the "important" style. **kind** (a4) = presenter kind: 0 game-side presenter table, 1 advisor (presenter = advisor ID, see below), 2 scenario presenter table (§2.6); any other value shows no portrait or name. **mood** is used only for kind 1. [STATIC] |
 | cmdShowNewsticker | 2 | G, I | Posts (G,I) to the news ticker (`22-advisors-news-petitioners.md`) |
 | cmdPlaySound | 1 | soundID | Plays a UI/event sound by ID (`06-audio.md`) |
 | cmdMoveCamera | 3 | x, z, zoom | Centres view on tile (x,z); zoom > 4 is replaced by 2. Out-of-map coordinates: command fails (returns 0) |
@@ -438,7 +442,7 @@ confidence: the value widths and signedness match]:
 | cmdGetCrimeValue | `avgCrime`, the average of the last completed crime sweep (`17-sim-services.md` §7.3) |
 | cmdGetAura | `cityAura`, the last finalised city aura (`17-sim-services.md` §8.5) |
 | cmdGetPollutionValue kind 0 / 1 | `avgAir` / `avgWater` of the last pollution sweep (`17-sim-services.md` §7.4) |
-| cmdGetPollutionValue kind 2 | the pollution subsystem's garbage summary [OPEN: no matching figure is defined in `17-sim-services.md` or `16-sim-utilities.md`; recommended: 0] |
+| cmdGetPollutionValue kind 2 | ⌊Σ standing garbage ÷ N⌋ truncated to 16 bits (u16), from the last pollution sweep. Σ runs over every tile's standing-garbage value (`17-sim-services.md` §7.2.1, low 15 bits) except tiles of terrain/zone type 0x11. N is the same divisor as kinds 0/1, so this is the mean standing garbage per counted tile. It is 0 when N = 0 and is held between sweeps. Any kind other than 0–2 returns 0 and leaves the variable unchanged. [STATIC; meaning of N and type 0x11 INFERRED] |
 
 The scenario engine only forwards these values; it never recomputes them.
 
@@ -497,10 +501,28 @@ save or done by script commands. [STATIC][DATA]
 
 The following tokens are substituted when scenario text is displayed [STATIC]:
 `%MAYOR%`, `%YOURNAME%`, `%CITYNAME%`, `%YOURCITY%`, `%POPULATION%`, `%YEAR%`, `%PARADENAME%`,
-`%ANYNEIGHBOR%`, `%SCNNAME%` (scenario title), `%SCNV<x> <n>%` (value of scenario variable n; x is
-`M`, `N` or `Y` — money, plain number, year [INFERRED]; only `N` appears in shipped text), and `%TOKEN%`
-(generic). Substitution happens when a scenario string is displayed (pop-ups, dialogs, ticker).
-[STATIC][DATA]
+`%ANYNEIGHBOR%`, `%SCNNAME%` (scenario title), `%SCNV<x> <n>%` (value of scenario variable n), and
+`%TOKEN%` (generic). Substitution happens when a scenario string is displayed (pop-ups, dialogs,
+ticker). [STATIC][DATA]
+
+`%SCNV<x> <n>%` [STATIC]:
+* Parsing: the token text between the two `%` is read as a word and a decimal integer
+  (`%s %d`). The first five characters must be `%SCNV`. The letter x is case-sensitive: `M`
+  money, `N` number, `Y` year; any other letter leaves the token unchanged. The space before n is
+  required (`%SCNVN5%` is left unchanged). n is not range-checked. Only `N` appears in shipped
+  text. [DATA]
+* `Y`: the plain signed decimal (`%d`), no separators. 2010 → `2010`.
+* `N`: the integer (no decimals, nothing to round) with digits grouped in threes using the
+  language's thousands separator, and a leading `-` when negative. Separator by language index
+  (`27-platform.md` §1): `,` for 1, 2, 12, 15, 17–20; `.` for 3–9, 13, 14; space for 10, 11, 16.
+  Language 11 puts the `-` after the digits. Languages 0, 14 and above 20 give an empty string for
+  negative values (original quirk). US English: 1234567 → `1,234,567`, −1500 → `-1,500`.
+* `M`: grouped digits as for `N` plus the currency symbol of the language: 1 `$`, 2 `£`, 3 and 7
+  `F`, 4 `DM`, 5 `L.`, 6 `Pts`, 8 `kr`, and so on. The symbol goes before the number for
+  languages 1, 2, 9, 11, 14, 16, 21–25, 29, 31 and 32, otherwise after. There is a space between
+  symbol and number for languages 3–9, 11, 13, 14 and 16. A negative value gets `-` in front of
+  the whole string. US English: 25000 → `$25,000`, −750 → `-$750`. [STATIC; the full per-language
+  tables live in the locale service; language 1 = US English is INFERRED]
 
 ## 7. `.SSC` — Scenario Creator project / template file
 
@@ -534,7 +556,7 @@ UTF-16LE text, no terminator; **BLOB** = u32 length N followed by N bytes.
 | 18 | table | variables | u32 n; n × (u32 variableNo, WSTR name, WSTR description) |
 | 19 | table | goals | u32 n; n × (u32 textID, WSTR text, u32 goalNo, WSTR notes, WSTR label, s32 x (−1)) |
 | 20 | table | ranks | u32 n; n × (u32 textID, WSTR text, u32 rankNo, WSTR label, WSTR notes) |
-| 21 | table | presenters | u32 n (0 in all files; custom-presenter rows) — row layout `[OPEN]` |
+| 21 | table | presenters | u32 n (0 in all files). Row layout `[OPEN]`. The Creator's presenter table has the columns ImageID (long), NameID (long), TitleID (long), HardCoded (bool), Name (text), Title (text), Image (OLE bitmap), Description (text). The compiled `.SNR` row (§2.6) is (ImageID, NameID, TitleID) [DATA]. The `.SSC` rows probably serialise these columns in the order of the other tables (u32 for long, WSTR for text, BLOB for the image) [INFERRED]. A reader can test candidate layouts against the section length of field 11 |
 | 22 | table | scripts | u32 n; n × (u32 scriptID, WSTR name, WSTR author, WSTR description) |
 | 23 | table | commands | u32 n; n × (u32 position, u32 scriptID, u32 delay, u32 cmdId, WSTR comment, u32 argc, argc × (WSTR kind, WSTR value)) |
 
@@ -659,9 +681,7 @@ the scenario fails. [STATIC] Which file extension the player saves to is a UI ma
 * Appearance-key encoding of `cmdCountStructuresWithAppearance*` (a1, a2, a3). The arguments
   are probably a Type, Group, Instance key (a2 = `0x57E` matches the occupant attribute group), but
   shipped a1 `0x207F0B0E` is not the occupant attribute type `0x207EDC0E`.
-* `cmdMakeDialogText` / `cmdSetResultsDlgText` slot numbers (1 = main, 2 = conditional extra text?).
 * Layout and button labels of the start/progress, pop-up and results dialogs (`09-ui-screens.md`).
 * Row layout of the `.SSC` presenter table (empty in all shipped files) and meanings of the free-text
   "notes"/"a"/"b"/"c" columns.
-* Tokens `%SCNV<x> n%`: format selector letters `M`, `N`, `Y` map to internal format codes 3, 2, 5
-  (money, number, year, inferred). Exact number formatting is `[OPEN]`.
+
