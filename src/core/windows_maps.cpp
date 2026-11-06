@@ -473,10 +473,13 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     maskInit = true;
   }
   const Rect box{r.x + 44, r.y + 50, 357, 189};
-  // Stripes measured on the original: y 52..64 (222,223,255), then 17 px bands (edges 65, 82, ... 201) alternating with (231,231,255), within the plot y 52..218.
-  ui.fill({box.x, box.y, box.w, box.h}, rgb(231, 231, 255));
-  for (int y = 52; y < 218; y++) ui.fill({box.x, r.y + y, box.w, 1}, (y < 65 ? 0 : 1 + (y - 65) / 17) % 2 ? rgb(231, 231, 255) : rgb(222, 223, 255));
-  sunkenLines(ui, box);
+  // Stripes measured on the original (screen rows 85.. = local 51..): base (222,223,255) 51..64, then 17 px bands (edges 65, 82, ... 201) alternating
+  // with (231,231,255) through local 217; below the 2 px axis (local 218..219) the base colour again to the frame (local 220..237).
+  ui.fill({box.x, box.y, box.w, box.h}, rgb(222, 223, 255));
+  for (int y = 51; y < 218; y++) ui.fill({box.x, r.y + y, box.w, 1}, (y < 65 ? 0 : 1 + (y - 65) / 17) % 2 ? rgb(231, 231, 255) : rgb(222, 223, 255));
+  // Frame: dark top/left (123,142,255), white right/bottom [OBSERVED].
+  ui.fill({box.x, box.y, box.w, 1}, rgb(123, 142, 255)); ui.fill({box.x, box.y, 1, box.h}, rgb(123, 142, 255));
+  ui.fill({box.x + box.w - 1, box.y, 1, box.h}, rgb(255, 255, 255)); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, rgb(255, 255, 255));
   const int x0 = r.x + 46, x1 = r.x + 300, yTop = r.y + 56, yBot = r.y + 214;
   struct Lab { std::string text; int endY; uint32_t col; int y = 0; };
   std::vector<Lab> labs;
@@ -517,10 +520,10 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     ui.text(r.x + 306, l.y, l.text, "system9", l.col);
   }
   // ticks along y ~ 220 and the current year in grey
-  ui.fill({r.x + 300, box.y + 1, 1, box.h - 2}, rgb(123, 138, 255));   // divider between the lines and their labels
-  ui.fill({r.x + 44, r.y + 218, 256, 1}, rgb(128, 128, 128));         // axis line along the ticks
-  if (nPts > 1) for (int k = 0; k < nPts; k++) ui.fill({x0 + k * (x1 - x0) / (nPts - 1), r.y + 219, 1, 4}, rgb(128, 128, 128));
-  if (year) rightText(ui, r.x + 299, r.y + 221, std::to_string(year), "system9", rgb(128, 128, 128));
+  ui.fill({r.x + 300, box.y + 1, 1, box.h - 2}, rgb(173, 178, 222));   // the "now" line between the lines and their labels (axis colour)
+  ui.fill({r.x + 44, r.y + 218, 256, 2}, rgb(173, 178, 222));         // axis, 2 px
+  if (nPts > 1) for (int k = 0; k < nPts; k++) ui.fill({x0 + k * (x1 - x0) / (nPts - 1), r.y + 220, 1, 3}, rgb(173, 178, 222));
+  if (year) rightText(ui, r.x + 265, r.y + 221, std::to_string(year), "system9", rgb(128, 128, 128));   // ink ends ~35 px left of the now line [observed]
   // check-box grid: three columns of 5, 6 and 5
   static const int colSize[3] = {5, 6, 5}, colX[3] = {58, 178, 298};
   size_t idx = 0;
