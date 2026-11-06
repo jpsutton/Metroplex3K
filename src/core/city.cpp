@@ -2085,7 +2085,17 @@ std::string City::debugStats() const {
   return o.str();
 }
 
-void City::monthlyNeighbours() { neighbours.monthly(clock.date().month, rng_); }
+void City::monthlyNeighbours() {
+  neighbours.monthly(clock.date().month, rng_);
+  // Deals whose connection is lost are cancelled, with the penalty charged at the next month end (spec 19 10.5, FUN_10018cd5).
+  if (neighbours.active.empty()) return;
+  OfferContext ctx;
+  for (const auto& o : world_->occupants) if (o.agentType == 12330) { ctx.hasSeaport = true; break; }
+  const bool pw = power.stats().produced > 0, wt = water.stats.supply > 0;
+  ctx.powered = [pw](int, int) { return pw; };
+  ctx.watered = [wt](int, int) { return wt; };
+  budget.dealPenaltyAccumulator += neighbours.checkConnections(ctx);
+}
 
 void City::monthlyWorld() {
   // Spec 14 §6.1 item 3 / Q-BF [STATIC]: world-layer monthly (economic phase + world charts).

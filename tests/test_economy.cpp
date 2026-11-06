@@ -594,6 +594,25 @@ static void testDeals() {
   CHECK(nd.active[0].monthCounter == 60);
   CHECK(nd.cancel(0) == 0 && nd.active.empty());
 
+  {  // monthly connection check (spec 19 10.5): lost link -> terminated with penalty (age < 60) or removed (age >= 60)
+    NeighbourDeals k; SimRng r2(5); k.newCity(r2, 64, 64);
+    for (int i = 0; i < 4; i++) k.neighbours[i].nPower = 1;
+    OfferContext cx = ctxFor(100000);
+    auto of = k.makeOffer(0, cx, r2); CHECK(of.has_value()); k.accept(0);
+    const int nb = k.active[0].neighbourIndex;
+    CHECK(k.checkConnections(cx) == 0 && !k.active[0].terminated());   // link intact
+    k.neighbours[nb].nPower = 0;
+    const int64_t pen = k.active[0].penalty;
+    CHECK(k.checkConnections(cx) == pen && k.active[0].terminated() && k.neighbours[nb].dealMade[0]);   // flag kept
+    CHECK(k.checkConnections(cx) == 0);                                  // already terminated: no second penalty
+    k.removeType(0);
+    k.neighbours[nb].nPower = 1; k.pending.clear();
+    auto o3 = k.makeOffer(0, cx, r2); CHECK(o3.has_value()); k.accept(0);
+    const int nb3 = k.active[0].neighbourIndex; k.active[0].monthCounter = 60;
+    k.neighbours[nb3].nPower = 0;
+    CHECK(k.checkConnections(cx) == 0 && k.active.empty() && !k.neighbours[nb3].dealMade[0]);   // old deal: removed, flag cleared
+  }
+
   // sell deal: income, and dropped when units < reported quantity
   NeighbourDeals s;
   s.cfg.baseRate[1] = 30;

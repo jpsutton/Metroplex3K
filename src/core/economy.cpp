@@ -965,6 +965,19 @@ bool NeighbourDeals::accept(size_t i) {
   return true;
 }
 
+int64_t NeighbourDeals::checkConnections(const OfferContext& ctx) {
+  int64_t penalty = 0;
+  std::vector<int> removals;
+  for (auto& d : active) {
+    if (d.terminated() || d.dealType >= kDealTypes || d.neighbourIndex >= kNeighbours) continue;
+    if (connectionOk(d.dealType, d.neighbourIndex, ctx)) continue;
+    if (d.monthCounter < 60) { penalty += d.penalty; d.monthCounter = -1; }
+    else removals.push_back(d.dealType);
+  }
+  for (int t : removals) removeType(t);
+  return penalty;
+}
+
 // The remove operation (spec 19 10.5): erase the active deal of the type and clear that type's flag for all four
 // neighbours. Player cancellation and declining an offer both end in it.
 void NeighbourDeals::removeType(int type) {

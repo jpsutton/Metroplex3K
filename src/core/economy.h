@@ -392,6 +392,9 @@ class NeighbourDeals {
   bool connectionOk(int type, int neighbour, const OfferContext& ctx) const;
   std::optional<Deal> makeOffer(int type, const OfferContext& ctx, SimRng& rng);   // also queues in `pending`
   bool accept(size_t pendingIndex);        // moves to active, age 0, sets dealMade; erases a same-type deal (flag kept)
+  // Monthly connection check (spec 19 10.5, run after the age step): a deal whose connection is gone is cancelled; before 60 months it
+  // is terminated (age -1, flag kept) and its penalty is returned for the budget, from 60 months on it is removed. Returns the penalty total.
+  int64_t checkConnections(const OfferContext& ctx);
   void removeType(int type);               // erase the type's deal, clear its flag for all neighbours (cancel, decline)
   // Cancel the active deal of `type`. Returns the penalty to add to the budget's accumulator.
   int64_t cancel(int type);
