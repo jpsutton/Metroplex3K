@@ -106,6 +106,10 @@ static void testIni() {
       "1=\"New\",0,\"n.xa\",\"\",0,1,0,0\r\n";
   AudioIni ini = AudioIni::parse(txt);
   CHECK(ini.options.get("zoomloopvol", 0) == 800);
+  CHECK(ini.options.get("VehicleMaxDistance", 7) == 4000 && ini.options.get("MusicPlayerSongDelayMsec", 7) == 3000);   // missing key: the original's built-in value
+  CHECK(ini.options.get("NoSuchOption", 7) == 7);
+  CHECK(AudioIni::parse("[Options]\r\nMusicPlayerSongDurationMsec=0\r\nUseCdForMusic=5\r\n").options.get("MusicPlayerSongDurationMsec", 0) == 180000);   // zero is not stored
+  CHECK(AudioIni::parse("[Options]\r\nUseCdForMusic=5\r\n").options.get("BuildingRandMultiplier", 0) == 5);   // original defect: same field
   CHECK(ini.oneShots.size() == 3);
   CHECK(ini.oneShots.at(1).file == "Sfx\\Interface\\zmin.xa" && ini.oneShots.at(1).interrupt);
   CHECK(ini.oneShots.at(0x22).vol == 900);  // NA locale wins by default country 54
@@ -374,7 +378,7 @@ static void testSparse() {
     out = it->second; return true;
   };
   const char* txt =
-      "[Options]\r\nBuildingRandMultiplier=10000\r\nBuildingsInAmbienceMinZoom=4\r\nBuildingsInAmbienceAttenuation=400\r\n"
+      "[Options]\r\nBuildingRandMultiplier=10000\r\nFreshnessOutroDurationMsec=500\r\nBuildingsInAmbienceMinZoom=4\r\nBuildingsInAmbienceAttenuation=400\r\n"
       "[Sparse]\r\n0x100=\"Always\",32,1024,1,0,0,\"Sfx\\Buildings\\g.wav\",100,10000\r\n"
       "0x101=\"Never\",32,1024,1,0,0,\"Sfx\\Buildings\\g.wav\",100,0\r\n"
       "0x102=\"Always2\",32,1024,1,0,0,\"Sfx\\Buildings\\g.wav\",100,10000\r\n";

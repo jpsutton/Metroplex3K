@@ -182,6 +182,46 @@ All values are integers read with base 10.
 [STATIC] for the key list (all keys are read from `[Options]`); the units column is [INFERRED]
 from names and usage except the two music keys, which are [STATIC]. Shipped values are in the file.
 
+**Built-in defaults** [STATIC, AUDIO 0x100053E3 reader; defaults from the audio object and music
+player constructors]. A key that is missing keeps the value below. Every numeric key is parsed as
+an unsigned base-10 integer (`CacheSize` as a signed integer) and stored without a clamp.
+
+| Key | Built-in default | Shipped | Store condition |
+|---|---|---|---|
+| `MusicPlayerSongDurationMsec` | 180000 | 300000 | only if found and non-zero |
+| `MusicPlayerSongDelayMsec` | 3000 | 45000 | if found |
+| `FreshnessIntroDurationMsec` | 1000 | 1000 | if found |
+| `FreshnessOutroDurationMsec` | 1000 | 1000 | if found |
+| `FreshnessMaxXSpeed` | 100 | 200 | if found |
+| `FreshnessSelectionAreaMinMsec` | 10000 | 10000 | if found |
+| `ZoomLoopVol` | 1024 | 1024 | if found |
+| `BuildingRandMultiplier` | 10000 | 10000 | if found |
+| `UseCdForMusic` | — | not in the file | if found; stored into the **same field** as `BuildingRandMultiplier` (original defect, checked in the disassembly: both stores at `[obj+0x38]`, 0x10006058 and 0x100060EF) |
+| `TrafficDensityMin` | 15 | 1 | if found |
+| `TrafficDensityMultiplier` | 20 | 5 | if found |
+| `VehicleHonkDivisor` | 1 | 3 | if found |
+| `VehicleMaxDistance` | 4000 | 240 | if found |
+| `VehicleMinDistance` | 256 | 100 | if found |
+| `BuildingsInAmbienceAttenuation` | 250 | 400 | if found |
+| `BuildingsInAmbienceMinZoom` | 4 | 4 | if found |
+| `HonkAttenuation` | 250 | 300 | if found |
+| `HonkMinZoom` | 4 | 4 | if found |
+| `VehicleAttenuation` | 300 | 300 | if found |
+| `VehicleMinZoom` | 4 | 4 | if found |
+| `VehicleEffectsLevel` | 0 | 60 | if found |
+| `VehicleEffectsPreset` | 0xFFFFFFFF (none) | 14 | if found; also applied to the 3D sound device |
+| `VehicleEffectsTallBuildingCrit` | 0 | 100 | if found |
+| `ForceCrimeTempo` | 0 | 0 | if found |
+| `ForceAmbienceQuadrant` | 0 | 0 | if found; non-zero forces quadrant value − 1 |
+| `AmbienceStartFadeAtPercent` | 0 | 35 | if found |
+| `AmbienceMinimumFadedVolume` | 1024 | 700 | if found |
+| `MusicStartDelayAfterStop` | none (field never initialised) | 3000 | if found. Use the shipped 3000 when the key is missing. |
+| `UseC2HCache` | off | 0 | the cache is enabled only if the value string matches a fixed literal |
+| `CachePath`, `CacheSize`, `MusicDataDir` | empty / 0 / empty | — | read only with the cache on; ignore |
+
+The music, sound-effect and ambience volumes are not INI keys. They come from the game options,
+clamped to 0…1024, with fallbacks 1000, 700 and 900.
+
 ### 4.3 Locale filter (localised sounds)
 
 Several sections accept an optional *locale* field (the INI header comment documents it). Its

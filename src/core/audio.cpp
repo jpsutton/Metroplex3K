@@ -62,9 +62,27 @@ std::string str(const std::vector<std::string>& f, size_t i) { return i < f.size
 std::string lower(std::string s) { for (auto& c : s) c = char(std::tolower(static_cast<unsigned char>(c))); return s; }
 }  // namespace
 
+// Built-in [Options] values of the original's audio object and music player constructors; a missing key keeps its value (spec 06 4.2 [STATIC]).
+// The shipped AUDIO.INI overrides most of them.
+static const std::map<std::string, int>& builtinOptions() {
+  static const std::map<std::string, int> m = {
+      {"musicplayersongdurationmsec", 180000}, {"musicplayersongdelaymsec", 3000}, {"musicstartdelayafterstop", 3000},   // last: never initialised in the original, shipped 3000
+      {"freshnessintrodurationmsec", 1000}, {"freshnessoutrodurationmsec", 1000}, {"freshnessmaxxspeed", 100},
+      {"freshnessselectionareaminmsec", 10000}, {"zoomloopvol", 1024}, {"buildingrandmultiplier", 10000},
+      {"trafficdensitymin", 15}, {"trafficdensitymultiplier", 20}, {"vehiclehonkdivisor", 1}, {"vehiclemaxdistance", 4000},
+      {"vehiclemindistance", 256}, {"buildingsinambienceattenuation", 250}, {"buildingsinambienceminzoom", 4},
+      {"honkattenuation", 250}, {"honkminzoom", 4}, {"vehicleattenuation", 300}, {"vehicleminzoom", 4},
+      {"vehicleeffectslevel", 0}, {"vehicleeffectspreset", -1}, {"vehicleeffectstallbuildingcrit", 0},
+      {"forcecrimetempo", 0}, {"forceambiencequadrant", 0}, {"ambiencestartfadeatpercent", 0}, {"ambienceminimumfadedvolume", 1024}};
+  return m;
+}
+
 int AudioOptions::get(const std::string& key, int dflt) const {
-  auto it = values.find(lower(key));
-  return it == values.end() ? dflt : it->second;
+  const std::string k = lower(key);
+  auto it = values.find(k);
+  if (it != values.end()) return it->second;
+  auto b = builtinOptions().find(k);
+  return b == builtinOptions().end() ? dflt : b->second;
 }
 
 bool AudioIni::hasSound(int id) const {
@@ -92,7 +110,12 @@ AudioIni AudioIni::parse(const std::string& text, int country) {
     while (!key.empty() && key.back() == ' ') key.pop_back();
     if (section == "options") {
       long v;
-      if (parseNum(val, v)) ini.options.values[lower(key)] = int(v);
+      if (parseNum(val, v)) {
+        std::string k = lower(key);
+        if (k == "musicplayersongdurationmsec" && v == 0) continue;   // stored only if non-zero
+        if (k == "usecdformusic") k = "buildingrandmultiplier";        // original defect: both keys write the same field (AUDIO 0x10006058 / 0x100060EF)
+        ini.options.values[k] = int(v);
+      }
       continue;
     }
     long idl;
