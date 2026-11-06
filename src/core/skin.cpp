@@ -164,18 +164,6 @@ const Image* Skin::fetch(uint32_t group, uint32_t inst) const {
     try {
       Image im = decodeUiImage(r.data, r.available, true);
       if (group == Sys && inst == 0xE2B66DB8) keyButtonPlate(im);
-      // Art whose opaque background must not show (the Layers window's lattice and check buttons): the opacity plane is the next instance, when it exists.
-      if ((group == UiBig && inst == 0x22F96E31) || (group == Sys && inst == 0xA2DEFD9A)) {
-        if (ResourceRef pr = db_->find({T_UI_IMAGE, group, inst + 1})) {
-          try {
-            Image pl = decodeUiImage(pr.data, pr.available, false);
-            if (pl.w == im.w && pl.h == im.h) {
-              uint32_t mx = 0; for (uint32_t q : pl.px) mx = std::max(mx, q & 255u);
-              for (size_t i = 0; i < im.px.size(); i++) { const uint32_t v = pl.px[i] & 255u; im.px[i] = (im.px[i] & 0x00FFFFFFu) | ((mx <= 31 ? v * 255 / 31 : v) << 24); }   // 5-bit levels or 8-bit
-            }
-          } catch (const FormatError&) {}
-        }
-      }
       if (!im.empty()) return &(cache_[k] = std::move(im));
     } catch (const FormatError&) {}
   }

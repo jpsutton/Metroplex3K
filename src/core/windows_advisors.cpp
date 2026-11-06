@@ -134,9 +134,9 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
     // Ascending petition id: the original's list control orders its rows by the id of the heading string (spec 09 6.5, 4/4 on Berlin).
     auto pending = pm.presentable();
     std::stable_sort(pending.begin(), pending.end(), [](const PendingPetition* a, const PendingPetition* b) { return a->id < b->id; });
-    // More than 13 petitions: a scrollbar inside the list box (screen x ~370..385, y 175..355) and the rows start 5 px lower, first row y 180 [OBSERVED].
+    // More than 13 petitions: a scrollbar inside the list box (screen x ~370..385, y 175..355) and the rows start 1 px lower, first ink row y 176 [OBSERVED].
     const bool bar = int(pending.size()) > 13;
-    const int visibleRows = bar ? (lr.h - 3 - 5) / 14 : (lr.h - 3) / 14;
+    const int visibleRows = 13;   // 13 rows in both cases [OBSERVED]
     if (bar) {
       const Rect br{lr.x + 343, lr.y + 3, 16, lr.h - 6};
       ui.fill(br, rgb(0x7B, 0x92, 0xFF));
@@ -147,8 +147,9 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
       const PendingPetition* p = pending[pi];
       if (k >= visibleRows) break;
       uint32_t tbl = pm.config.tableFor(PetitionText::Heading, p->id, has);
-      std::string h = tbl ? E.text(tbl, p->id, hexName("Petition ", p->id)) : hexName("Petition ", p->id);
-      const int ty = lr.y + 3 + (bar ? 5 : 0) + 14 * k;
+      std::string h = hexName("Petition ", p->id);
+      if (tbl) { std::string raw = E.rawText(tbl, p->id); if (!raw.empty()) h = topicText(raw, E.tc, p->args); }
+      const int ty = lr.y + 3 + (bar ? 1 : 0) + 14 * k;
       Rect row{lr.x + 1, ty - 1, lr.w - 2 - (bar ? 18 : 0), 14};
       E.spot("petition." + std::to_string(p->id), row);
       const bool sel = petSel == int(p->id);
@@ -311,7 +312,8 @@ PetitionerView makePetitionerView(const WinEnv& E, const PetitionerConfig& cfg, 
   auto get = [&](PetitionText c, const std::string& fb) {
     uint32_t t = cfg.tableFor(c, p.id, has);
     if (!t) return fb;
-    std::string raw = E.text(t, p.id, fb);
+    std::string raw = E.rawText(t, p.id);
+    if (raw.empty()) raw = fb;
     return topicText(raw, tc ? *tc : E.tc, p.args);
   };
   v.name = get(PetitionText::Name, "Citizen");
@@ -369,27 +371,28 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
     const int visible = 13;
     const bool over = int(lines.size()) > visible;
     if (over) {
-      ui.fill({r.x + 363, r.y + 60, 16, 198}, rgb(0x7B, 0x92, 0xFF));
-      scenarioScrollBar(ui, E, {r.x + 363, r.y + 60, 16, 198}, mb, int(lines.size()), visible, scroll);
+      ui.fill({r.x + 364, r.y + 60, 16, 198}, rgb(0x7B, 0x92, 0xFF));
+      scenarioScrollBar(ui, E, {r.x + 364, r.y + 60, 16, 198}, mb, int(lines.size()), visible, scroll);
     } else scroll = 0;
-    for (int i = 0; i < visible && scroll + i < int(lines.size()); i++) ui.text(r.x + 133, r.y + 63 + 14 * i, lines[size_t(scroll + i)], "main9", rgb(0, 0, 0));
+    for (int i = 0; i < visible && scroll + i < int(lines.size()); i++) ui.text(r.x + 133, r.y + 62 + 14 * i, lines[size_t(scroll + i)], "main9", rgb(0, 0, 0));
     const uint32_t plate = rgb(0x7B, 0x92, 0xFF);
     ui.fill({r.x + 5, r.y + 263, 115, 24}, plate); ui.fill({r.x + 5, r.y + 287, 45, 62}, plate);
-    ui.text(r.x + 21, r.y + 270, E.win(0x82, "Take Action:"), "main9", kInk);
-    const Image* radioArt = ui.skin ? ui.skin->get("radio") : nullptr;
+    ui.text(r.x + 21, r.y + 268, "Take Action:", "main9", kInk);
     const std::string labels[2] = {v.button1, v.button2};
-    for (int k = 0; k < 2; k++) {
-      Rect hit{r.x + 20, r.y + 290 + 28 * k, 24 + 4 + ui.textWidth(labels[k], "main9") + 8, 24};
+    for (int k = 0; k < 2; k++) {   // the big round button art (the Dismiss button's 42DEC7D2:02) as radio, ink x28..51 y298..321 / y326..349
+      Rect hit{r.x + 19, r.y + 289 + 28 * k, 26 + 4 + ui.textWidth(labels[k], "main9") + 8, 25};
+      Rect rb{r.x + 19, r.y + 289 + 28 * k, 26, 25};
       E.spot(t + (k ? ".button2" : ".button1"), hit);
-      const bool hot = ui.hover(hit);
-      if (!(ui.skin && ui.skin->drawCheck(ui, radioArt, hit.x + 6, hit.y + 6, false, true, hot, hot && ui.in.down))) { ui.fill({hit.x + 6, hit.y + 6, 12, 12}, rgb(255, 255, 255)); ui.frame({hit.x + 6, hit.y + 6, 12, 12}, false); }
-      ui.text(r.x + 58, r.y + 294 + 28 * k, labels[k], "main9", kInk);
-      if (ui.clicked(hit)) answer(k == 0);
+      bool c = false;
+      const Image* art = E.img(0x42DEC7D2, 0x02);
+      if (!(ui.skin && art && ui.skin->imageButtonCells(ui, art, 4, rb, "", false, true, c))) { ui.fill({rb.x + 6, rb.y + 6, 12, 12}, rgb(255, 255, 255)); ui.frame({rb.x + 6, rb.y + 6, 12, 12}, false); c = ui.clicked(rb); }
+      ui.text(r.x + 58, r.y + 292 + 28 * k, labels[k], "main9", kInk);
+      if (c || ui.clicked(hit)) answer(k == 0);
     }
     ui.fill({r.x + 273, r.y + 294, 105, 54}, plate);
-    ui.text(r.x + 278, r.y + 309, "Impact", "main9", kInk); ui.text(r.x + 278, r.y + 325, "Analysis:", "main9", kInk);
+    ui.text(r.x + 278, r.y + 307, "Impact", "main9", kInk); ui.text(r.x + 278, r.y + 321, "Analysis:", "main9", kInk);
     {
-      Rect q{r.x + 344, r.y + 317, 26, 24};
+      Rect q{r.x + 342, r.y + 317, 26, 24};
       E.spot(t + ".impact", q);
       bool c = false;
       if (ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Gonzo, 0x19), 4, q, "", false, true, c)) {}

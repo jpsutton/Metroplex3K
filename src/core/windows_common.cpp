@@ -16,6 +16,12 @@ std::string WinEnv::text(uint32_t table, uint32_t id, const std::string& fallbac
   return expandTokens(s, tc);
 }
 
+std::string WinEnv::rawText(uint32_t table, uint32_t id) const {
+  if (textFn) return textFn(table, id);
+  if (data) return data->string(table, id);
+  return std::string();
+}
+
 bool WinEnv::has(uint32_t table, uint32_t id) const {
   if (textFn) return !textFn(table, id).empty();
   if (data) return !data->string(table, id).empty();

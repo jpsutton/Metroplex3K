@@ -72,14 +72,17 @@ bool TopicGfxTable::get(uint32_t t, uint32_t& g, uint32_t& i) const {
 }
 
 std::string topicText(const std::string& raw, const TextContext& ctx, const std::vector<TopicArg>& args) {
-  std::string s = expandTokens(raw, ctx);
+  std::string s = raw;   // argument tokens first (a deal petition's %NEIGHBOR% names its own slot), the generic tokens after
   for (auto& a : args) {
     if (a.name.empty()) continue;
-    std::string rep = std::to_string(a.value);
+    // The argument's `index` is its format kind [saved petitions of the original]: 2 plain with thousands separators, 3 money ($ is drawn as the simoleon
+    // sign), 4 the name of neighbour slot `a`; anything else (the engine's %X% / %Y%) is the plain number.
+    std::string rep = a.index == 2 ? groupDigits(int32_t(a.value)) : a.index == 3 ? "$" + groupDigits(int32_t(a.value))
+                    : a.index == 4 ? ctx.neighbours[a.a & 3] : std::to_string(a.value);
     size_t p = 0;
     while ((p = s.find(a.name, p)) != std::string::npos) { s.replace(p, a.name.size(), rep); p += rep.size(); }
   }
-  return s;
+  return expandTokens(s, ctx);
 }
 
 // ---------------------------------------------------------------------------------------------

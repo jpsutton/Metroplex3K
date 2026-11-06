@@ -57,6 +57,7 @@ struct WinEnv {
   std::string gui(uint32_t id, const std::string& fb) const { return text(kTblGui, id, fb); }
   std::string app(uint32_t id, const std::string& fb) const { return text(kTblApp, id, fb); }
   bool has(uint32_t table, uint32_t id) const;
+  std::string rawText(uint32_t table, uint32_t id) const;   // the string without token expansion (empty if missing)
   std::string money(int64_t v) const;                    // "$1,234" / "-$1,234"
   const Image* img(uint32_t group, uint32_t inst) const { return image ? image(group, inst) : nullptr; }
   void spot(const std::string& n, Rect r) const { if (spots) spots->push_back({n, r}); }
