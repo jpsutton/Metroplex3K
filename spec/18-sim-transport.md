@@ -147,7 +147,7 @@ The map is W × H tiles. The traffic subsystem keeps the following grids [STATIC
 | 0x0008 | subway occupant, subway station, subway–rail station | Subway |
 | 0x0010 | transit station building | Station / stop tile |
 | 0x0020 | subway–rail station | Rail↔subway transfer |
-| 0x0040 | highway on-ramp piece: network piece IDs 15130–15141 ("Highway Onramp", agent type 17202) [STATIC] | Road/highway junction tile |
+| 0x0040 | highway on-ramp piece: network piece IDs 15130–15141 ("Highway Onramp", agent type 17202) [STATIC]. The other agent-type-17202 pieces (15107–15110, 15115–15128: mainline fork lanes) do **not** carry it [DATA: giving them 0x40 drops London highway density from 60.1 to 55.0 and Berlin's from 19.6 to 10.4 against the original's 58.3 / 28.5; a briefly published revision of this row said otherwise and is withdrawn] | Road/highway junction tile |
 | 0x0080 | road/highway piece reports itself damaged: its damaged flag (piece word bit 27, `10-save-format.md` §6.2.6) is set [STATIC] | Damaged (adds `DamagedCostAddToStep`) |
 | 0x0100 | road/highway/rail piece whose record has bit 0 of attribute 0x12D set [STATIC] | Step cost × 0.7. The pieces with the bit are the diagonal ones (highway 11223, 11224, 15052, 15106; road 35, 11207, 11209, 18004; rail 50, 51) [DATA; "diagonal" INFERRED from the 0.7 ≈ 1/√2] |
 | 0x0200 | subway piece with the same bit (subway 11621, 11622, 18015, 18018) | Subway step cost × 0.7 |
@@ -293,7 +293,14 @@ against the saved 6 546. Without the untried term it is ≈ 4 200.
 
 ### 4.5 Counting test
 
-This test only applies to buildings that are functional (as in §4.3). Let d be the value (0–255)
+A trip starts as **not counted**. Only a functional building (as in §4.3: the occupant reports
+functional and bit 0 of the lot state is set) draws the test below; a non-functional building's
+trip (under construction 4/0x204, abandoned 2/0x202) is never counted and adds no density or
+income [STATIC, SimTransit 0x100097B9]. CORRECTION: the earlier wording let readers count
+non-functional buildings unconditionally. [DATA: implementing this rule lowers a reimplementation's
+London month-1 road density from 54.8 to 50.0, against the original's 47.8.]
+
+Let d be the value (0–255)
 at the lot's first tile of the **valve-effect map** of the RCI development layer (`10-save-format.md`
 §6.7 `effectMap`, the map of the last completed cycle; owned by the growth valve layer,
 `15-sim-growth.md` §3.3). The traffic layer looks it up by the layer ID 0x80F1E6D3 [STATIC]. Each tile
@@ -407,7 +414,9 @@ until the annoyance level is reached, and then spills onto quieter tiles.
 
 For modes 1, 4, 8, 0x14, 0x18, 0x30, 0x41 and 0x50, the candidates are the 8-neighbour ring
 around the node rectangle (the rectangle grown by 1, clipped, without its four corners). The
-transition table is [STATIC]:
+scan skips only those four corners: the tiles of the node rectangle itself are also candidates,
+so a 1×1 node can pick its own tile again [STATIC, SimTransit; earlier implementations skipped
+it]. The transition table is [STATIC]:
 
 | From mode | Candidate tile | New mode |
 |---|---|---|
@@ -424,6 +433,7 @@ transition table is [STATIC]:
 | 8 subway | subway, not station | 8 |
 | 8 subway | station with 0x20 | 0x30 |
 | 8 subway | station with subway and without road/rail | 0x18 |
+| 8 subway | station with subway **and** with road or rail (flags & 5), e.g. a bus stop or rail station above the line | 8 (stays on the subway layer) [STATIC, SimTransit asm 0x10007ba5–0x10007c28; 0x20 is tested before 0x08] |
 | 0x14 rail stn | rail, not station, and previous mode ≠ 4 | 4 (board) |
 | 0x18 subway stn | subway, not station, and previous mode ≠ 8 | 8 (board) |
 | 0x30 | (rail allowed) rail, not station, previous ≠ 4 | 4 |
@@ -465,6 +475,15 @@ in the order north/−y, west/−x, south/+y, east/+x) is evaluated as follows [
 | 0x42 | highway | 0x42, or 0x43 if 0x40 | highway |
 | 0x43 | road | 0x41, or 0x43 if 0x40 | surface |
 | 0x43 | highway (no road) | 0x42 / 0x43 | highway |
+
+**New node rectangle** [STATIC, SimTransit dc ~5476–5499 and the first step]: after the choice, the new
+node is the **chosen tile's occupant rectangle** (occupant vf 0xCC, anchor to anchor + size − 1,
+inclusive), not the single tile. Every tile of that rectangle receives the parent's visit code. For
+1×1 network pieces this is the tile itself. For a 2×2 rail station (agent type 12230) the node covers
+all four tiles, so the next ring scan surrounds the whole station and track touching any of its sides
+can be boarded. Spans are the exception (§5.1: a one-tile node on the landing tile). [DATA: London, a
+reimplementation with this rule and the subway row above reaches monthly fares of 932 / 999 / 878
+against the original's 936 / 1018 / 1030, up from 906 / 817 / 803.]
 
 Selection among the permitted neighbours: the first is taken. A later one replaces it only if its
 density is below `TrafficAnnoyanceLevel`; in that case the node is flagged "alternatives exist".

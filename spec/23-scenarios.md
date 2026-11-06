@@ -360,10 +360,10 @@ marked.
 | cmdGetCurrentDate | 3 | vYear, vMonth, vDay | Three destination variables (not one): vYear ← current year, vMonth ← current month, vDay ← current day, all from the simulation calendar (`14-sim-clock.md`). Fails (returns 0) if any destination is not a valid variable number; otherwise returns 1. [STATIC] (exact year/month/day order of the three outputs: see §4.6.1) |
 | cmdGetRCItaxes | 3 | vR, vC, vI | Three destination variables: vR ← residential, vC ← commercial, vI ← industrial tax rate (percent, 0–255 taken as an unsigned byte; the budget's per-zone-category tax rate of `19-sim-economy.md`). Returns 1. [STATIC] (not used in shipped data) |
 | cmdGetPollutionValue | 2 | v, kind | v ← average pollution of kind (0, 1, 2 = air, water, garbage — order `[INFERRED]`) |
-| cmdCountStructures | 2 | v, occupantID | v ← number of occupants of that type in the city |
-| cmdCountStructuresNearLocation | 5 | v, occupantID, x, z, radius | count within radius of tile (x,z) |
-| cmdCountStructuresWithAppearanceInCity | 4 | v, a1, a2, a3 | count by appearance key (a1 seen = `0x207EDC0E`-style group IDs; shipped a1 = 545184782 = 0x207F0B0E, a2 = 1406 = 0x57E) `[INFERRED]` |
-| cmdCountStructuresWithAppearanceNearLocation | 7 | v, a1, a2, a3, x, z, radius | as above, within radius |
+| cmdCountStructures | 2 | v, agentType | v ← number of objects in the city whose **agent type** matches (same filter and sources as the next row). CORRECTION: the argument is an agent type (`CitySim.ini [AgentTypes]`), not an occupant ID |
+| cmdCountStructuresNearLocation | 5 | v, agentType, x, z, radius | v ← 0, then counts objects whose agent type matches `agentType`, within the tile rectangle centred on (x − 1, z − 1). The x/z arguments are 1-based; a value above the map size becomes 0. The rectangle is [cx − r, cx + r] × [cz − r, cz + r], with the low edges clamped at 0 and the high edges at the map width/height. Sources in order, each tried only while the count is still 0: (1) the occupant manager (buildings), (2) the network manager (road/rail/highway… pieces), (3) a third manager [INFERRED: flora/props]. The type filter takes the agent-type hierarchy object, so a parent type also matches its subtypes [INFERRED]. Shipped use: 16000 Road and 17000 Rail near the Betterfeld landfill (both are network types, found only through source 2); 8100/8700/8900/9100 industrial types. Returns 1. [STATIC] |
+| cmdCountStructuresWithAppearanceInCity | 4 | v, T, G, I | v ← number of **occupants** whose occupant attribute key equals (T, G, I) exactly, over the whole map: rectangle centre (0,0) with radius max(W, H) + 1. Shipped T = 545184782 = **`0x207EDC0E`**, G = 1406 = `0x57E`, so I is an occupant ID: the command counts one specific building, for example a landmark. CORRECTION: the earlier text gave T as 0x207F0B0E. Only the occupant manager is searched. Returns 1. [STATIC, DATA] |
+| cmdCountStructuresWithAppearanceNearLocation | 7 | v, T, G, I, x, z, radius | Same match, within the rectangle of `cmdCountStructuresNearLocation` (centre (x − 1, z − 1), 1-based, out-of-map → 0, clamped). [STATIC] |
 | cmdIsOrdinanceEnacted | 2 | ordinanceID, want | 1 if (ordinance enacted) = (want ≠ 0) |
 | cmdIsNeighborConnection | 3 | a0, a1, want | Tests the neighbour-connection table of the neighbour manager (`12-networks.md`, `19-sim-economy.md`): t ← "connection exists for (a0, a1)", where a0 and a1 are each truncated to an unsigned byte (a0 = neighbour index; a1 = connection/network kind `[INFERRED]`). Returns t if want = 1, otherwise (NOT t). [STATIC] (not used in shipped data) |
 | cmdIsNeighborDealPresent | 3 | n, dealKind, want | Fetches the current deal of neighbour n (n truncated to a byte). t ← 1 iff a deal record exists **and** its deal-type byte equals dealKind (low byte) **and** its neighbour byte equals n. Returns t if want = 1, otherwise (NOT t). [STATIC] Deal-type numbering as in the neighbour-deal record of `19-sim-economy.md` / `10-save-format.md` `[INFERRED]` |
@@ -465,7 +465,27 @@ The scenario engine only forwards these values; it never recomputes them.
 #### 4.7.1 Observed layouts at 800 × 600 `[OBSERVED]` (A Better Betterfeld)
 
 Coordinates are window client pixels, as (left, top)–(right, bottom), right/bottom exclusive. All
-three dialogs use the standard light-blue dialog skin (panel fill RGB 123,146,255; light bevels).
+three dialogs use the standard light-blue dialog skin (frame/panel fill RGB 123,146,255; light
+bevels).
+* Every inset area is filled with RGB 222,223,255, **not white**: the text boxes, the goals list,
+  the results panel, the results text box and the three button panels.
+* Text in the text boxes is black.
+* The goals list text and the achieved rank are dark blue RGB 49,52,123. Ranks not achieved are
+  RGB 165,162,165.
+* Body text lines are on a **14 px pitch** (start/status text tops at y 146, 160, 174 …); goal
+  texts wrap on the same pitch.
+
+Art [STATIC: keys referenced by SCENARIO.DLL / SIMUI.DLL; OBSERVED: placement]:
+* Goal status icon, unmet: `DLG.IXF` group `C2BF3646` instance `252A754F` (32 × 29), drawn at
+  (184, 333 + 40·row).
+* Goal status icon, met: instance `E50ED85A` (38 × 33, the red "SimCity" stamp). The same image
+  marks the achieved rank in the results dialog, at (197,243) there.
+* The goals list chooses icon and text colour per goal from its met flag.
+* Results-dialog logo button: instance `C5171C41`, 292 × 34 = four 73 × 34 cells (0 disabled
+  grey, 1 normal, 2 pressed, 3 hover). Normal is cell 1 at (220,446), (362,446), (504,446), i.e.
+  centred in each 134 px panel.
+* Pop-up icon: `SYS.IXF` MBIcons `82B9B75B:42E55FD4` cell 1 (the yellow warning triangle,
+  32 × 29), at (235,239).
 Each dialog centres itself in the window. All three pause the simulation while open: the date did
 not advance with the game at top speed.
 
@@ -502,7 +522,8 @@ not advance with the game at top speed.
 * Frame (177,101)–(621,498), 444 × 397. The title bar shows the scenario title.
 * Results panel (190,135)–(498,289):
   * heading "Scenario Completed!" (y ≈ 140–157);
-  * "Results for Mayor <name>" (y ≈ 162–173);
+  * "Results for Mayor <name>" (y ≈ 162–173). The mayor's name replaces the `%YOURNAME%` token
+    of the string; it is not appended;
   * the rank list: one line per rank (`cmdAddRankInfo`) at x ≈ 238, y ≈ 193, 212, 231…
   * Ranks not achieved are drawn in grey. The achieved rank is drawn in dark blue, may wrap to two
     lines, and has a red "SimCity" stamp icon at (195,250)–(235,276) to its left.
@@ -513,9 +534,9 @@ not advance with the game at top speed.
   watching the time pass?").
 * Three button panels on a 142 px pitch, each 134 × 76: (189,406)–(323,482), (331,406)–(465,482)
   and (473,406)–(607,482).
-  * Each has a two-line centred caption at y ≈ 415–440: "Replay Scenario", "Play Another
-    Scenario", "Return to Main Menu".
-  * Below the caption, a 66 × 30 "SimCity" logo button centred at y ≈ 449–479.
+  * Each has a caption **centred** and wrapped to two lines at y ≈ 415–440: "Replay Scenario";
+    "Play Another" / "Scenario"; "Return to Main" / "Menu".
+  * Below the caption, the 73 × 34 "SimCity" logo button (art above) at y 446–480.
   * These are outcomes 0, 1, 2 of §4.7.
   * There is no close box or OK button.
 

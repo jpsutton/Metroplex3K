@@ -628,12 +628,15 @@ The utilities side reports the current quantity for each deal type (one active d
   before the rest of that month's deal processing [STATIC].
 * Terminated deals (age −1) are excluded from the deal list shown to the player. No sweep removes
   them: they are erased only by the remove operation below, or by accepting a new deal of the same
-  type. Billing ignores the age, so a terminated deal keeps paying until it is erased [STATIC,
-  SIMMISC FUN_10018f95; cost side not checked].
+  type. Billing ignores the age on both sides, so a terminated deal keeps billing until it is erased:
+  income (odd types) and cost (even types, with the minimum cost) are both summed over every
+  deal in the list without an age test [STATIC, SIMMISC 0x10018F95 income, 0x10019000 cost]. No
+  terminated deal occurs in any shipped city or in the 89 W5 saves (84 deals, all with age ≥ 0)
+  [DATA].
 * **Deal-made flag** [STATIC, SIMMISC]: one byte per (neighbour, deal type).
-  * Accepting a deal sets it to 1 (FUN_10017d45). Accepting also erases any existing deal of the
+  * Accepting a deal sets it to 1 (0x10017D45). Accepting also erases any existing deal of the
     same type, without clearing that deal's flag.
-  * The remove operation (FUN_10017f16) erases the active deal of type d and sets flag[n][d] = 0
+  * The remove operation (0x10017F16) erases the active deal of type d and sets flag[n][d] = 0
     for all four neighbours. Only that type's byte is cleared.
   * Player cancellation runs cancel, then remove, so the flag is cleared. Declining an offer also
     runs remove.
@@ -642,7 +645,7 @@ The utilities side reports the current quantity for each deal type (one active d
     neighbour is skipped if either flag of that commodity (both directions) is set.
 * **No automatic expiry**: nothing compares the age with 60 except cancellation. A deal past 60
   months runs until cancelled or until the connection is lost.
-* **Monthly connection check** (FUN_10018cd5), for every deal with age ≥ 0, after age += 1:
+* **Monthly connection check** (0x10018CD5), for every deal with age ≥ 0, after age += 1:
   * type 0: no power-line connections to that neighbour;
   * type 1: no connections, or none of them powered;
   * type 2: no pipe connections;

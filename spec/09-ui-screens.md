@@ -350,6 +350,33 @@ of `14-sim-clock.md`. [STATIC]
 ### 4.2 Speed controls [STATIC]
 
 Images `02F78C6D:52FB06E4`–`52FB06E9` (pause/run and four speed buttons; 48×23 and 10×11 parts).
+
+**Speed indicator drawing** [STATIC, SIMUI 0x1002643A draw, 0x10026144 messages; OBSERVED 800 × 600]:
+
+* Images:
+  * `E4`, `E5`, `E6`, `E7` (48 × 23) are the complete indicator while running at speed 1, 2, 3, 4.
+    Cells up to the speed are lit bright green with a glow; the rest are grey.
+  * `E8` (10 × 11) is the hover cell.
+  * `E9` (10 × 11) is the dark-green paused cell.
+* Cells: four, at panel offsets (4 + 10·i, 5), each the size of `E8` (10 × 11), for i = 0…3.
+  The four cells span x 4…43 of the 48-px panel. Correction: the bar table in
+  `08-ui-framework.md` gave 12-px cells.
+* Speed index s = 0…3, set by the speed-changed message `0xC2684066` (argument 1…4).
+* Paused flag:
+  * set by message `0xC2A35D7F` (the simulation has paused);
+  * cleared by `0xC2A35D81` (the simulation is running).
+* Draw:
+  * If the paused flag is set, or the bar is in either of its disabled states (messages
+    `0xE31E2463`, and `0x54E23EE9` with argument 0), `E9` is drawn into cells 0…s. That is,
+    s + 1 dark-green cells from the left, over the grey bar background, with no glow.
+  * Otherwise the whole image `E4 + s` is drawn at the panel origin.
+  * Then, if the pointer is over cell h (not tracked while disabled), `E8` is drawn into cells
+    0…h.
+* Observed while paused at 800 × 600:
+  * the cell at x = 4 has the colour sequence (0,44,0), (0,117,0), (0,138,0), (0,105,0),
+    (0,85,0), (0,105,0), (0,154,0), (0,178,0), (0,195,0), (0,97,0) along row 7;
+  * the cells repeat every 10 px;
+  * speed 1 shows one dark cell, speed 4 four.
 Tooltips: pause `225872FE:64`, run `65`, speeds 1–4 `66`–`69` (turtle, llama, cheetah, African
 swallow). Sounds: run 23 `UiPlaySim`, pause 24 `UiPauseSim`, speed 1–4
 → 25–28 `UiSimSpeed1`–`4`. Speed semantics (ticks per real second) are in `14-sim-clock.md`.
