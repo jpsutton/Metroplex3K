@@ -479,10 +479,9 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
   // Visit mask (spec 18 5.1, 5.7) [STATIC]: one u8 per tile holding the OR of raw mode codes. A scan in mode m skips a
   // tile when (v & m) == m. The chosen node's tiles get the scanning (parent's) code; ring tiles with no valid transition
   // get the scanning branch's code (1 road, 4 rail, 8 subway, 0x10 station, 0x41 bus, 0x50 bus stop); candidates that
-  // lose the choice are not marked. NOT the default yet: on the observed saves these rules lower rail/station density
-  // well below the original's (Berlin day 356 108 vs 139, Madison day 460 32 vs 50; private bits give 122 / 50) and leave
-  // London's road excess unchanged, so they are behind M3K_VISITSPEC=1 until the dirty side rechecks them.
-  static const bool privateBits = std::getenv("M3K_VISITSPEC") == nullptr;
+  // lose the choice are not marked. The default since the dirty side's recheck (rail density swings both ways between months, no
+  // systematic effect); M3K_PRIVATEBITS=1 brings back the old one-private-bit-per-mode marking for comparisons.
+  static const bool privateBits = std::getenv("M3K_PRIVATEBITS") != nullptr;
   const int bit = privateBits ? (1 << modeBit(scanMode)) : int(scanMode);
   int rejectBit = bit;
   if (!privateBits) {
@@ -564,7 +563,7 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
       for (int z = g.z0; z <= g.z1; z++) {
         bool cx = (x == g.x0 || x == g.x1), cz = (z == g.z0 || z == g.z1);
         if (cx && cz) continue;  // four corners of the grown rectangle
-        if (x >= cur.r.x0 && x <= cur.r.x1 && z >= cur.r.z0 && z <= cur.r.z1) continue;
+        // Only the four corners are skipped: the first road node may pick its own tile again, as in the original (spec 18 5.1).
         if (x < 0 || z < 0 || x >= W_ || z >= H_) continue;
         tiles.push_back({x, z});
       }
@@ -637,7 +636,7 @@ TripResult TrafficSim::routeTrip(const TripRequest& req) {
   start.alt = true;   // the origin node is created with "alternatives exist" set too (spec 18 5.3)
   for (int x = std::max(0, req.origin.x0); x <= std::min(W_ - 1, req.origin.x1); x++)
     for (int z = std::max(0, req.origin.z0); z <= std::min(H_ - 1, req.origin.z1); z++)
-      visit_[size_t(x) * H_ + z] |= uint16_t(std::getenv("M3K_VISITSPEC") == nullptr ? (1 << modeBit(TM_START)) : int(TM_START));
+      visit_[size_t(x) * H_ + z] |= uint16_t(std::getenv("M3K_PRIVATEBITS") != nullptr ? (1 << modeBit(TM_START)) : int(TM_START));
   std::vector<TripNode> stack{start};
   size_t guard = size_t(W_) * H_ * 16 + 1024;
   while (guard-- > 0) {
@@ -747,25 +746,22 @@ bool TrafficSim::fireBuilding(const TripBuilding& b) {
   if (b.x < 0 || b.z < 0 || b.x >= W_ || b.z >= H_) return false;
   TripRect origin{b.x, b.z, b.x + b.w - 1, b.z + b.h - 1};
   size_t first = size_t(b.x) * H_ + b.z;
-  int r = rng_.rand(100);
-  bool counted, firstTimePath = false;
-  if (r > p_.tripThresholdPercent) {
-    if (rec_.tripTried[first]) return false;
-    counted = false;
-    firstTimePath = true;
-  } else {
-    counted = true;
-    if (b.functional) {
-      int d = lotDensity ? lotDensity(b.x, b.z) : 0;
-      int q = rng_.rand(100);
-      int lim = int(float(p_.chanceCountingBase) + float(d) * float(p_.chanceDensityMultiplier) / 100.0f);
-      counted = q <= lim;
-    }
-  }
+  // The draws follow the original's order: destination, threshold, counting test, mass transit (SimTransit FUN_100097b9).
   TripRequest req;
   req.origin = origin;
   req.originCategory = b.category;
   req.dest = chooseDestination(b.category);
+  int r = rng_.rand(100);
+  bool counted = false, firstTimePath = false;   // a trip counts only when the lot is functional and the counting test passes [STATIC]
+  if (r > p_.tripThresholdPercent) {
+    if (rec_.tripTried[first]) return false;
+    firstTimePath = true;
+  } else if (b.functional) {
+    int d = lotDensity ? lotDensity(b.x, b.z) : 0;
+    int q = rng_.rand(100);
+    int lim = int(float(p_.chanceCountingBase) + float(d) * float(p_.chanceDensityMultiplier) / 100.0f);
+    counted = q <= lim;
+  }
   bool subject;
   permissions(b.category, req.rail, req.bus, req.subway, subject);
   if (subject) {
