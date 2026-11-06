@@ -9,6 +9,7 @@ namespace m3k {
 namespace {
 struct Stats : ICityStats {
   City* c = nullptr;
+  std::function<uint32_t(uint32_t)> pieceAgent;
   const World* w() const { return c->world(); }
   int32_t population() const override { return c->population(); }
   int32_t landValue() const override { return c->landValue.cityAverage(); }
@@ -37,16 +38,29 @@ struct Stats : ICityStats {
   int countType(uint32_t type, int x0, int z0, int x1, int z1) const {
     if (!w()) return 0;
     const auto& hier = c->agentHierarchy();
+    auto in = [&](int x, int z) { return x >= x0 && x <= x1 && z >= z0 && z <= z1; };
     int n = 0;
     for (const auto& o : w()->occupants)
-      if (o.x >= x0 && o.x <= x1 && o.z >= z0 && o.z <= z1 && hier.isAncestorOrSelf(o.agentType, type)) n++;
+      if (in(o.x, o.z) && hier.isAncestorOrSelf(o.agentType, type)) n++;
     if (n) return n;
-    NetworkKind k = NetworkKind::Road; bool known = true;
-    switch (type) { case 16000: k = NetworkKind::Road; break; case 16001: k = NetworkKind::Highway; break; case 17000: k = NetworkKind::Rail; break;
-                    case 17100: k = NetworkKind::Power; break; default: known = false; }
-    if (known)
-      for (const auto& p : w()->surface)
-        if (p.x >= x0 && p.x <= x1 && p.z >= z0 && p.z <= z1 && c->pieceInKind(p.pieceId, k)) n++;
+    // Surface network pieces by their own agent type (road, highway, rail, power, bridge parts, tunnels, ramps ...).
+    for (const auto& p : w()->surface) {
+      if (!in(p.x, p.z)) continue;
+      if (pieceAgent) { const uint32_t a = pieceAgent(p.pieceId); if (a && hier.isAncestorOrSelf(a, type)) n++; }
+      else if ((type == 16000 && c->pieceInKind(p.pieceId, NetworkKind::Road)) || (type == 17000 && c->pieceInKind(p.pieceId, NetworkKind::Rail))) n++;
+    }
+    if (n) return n;
+    // Third source [INFERRED]: the underground layers (pipes 17300, subway 17400).
+    for (const auto& p : w()->pipes) if (in(p.x, p.z) && hier.isAncestorOrSelf(17300, type)) n++;
+    for (const auto& p : w()->subway) if (in(p.x, p.z) && hier.isAncestorOrSelf(17400, type)) n++;
+    return n;
+  }
+  // Structures whose occupant key is exactly (T, G, I); the whole map has centre (0,0) and radius max(W,H)+1 (spec 23).
+  int countKey(uint32_t t, uint32_t g, uint32_t i, int x0, int z0, int x1, int z1) const {
+    if (!w() || g != 0x57E || (t != 0x207EDC0Eu && t != 0x220055E1u)) return 0;
+    int n = 0;
+    for (const auto& o : w()->occupants)
+      if (o.occId == i && o.keyType == t && o.x >= x0 && o.x <= x1 && o.z >= z0 && o.z <= z1) n++;
     return n;
   }
   int32_t countStructures(uint32_t type) const override { return w() ? countType(type, 0, 0, w()->W, w()->H) : 0; }
@@ -58,8 +72,14 @@ struct Stats : ICityStats {
     if (cz > w()->H) cz = 0;
     return countType(type, std::max(0, cx - r), std::max(0, cz - r), std::min(w()->W, cx + r), std::min(w()->H, cz + r));
   }
-  int32_t countAppearance(uint32_t, uint32_t, uint32_t) const override { return 0; }
-  int32_t countAppearanceNear(uint32_t, uint32_t, uint32_t, int, int, int) const override { return 0; }
+  int32_t countAppearance(uint32_t t, uint32_t g, uint32_t i) const override { return w() ? countKey(t, g, i, 0, 0, w()->W, w()->H) : 0; }
+  int32_t countAppearanceNear(uint32_t t, uint32_t g, uint32_t i, int x, int z, int r) const override {
+    if (!w()) return 0;
+    int cx = x - 1, cz = z - 1;
+    if (cx > w()->W) cx = 0;
+    if (cz > w()->H) cz = 0;
+    return countKey(t, g, i, std::max(0, cx - r), std::max(0, cz - r), std::min(w()->W, cx + r), std::min(w()->H, cz + r));
+  }
   bool ordinanceEnacted(int id) const override { return c->ordinances.enacted(uint32_t(id)); }
   bool neighborConnection(int n, int kind) const override {
     if (n < 0 || n >= kNeighbours) return false;
@@ -166,6 +186,7 @@ void ScenarioController::start(City& city, const std::string& mayor, const std::
   p_->hooks = std::move(hooks);
   p_->city = &city; p_->mayor = mayor; p_->cityName = cityName;
   p_->stats.c = &city;
+  p_->stats.pieceAgent = p_->hooks.pieceAgentType;
   p_->host.h = &p_->hooks; p_->host.file = &p_->file; p_->host.co = &p_->co;
   p_->host.resolve = [this](uint32_t g, uint32_t id) { return p_->res(g, id) .empty() ? std::string() : expandScenarioTokens(p_->res(g, id), p_->ctx()); };
   p_->rt.reset(new ScenarioRuntime(p_->file, p_->stats, p_->host, 1));

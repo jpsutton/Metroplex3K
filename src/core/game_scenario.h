@@ -27,6 +27,7 @@ struct ScenarioHooks {
   std::function<void(int dealId, bool enabled)> enableBusiness;
   std::function<void(int rank)> ended;
   std::function<std::string(uint32_t group, uint32_t id)> text;   // game string tables (may return "")
+  std::function<uint32_t(uint32_t pieceId)> pieceAgentType;       // agent type of a network piece (0 = unknown), for structure counts
 };
 
 struct ScenarioInfo {

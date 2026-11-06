@@ -768,6 +768,7 @@ void Game::startScenarioHooks() {
   };
   h.ended = [this](int) { scr_ = Screen::ScenarioEnd; };
   h.ticker = [this](const std::string& text, int, bool) { statusLine_ = text; };
+  h.pieceAgentType = [this](uint32_t id) -> uint32_t { const OccAttr* oa = haveData_ ? data_.occupant(id, true, false) : nullptr; return oa ? oa->agentType : 0u; };
   h.sound = [this](int id) { sound(id); };
   h.moveCamera = [this](int x, int z, int zoom) { setView(x, z, zoom); };
   h.setSpeed = [this](int sp) { speed_ = std::max(1, std::min(4, sp)); };
