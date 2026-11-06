@@ -518,8 +518,8 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
     ui.fill({bx + 11, by + 1, 1, 11}, rgb(123, 130, 189)); ui.fill({bx + 1, by + 11, 11, 1}, rgb(123, 130, 189));
     ui.fill({bx + 12, by, 1, 13}, rgb(181, 182, 231)); ui.fill({bx, by + 12, 13, 1}, rgb(181, 182, 231));
     if (q.historical) { ui.fill({bx + 3, by + 3, 7, 7}, rgb(0x31, 0x36, 0x7C)); }
-    ui.text(bx + 16, by - 2, E.query(0x30, "Make Historical"), "main10");
-    Rect hit{bx, by - 2, 16 + ui.textWidth(E.query(0x30, "Make Historical")), 17};
+    ui.text(bx + 15, by - 1, E.query(0x30, "Make Historical"), "main10");
+    Rect hit{bx, by - 2, 15 + ui.textWidth(E.query(0x30, "Make Historical")), 17};
     E.spot("historical", hit);
     if (ui.clicked(hit)) R.add(Act::ToggleHistorical, 0, q.x, q.z);
   }

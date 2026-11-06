@@ -112,13 +112,15 @@ void Game::drawNavigator(int barH) {
       float dx = float(ui_.in.mx - (ox + kCx)), dy = float(ui_.in.my - (oy + kCy));
       if (std::abs(dx) + std::abs(dy) <= float(kMapHalf)) {
         float s = float(N) / float(2 * kMapHalf);
-        // The original centres the view 176 px left and 140 px up of where this build did, for every click (Berlin, four clicks at the load camera, zoom 4:
-        // screen = ours + (-176, -140)); at one tile per minimap px that is the click read (1.375, 2.1875) minimap px further down and to the right [OBSERVED; the
-        // cause is unknown, the correction is empirical].
-        dx += 1.375f; dy += 2.1875f;
+        // The original centres the view 176 px left and 140 px up of where this build did at the default zoom (tile 128 px wide) and, at other zooms, the offset
+        // is (-128, -112) * tile / 128 + (-48, -28) px [OBSERVED on Berlin, rotations 0 and 1, tile widths 32..128]: a part that scales with the zoom, which is
+        // the click read (1.0, 1.75) minimap px further down and to the right, and a fixed screen part. The cause is unknown; the correction is empirical.
+        dx += 1.0f; dy += 1.75f;
         float u = (dy - dx) * s + N * 0.5f, v = (dy + dx) * s + N * 0.5f;
+        const float tileW = 8.f * float(1 << cam_.zoom);
+        const float cu = u + 8.f / tileW, cv = v + 104.f / tileW;   // the fixed (-48, -28) px: the view centre moves by (8, 104) / tile width in view units
         int x, z; Renderer::viewToWorldVertex(cam_.rot, world_.W, world_.H, int(u), int(v), x, z);
-        if (x >= 0 && z >= 0 && x < world_.W && z < world_.H && ui_.in.pressed) { cam_.u = u; cam_.v = v; }   // sub-tile centre: the offset is not a whole number of tiles
+        if (x >= 0 && z >= 0 && x < world_.W && z < world_.H && ui_.in.pressed) { cam_.u = cu; cam_.v = cv; }   // sub-tile centre: the offset is not a whole number of tiles
       }
     }
   }
