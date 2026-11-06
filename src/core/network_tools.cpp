@@ -59,6 +59,30 @@ bool slopesAlong(const INetworkMap& m, int x, int z, bool alongX) {
   m.tileCorners(x, z, c);
   return alongX ? (c[1] != c[0] || c[2] != c[3]) : (c[3] != c[0] || c[2] != c[1]);
 }
+
+// Odd-corner levelling of the second-to-last tile [OBSERVED, Mount Herrang, road/rail/power/pipe/subway drags ending on a slope; the rule is INFERRED from
+// those drags]: when B (the second-to-last tile) has three corners at one level and a single odd corner, the odd corner moves to that level, B becomes
+// flat and the last tile T a clean one-direction slope; nothing else moves. Succeeds only when T is then flat or a valid slope.
+struct OddCornerFix { int vx = 0, vz = 0, h = 0, delta = 0; };
+bool oddCornerFix(const INetworkMap& m, const PathTile& b, const PathTile& t, OddCornerFix& out) {
+  if (!m.onMap(b.x, b.z) || !m.onMap(t.x, t.z)) return false;
+  int c[4]; m.tileCorners(b.x, b.z, c);
+  int odd = -1, lvl = 0;
+  for (int i = 0; i < 4 && odd < 0; i++) {
+    // corner i is odd when the other three are equal and it differs
+    int o1 = c[(i + 1) % 4], o2 = c[(i + 2) % 4], o3 = c[(i + 3) % 4];
+    if (o1 == o2 && o2 == o3 && c[i] != o1) { odd = i; lvl = o1; }
+  }
+  if (odd < 0) return false;
+  out.vx = b.x + (odd == 1 || odd == 2); out.vz = b.z + (odd == 2 || odd == 3); out.h = lvl;
+  out.delta = std::abs(c[odd] - lvl);
+  if (!m.canChangeCorner(out.vx, out.vz)) return false;
+  int tc[4]; m.tileCorners(t.x, t.z, tc);
+  const int vxs[4] = {t.x, t.x + 1, t.x + 1, t.x}, vzs[4] = {t.z, t.z, t.z + 1, t.z + 1};
+  for (int i = 0; i < 4; i++) if (vxs[i] == out.vx && vzs[i] == out.vz) tc[i] = lvl;
+  const bool flat = tc[0] == tc[1] && tc[1] == tc[2] && tc[2] == tc[3];
+  return flat || isValidSlope(tc);
+}
 }  // namespace
 
 RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std::pair<int, int> E) {
@@ -617,6 +641,14 @@ static int levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool
   if (lane.empty()) return 0;
   const PathTile& a = start ? lane.front() : lane.back();
   const PathTile& b = highway && lane.size() > 1 ? (start ? lane[1] : lane[lane.size() - 2]) : a;
+  if (!highway && !start && lane.size() >= 2) {   // the drag's far end: the odd-corner levelling of the second-to-last tile, else the average below
+    const PathTile& prev = lane[lane.size() - 2];
+    OddCornerFix fx;
+    if (!m.occupantAt(prev.x, prev.z, LAYER_SURFACE).present && !m.occupantAt(a.x, a.z, LAYER_SURFACE).present && oddCornerFix(m, prev, a, fx)) {
+      m.setCornerHeight(fx.vx, fx.vz, fx.h);
+      return fx.delta;
+    }
+  }
   for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return 0;
   bool bothValid = true, bothFlat = true;
   for (const PathTile* t : {&a, &b}) {

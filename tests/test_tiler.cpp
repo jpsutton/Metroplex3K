@@ -291,6 +291,24 @@ static void testBlockedShore() {
   CHECK(m.occupantAt(5, 3, LAYER_SURFACE).present && !m.occupantAt(6, 3, LAYER_SURFACE).present);
 }
 
+// A drag ending on a slope whose second-to-last tile has a single odd corner is accepted: that corner moves to the tile's level and the last tile
+// becomes a clean slope; the six tiles are all built and the terrain is charged LevelTerrain x 2 >> 2 (observed on Mount Herrang, one drag per kind).
+static void testEndOddCorner() {
+  auto rules = makeRules({{"ROAD_GRND_final.txt", roadFinal()}});
+  SimpleNetworkMap m(20, 20);
+  setupRoadFlags(m);
+  m.setCornerHeight(2, 9, 28); m.setCornerHeight(2, 10, 28); m.setCornerHeight(3, 10, 28);   // tile (2,8): 30 30 28 30; tile (2,9): 28 30 28 28
+  RoutedPath rp = routePath(m, TOOL_ROAD, {2, 4}, {2, 9});
+  CHECK(rp.tiles.size() == 6 && !rp.blocked && rp.validPrefix == 6);
+  PlacementCosts costs;
+  costs.byType[16000] = 10; costs.levelTerrain = 25;
+  TestHost host;
+  CommitResult r = commitPath(m, rules, costs, host, TOOL_ROAD, rp);
+  CHECK(r.status == COMMIT_OK && host.charged == 72);
+  CHECK(m.cornerHeight(2, 9) == 30 && m.cornerHeight(3, 9) == 30 && m.cornerHeight(2, 10) == 28 && m.cornerHeight(3, 10) == 28);
+  CHECK(m.occupantAt(2, 8, LAYER_SURFACE).present && m.occupantAt(2, 9, LAYER_SURFACE).present);
+}
+
 // Highway commit: every vertex row across the two carriageways is set to its minimum (interim rule), and terrain levelling is charged
 // LevelTerrain x sum|dh| >> 2.
 static void testHighwayCrossRows() {
@@ -706,6 +724,7 @@ int main() {
   testBridge();
   testBlockedShore();
   testHighwayCrossRows();
+  testEndOddCorner();
   testTunnel();
   testConnections();
   testOnRamp();
