@@ -1578,7 +1578,7 @@ City::NetworkConfirm City::peekNetworkConfirm(NetworkKind k, const std::vector<s
         return out;
       }
     }
-    if (nk == NK_ROAD || nk == NK_RAIL || nk == NK_HIGHWAY) {
+    if (nk == NK_ROAD || nk == NK_RAIL || nk == NK_HIGHWAY) {   // the road/rail entrance is the last tile (heights before the strip grade here)
       TunnelPlan tp = planTunnel(map, nk, tiles, costs);
       if (tp.ok && tp.price <= host.funds()) {
         out.kind = NetworkConfirmKind::Tunnel;

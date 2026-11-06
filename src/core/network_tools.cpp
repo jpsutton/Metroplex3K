@@ -601,6 +601,52 @@ TunnelPlan planTunnel(const INetworkMap& m, int kind, const std::vector<PathTile
           }
     if (tp.pairDx == 0 && tp.pairDz == 0) return tp;  // need a second carriageway
   }
+  if (!tp.highway) {
+    // Road and rail [STATIC SIMNTWRK 0x10014A23 + builder 0x1001C102]: the entrance is the LAST dragged tile and the direction comes from the last step
+    // only (heights as they stand after the strip grade). The tile must climb by >= 4 along d: rise = the sum of the two edge differences. The loop walks
+    // on while the lowest corner stays >= h + 4 (E + d is never tested); the exit always lies beyond the drag's end.
+    const PathTile& E = primary.back(); const PathTile& Pv = primary[primary.size() - 2];
+    const int sdx = E.x - Pv.x, sdz = E.z - Pv.z;
+    if (std::abs(sdx) + std::abs(sdz) != 1) return tp;
+    tp.dx = sdx; tp.dz = sdz;
+    tp.dir = sdx < 0 ? 0 : sdz < 0 ? 1 : sdx > 0 ? 2 : 3;
+    if (!m.onMap(E.x, E.z)) return tp;
+    int c[4]; m.tileCorners(E.x, E.z, c);
+    const int rise = sdx == 1 ? (c[1] - c[0]) + (c[2] - c[3]) : sdx == -1 ? (c[0] - c[1]) + (c[3] - c[2])
+                   : sdz == 1 ? (c[3] - c[0]) + (c[2] - c[1]) : (c[0] - c[3]) + (c[1] - c[2]);
+    if (rise < 4) return tp;
+    const int h = *std::min_element(c, c + 4), T = (h + 4) & 255;
+    auto lowestOf = [&](int x, int z) { int q[4]; m.tileCorners(x, z, q); return *std::min_element(q, q + 4); };
+    int L = 1, px = E.x + sdx, pz = E.z + sdz;
+    for (;;) {
+      const int nx = px + sdx, nz = pz + sdz;
+      if (!m.onMap(nx, nz)) return tp;
+      px = nx; pz = nz; L++;
+      if (lowestOf(px, pz) < T) break;
+    }
+    if (L < 3) return tp;
+    tp.ok = true;
+    tp.entrance = {E.x, E.z};
+    tp.exit = {E.x + L * sdx, E.z + L * sdz};
+    tp.length = L; tp.spanLength = L; tp.hillTiles = L - 1;
+    for (int q = 1; q < L; q++) tp.hidden.push_back({E.x + q * sdx, E.z + q * sdz});
+    tp.price = (L - 1) * costs.cost(kTunnelCostKey);
+    tp.continueTile = {tp.exit.first + sdx, tp.exit.second + sdz};
+    // shaping: E near edge -> h, far edge -> h + 4; X near edge -> h + 4, far edge -> h; the far edge of X + d -> h
+    auto edge = [&](int tx, int tz, bool nearEdge, int hh) {
+      int v[2][2];
+      if (sdx == 1) { const int vx = nearEdge ? tx : tx + 1; v[0][0] = vx; v[0][1] = tz; v[1][0] = vx; v[1][1] = tz + 1; }
+      else if (sdx == -1) { const int vx = nearEdge ? tx + 1 : tx; v[0][0] = vx; v[0][1] = tz; v[1][0] = vx; v[1][1] = tz + 1; }
+      else if (sdz == 1) { const int vz = nearEdge ? tz : tz + 1; v[0][0] = tx; v[0][1] = vz; v[1][0] = tx + 1; v[1][1] = vz; }
+      else { const int vz = nearEdge ? tz + 1 : tz; v[0][0] = tx; v[0][1] = vz; v[1][0] = tx + 1; v[1][1] = vz; }
+      for (auto& q : v) if (q[0] >= 0 && q[1] >= 0 && q[0] <= m.width() && q[1] <= m.height()) tp.corners.push_back({q[0], q[1], hh});
+    };
+    edge(E.x, E.z, true, h); edge(E.x, E.z, false, h + 4);
+    edge(tp.exit.first, tp.exit.second, true, h + 4); edge(tp.exit.first, tp.exit.second, false, h);
+    edge(tp.continueTile.first, tp.continueTile.second, false, h);
+    for (const auto& cn : tp.corners) if (m.cornerHeight(cn.vx, cn.vz) != cn.h && !m.canChangeCorner(cn.vx, cn.vz)) { tp.blocked = true; break; }
+    return tp;
+  }
   const int hillAdd = tp.highway ? 8 : 4;
   auto lowest = [&](int x, int z) { int c[4]; m.tileCorners(x, z, c); return *std::min_element(c, c + 4); };
   auto lowestPair = [&](int x, int z) {
@@ -815,6 +861,18 @@ static int levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool
   const PathTile& a = start ? lane.front() : lane.back();
   const PathTile& b = highway && lane.size() > 1 ? (start ? lane[1] : lane[lane.size() - 2]) : a;
   for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return 0;
+  if (!highway && !start) {   // the far end tile with one odd corner: that corner moves to the level of the other three [OBSERVED: Mount Herrang hill road (81,90) 90 -> 92]
+    int c[4]; m.tileCorners(a.x, a.z, c);
+    for (int i = 0; i < 4; i++) {
+      const int o1 = c[(i + 1) % 4], o2 = c[(i + 2) % 4], o3 = c[(i + 3) % 4];
+      if (o1 == o2 && o2 == o3 && c[i] != o1) {
+        const int vx = a.x + (i == 1 || i == 2), vz = a.z + (i == 2 || i == 3);
+        if (!m.canChangeCorner(vx, vz)) return 0;
+        m.setCornerHeight(vx, vz, o1);
+        return std::abs(c[i] - o1);
+      }
+    }
+  }
   bool bothValid = true, bothFlat = true;
   for (const PathTile* t : {&a, &b}) {
     int c[4]; m.tileCorners(t->x, t->z, c);
@@ -937,16 +995,23 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
       extraSpent += total;
     }
   }
-  // tunnel attempt (road, rail, highway — spec 12 s6.4 / Q-AN)
-  // A tunnel is only tried when the strip grader could not grade the straight run (a hill the grade window cannot follow): a drag over a hill the grader
-  // can follow builds terrain-following road, no tunnel offer [OBSERVED, Mount Herrang (55,90)->(80,90)]. The tunnel then carries the whole route.
-  std::vector<PathTile> tunnelPath;
-  bool gradeFailed = false;
-  for (const auto& t : rp.tiles) if (t.gradeInvalid) gradeFailed = true;
-  if (gradeFailed) for (const auto& t : rp.tiles) if (t.valid || t.gradeInvalid) { PathTile pt; pt.x = t.x; pt.z = t.z; pt.carriage = t.carriage; tunnelPath.push_back(pt); }
-  if (res.bridges == 0 && (P.kind == NK_ROAD || P.kind == NK_RAIL || P.kind == NK_HIGHWAY) && (gradeFailed || P.kind == NK_HIGHWAY)) {
-    TunnelPlan tp = planTunnel(m, P.kind, P.kind == NK_HIGHWAY || !gradeFailed ? path : tunnelPath, costs);
+  // Strip grade of the straight runs (commit order: bridge, then validate + grade, then the tunnel attempt; charged LevelTerrain x raised/lowered >> 2)
+  int levelK = 0;
+  if (P.kind != NK_HIGHWAY) {
+    std::vector<std::pair<int, int>> ts; std::vector<char> sk;
+    for (const PathTile& t : path) { ts.push_back({t.x, t.z}); sk.push_back(skip.count({t.x, t.z}) ? 1 : 0); }
+    StripGrade g = planStripGrade(m, ts, sk);
+    if (g.failFrom == size_t(-1)) for (const auto& v : g.verts) m.setCornerHeight(v.x, v.z, v.h);
+    levelK += g.raised + g.lowered;
+  }
+  // tunnel attempt (road, rail, highway; spec 12 s6.4 / Q-AN): road and rail try it on every drag where no bridge was built, the entrance being the last tile
+  if (res.bridges == 0 && (P.kind == NK_ROAD || P.kind == NK_RAIL || P.kind == NK_HIGHWAY)) {
+    TunnelPlan tp = planTunnel(m, P.kind, path, costs);
     if (tp.ok && tp.price <= host.funds() && host.confirmTunnel(tp.price)) {
+      if (!tp.highway) {
+        if (tp.blocked) { host.message("tunnel construction discontinued"); res.status = COMMIT_CANCELLED; return res; }   // message 0x284, nothing placed
+        for (const auto& cn : tp.corners) m.setCornerHeight(cn.vx, cn.vz, cn.h);
+      }
       const int dIn = tp.dir, dOut = (tp.dir + 2) & 3;
       auto altAt = [&](int x, int z) {
         int c[4]; m.tileCorners(x, z, c); return *std::min_element(c, c + 4);
@@ -995,7 +1060,11 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
       host.charge(tp.price);
       extraSpent += tp.price;
       res.tunnels++;
-      if (gradeFailed && P.kind != NK_HIGHWAY) path = tunnelPath;   // the tunnel carried the whole route; the tiles outside it are tiled
+      if (P.kind != NK_HIGHWAY && tp.continueTile.first >= 0) {   // the dragged end becomes the portal; the road continues one tile past the exit
+        path.pop_back();
+        PathTile ct; ct.x = tp.continueTile.first; ct.z = tp.continueTile.second;
+        if (m.onMap(ct.x, ct.z)) path.push_back(ct);
+      }
       for (auto& t : tp.hidden) skip.insert(t);
       for (auto& t : skip) context.push_back(t);
     }
@@ -1003,14 +1072,6 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
   // Endpoint levelling: at the start always, at the end only when neither a bridge nor a tunnel was built.
   // Terrain operations are charged LevelTerrain x k >> 2, k = the sum of the absolute corner changes [STATIC SIMDIRT level plan 0x1000A750; observed 25
   // for four corners moving 1 each].
-  int levelK = 0;
-  if (P.kind != NK_HIGHWAY) {   // strip grade of the straight runs (charged: LevelTerrain x raised/lowered >> 2)
-    std::vector<std::pair<int, int>> ts; std::vector<char> sk;
-    for (const PathTile& t : path) { ts.push_back({t.x, t.z}); sk.push_back(skip.count({t.x, t.z}) ? 1 : 0); }
-    StripGrade g = planStripGrade(m, ts, sk);
-    if (g.failFrom == size_t(-1)) for (const auto& v : g.verts) m.setCornerHeight(v.x, v.z, v.h);
-    levelK += g.raised + g.lowered;
-  }
   if (P.kind == NK_HIGHWAY) {
     std::vector<PathTile> lane0;
     for (const PathTile& t : path) if (t.carriage == 0 && !skip.count({t.x, t.z})) lane0.push_back(t);

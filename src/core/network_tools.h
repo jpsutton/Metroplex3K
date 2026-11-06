@@ -142,6 +142,10 @@ struct TunnelPlan {
   int spanLength = 0;                       // length written on span pieces (L road/rail; L+1 highway)
   std::vector<std::pair<int, int>> hidden;  // tiles strictly between portals (both carriageways for highway)
   int price = 0;
+  struct Corner { int vx, vz, h; };
+  std::vector<Corner> corners;              // road/rail shaping of the entrance and exit [STATIC 0x1001C102]
+  bool blocked = false;                     // a shaped corner has an occupant next to it: message 0x284, nothing placed
+  std::pair<int, int> continueTile{-1, -1}; // road/rail: the tile one past the exit that replaces the dragged end
 };
 TunnelPlan planTunnel(const INetworkMap& m, int kind, const std::vector<PathTile>& path, const PlacementCosts& costs);
 

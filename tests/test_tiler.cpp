@@ -428,7 +428,7 @@ static void testTunnel() {
   PlacementCosts c;
   c.byType[16006] = 500;
   std::vector<PathTile> path;
-  for (int x = 2; x <= 9; x++) { PathTile p; p.x = x; p.z = 1; path.push_back(p); }
+  for (int x = 0; x <= 2; x++) { PathTile p; p.x = x; p.z = 1; path.push_back(p); }   // the entrance is the last dragged tile
   auto tp = planTunnel(m, NK_ROAD, path, c);
   // walk: tiles 3..6 have lowest corner 35 >= 34; tile 7 (corner vx 8 = 30) is the first below h + 4 -> X = 7, L = 5
   CHECK(tp.ok && tp.entrance.first == 2 && tp.exit.first == 7 && tp.length == 5 && tp.dir == 2);
