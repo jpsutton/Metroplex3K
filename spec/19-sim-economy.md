@@ -384,7 +384,12 @@ Issuing a bond for a requested amount `x` [STATIC]:
 
 With shipped values a 25,000 bond costs 250 per month for 120 months = 30,000 total. Payments are
 charged monthly into `bondYTD` and settled at year end (§7). There is no interest-rate variation
-and no early repayment [STATIC]. [OPEN] Whether the UI offers early repayment.
+and no early repayment [STATIC]. The UI does not offer early repayment either [STATIC]: the
+budget object has no repay entry (slot 0x60 at SIMMISC 0x1000521F only returns the 64-bit total
+principal outstanding; slot 0x64 at 0x100092AA returns the credit limit
+`MaxBondAmt × 1000 × MaxBonds`), and the loans page handler (SIMMISC 0x10025DEE) handles only page
+navigation, "issue a bond for the selected amount" and "open the budget advisor". A bond ends
+only in the month-end bond loop, when its remaining balance reaches 0 or at its maturity month.
 
 Retirement test note: the stored `month` is the 1-based calendar month at issue, while the month
 slot `m` compared at month-end is 0-based; the original compares them directly. The practical
@@ -727,10 +732,36 @@ by the utilities advisor once per advisor cycle using
 in the file but no reader was found). Scenario commands `cmdEnableNewNeighborDeals` /
 `cmdDisableNewNeighborDeals` gate new offers (`23-scenarios.md`).
 
-Utility effect: accepted buy-power/buy-water deals add capacity to the city's power/water
-network at the neighbour connection; sell deals consume capacity; garbage export removes garbage
-from the city's garbage total, import adds it. The capacity accounting is specified in
-`16-sim-utilities.md` [OPEN: exact coupling].
+Utility effect [STATIC]: the city is always served first; sales come only from what is left
+after the city's own demand, and nothing is reserved in advance. Deal type codes: 0 power buy,
+1 power sell, 2 water buy, 3 water sell, 4 garbage export, 5 garbage import.
+
+* **Power** (SIMUTIL 0x1000406B set-up, 0x10004E57 distribution, 0x10003724 settlement). Per
+  neighbour slot, a buy deal sets an available amount of 1,000,000,000 (effectively unlimited) and
+  a sell deal sets the contract amount; working copies `remBuy`, `remSell` start equal to them.
+  Per connected network: S = sum of plant outputs; **if no neighbour connection is in the
+  network, S = trunc(S × 1.1)** (a connection removes this 10 % bonus); D = Σ `remBuy` of the
+  connections in it; k = 1 − conservation − stairwell factors; B = trunc((S + D)/k). Tiles are
+  served in scan order while consumption ≤ B. If supply runs out, the rest of the network is
+  unpowered, `remBuy` of its slots is set to 0 and the sale gets nothing. Otherwise the leftover
+  L = trunc(B × k) goes first to the sale (`remSell −= min(L, remSell)`); if L < D, `remBuy` is
+  reduced by D − L (the amount actually drawn). Bought power can therefore also feed a sale
+  [INFERRED]. Settlement: a purchase is billed on the amount used (`buy − remBuy`); for a sale,
+  **any undelivered amount (`remSell ≠ 0`, even 1 unit) cancels the deal**.
+* **Water** (SIMUTIL 0x1000E8C4): with a connected buy deal the supply budget is unlimited;
+  otherwise it is the sum of facility outputs (no 10 % bonus), divided by k. A sale receives
+  `min(contract − delivered, leftover)`. A purchase records the amount drawn; at settlement the
+  billed amount is `max(used, contract)` [INFERRED: argument meaning] and a sale with
+  `delivered < contract` is cancelled.
+* **Garbage** (SIMECO 0x100094A2 disposal): the city's own facilities are used first; with an
+  export deal **all** remaining garbage goes to the neighbour, uncapped (without one the overflow
+  is capped); the monthly bill uses the amount exported. An import deal pushes `units/30` per
+  pass through the same disposal, competing with the city's own garbage for its capacity. No
+  cancellation for garbage deals was found.
+* **Cancellation penalty** (deal manager slot 0x80, SIMMISC 0x10017F89): if the deal's age is
+  below 60 (months, [INFERRED]) it is ended and its penalty (`MULT × amount` from the offer) is
+  added to a pending amount charged as a month-end expense; at age ≥ 60 it is removed with no
+  penalty.
 
 ## 11. Business deals
 
