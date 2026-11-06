@@ -676,6 +676,32 @@ void City::setTaxRate(int rate) {
 
 // ============================================================================ index / network classification
 
+// Exit function of the network maps (spec 12 4.8, 18 5.4 [DATA]): a piece exposes side k (tiler dir 0..3 = W, N, E, S) at rotation r iff a bit b
+// of the low 16 bits of its connection matrix (occupant attribute 0x136 road/highway, 0x137 rail, 0x138 subway) has (b mod 4 + r) mod 4 == k,
+// i.e. the OR of the four low nibbles rotated left by r. Pieces without a matrix stay open on all four sides.
+void City::configureMap(WorldNetworkMap& map) const {
+  if (!game_ || !cfg_.haveTiling) return;
+  GameData* g = game_;
+  const auto* tr = &cfg_.tiling;
+  auto cache = std::make_shared<std::unordered_map<uint32_t, unsigned>>();
+  map.setExitFn([g, tr, cache](uint32_t id, int rot) -> unsigned {
+    auto it = cache->find(id);
+    unsigned base;
+    if (it != cache->end()) base = it->second;
+    else {
+      base = 0xF;
+      if (const OccAttr* a = g->occupant(id, true)) {
+        const int which = tr->inSet(netKindToTable(NK_RAIL), id) ? 1 : tr->inSet(netKindToTable(NK_SUBWAY), id) ? 2 : 0;
+        const uint32_t m = a->netMatrix[which];
+        if (m) { const uint32_t lo = m & 0xFFFFu; base = (lo | (lo >> 4) | (lo >> 8) | (lo >> 12)) & 0xFu; }
+      }
+      (*cache)[id] = base;
+    }
+    const int r = rot & 3;
+    return ((base << r) | (base >> (4 - r))) & 0xFu;
+  });
+}
+
 uint32_t City::kindOf(const NetPiece& p) const {
   if (!cfg_.haveTiling) return p.pieceId == kFallbackPowerPiece ? 3u : 1u;
   static const int order[] = {NK_ROAD, NK_HIGHWAY, NK_RAIL, NK_POWER};
@@ -1320,6 +1346,7 @@ std::vector<std::pair<int, int>> City::routeNetworkPath(NetworkKind k, int x0, i
   Tool tool = k == NetworkKind::Road ? TOOL_ROAD : k == NetworkKind::Rail ? TOOL_RAIL : k == NetworkKind::Power ? TOOL_POWER
             : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
   WorldNetworkMap map(*const_cast<World*>(world_), flagsFromRuleSets(cfg_.tiling));
+  configureMap(map);
   RoutedPath rp = ::m3k::routePath(map, tool, {x0, z0}, {x1, z1});
   path.reserve(rp.tiles.size());
   for (const auto& t : rp.tiles) if (t.valid) path.push_back({t.x, t.z});
@@ -1330,6 +1357,7 @@ City::Quote City::quoteOnRamp(int ax, int az) const {
   Quote q;
   if (!world_ || !cfg_.haveTiling) return q;
   WorldNetworkMap map(*const_cast<World*>(world_), flagsFromRuleSets(cfg_.tiling));
+  configureMap(map);
   OnRampPlan plan = planOnRamp(map, ax, az);
   if (!plan.ok) return q;
   PlacementCosts pc = makeCosts(budget, cfg_);
@@ -1344,6 +1372,7 @@ std::vector<std::pair<int, int>> City::onRampPreview(int ax, int az) const {
   std::vector<std::pair<int, int>> out;
   if (!world_ || !cfg_.haveTiling) return out;
   WorldNetworkMap map(*const_cast<World*>(world_), flagsFromRuleSets(cfg_.tiling));
+  configureMap(map);
   OnRampPlan plan = planOnRamp(map, ax, az);
   if (!plan.ok) return out;
   // Show the three footprint tiles; dual-carriageway partners are implied.
@@ -1355,6 +1384,7 @@ bool City::buildOnRamp(int ax, int az) {
   lastFailNoMoney = false;
   if (!world_ || !cfg_.haveTiling) return false;
   WorldNetworkMap map(*world_, flagsFromRuleSets(cfg_.tiling));
+  configureMap(map);
   PlacementCosts costs = makeCosts(budget, cfg_);
   struct Host : ToolHost {
     City& c;
@@ -1433,6 +1463,7 @@ City::NetworkConfirm City::peekNetworkConfirm(NetworkKind k, const std::vector<s
   Tool tool = k == NetworkKind::Road ? TOOL_ROAD : k == NetworkKind::Rail ? TOOL_RAIL : k == NetworkKind::Power ? TOOL_POWER
             : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
   WorldNetworkMap map(*const_cast<World*>(world_), flagsFromRuleSets(cfg_.tiling));
+  configureMap(map);
   PlacementCosts costs = makeCosts(budget, cfg_);
   struct Host : ToolHost {
     const City& c;
@@ -1506,6 +1537,7 @@ bool City::buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& p
   Tool tool = k == NetworkKind::Road ? TOOL_ROAD : k == NetworkKind::Rail ? TOOL_RAIL : k == NetworkKind::Power ? TOOL_POWER
             : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
   WorldNetworkMap map(*world_, flagsFromRuleSets(cfg_.tiling));
+  configureMap(map);
   PlacementCosts costs = makeCosts(budget, cfg_);
   struct Host : ToolHost {
     City& c;
@@ -1618,6 +1650,7 @@ bool City::bulldoze(int x0, int z0, int x1, int z1) {
   if (!netTiles.empty()) {
     if (cfg_.haveTiling) {
       WorldNetworkMap map(*world_, flagsFromRuleSets(cfg_.tiling));
+  configureMap(map);
       for (auto& kv : netTiles) demolish(map, cfg_.tiling, int(kv.first), kv.second);
     } else {
       std::set<std::pair<int, int>> rm;

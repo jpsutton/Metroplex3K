@@ -163,7 +163,8 @@ class City {
   bool usingTilingRules() const { return cfg_.haveTiling; }
   uint32_t kindOf(const NetPiece& p) const;
   // True when the piece id belongs to the tiling set of the network kind (crossings belong to every kind they contain).
-  bool pieceInKind(uint32_t pieceId, NetworkKind k) const;   // NetworkKind value of a surface piece, 0 = unknown
+  bool pieceInKind(uint32_t pieceId, NetworkKind k) const;
+  void configureMap(class WorldNetworkMap& map) const;   // exit function from the occupants' connection matrices   // NetworkKind value of a surface piece, 0 = unknown
 
   // ---- subsystems (public: state classes) ----
   Clock clock;
