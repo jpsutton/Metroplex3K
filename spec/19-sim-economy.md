@@ -787,6 +787,76 @@ the cost; the remainder of the line is a comment. Cost lookup for an occupant of
 `[TuningParameters] TireRecyclingOrdEffect = pct:type,type,…` — `pct` (must be ≤ 100) applies to
 each listed agent type (shipped list: roads, highway, ramps, bridges and highway pieces).
 
+Shipped `[BuildingPlacementCosts]` (63 entries, file order) [DATA]:
+
+| Agent type | Cost | Comment in the file |
+|---|---|---|
+| 300 | 3 | Flora |
+| 12111 | 5000 | CoalPlant |
+| 12112 | 8500 | OilPlant |
+| 12113 | 4500 | GasPlant |
+| 12114 | 30000 | MicrowavePlant |
+| 12115 | 20000 | NuclearPlant |
+| 12116 | 50000 | FusionPlant |
+| 12117 | 15000 | SolarPlant |
+| 12118 | 250 | WindPlant |
+| 17100 | 5 | Powerlines |
+| 12810 | 300 | WaterPump |
+| 12820 | 15000 | WaterTreatment |
+| 12830 | 1500 | DesalinationPlant |
+| 12840 | 150 | WaterTower |
+| 17300 | 5 | Pipes |
+| 12851 | 5000 | Recycling Center |
+| 12852 | 7500 | Incinerator |
+| 12853 | 25000 | Waste to Energy Incinerator |
+| 16000 | 10 | Road |
+| 16001 | 150 | Highway |
+| 17202 | 75 | Highway Ramp |
+| 17000 | 10 | Rail |
+| 17400 | 150 | Subway |
+| 16002 | 100 | Road Bridge |
+| 16003 | 500 | Rail Bridge |
+| 16004 | 1000 | Highway Bridge |
+| 16006 | 1000 | Tunnels |
+| 12210 | 150 | Bus Station |
+| 12230 | 250 | Rail Station |
+| 12360 | 500 | Subway Station |
+| 12361 | 500 | SubwaytoRail Station |
+| 13130 | 500 | PoliceStation |
+| 13002 | 500 | FireStation |
+| 13881 | 2500 | Jail |
+| 13310 | 500 | Hospitals |
+| 13010 | 500 | School |
+| 13873 | 3000 | College |
+| 14130 | 1000 | Library |
+| 14140 | 1500 | Museum |
+| 14311 | 100 | Small Park |
+| 14316 | 100 | Fountain |
+| 14314 | 500 | PlayGround |
+| 14315 | 500 | Pond |
+| 14312 | 1000 | Large Park |
+| 14313 | 2500 | Ball Park |
+| 14430 | 3000 | Marina |
+| 14450 | 5000 | Zoo |
+| 14600 | 75000 | Stadium |
+| 13872 | 75000 | Medical Research Center |
+| 13874 | 75000 | Science Center |
+| 12350 | 250000 | SpacePort |
+| 14550 | 5000 | Lighthouse |
+| 14003 | 10000 | Geyser Park |
+| 14370 | 25000 | Country Club |
+| 14325 | 125000 | Theme Park |
+| 11001 | 25000 | Defense Contractor |
+| 16017 | 2500 | RoadNeighbor |
+| 17006 | 2500 | RailNeighbor |
+| 12102 | 2000 | PowerNeighbor |
+| 17207 | 5000 | HighwayNeighbor |
+| 17310 | 2000 | PipesNeighbor |
+| 17410 | 4000 | SubwayNeighbor |
+| 20002 | 1500 | Winter Wonderland |
+
+A type with no entry and no listed ancestor costs **0** (no error, no message) [STATIC, SIMMISC 0x10008FBE]. The hierarchy distance must be below 50 000; the search stops early at an exact match (distance 0). Flora is listed only as `300`, so every flora type inherits cost 3 through the hierarchy.
+
 ## 14. Budget history and graphs
 
 * Per-line monthly arrays (12 slots) and YTD accumulators — see §7 and Persisted state.
