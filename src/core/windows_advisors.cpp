@@ -75,6 +75,25 @@ bool sysButton(Ui& ui, const WinEnv& E, const std::string& name, int row, int x,
   else ui.button(hit, row == 1 ? "<" : "x");
   return ui.clicked(hit);
 }
+// Help topics of the Briefings tab: each advisor appends a fixed list of help ids in order [STATIC SIMADV builders]; the heading is the string of table
+// 82B85965 with that id and the body the string of E26EC3B8 (A26EC340 is unused). The city planner's extra "Starter Town" item is not modelled.
+std::vector<uint32_t> briefingIds(uint32_t adv) {
+  std::vector<uint32_t> v;
+  auto range = [&](uint32_t a, uint32_t b) { for (uint32_t i = a; i <= b; i++) v.push_back(i); };
+  if (adv == kAdvBudget) range(0xBB8, 0xBC0);
+  else if (adv == kAdvPlanner) range(0x3E9, 0x3ED);
+  else if (adv == kAdvEnvironment) range(0x7D0, 0x7D7);
+  else if (adv == kAdvDemographics) range(0xFA0, 0xFA5);
+  else if (adv == kAdvSafety) range(0x1388, 0x1391);
+  else if (adv == kAdvTransport) v = {0x1770, 0x1772, 0x1773, 0x1774, 0x177A};
+  else if (adv == kAdvUtilities) range(0x1B59, 0x1B64);
+  return v;
+}
+// Position of an advisor in the title blocks of table 029541F4 (Financial, Transportation, City Planning, Environmental, Public Safety, HEA, Utilities).
+int titleBlockIndex(uint32_t adv) {
+  if (adv == kAdvBudget) return 0; if (adv == kAdvTransport) return 1; if (adv == kAdvPlanner) return 2; if (adv == kAdvEnvironment) return 3;
+  if (adv == kAdvSafety) return 4; if (adv == kAdvDemographics) return 5; return 6;
+}
 }  // namespace
 
 // Two screens measured on the original (dialog-shots/hud--meet-*.png, 800x600):
@@ -147,16 +166,17 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
   if (tab == 2) {
     for (const auto& oc : AdvisorManager::ordinanceTopics(selected))
       if (!ordinances || ordinances->available(oc.first)) rows.push_back({oc.second, E.text(kTblAdvisorHeading, oc.second, hexName("Topic ", oc.second))});
+  } else if (tab == 1) {
+    for (uint32_t t : briefingIds(selected)) rows.push_back({t, E.text(0x82B85965, t, hexName("Help ", t))});
   } else {
     for (uint32_t t : topicsFor(list, tab)) rows.push_back({t, E.text(kTblAdvisorHeading, t, hexName("Topic ", t))});
   }
   const bool onPage = topicSel >= 0;
-  // Title: "Financial Advisor" on the news pages, "<Financial> Briefings" / "<Financial> Ordinances" on the other tabs [OBSERVED].
+  // Title: the advisor role on the news pages; "Financial Briefings" (029541F4 0x2C3..) / "Financial Ordinances" (0x2BC..) on the other tabs [OBSERVED / STATIC].
   std::string title = advisorName(E, selected);
   if (onPage && tab != 0) {
-    const std::string suffix = " Advisor";
-    std::string base = title.size() > suffix.size() && title.compare(title.size() - suffix.size(), suffix.size(), suffix) == 0 ? title.substr(0, title.size() - suffix.size()) : title;
-    title = base + " " + E.win(tabIds[tab], tabFb[tab]);
+    static const char* fb[2] = {"Briefings", "Ordinances"};
+    title = E.win((tab == 1 ? 0x2C3u : 0x2BCu) + uint32_t(titleBlockIndex(selected)), fb[tab == 1 ? 0 : 1]);
   }
   if (frame(ui, E, r, title)) { R.close = true; R.add(Act::Close); }
   if (sysButton(ui, E, "back", 1, r.x + 328, r.y + 7)) {
@@ -183,9 +203,11 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
     const Rect P{r.x + 7, r.y + 39, 248, 307};
     ui.fill(P, rgb(222, 223, 255)); insetBevel(ui, P);
     const TopicInstance* ti = list.find(uint32_t(topicSel));
-    const std::string head = E.text(kTblAdvisorHeading, uint32_t(topicSel), hexName("Topic ", uint32_t(topicSel)));
+    const bool help = tab == 1;
+    const std::string head = help ? E.text(0x82B85965, uint32_t(topicSel), hexName("Help ", uint32_t(topicSel)))
+                                  : E.text(kTblAdvisorHeading, uint32_t(topicSel), hexName("Topic ", uint32_t(topicSel)));
     ui.text(r.x + 13, r.y + 51, ellipsize(ui, head, 232), "main10", kInk);   // bold heading: ink x 21, rows 61..73
-    const std::string raw = E.text(kTblAdvisorMessage, uint32_t(topicSel), "(no text)");
+    const std::string raw = help ? E.text(0xE26EC3B8, uint32_t(topicSel), "(no text)") : E.text(kTblAdvisorMessage, uint32_t(topicSel), "(no text)");
     const std::string body = topicText(raw, E.tc, ti ? ti->args : std::vector<TopicArg>{});
     auto lines = wrapKeepSpaces(ui, body, 228, "main9");
     const int bodyTop = r.y + 79, visible = std::max(1, (P.y + P.h - 4 - bodyTop) / 14);
@@ -205,7 +227,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
       E.spot("ordinances", ob);
       if (!(ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Gonzo, 0x09), 4, ob, "", false, true, c))) c = ui.button(ob, "?");
       if (c) R.add(Act::OpenOrdinances);
-    } else {
+    } else if (tab == 0) {
       // Topic picture 118 x 110 (831D112B via the topic's graphic id) at (270, 48) inside a dark top/left, light bottom/right frame x 269..388, y 47..158.
       insetBevel(ui, {r.x + 261, r.y + 39, 120, 112});
       uint32_t g = 0, gi = 0;
@@ -228,7 +250,10 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
       for (int k = 0; k < 9; k++) ui.fill({lr.x + 4, bar.y + 2 + k, k < 5 ? k + 1 : 9 - k, 1}, sel ? kWhite : kInk);
       ui.text(lr.x + 15, bar.y - 1, ellipsize(ui, row.title, lr.w - 22), "main9", sel ? kWhite : kInk);
       if (ui.clicked(bar)) {
-        if (sel && frameNo - rowClickFrame <= 30) { topicSel = int(row.id); scroll = 0; }
+        if (sel && frameNo - rowClickFrame <= 30) {
+          topicSel = int(row.id); scroll = 0;
+          if (tab == 0) list.dismiss(row.id);   // reading a topic hides it (and withdraws its ticker item) when it has a limit, is persistent or expiring [STATIC]
+        }
         rowSel = int(row.id); rowClickFrame = frameNo;
       }
     }
@@ -286,7 +311,7 @@ PetitionerView makePetitionerView(const WinEnv& E, const PetitionerConfig& cfg, 
   v.button2 = get(PetitionText::Button2, "");
   v.advisorResponse = get(PetitionText::Advice, "");
   auto ex = cfg.extraInfo(p.id);
-  if (ex.found && ex.portrait) v.portrait = E.img(0x52DB60A0, ex.portrait);
+  if (ex.found && ex.portrait) { const uint32_t pic = petitionerPortraitImage(ex.portrait); v.portrait = E.img(0x52DB60A0, pic ? pic : ex.portrait); }
   return v;
 }
 
@@ -318,8 +343,14 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
   const bool hasAnswers = !v.button1.empty() || !v.button2.empty();
   const bool hasImpact = !v.advisorResponse.empty() || !v.councilResponse.empty();
   const int textH = mb.h - 8 - ((hasAnswers || hasImpact || impact) ? 40 : 0);
+  // Body text: lines of up to ~232 px on a 14 px pitch [OBSERVED]; returns the height used.
+  auto body = [&](Rect br, const std::string& text) {
+    int y = 0;
+    for (const auto& l : wrap(ui, text, 232, "main9")) { if (br.h > 0 && y + 14 > br.h) break; ui.text(br.x, br.y + y, l, "main9", rgb(0, 0, 0)); y += 14; }
+    return y;
+  };
   if (!impact) {
-    paragraph(ui, {r.x + 133, r.y + 62, 236, textH}, v.message, "main9", rgb(0, 0, 0));
+    body({r.x + 133, r.y + 63, 232, textH}, v.message);
     int bx = mb.x + 6, by = mb.y + mb.h - 38, bw = 80;
     if (hasAnswers) {
       if (!v.button1.empty() && button(ui, E, t + ".button1", {bx, by, bw, 33}, v.button1)) answer(true);
@@ -331,9 +362,9 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
   } else {
     int y = r.y + 62;
     ui.text(r.x + 133, y, E.win(0x80, "Advisor's response"), "main9", kInk);
-    y += paragraph(ui, {r.x + 133, y + 16, 236, 100}, v.advisorResponse.empty() ? "-" : v.advisorResponse, "main9", rgb(0, 0, 0)) + 24;
+    y += body({r.x + 133, y + 16, 232, 100}, v.advisorResponse.empty() ? "-" : v.advisorResponse) + 24;
     ui.text(r.x + 133, y, E.win(0x81, "City council's response"), "main9", kInk);
-    paragraph(ui, {r.x + 133, y + 16, 236, 100}, v.councilResponse.empty() ? "-" : v.councilResponse, "main9", rgb(0, 0, 0));
+    body({r.x + 133, y + 16, 232, 100}, v.councilResponse.empty() ? "-" : v.councilResponse);
     if (button(ui, E, t + ".return", {mb.x + 6, mb.y + mb.h - 38, 112, 33}, "<<")) impact = false;
   }
   // Round Dismiss button on the plate with its two-line label.

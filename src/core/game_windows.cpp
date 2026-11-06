@@ -512,7 +512,10 @@ void Game::drawWindows(uint32_t dtMs) {
     } else if (viewData_.mode == int(ViewDataWindow::ModeCharts)) {
       cd = chartsFromPopulation(city.pop, uint32_t(std::max(0, city.population())));
       // Electricity: the annual production by plant type (the power record's annual totals); garbage: the 12-month disposal totals (spec 16 4.5).
-      for (int i = 0; i < 10; i++) cd.electricity[i] = double(std::max<int32_t>(0, city.power.annualTotal[i]));
+      // annualTotal is indexed by powerPlantTypes() (coal, oil, gas, microwave, nuclear, fusion, solar, wind, waste-to-energy, neighbour deals); the chart
+      // lists coal, oil, gas, wind, solar, nuclear, microwave, fusion, waste-to-energy, deals.
+      static const int kSrc[10] = {0, 1, 2, 7, 6, 4, 3, 5, 8, 9};
+      for (int i = 0; i < 10; i++) cd.electricity[i] = double(std::max<int32_t>(0, city.power.annualTotal[kSrc[i]]));
       const auto& gt = city.pollution.disp.totals;
       cd.garbage[0] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Landfilled]));
       cd.garbage[1] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Exported]));

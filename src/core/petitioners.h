@@ -21,6 +21,9 @@ enum class PetitionText { Advice, Button1, Button2, Heading, Message, Name, Reac
 constexpr int kPetitionTextCount = 11;
 
 // Everything read from PetitionerManager.ini and PetitionerExtraInfo files.
+// Picture instance (52DB60A0:FFxx) of a [PetitionerExtraInfo] portrait index (the game-side presenter pictures, spec 23 4.7.0); 0 = none.
+uint32_t petitionerPortraitImage(uint32_t portraitIndex);
+
 class PetitionerConfig {
  public:
   void loadManagerIni(const IniFile& f);

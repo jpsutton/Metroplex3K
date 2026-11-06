@@ -388,7 +388,7 @@ void testAdvisors() {
   h.click("tab.1");
   CHECK(w.tab == 1);
   h.click("topic.0"); h.click("topic.0");
-  CHECK(w.topicSel == 0x102);
+  CHECK(w.topicSel == 0xBB8);
   h.frame(); CHECK(h.inked() > 1000);
   h.click("back");
   // Ordinances tab lists the advisor's ordinance announcements.

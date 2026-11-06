@@ -56,6 +56,15 @@ uint32_t PetitionerConfig::tableFor(PetitionText cat, uint32_t id, const std::fu
   for (uint32_t t : tables_[int(cat)]) if (has(t, id)) return t;
   return 0;
 }
+uint32_t petitionerPortraitImage(uint32_t t) {
+  struct P { uint32_t idx, pic; };
+  static const P rows[] = {{0x02, 0xFF01}, {0x03, 0xFF02}, {0x04, 0xFF12}, {0x05, 0xFF07}, {0x06, 0xFF0B}, {0x07, 0xFF08}, {0x08, 0xFF0E}, {0x09, 0xFF15},
+                           {0x0A, 0xFF11}, {0x0B, 0xFF0C}, {0x0C, 0xFF0F}, {0x0D, 0xFF09}, {0x0E, 0xFF13}, {0x0F, 0xFF06}, {0x10, 0xFF0A}, {0x11, 0xFF0D},
+                           {0x13, 0xFF04}};
+  for (const P& r : rows) if (r.idx == t) return r.pic;
+  return 0;
+}
+
 PetitionerConfig::ExtraInfo PetitionerConfig::extraInfo(uint32_t p) const {
   auto it = extra_.find(p);
   return it == extra_.end() ? ExtraInfo() : it->second;

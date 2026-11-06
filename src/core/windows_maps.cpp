@@ -614,7 +614,7 @@ void pieChart(Ui& ui, int cx, int cy, const std::vector<PieSlice>& sl) {
       const double rimY = double(dy - rim) / ry;
       const bool inRim = !top && fx * fx + rimY * rimY <= 1.0 && dy > 0;
       if (!top && !inRim) continue;
-      const double ang = std::atan2(fx, -topY);   // 0 at the top, clockwise
+      const double ang = std::atan2(-fx, -topY);   // 0 at 12 o'clock, COUNTER-clockwise in legend order [OBSERVED]
       double frac = ang / (2 * kPi); if (frac < 0) frac += 1;
       uint32_t col = colourAt(frac);
       if (inRim) col = lerpCol(col, rgb(0, 0, 0), 0.45f);
@@ -627,7 +627,7 @@ void pieChart(Ui& ui, int cx, int cy, const std::vector<PieSlice>& sl) {
     acc += f;
     if (f < 0.04) continue;
     const std::string t = std::to_string(int(std::lround(f * 100))) + "%";
-    const int px = cx + int(std::sin(mid) * rx * 0.62), py = cy - int(std::cos(mid) * ry * 0.62);
+    const int px = cx - int(std::sin(mid) * rx * 0.62), py = cy - int(std::cos(mid) * ry * 0.62);
     ui.text(px - ui.textWidth(t, "main10") / 2, py - 6, t, "main10", 0);
   }
 }
@@ -702,7 +702,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
       }
       float v = n ? sum / float(n) : 0.f;
       if (tab == 2) v = d.totalPopulation > 0 ? sum * 100.f / float(d.totalPopulation) : 0.f;   // percent of the population in the bucket
-      const int h = std::max(0, std::min(plot.h - 4, int(v * pxPerUnit)));
+      const int h = std::max(0, std::min(plot.h - 4, int(v * pxPerUnit + (tab == 2 ? 0.5f : 0.f))));
       // Outlines: right at x 196 + 13 k; left at 188 + 13 k for the first three bars and 187 + 13 k from the fourth: fills of 7, then 8 px [OBSERVED].
       const int fx0 = r.x + 149 + 13 * i - (i >= 3 ? 1 : 0), fw = i >= 3 ? 8 : 7;
       if (h > 0) {
@@ -747,7 +747,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
       by += barPitch;
       slices.push_back({"", c.v, c.col});
     }
-    pieChart(ui, r.x + 318, r.y + 117, slices);
+    pieChart(ui, r.x + 318, r.y + 138, slices);   // ellipse + rim span y 124..231 [OBSERVED]
     cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(int64_t(total)));
   }
   const int capDy = agePage ? -6 : 0;   // the bar pages' caption lines sit 6 px higher (observed)
