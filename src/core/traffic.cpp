@@ -610,9 +610,6 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
   nn.mode = best.mode;
   nn.prevMode = cur.mode;
   nn.cost = cur.cost + stepCost(best.mode, cur.mode, best.d, best.f) * mult;   // costed as the station it is
-  // A station node reached by subway is STORED as mode 8 (SimTransit): subway-only density at the node, previous mode 8 for its children and
-  // the plain subway code in the visit mask, so the subway trip continues past the station [STATIC].
-  if (nn.mode == TM_SUBWAY_STN && cur.mode == TM_SUBWAY) nn.mode = TM_SUBWAY;
   if (nn.r.z0 > cur.r.z1) nn.lastDir = 1;
   else if (nn.r.x0 > cur.r.x1) nn.lastDir = 0;
   else if (nn.r.z1 < cur.r.z1) nn.lastDir = 3;
@@ -643,13 +640,17 @@ TripResult TrafficSim::routeTrip(const TripRequest& req) {
   std::vector<TripNode> stack{start};
   size_t guard = size_t(W_) * H_ * 16 + 1024;
   while (guard-- > 0) {
-    const TripNode& cur = stack.back();
+    TripNode& cur = stack.back();
     if (arrived(c, cur)) {
       res.success = true;
       res.path = stack;
       res.cost = cur.cost;
       return res;
     }
+    // A subway-permitted trip that reaches a subway station (0x18) boards: the popped node becomes mode 8 after the arrival test and before its
+    // neighbours are scanned and it joins the path, so it scans as subway, takes subway density and gets visit code 8 (SimTransit FUN_100070d0
+    // [STATIC]). Its step cost was charged as the station when it was created. Trips without subway permission keep 0x18.
+    if (c.subway && cur.mode == TM_SUBWAY_STN) cur.mode = TM_SUBWAY;
     // Budget test at the start of the step (spec 18 5.6): a node whose cost exceeds B is not expanded (cost == B is).
     if (cur.cost <= c.budget && nextStep(c, stack, false)) continue;
     // Backtrack (spec 18 5.7, 5.3 defect) [STATIC]: a node whose step finds no candidate has its "alternatives" flag
