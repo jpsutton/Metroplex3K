@@ -317,7 +317,7 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
     std::vector<std::pair<int, int>> ts;
     for (const RoutedTile& t : rp.tiles) { if (!t.valid) break; ts.push_back({t.x, t.z}); }
     StripGrade g = planStripGrade(m, ts, {});
-    if (g.failFrom != size_t(-1)) { for (size_t k = g.failFrom; k < rp.tiles.size(); k++) rp.tiles[k].valid = false; blocked = true; }
+    if (g.failFrom != size_t(-1)) { for (size_t k = g.failFrom; k < rp.tiles.size(); k++) { if (rp.tiles[k].valid) rp.tiles[k].gradeInvalid = true; rp.tiles[k].valid = false; } blocked = true; }
   }
   rp.blocked = blocked;
   rp.validPrefix = 0;
@@ -938,8 +938,14 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
     }
   }
   // tunnel attempt (road, rail, highway — spec 12 s6.4 / Q-AN)
-  if (res.bridges == 0 && (P.kind == NK_ROAD || P.kind == NK_RAIL || P.kind == NK_HIGHWAY)) {
-    TunnelPlan tp = planTunnel(m, P.kind, path, costs);
+  // A tunnel is only tried when the strip grader could not grade the straight run (a hill the grade window cannot follow): a drag over a hill the grader
+  // can follow builds terrain-following road, no tunnel offer [OBSERVED, Mount Herrang (55,90)->(80,90)]. The tunnel then carries the whole route.
+  std::vector<PathTile> tunnelPath;
+  bool gradeFailed = false;
+  for (const auto& t : rp.tiles) if (t.gradeInvalid) gradeFailed = true;
+  if (gradeFailed) for (const auto& t : rp.tiles) if (t.valid || t.gradeInvalid) { PathTile pt; pt.x = t.x; pt.z = t.z; pt.carriage = t.carriage; tunnelPath.push_back(pt); }
+  if (res.bridges == 0 && (P.kind == NK_ROAD || P.kind == NK_RAIL || P.kind == NK_HIGHWAY) && (gradeFailed || P.kind == NK_HIGHWAY)) {
+    TunnelPlan tp = planTunnel(m, P.kind, P.kind == NK_HIGHWAY || !gradeFailed ? path : tunnelPath, costs);
     if (tp.ok && tp.price <= host.funds() && host.confirmTunnel(tp.price)) {
       const int dIn = tp.dir, dOut = (tp.dir + 2) & 3;
       auto altAt = [&](int x, int z) {
@@ -989,6 +995,7 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
       host.charge(tp.price);
       extraSpent += tp.price;
       res.tunnels++;
+      if (gradeFailed && P.kind != NK_HIGHWAY) path = tunnelPath;   // the tunnel carried the whole route; the tiles outside it are tiled
       for (auto& t : tp.hidden) skip.insert(t);
       for (auto& t : skip) context.push_back(t);
     }

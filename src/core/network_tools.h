@@ -49,6 +49,7 @@ struct RoutedTile {
   int x = 0, z = 0;
   int carriage = 0;
   bool valid = true;
+  bool gradeInvalid = false;   // invalidated by the strip grader (a tunnel may still carry it)
 };
 struct RoutedPath {
   std::vector<RoutedTile> tiles;
