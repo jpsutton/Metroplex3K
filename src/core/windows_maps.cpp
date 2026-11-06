@@ -350,15 +350,23 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
       ui.fill({f.x + 1, f.y + f.h, f.w, 1}, rgb(0xC6, 0xCB, 0xDE)); ui.fill({f.x + 2, f.y + f.h + 1, f.w, 1}, rgb(0xA5, 0xA6, 0xB5));
       ui.fill({f.x + 1, f.y + f.h + 2, f.w, 1}, rgb(173, 186, 255)); ui.fill({f.x + 1, f.y + f.h + 3, f.w, 1}, rgb(156, 170, 255)); ui.fill({f.x + 1, f.y + f.h + 4, f.w, 1}, rgb(140, 154, 255));
     } else {
-      ui.fill({f.x + 3, f.y + 3, f.w, f.h}, rgb(0x18, 0x20, 0x39));   // drop shadow
-      ui.fill(f, rgb(0xD6, 0xDB, 0xFF));
-      ui.fill({f.x, f.y, f.w, 2}, rgb(0xEF, 0xEB, 0xFF)); ui.fill({f.x, f.y, 2, f.h}, rgb(0xEF, 0xEB, 0xFF));
-      const uint32_t navy = rgb(0x31, 0x38, 0x84);
-      ui.fill({f.x + 2, f.y + 2, f.w - 3, 1}, navy); ui.fill({f.x + 2, f.y + 2, 1, f.h - 3}, navy);
-      ui.fill({f.x + 2, f.y + f.h - 2, f.w - 3, 1}, navy); ui.fill({f.x + f.w - 2, f.y + 2, 1, f.h - 3}, navy);
+      // Raised plate with the original's soft shadow [OBSERVED, columns x = 250 and row y = 86]: a faint ring above/left, a 2-row/2-column highlight, a navy
+      // outline (top/left (49,56,132), bottom (49,52,123), right (49,56,123)), the field, and a shadow fading over 7 rows below / 6 columns right.
+      const int W = 130;
+      ui.fill({f.x, f.y - 2, W, 1}, rgb(123, 138, 247)); ui.fill({f.x, f.y - 1, W, 1}, rgb(107, 130, 231));
+      ui.fill({f.x - 1, f.y, 1, 20}, rgb(107, 130, 231));
+      ui.fill({f.x, f.y, W, 20}, rgb(214, 219, 255));
+      ui.fill({f.x, f.y, W, 1}, rgb(231, 235, 255)); ui.fill({f.x, f.y + 1, W, 1}, rgb(222, 227, 255));
+      ui.fill({f.x, f.y + 2, 1, 17}, rgb(239, 235, 255)); ui.fill({f.x + 1, f.y + 2, 1, 17}, rgb(231, 231, 255));
+      ui.fill({f.x + 2, f.y + 2, W - 2, 1}, rgb(49, 56, 132)); ui.fill({f.x + 2, f.y + 2, 1, 17}, rgb(49, 56, 132));
+      ui.fill({f.x + 2, f.y + 18, W - 2, 1}, rgb(49, 52, 123)); ui.fill({f.x + W - 1, f.y + 2, 1, 17}, rgb(49, 56, 123));
+      static const uint32_t below[7] = {rgb(148, 146, 173), rgb(107, 105, 123), rgb(24, 32, 57), rgb(49, 56, 99), rgb(74, 89, 156), rgb(99, 113, 198), rgb(107, 130, 231)};
+      static const uint32_t side[6] = {rgb(156, 162, 189), rgb(107, 113, 132), rgb(24, 32, 57), rgb(49, 56, 99), rgb(74, 89, 156), rgb(99, 121, 214)};
+      for (int k = 0; k < 7; k++) ui.fill({f.x + 3, f.y + 19 + k, W - 3 + (k < 6 ? 1 + k : 0), 1}, below[k]);
+      for (int k = 0; k < 6; k++) ui.fill({f.x + W + k, f.y + 3, 1, 16 + (k < 5 ? 1 : 0)}, side[k]);
     }
     const int o = on || down ? 1 : 0;
-    ui.textCentered({f.x + o, f.y + o + 1 + labelDy, f.w, f.h}, label, "main10", ink);
+    ui.textCentered({f.x + o, f.y + o + 1 + labelDy, f.w, f.h}, label, "main9", ink);   // the next smaller bold face [OBSERVED: ink 85 px against 88]
     if (ui.clicked(f)) edit.mode = mode;
   };
   // Check box (GZCheckBox) / radio (GZRadioBtn) with a label; greyed out while its group's mode is not selected.
@@ -404,9 +412,9 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
       edit.layer = int(i);
 
   // ---- Buttons
-  auto pill = [&](const char* name, Rect b, const std::string& label) { E.spot(name, b); return ui.button(b, label, true, false, "title9"); };
-  if (pill("apply", {r.x + 9, r.y + 260, 106, 33}, E.win(0x26D, "Apply"))) R.add(Act::ApplyLayers);
-  if (pill("default", {r.x + 9, r.y + 293, 106, 33}, E.win(0x26C, "Default View"))) { edit = CityLayers(); R.add(Act::ApplyLayers); }
+  auto pill = [&](const char* name, Rect b, const std::string& label) { E.spot(name, b); ui.buttonLabelDy = -1; const bool c = ui.button(b, label, true, false, "title9"); ui.buttonLabelDy = 0; return c; };   // caption 1 px up [OBSERVED]
+  if (pill("apply", {r.x + 8, r.y + 260, 106, 33}, E.win(0x26D, "Apply"))) R.add(Act::ApplyLayers);
+  if (pill("default", {r.x + 8, r.y + 293, 106, 33}, E.win(0x26C, "Default View"))) { edit = CityLayers(); R.add(Act::ApplyLayers); }
   Rect grid{r.x + 247, r.y + 260, 36, 35};
   E.spot("grid", grid);
   { bool c = false;
