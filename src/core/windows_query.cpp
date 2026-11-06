@@ -435,7 +435,7 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
   {
     const uint32_t lightEdge = rgb(173, 182, 255);
     ui.fill({r.x + 5, r.y + 5, 7, r.h - 10}, rgb(123, 146, 255));   // x 5..11: the right line starts below the title band (row 33)
-    ui.fill({r.x + 4, r.y + 4, 1, r.h - 8}, lightEdge); ui.fill({r.x + 11, r.y + 33, 1, r.h - 37}, lightEdge);
+    ui.fill({r.x + 4, r.y + 4, 1, r.h - 8}, lightEdge); ui.fill({r.x + 11, r.y + 34, 1, r.h - 38}, lightEdge);
     ui.fill({r.x + 4, r.y + r.h - 5, 8, 1}, lightEdge);
     // The strip is drawn over the title band's left end in this build's order; the title's first glyph reaches into it (the Q's ink at x 8..9), so it is
     // drawn again on top [OBSERVED: the original's Q is complete].
@@ -451,10 +451,6 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
     ui.fill({box.x, box.y, box.w, box.h}, rgb(222, 223, 255));   // the last column and row inside the frame line show the window texture [OBSERVED]
     ui.fill({box.x - 1, box.y - 1, box.w + 3, 1}, rgb(123, 138, 255)); ui.fill({box.x - 1, box.y, 1, box.h + 2}, rgb(123, 138, 255));
     ui.fill({box.x + box.w + 1, box.y - 1, 1, box.h + 3}, rgb(255, 243, 255)); ui.fill({box.x - 1, box.y + box.h + 1, box.w + 3, 1}, rgb(255, 243, 255));
-    // The interior's last row (above the bottom highlight): the original's exact, dither-like values from the box's left edge [OBSERVED].
-    static const struct { int from, to; uint32_t col; } kRow[] = {{0, 3, 0}, {4, 6, 1}, {7, 11, 2}, {12, 27, 3}, {28, 29, 4}, {30, 33, 3}, {34, 36, 4}};
-    static const uint32_t kCols[5] = {rgb(206, 207, 255), rgb(206, 211, 255), rgb(214, 215, 255), rgb(214, 219, 255), rgb(222, 219, 255)};
-    for (const auto& seg : kRow) for (int i = seg.from; i <= seg.to && i <= box.w; i++) ui.at(box.x + i, box.y + box.h) = kCols[seg.col];
     spriteCentred(ui, E.data, q.picture, box, box);
   }
 
@@ -522,8 +518,8 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
     ui.fill({bx + 11, by + 1, 1, 11}, rgb(123, 130, 189)); ui.fill({bx + 1, by + 11, 11, 1}, rgb(123, 130, 189));
     ui.fill({bx + 12, by, 1, 13}, rgb(181, 182, 231)); ui.fill({bx, by + 12, 13, 1}, rgb(181, 182, 231));
     if (q.historical) { ui.fill({bx + 3, by + 3, 7, 7}, rgb(0x31, 0x36, 0x7C)); }
-    ui.text(bx + 15, by - 2, E.query(0x30, "Make Historical"), "main10");
-    Rect hit{bx, by - 2, 15 + ui.textWidth(E.query(0x30, "Make Historical")), 17};
+    ui.text(bx + 16, by - 2, E.query(0x30, "Make Historical"), "main10");
+    Rect hit{bx, by - 2, 16 + ui.textWidth(E.query(0x30, "Make Historical")), 17};
     E.spot("historical", hit);
     if (ui.clicked(hit)) R.add(Act::ToggleHistorical, 0, q.x, q.z);
   }

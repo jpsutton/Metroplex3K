@@ -112,9 +112,13 @@ void Game::drawNavigator(int barH) {
       float dx = float(ui_.in.mx - (ox + kCx)), dy = float(ui_.in.my - (oy + kCy));
       if (std::abs(dx) + std::abs(dy) <= float(kMapHalf)) {
         float s = float(N) / float(2 * kMapHalf);
+        // The original centres the view 176 px left and 140 px up of where this build did, for every click (Berlin, four clicks at the load camera, zoom 4:
+        // screen = ours + (-176, -140)); at one tile per minimap px that is the click read (1.375, 2.1875) minimap px further down and to the right [OBSERVED; the
+        // cause is unknown, the correction is empirical].
+        dx += 1.375f; dy += 2.1875f;
         float u = (dy - dx) * s + N * 0.5f, v = (dy + dx) * s + N * 0.5f;
         int x, z; Renderer::viewToWorldVertex(cam_.rot, world_.W, world_.H, int(u), int(v), x, z);
-        if (x >= 0 && z >= 0 && x < world_.W && z < world_.H && ui_.in.pressed) centreOn(x, z);
+        if (x >= 0 && z >= 0 && x < world_.W && z < world_.H && ui_.in.pressed) { cam_.u = u; cam_.v = v; }   // sub-tile centre: the offset is not a whole number of tiles
       }
     }
   }

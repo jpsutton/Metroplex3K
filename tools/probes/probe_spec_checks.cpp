@@ -401,6 +401,7 @@ int main(int argc, char** argv) {
           std::map<std::pair<int, int>, int> perAnchor;
           for (const auto& o : c.powerConsumers()) { listed += o.powerUse; cnt++; if (o.powerUse > 255) over255++; perAnchor[{o.x, o.z}]++; }
           int shared = 0; for (const auto& kv : perAnchor) if (kv.second > 1) { shared++; if (shared <= 10) std::printf("   anchor (%d,%d) used by %d consumers\n", kv.first.first, kv.first.second, kv.second); }
+          if (std::getenv("M3K_CONSUMERS")) for (const auto& o : c.powerConsumers()) std::printf("   consumer %d %d use %d type %u state %u\n", o.x, o.z, o.powerUse, o.agentType, o.state);
           std::printf("   consumer list: %d entries, sum use %lld, > 255: %d, anchors shared by several: %d\n", cnt, listed, over255, shared);
         }
       }
