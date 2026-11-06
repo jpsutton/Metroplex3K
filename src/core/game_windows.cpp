@@ -594,7 +594,12 @@ void Game::drawWindows(uint32_t dtMs) {
       cd.garbage[2] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Incinerated] + gt[us::GarbageDisposal::Wte]));
       cd.garbage[3] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Recycled]));
       cd.garbageProduced = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Produced]));
-      cd.garbage[4] = 0;   // garbage collecting in the streets: not tracked
+      {  // "collecting in the streets" = the current stock of uncollected street garbage (a point-in-time value, not a 12-month flow) [STATIC]
+        double stock = 0;
+        for (int x = 0; x < world_.W; x++) for (int z = 0; z < world_.H; z++)
+          if (!city.pollution.landfillRegistered(x, z)) stock += double(city.pollution.standingGarbageAt(x, z));
+        cd.garbage[4] = stock;
+      }
     }
     viewData_.map.viewRotation = cam_.rot;
     viewData_.graphs.year = city.clock.date().year; viewData_.graphs.month = city.clock.date().month;

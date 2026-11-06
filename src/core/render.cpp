@@ -227,7 +227,8 @@ inline void fetch(const Image& im, int row, int col, int& r, int& g, int& b) {
   r = c & 255; g = (c >> 8) & 255; b = (c >> 16) & 255;
 }
 inline void fetchBasicOverlay(const Image& im, int row, int shade, int& r, int& g, int& b) {
-  fetch(im, row, 31, r, g, b);   // column 31 is the row colour itself
+  fetch(im, row, 31, r, g, b);   // column 31 is the row colour itself, quantised to RGB565 first: r5 * 255 / 31, g6 * 255 / 63, b5 * 255 / 31 [OBSERVED, exact]
+  r = (r >> 3) * 255 / 31; g = (g >> 2) * 255 / 63; b = (b >> 3) * 255 / 31;
   const float f = std::cos(float(63 - (36 + shade / 2)) * 3.14159265f / 126.0f);
   r = int(float(r) * f); g = int(float(g) * f); b = int(float(b) * f);
 }

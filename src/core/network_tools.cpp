@@ -894,7 +894,7 @@ int removeConnectionsAt(INetworkMap& m, int x, int z) {
 // are levelled to the average of their corner rectangle's perimeter, unless an occupant stands on them, both tiles already have a valid slope
 // (flat or a straight ramp of rise <= 2) or both are flat. No money is charged and a refusal is silent: the network is built anyway.
 // Returns the sum of the absolute corner changes (0 = terrain unchanged).
-static int levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool start, bool highway) {
+static int levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool start, bool highway, bool fixup = true) {
   if (path.empty()) return 0;
   // Highway: A and B are consecutive tiles of the first carriageway (A the end tile, B the previous / next one along the drag), not the pair partner
   // [OBSERVED: the original's levelled corners lie along the drag, x 40..41 and z 162..164, for an end at (40,163)].
@@ -904,7 +904,7 @@ static int levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool
   const PathTile& a = start ? lane.front() : lane.back();
   const PathTile& b = highway && lane.size() > 1 ? (start ? lane[1] : lane[lane.size() - 2]) : a;
   for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return 0;
-  if (!highway && !start) {
+  if (!highway && !start && fixup) {   // (the fix-up loop covers net types road, rail, power, subway; not pipe)
     // The fix-up loop of the original's commit (FUN_10008064) re-grades a single end tile with FLATTEN; observed on the hill road's end tile 92/91/91/92 (a ramp
     // of gap 1) -> flat 92, while a gap-2 ramp (Mount Herrang (2,79) 94/94/92/92) stays. The trigger is INFERRED; the fix-up is free [charge 607 = 260 + 287 + 60].
     int c[4]; m.tileCorners(a.x, a.z, c);
@@ -995,6 +995,9 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
   std::vector<std::pair<int, int>> context;
   int extraSpent = 0;
 
+  // Commit step 1 [STATIC order + OBSERVED, pipe drag (1,78)->(1,73): the start tile 92/94/92/92 flattened to 93, free]: the start endpoint is levelled (perimeter
+  // mean) before the bridge attempt and the strip grade, and not charged. Highways keep the later, charged levelling.
+  if (P.kind != NK_HIGHWAY) levelEndpoint(m, path, true, false, P.kind != NK_PIPE);
   // bridge attempt
   std::vector<BridgePlan> bridges;
   if (path.size() >= 4 && !nr.bridges.empty() &&
@@ -1126,8 +1129,11 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
     for (const PathTile& t : path) if (t.carriage == 0 && !skip.count({t.x, t.z})) lane0.push_back(t);
     levelK += levelHighwayCrossRows(m, lane0, rp.pairDx, rp.pairDz);
   }
-  levelK += levelEndpoint(m, path, true, P.kind == NK_HIGHWAY);
-  if (res.bridges == 0 && res.tunnels == 0) levelK += levelEndpoint(m, path, false, P.kind == NK_HIGHWAY);
+  if (P.kind == NK_HIGHWAY) levelK += levelEndpoint(m, path, true, true);
+  if (res.bridges == 0 && res.tunnels == 0) {
+    const int k = levelEndpoint(m, path, false, P.kind == NK_HIGHWAY, P.kind != NK_PIPE);
+    if (P.kind == NK_HIGHWAY) levelK += k;   // the non-highway end levelling is free [STATIC: terrain apply flag 1 after the strip grade]
+  }
   if (levelK > 0 && costs.levelTerrain > 0) { const int c = (costs.levelTerrain * levelK) >> 2; host.charge(c); extraSpent += c; }
   // connections
   res.connections = offerConnections(m, host, costs, P.kind, path, dragPrice);
