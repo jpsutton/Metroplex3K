@@ -683,7 +683,11 @@ subways have no bridge records and simply pass under water. A bridge is attempte
 committed path has at least 4 tiles and the network's Bridges table is non-empty.
 
 **1. Locating the water span.** Walk the path in order and classify each tile as water or land
-(terrain water test, `11-world-terrain.md`).
+with the terrain water test (`11-world-terrain.md`): a tile is water if any of its corners has
+water ≥ ground [STATIC]. Shore tiles with some corners submerged are part of the span. DATA example:
+in Roadless Paradise, a highway drag along x = 39/40 from z = 159 meets water at z = 164. Tiles
+164..172 are water by this test, and z = 173 is land (E0). Tiles 174..178 are water again and so
+form a second crossing.
 
 * The span starts at the first water tile; the walk stops at the first land tile after it. If no
   land tile follows the water, or if any water tile in the path already holds an occupant, no
