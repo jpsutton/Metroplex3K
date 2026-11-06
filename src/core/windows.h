@@ -809,7 +809,9 @@ class TipWindow {
 class CreditsWindow {
  public:
   double scroll = 0;                    // pixels
-  double speed = 30;                    // px per second [OPEN rate]
+  double speed = 25;                    // px per second [OBSERVED 25.1]
+  const Image* background = nullptr;    // the main-menu city picture drawn behind (set by the caller)
+  int logoY = 0;                        // top of the logo image at 600 px height [OPEN: the ink starts at y 24, the image's own margin is not measured]
   std::vector<std::string> lines;       // filled on first draw from table 830CDF29 (ids ascending); raw, style digit included
   std::vector<uint32_t> ids;            // string id of each entry in `lines`
   // Laid-out row. Table ids 1..199 are left-hand entries (heading / role); id + 199 holds the matching name(s).

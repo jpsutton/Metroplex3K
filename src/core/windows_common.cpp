@@ -656,43 +656,33 @@ WindowResult CreditsWindow::draw(Ui& ui, const WinEnv& E) {
     }
     rows = layoutRows(ids, lines);
   }
-  Rect r = wui::centered(ui, 560, 420);
-  const uint32_t bgCol = rgb(8, 10, 30);
-  ui.fill({0, 0, ui.W, ui.H}, bgCol);
-  const Image* bg = E.img(0x82B9B75C, 0x22729940);
-  int logoH = 0;
-  if (bg) { ui.blit(*bg, r.x + (r.w - bg->w) / 2, r.y); logoH = bg->h; }
-  // Scrolling text sits below the logo so it never overlaps it.
-  Rect view{r.x + 10, r.y + logoH + 8, r.w - 20, r.h - logoH - 16};
-  // Clip by rendering into a sub-buffer.
-  std::vector<uint32_t> buf(size_t(view.w) * view.h, bgCol);
-  Ui sub = ui; sub.setTarget(&buf, view.w, view.h);
-  int lh = wui::lineHeight(ui) + 2;
+  // Layout measured on the original at 800 x 600 [OBSERVED]: the main-menu city picture behind, the logo at the top (ink x 224..570, y 24..132), serif text in
+  // light yellow, roles left-aligned from x 127 and names right-aligned to x 672, one line every 58 px, scrolling up at 25 px per second from the bottom edge.
+  const int ox = (ui.W - 800) / 2, oy = (ui.H - 600) / 2;
+  ui.fill({0, 0, ui.W, ui.H}, rgb(0, 0, 0));
+  if (background && !background->empty()) ui.blit(*background, (ui.W - background->w) / 2, (ui.H - background->h) / 2);
+  const Image* logo = E.img(0x82B9B75C, 0x22729940);
+  const uint32_t ink = rgb(255, 223, 148);
+  const int pitch = 58, left = ox + 127, right = ox + 672;
   int totalLines = 0;
   for (auto& row : rows) totalLines += row.lineCount();
-  double total = double(totalLines) * lh + view.h;
+  const double total = double(totalLines) * pitch + 600;
   if (scroll > total) scroll = 0;
-  const int colGap = 8, mid = view.w / 2;
   int line = 0;
   for (auto& row : rows) {
-    int y = int(view.h - scroll + double(line) * lh);
+    const int y0 = oy + 600 + int(std::lround(double(line) * pitch - scroll));
     line += row.lineCount();
-    if (y < -lh * row.lineCount() || y > view.h) continue;
+    if (y0 + pitch * row.lineCount() < 0 || y0 > ui.H) continue;
     switch (row.kind) {
       case Row::Blank: break;
-      case Row::Heading: sub.text((view.w - ui.textWidth(row.left)) / 2, y, row.left, "main10", rgb(255, 214, 120)); break;
-      case Row::Centered: sub.text((view.w - ui.textWidth(row.left)) / 2, y, row.left, "main10", rgb(230, 235, 255)); break;
+      case Row::Heading: case Row::Centered: ui.text(ox + 400 - ui.textWidth(row.left, "serif17") / 2, y0, row.left, "serif17", ink); break;
       case Row::Pair:
-        sub.text(mid - colGap - ui.textWidth(row.left), y, row.left, "main10", rgb(170, 180, 220));
-        for (size_t k = 0; k < row.names.size(); k++) sub.text(mid + colGap, y + int(k) * lh, row.names[k], "main10", rgb(230, 235, 255));
+        ui.text(left, y0, row.left, "serif17", ink);
+        for (size_t k = 0; k < row.names.size(); k++) ui.text(right - ui.textWidth(row.names[k], "serif17"), y0 + int(k) * pitch, row.names[k], "serif17", ink);
         break;
     }
   }
-  for (int y = 0; y < view.h; y++)
-    for (int x = 0; x < view.w; x++) {
-      int dx = view.x + x, dy = view.y + y;
-      if (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) ui.at(dx, dy) = buf[size_t(y) * view.w + x];
-    }
+  if (logo) ui.blit(*logo, (ui.W - logo->w) / 2, oy + logoY);
   if (ui.in.key[K_ESC] || ui.in.pressed) R.close = true;
   return R;
 }

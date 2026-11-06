@@ -1142,6 +1142,7 @@ void Game::drawLoadList() {
 
 void Game::drawCredits(uint32_t dtMs) {
   creditsWin_.update(dtMs);
+  creditsWin_.background = menuBg_.empty() ? nullptr : &menuBg_;
   WindowResult r = creditsWin_.draw(ui_, env());
   if (r.close || r.has(Act::Close) || ui_.in.key[K_ESC]) scr_ = Screen::MainMenu;
 }
