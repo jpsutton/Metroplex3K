@@ -214,7 +214,7 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
   // Rows.
   const MainRow* rows = incomeTab ? kIncRows : kExpRows;
   int nRows = incomeTab ? int(std::size(kIncRows)) : int(std::size(kExpRows));
-  if (!incomeTab) ui.fillAlpha(at(234, 177, 8, 139), kWhite, 0.33f);   // 100% funding marker behind the sliders
+  if (!incomeTab) ui.fillAlpha(at(235, 177, 8, 139), kWhite, 0.33f);   // 100% funding marker behind the sliders
   for (int k = 0; k < nRows; k++) {
     const MainRow& row = rows[k];
     if (!row.key) continue;
@@ -559,7 +559,7 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   { int h = 0; for (size_t i = size_t(scroll); i < items.size(); i++) { h += advance(i); if (h > bottom - top) break; visible++; } }
   const bool bar = int(items.size()) > std::max(1, visible);
   if (bar) {
-    const Rect br{list.x + 356, list.y + 5, 16, 216};
+    const Rect br{list.x + 356, list.y + 5, 16, 218};   // the down arrow occupies y 271..286 [OBSERVED]
     ui.fill({br.x, br.y, 16, 218}, band);
     scenarioScrollBar(ui, E, br, list, int(items.size()), std::max(1, visible), scroll);
   } else scroll = 0;
@@ -601,7 +601,7 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
       }
       ui.text(list.x + 19, y, it.name, "system9", ink);   // SYSTEM9 (not bold), ink x 31, cap top 101
       const int64_t val = en ? o.monthlyValue(it.id, money) : o.ifEnactedValue(it.id, money);   // not enacted: the cost it would have, in grey
-      rightText(ui, list.x + 351, y, E.money(val), "main9", en ? (val < 0 ? rgb(0xC0, 0, 0) : 0) : grey);
+      rightText(ui, list.x + 352, y, E.money(val), "main9", en ? (val < 0 ? rgb(0xC0, 0, 0) : 0) : grey);
     }
     y += advance(i);
   }
@@ -613,9 +613,10 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   { // Footer: "Monthly Total" from x 255, the amount from x 343, cap top y 298.
     const std::string lab = E.win(0x1C4, "Monthly Total"), val = E.money(net);
     ui.text(r.x + 247, r.y + 288, lab, "main9", ink);
-    ui.text(r.x + 335, r.y + 288, val, "main9", net < 0 ? rgb(0xC0, 0, 0) : 0);
+    ui.text(r.x + 335, r.y + 288, val, "main9", net < 0 ? rgb(0xC0, 0, 0) : rgb(0, 0, 0));   // black, not the ink colour [OBSERVED]
   }
   const Rect done{r.x + r.w - 52, r.y + r.h - 44, 44, 34};
+  blueBand(ui, done);   // 1 px ring (173,182,255) around the blue plate [OBSERVED]
   E.spot("ok", done);
   bool c = false;
   if (!(ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Sys, 0xA2DEFD9A), 4, done, "", false, true, c))) c = ui.button(done, E.app(0xB4, "OK"));

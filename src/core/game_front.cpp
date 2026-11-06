@@ -746,7 +746,9 @@ void Game::drawNewCity() {
   { std::string t = cap(0x041F2625, 0x2B, "User-Made Buildings:"); lab(306, 294, t); }
   Rect sel{r.x + 434, r.y + 282, 78, 33};
   ui_.fill(sel, rgb(0x7B, 0x92, 0xFF));
+  ui_.buttonLabelDy = -1;   // this caption sits 1 px higher than the other pill buttons [OBSERVED]
   if (ui_.button(sel, cap(0x041F2625, 0x2F, "Select"), true, false, "title9")) openUserBuildings();
+  ui_.buttonLabelDy = 0;
 
   // Done (check mark) / cancel.
   Rect done{r.x + 589, r.y + 331, 42, 32};
