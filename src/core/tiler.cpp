@@ -254,6 +254,7 @@ struct Tiler::Ctx {
   std::set<Tile> set;        // re-tile set
   std::set<Tile> finalQ;     // queued for the final pass
   std::set<Tile> protQ;      // power: protected tiles queued for the complex pass
+  int applied = 0;           // results other than (0, 0) applied in the current complex iteration
   TilerResult res;
 };
 
@@ -376,7 +377,10 @@ void Tiler::describe(Ctx& c, int pass, int x, int z, std::vector<RuleCond>& entr
   (void)radius;
 }
 
-bool Tiler::evalTile(Ctx& c, int pass, int x, int z) {
+// One tile of a pass (spec 12 4.6, SIMNTWRK pass driver). The evaluated tile is NOT removed from the working set: the result targets (tile + result
+// offset) are collected in `targets` even when placement fails, and the caller removes them after the whole pass. A (0, 0) result queues its
+// target for the final pass instead.
+bool Tiler::evalTile(Ctx& c, int pass, int x, int z, std::vector<std::pair<int, int>>& targets) {
   if (!map_.onMap(x, z) || !map_.isFlat(x, z)) return false;
   std::vector<RuleCond> entries;
   int mask = 0;
@@ -398,6 +402,12 @@ bool Tiler::evalTile(Ctx& c, int pass, int x, int z) {
     if (ok) { hit = &r; break; }
   }
   if (!hit) return false;
+  for (auto& rs : hit->results) {   // targets are collected before validation
+    int dx, dz;
+    dirOffset(rs.dir, dx, dz);
+    if (rs.id == 0 && rs.rot == 0) c.finalQ.insert({x + dx, z + dz});
+    else targets.push_back({x + dx, z + dz});
+  }
   // validate
   for (auto& rs : hit->results) {
     int dx, dz;
@@ -420,10 +430,8 @@ bool Tiler::evalTile(Ctx& c, int pass, int x, int z) {
       map_.placePiece(tx, tz, c.layer, rs.id, rs.rot, y);
       note(c, tx, tz, rs.id, rs.rot, y);
     }
-    if (rs.id == 0 && rs.rot == 0) c.finalQ.insert({tx, tz});
-    else { c.set.erase({tx, tz}); c.finalQ.erase({tx, tz}); }
+    if (!(rs.id == 0 && rs.rot == 0)) c.applied++;
   }
-  c.set.erase({x, z});
   return true;
 }
 
@@ -512,36 +520,39 @@ TilerResult Tiler::run(int kind, const std::vector<PathTile>& path, const TilerO
     }
   }
 
+  // The complex pass walks every tile of the region as it was after clearing, also the ones the simple pass already tiled (list C, never
+  // reduced); only the working set S shrinks, by the result targets of each pass.
+  std::vector<Tile> complexList(c.set.begin(), c.set.end());
+  auto dropTargets = [&](const std::vector<Tile>& R) {
+    for (auto& t : R) { c.set.erase(t); c.finalQ.erase(t); }
+  };
+
   // 4. simple pass
   for (;;) {
     size_t before = c.set.size();
-    std::vector<Tile> snap(c.set.begin(), c.set.end());
-    for (auto& t : snap) {
-      if (!c.set.count(t)) continue;
-      evalTile(c, 0, t.first, t.second);
-    }
+    std::vector<Tile> snap(c.set.begin(), c.set.end()), R;
+    for (auto& t : snap) evalTile(c, 0, t.first, t.second, R);
+    dropTargets(R);
     c.res.simplePasses++;
     if (c.set.size() == before) break;
   }
 
   // 5. complex pass
-  if (kind == NK_POWER) for (auto& t : c.protQ) c.set.insert(t);
+  if (kind == NK_POWER) for (auto& t : c.protQ) { c.set.insert(t); complexList.push_back(t); }
   for (int it = 0; it < 5; it++) {
-    bool changed = false;
-    std::vector<Tile> snap(c.set.begin(), c.set.end());
-    for (auto& t : snap) {
-      if (!c.set.count(t)) continue;
-      if (evalTile(c, 1, t.first, t.second)) changed = true;
-    }
+    c.applied = 0;
+    std::vector<Tile> R;
+    for (auto& t : complexList) evalTile(c, 1, t.first, t.second, R);
+    dropTargets(R);
     c.res.complexPasses++;
-    if (!changed) break;
+    if (c.applied == 0) break;
   }
 
-  // 6. final pass
+  // 6. final pass: S plus the queued (0, 0) targets, once
   for (auto& t : c.finalQ) c.set.insert(t);
   {
-    std::vector<Tile> snap(c.set.begin(), c.set.end());
-    for (auto& t : snap) evalTile(c, 2, t.first, t.second);
+    std::vector<Tile> snap(c.set.begin(), c.set.end()), R;
+    for (auto& t : snap) evalTile(c, 2, t.first, t.second, R);
   }
   return c.res;
 }

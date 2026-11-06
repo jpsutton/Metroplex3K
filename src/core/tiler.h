@@ -196,7 +196,7 @@ class Tiler {
  private:
   struct Ctx;
   bool tryCrossing(Ctx& c, const PathTile& pt);
-  bool evalTile(Ctx& c, int pass, int x, int z);
+  bool evalTile(Ctx& c, int pass, int x, int z, std::vector<std::pair<int, int>>& targets);
   void describe(Ctx& c, int pass, int x, int z, std::vector<RuleCond>& entries, int& mask);
   bool isNetOcc(int kind, const TileOcc& o) const;
   bool canOverwrite(const Ctx& c, int x, int z) const;
