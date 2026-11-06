@@ -610,8 +610,13 @@ int removeConnectionsAt(INetworkMap& m, int x, int z) {
 // Returns true when the terrain changed.
 static bool levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool start, bool highway) {
   if (path.empty()) return false;
-  const PathTile& a = start ? path.front() : path.back();
-  const PathTile& b = highway && path.size() > 1 ? (start ? path[1] : path[path.size() - 2]) : a;
+  // Highway: A and B are consecutive tiles of the first carriageway (A the end tile, B the previous / next one along the drag), not the pair partner
+  // [OBSERVED: the original's levelled corners lie along the drag, x 40..41 and z 162..164, for an end at (40,163)].
+  std::vector<PathTile> lane;
+  for (const PathTile& t : path) if (!highway || t.carriage == 0) lane.push_back(t);
+  if (lane.empty()) return false;
+  const PathTile& a = start ? lane.front() : lane.back();
+  const PathTile& b = highway && lane.size() > 1 ? (start ? lane[1] : lane[lane.size() - 2]) : a;
   for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return false;
   bool bothValid = true, bothFlat = true;
   for (const PathTile* t : {&a, &b}) {

@@ -44,10 +44,20 @@ int main(int argc, char** argv) {
   auto snapshot = [&](const World& ww) { std::map<std::pair<Key, int>, NetPiece> m; for (const auto& p : ww.surface) m[{{p.x, p.z}, 0}] = p; return m; };
   const auto before = snapshot(w);
   const std::vector<uint8_t> altBefore = w.alt;
+  // M3K_CORNERS=x0,z0,x1,z1 prints the vertex heights of that window before and after.
+  int cx0 = -1, cz0 = -1, cx1 = -1, cz1 = -1;
+  if (const char* e = std::getenv("M3K_CORNERS")) std::sscanf(e, "%d,%d,%d,%d", &cx0, &cz0, &cx1, &cz1);
+  auto window = [&](const World& ww, const char* tag) {
+    if (cx0 < 0) return;
+    std::printf("corners %s (rows = z, columns = x %d..%d):\n", tag, cx0, cx1);
+    for (int z = cz0; z <= cz1; z++) { std::printf("  z%-4d", z); for (int x = cx0; x <= cx1; x++) std::printf(" %3d", int(ww.altAt(x, z))); std::printf("\n"); }
+  };
+  window(w, "before");
   const int64_t fundsBefore = s.game.sim().funds;
   city.connectionConfirmOverride = true;
   const bool built = city.buildNetwork(kind->nk, path);
   const World& after = s.game.world();
+  window(after, "after");
   std::printf("buildNetwork -> %d, charged %lld\n", int(built), (long long)(fundsBefore - s.game.sim().funds));
   const auto now = snapshot(after);
   for (const auto& kv : now) {
