@@ -855,7 +855,7 @@ Shipped `[BuildingPlacementCosts]` (63 entries, file order) [DATA]:
 | 17410 | 4000 | SubwayNeighbor |
 | 20002 | 1500 | Winter Wonderland |
 
-A type with no entry and no listed ancestor costs **0** (no error, no message) [STATIC, SIMMISC 0x10008FBE]. The hierarchy distance must be below 50 000; the search stops early at an exact match (distance 0). Flora is listed only as `300`, so every flora type inherits cost 3 through the hierarchy.
+A type with no entry and no listed ancestor costs **0** (no error, no message) [STATIC, SIMMISC 0x10008FBE]. The hierarchy distance must be below 50 000; the search stops early at an exact match (distance 0). Flora is listed only as `300`, so every flora type inherits cost 3 through the hierarchy `[INFERRED]`.
 
 ## 14. Budget history and graphs
 
