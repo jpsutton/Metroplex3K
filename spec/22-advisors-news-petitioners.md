@@ -1350,11 +1350,19 @@ entry that is not a deal and not owned, with N = population, Y = current year:
 | 13871 university | `0x97` | city EQ > `EQ_NEEDED_FOR_UNIVERSITY` and ordinance `0xE0D07233` (pro-reading) enacted |
 | 13872 medical research | `0x8E` | life expectancy > `LE_NEEDED_FOR_MEDICAL_CENTER` |
 | 13874 science/R&D centre | `0x84` | city EQ > `EQ_NEEDED_FOR_SCIENCE_CENTER` |
-| 14003 national park | `0x88` | number of agent-type 14310 buildings > `PARKS_NEEDED_FOR_NATIONAL_PARK`; the population test uses a different population measure [OPEN] |
+| 14003 national park | `0x88` | park measure PM > `PARKS_NEEDED_FOR_NATIONAL_PARK` (PM defined below; CORRECTION: not a count of agent type 14310); the population test uses a different population measure [OPEN] |
 | 14325 theme park | `0x8D` | number of airport buildings (12310) > 5 and ordinance `0x62F6E7CF` (tourism promotion) enacted |
 | 14550 lighthouse | `0x8B` | population test uses the same alternative measure as national park [OPEN: likely coastal/seaport related] |
-| 20001 haunted house (Holidays) | `0x12C` | Holidays building set enabled; month index 7–9 (0-based: Aug–Oct) [INFERRED 0-based]; not in certain game modes [OPEN] |
-| 20002 skating rink (Holidays) | `0x12F` | Holidays building set enabled; month index 9–11 (Oct–Dec); number of agent-type 14310 buildings > 29 |
+| 20001 haunted house (Holidays) | `0x12C` | Holidays building set enabled; calendar month m (1 = January) with 6 < m < 10, i.e. July–September [STATIC; CORRECTION of the earlier 0-based reading]; not when a game-state value (a getter on the application object) is 0x1E, 0x1F, 0x20, 0x22 or 0x31 [OPEN: meaning, probably game modes] |
+| 20002 skating rink (Holidays) | `0x12F` | Holidays building set enabled; calendar month 8 < m < 12, i.e. September–November [STATIC]; park measure PM > 29 |
+
+**Park measure PM** [STATIC]: a weighted sum of park buildings by agent type, counting each type
+present: 14311 small park ×1, 14312 big park ×9, 14313 baseball ×16, 14314 playground ×4,
+14315 pond ×4, 14316 fountain ×1. Agent type 14310 ("Park", the parent of these in
+`[AgentTypeHierarchy]`) is counted separately and is not part of PM. [DATA check] An original
+save of Berlin in September 2067 had both `0x12C` and `0x12F` pending. That needs month 9 to be
+inside both ranges, and PM > 29 (Berlin has 1059 park buildings of types 14311–14316).
+The month is the calendar month from the city date, 1–12.
 
 When the condition holds:
 
