@@ -633,6 +633,7 @@ class GraphsWindow {
   static std::vector<uint32_t> samples(const Chart& c, int range);
   // Body of the View Data window's graphs mode inside `area` (spec 09 7.3).
   int year = 0;                         // current year, printed under the plot
+  int month = 0;                        // current month 1..12: on the 12-month view the year label is centred on January's tick
   WindowResult drawBody(Ui& ui, const WinEnv& E, Rect win, const std::vector<GraphSeries>& series);
 };
 

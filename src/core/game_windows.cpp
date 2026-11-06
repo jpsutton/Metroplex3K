@@ -513,7 +513,7 @@ void Game::drawWindows(uint32_t dtMs) {
       cd = chartsFromPopulation(city.pop, uint32_t(std::max(0, city.population())));
     }
     viewData_.map.viewRotation = cam_.rot;
-    viewData_.graphs.year = city.clock.date().year;
+    viewData_.graphs.year = city.clock.date().year; viewData_.graphs.month = city.clock.date().month;
     finish(viewData_.draw(ui_, E, src, series, cd), showMap_);
   }
   if (showLayers_) finish(layersDlg_.draw(ui_, E, ropt_.grid), showLayers_);

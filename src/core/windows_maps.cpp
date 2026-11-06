@@ -526,7 +526,10 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   if (nPts > 1) for (int k = 0; k < nPts; k++) ui.fill({r.x + 45 + k * 255 / (nPts - 1), r.y + 220, 1, 2}, rgb(173, 178, 222));
   // The year label (axis colour) is centred under the tick span it names: the second-to-last tick [INFERRED from one same-length capture].
   if (year) {
-    const int tx = nPts > 2 ? r.x + 45 + (nPts - 2) * 255 / (nPts - 1) : r.x + 253;
+    // 12-month view: January's tick = (n - 1) - (month - 1) [OBSERVED: March -> tick 9 of 12]; other ranges: the second-to-last tick [INFERRED].
+    int jt = nPts - 2;
+    if (range == 0 && month >= 1 && month <= 12 && nPts > 12 - 1) jt = std::max(0, nPts - month);
+    const int tx = nPts > 2 ? r.x + 45 + jt * 255 / (nPts - 1) : r.x + 253;
     ui.text(tx - ui.textWidth(std::to_string(year), "system9") / 2, r.y + 221, std::to_string(year), "system9", rgb(173, 178, 222));
   }
   // check-box grid: three columns of 5, 6 and 5

@@ -177,6 +177,9 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
   for (auto& l : L) { if (l.income) { incY += l.ytd; incE += l.est; } else { expY += l.ytd; expE += l.est; } }
 
   ui.panel(r, E.win(0x89, "Budget"));
+  if (ui.skin) {   // the Budget title band is 1 px wider than the common frame's (right edge line at r.x + r.w - 5, observed)
+    ui.fill({r.x + r.w - 6, r.y + 5, 1, 29}, rgb(123, 146, 255)); ui.fill({r.x + r.w - 5, r.y + 4, 1, 31}, rgb(173, 182, 255));
+  }
   // Title-bar page tabs (42DEC7D2:01, 4 cells 54x31, stretched; active page = pressed cell).
   {
     const Image* tab = dlgArt(ui, 0x01);
@@ -222,10 +225,10 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
     ui.text(r.x + 18, r.y + fy + 2, E.win(row.label, row.fb), F, kInkLabel);
     if (const Line* l = line(key)) {
       int64_t ya = incomeTab ? l->ytd : -l->ytd, ye = incomeTab ? l->est : -l->est;
-      // Value boxes [OBSERVED, Berlin]: 17 rows tall on the expenditure page (top 1 px lower; the Ordinances box 2 px lower and 1 px longer at the
-      // bottom); the Neighbor Deals box stays 18.
+      // Value boxes [OBSERVED, Berlin, top rows 119 144 165 -- 212 235 258 281 304 327]: the first row (ord.exp) and the Loans row keep 18 rows; the
+      // second row (deal.exp) starts 2 px lower and ends 1 px lower; the department rows are 17 rows tall (top 1 px lower).
       int vt = 0, vb = 0;
-      if (!incomeTab && key != "deal.exp") { vt = key == "ord.exp" ? 2 : 1; vb = key == "ord.exp" ? 1 : 0; }
+      if (!incomeTab && key != "ord.exp" && key != "loans") { vt = key == "deal.exp" ? 2 : 1; vb = key == "deal.exp" ? 1 : 0; }
       whiteField(ui, at(275, fy + vt, 76, 18 - vt + vb));
       whiteField(ui, at(353, fy + vt, 76, 18 - vt + vb));
       rightText(ui, r.x + 349, r.y + fy + 2, E.money(ya), F, moneyCol(ya));
@@ -801,7 +804,7 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
     // The original lists every named neighbour, including one whose `exists` byte is 0 (Hawkin's Creek in Berlin).
     if (!nb.exists && nb.cityName.empty()) continue;
     outline(ox, oy, 47, 2, rgb(0x6B, 0x92, 0xF7));
-    if (selected == i) outline(ox, oy, 45.5, 3, rgb(255, 0, 0));
+    if (selected == i) outline(ox + 0.5, oy + 1.5, 46, 3, rgb(255, 0, 0));   // box (137,147)-(228,238) on the original (observed)
     const int ncx = int(cx + ox), ncy = int(cy + oy);
     // A neighbour without a land link (`exists` 0) gets an arrow pointing out of the map (000005E5:28 up-left, 2B up-right,
     // 29 down-left, 23 down-right), under its name. Placement measured for the up-left arrow (Hawkin's Creek in
