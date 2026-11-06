@@ -501,7 +501,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   ui.fill({box.x + box.w - 1, box.y, 1, box.h}, rgb(255, 255, 255)); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, rgb(255, 255, 255));
   // Vertical mapping fitted on 14 line ends of London and Berlin captures: original y = 1.0308 * ours - 7.5 (ours was right at the bottom, 3..5 px too low at the top).
   const int origY0 = r.y - 34;   // the original's window top is y34 at 800 x 600
-  const int x0 = r.x + 46, x1 = r.x + 300, yTop = origY0 + 95, yBot = origY0 + 251;   // old rows 99 / 251 mapped through the fit (94.5 / 251.2)
+  const int x0 = r.x + 46, x1 = r.x + 300, yTop = origY0 + 94, yBot = origY0 + 251;   // value 0 at y251, the saved max 157 rows above [OBSERVED: y = 251 - floor(v * 157 / max), 20 of 33 points exact]
   struct Lab { std::string text; int endY; uint32_t col; int y = 0; float endYf = 0; int top = 0; };
   std::vector<Lab> labs;
   int nPts = 0;
@@ -517,8 +517,9 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
     for (size_t k = 0; k < s.size(); k++) {
       int x = x0 + int(k) * (x1 - 1 - x0) / int(s.size() - 1);   // the line stops at x339; the leader starts at x340
       float t = hi <= lo ? 0.5f : std::max(0.f, std::min(1.f, float(int64_t(s[k]) - int64_t(lo)) / float(hi - lo)));
-      int y = yBot - int(t * float(yBot - yTop));
-      yfEnd = float(yBot) - t * float(yBot - yTop);
+      const int rows = int(std::floor(double(t) * double(yBot - yTop)));
+      int y = yBot - rows;
+      yfEnd = float(y);
       if (k) line(ui, px, py, x, y, kSeriesCol[i]);
       px = x; py = y;
     }
