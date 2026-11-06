@@ -131,7 +131,7 @@ void splitHeading(Ui& ui, int cx, int y, const std::string& s, const char* font,
   }
   for (size_t i = 0; i < parts.size(); i++) {
     // The original centres these three lines 2 px off the ink-width centre (English strings, observed): "Expense" and "Estimate" 2 px right, "Meet" 2 px left.
-    const int adj = (parts[i] == "Expense" || parts[i] == "Estimate" || parts[i] == "Mo/Yr") ? 2 : parts[i] == "Meet" ? -2 : 0;
+    const int adj = (parts[i] == "Expense" || parts[i] == "Estimate" || parts[i] == "Mo/Yr" || parts[i] == "Income" || parts[i] == "Advisor") ? 2 : parts[i] == "Meet" ? -2 : 0;
     ui.text(cx - ui.textWidth(parts[i], font) / 2 + adj, y + int(i) * 14, parts[i], font, col);
   }
 }
@@ -701,7 +701,7 @@ WindowResult BusinessDealsWindow::draw(Ui& ui, const WinEnv& E, BusinessDeals& d
   { std::string tv = plus(d.monthlyIncome()); ui.text(r.x + 304 - ui.textWidth(tv, "main9"), r.y + 129, tv, "main9", ink); }
   // Plates.
   blueBand(ui, {r.x + 86, r.y + 155, 44, 34});
-  blueBand(ui, {r.x + 271, r.y + 156, 44, 34});   // plate 42 x 32 at (508, 358) inside a 1 px light border, outer box x 507..550 y 357..390 [OBSERVED]
+  blueBand(ui, {r.x + 271, r.y + 155, 44, 34});   // plate 42 x 32 at (508, 358) inside a 1 px light border, outer box x 507..550 y 357..390 [OBSERVED]
   { std::string fb = E.win(0x23A, "Finance Briefing:");
     size_t sp = fb.rfind(' ');
     T(24, 159, sp == std::string::npos ? fb : fb.substr(0, sp));
@@ -767,8 +767,13 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
   const uint32_t ink = rgb(0x31, 0x34, 0x7B), lav = rgb(0x7B, 0x7D, 0xB5), white = rgb(255, 255, 255);
   Rect r = placedAt(ui, 50, 50, 372, 445);
   if (frame(ui, E, r, E.win(0x117, "Neighbors Map"))) { R.close = true; R.add(Act::Close); }
-  for (Rect b : {Rect{10, 325, 111, 26}, Rect{232, 300, 131, 51}, Rect{10, 326, 11, 110}, Rect{352, 300, 11, 136}, Rect{10, 395, 353, 41}})
-    ui.fill({r.x + b.x, r.y + b.y, b.w, b.h}, rgb(0x7B, 0x92, 0xFF));
+  { int pi = 0;
+    for (Rect b : {Rect{10, 325, 111, 26}, Rect{232, 300, 131, 51}, Rect{10, 326, 11, 110}, Rect{352, 300, 11, 136}, Rect{10, 395, 353, 41}}) {
+      const Rect pr{r.x + b.x, r.y + b.y, b.w, b.h};
+      ui.fill(pr, rgb(0x7B, 0x92, 0xFF));
+      if (pi < 3) { ui.fill({pr.x, pr.y, pr.w, 1}, rgb(173, 182, 255)); ui.fill({pr.x, pr.y, 1, pr.h}, rgb(173, 182, 255)); }   // 1 px highlight on the top row and left column of the Discuss Deal and the two left plates [OBSERVED]
+      pi++;
+    } }   // 1 px highlight on each plate's top row and left column [OBSERVED]
   // Region diamond.
   const double cx = r.x + 182.5, cy = r.y + 191.5;
   const int rot = viewRotation & 3;

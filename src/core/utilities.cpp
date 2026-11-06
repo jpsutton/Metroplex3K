@@ -329,8 +329,11 @@ void PowerLayer::recomputeCoverage(const PowerEnv& env, bool rollover) {
     // Loading a city performs one rollover of the production record: the month index advances, the oldest row is replaced by the current
     // production and the annual totals are adjusted (original Berlin re-saved right after load: index 9 -> 10, new row = row 9, sum 1,908,843
     // -> 1,906,937) [OBSERVED].
+    // The original's new slot equals the previous slot (Berlin: 59544 / 92624 / 5263 / 823 = row 9): copy it rather than the recomputed output.
+    const int prevSlot = monthIndex;
     monthIndex = (monthIndex + 1) % 12;
-    for (int c = 0; c < 10; c++) { annualTotal[c] -= production[monthIndex][c]; production[monthIndex][c] = int32_t(cat[c]); annualTotal[c] += int32_t(cat[c]); }
+    (void)cat;
+    for (int c = 0; c < 10; c++) { annualTotal[c] -= production[monthIndex][c]; production[monthIndex][c] = production[prevSlot][c]; annualTotal[c] += production[monthIndex][c]; }
   }
 }
 
