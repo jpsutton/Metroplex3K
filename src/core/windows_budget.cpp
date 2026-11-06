@@ -771,12 +771,17 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
     for (Rect b : {Rect{10, 325, 111, 26}, Rect{232, 300, 131, 51}, Rect{10, 326, 11, 110}, Rect{352, 300, 11, 136}, Rect{10, 395, 353, 41}}) {
       const Rect pr{r.x + b.x, r.y + b.y, b.w, b.h};
       ui.fill(pr, rgb(0x7B, 0x92, 0xFF));
-      if (pi < 3) { ui.fill({pr.x, pr.y, pr.w, 1}, rgb(173, 182, 255)); ui.fill({pr.x, pr.y, 1, pr.h}, rgb(173, 182, 255)); }
+      if (pi < 3) { ui.fill({pr.x, pr.y, pr.w, 1}, rgb(173, 182, 255)); ui.fill({pr.x, pr.y, 1, pr.h}, rgb(173, 182, 255)); }   // top row / left column of the Discuss Deal and the two left plates [OBSERVED]
       if (pi == 0) ui.fill({pr.x + pr.w - 1, pr.y, 1, pr.h}, rgb(173, 182, 255));   // the inner column x170 (y375..400)
-      if (pi == 2) ui.fill({pr.x + pr.w - 1, pr.y, 1, 48}, rgb(173, 182, 255));     // the partial inner column x70
-      if (pi == 4) ui.fill({pr.x, pr.y, 20, 1}, rgb(173, 182, 255));                // the short row y445 x60..79   // 1 px highlight on the top row and left column of the Discuss Deal and the two left plates [OBSERVED]
       pi++;
-    } }   // 1 px highlight on each plate's top row and left column [OBSERVED]
+    }
+    const uint32_t hl = rgb(173, 182, 255);   // the remaining segments, exactly as observed (screen coords of the original at window (50, 50))
+    ui.fill({r.x + 20, r.y + 350, 101, 1}, hl); ui.fill({r.x + 232, r.y + 350, 98, 1}, hl);          // y400: x70..170 and x282..379
+    ui.fill({r.x + 10, r.y + 325, 1, 111}, hl);                                                       // x60 y375..485
+    ui.fill({r.x + 20, r.y + 325, 1, 1}, hl); ui.fill({r.x + 20, r.y + 350, 1, 46}, hl); ui.fill({r.x + 20, r.y + 435, 1, 1}, hl);   // x70: y375, y400..445, y485
+    ui.fill({r.x + 10, r.y + 395, 1, 1}, hl); ui.fill({r.x + 20, r.y + 395, 10, 1}, hl);              // y445: x60 and x70..79
+    ui.fill({r.x + 10, r.y + 435, 20, 1}, hl);                                                        // y485: x60..79
+  }   // 1 px highlight on each plate's top row and left column [OBSERVED]
   // Region diamond.
   const double cx = r.x + 182.5, cy = r.y + 191.5;
   const int rot = viewRotation & 3;
@@ -828,7 +833,7 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
     E.spot("nb." + std::to_string(i), hit);
     // The original lists every named neighbour, including one whose `exists` byte is 0 (Hawkin's Creek in Berlin).
     if (!nb.exists && nb.cityName.empty()) continue;
-    outline(ox, oy, 47.5, 2, rgb(0x6B, 0x92, 0xF7));
+    if (nb.exists) outline(ox, oy, 47.5, 2, rgb(0x6B, 0x92, 0xF7));   // a neighbour without a land link has no border diamond (its arrow instead) [OBSERVED]
     if (selected == i) outline(ox + 0.5, oy + 1.5, 46, 3, rgb(239, 56, 0));   // (239,56,0) [OBSERVED]; box (137,147)-(228,238) on the original (observed)
     const int ncx = int(cx + ox), ncy = int(cy + oy);
     // A neighbour without a land link (`exists` 0) gets an arrow pointing out of the map (000005E5:28 up-left, 2B up-right,
