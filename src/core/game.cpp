@@ -768,6 +768,21 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
     }
   }
   drawFpsCounter(dtMs);
+  {   // M3K_RGB565=1: quantise the finished frame to 5-6-5 the way the original's DirectDraw surface did (R, B: (v>>3)<<3 | v>>5 ... expanded as
+      // (v << 3) | (v >> 2), G: (v << 2) | (v >> 4)), so screenshot pixel diffs against the original are exact. Off by default.
+    static const bool rgb565 = [] { const char* e = std::getenv("M3K_RGB565"); return e && e[0] == '1'; }();
+    if (rgb565 && drawPx_) {
+      for (int y = 0; y < h; y++) {
+        uint32_t* row = drawPx_ + size_t(y) * drawPitch_;
+        for (int x = 0; x < w; x++) {
+          const uint32_t p = row[x];
+          const uint32_t r = (p >> 16) & 255, g = (p >> 8) & 255, b = p & 255;   // symmetric in r / b, so the byte order of the frame does not matter
+          const uint32_t qr = r >> 3, qg = g >> 2, qb = b >> 3;
+          row[x] = (p & 0xFF000000u) | (((qr << 3) | (qr >> 2)) << 16) | (((qg << 2) | (qg >> 4)) << 8) | ((qb << 3) | (qb >> 2));
+        }
+      }
+    }
+  }
   const auto pe0 = PhaseClock::now();
   asyncFrameEnd();
   phases_.simWaitMs += 0;
