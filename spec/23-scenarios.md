@@ -465,7 +465,27 @@ The scenario engine only forwards these values; it never recomputes them.
 #### 4.7.1 Observed layouts at 800 × 600 `[OBSERVED]` (A Better Betterfeld)
 
 Coordinates are window client pixels, as (left, top)–(right, bottom), right/bottom exclusive. All
-three dialogs use the standard light-blue dialog skin (panel fill RGB 123,146,255; light bevels).
+three dialogs use the standard light-blue dialog skin (frame/panel fill RGB 123,146,255; light
+bevels).
+* Every inset area is filled with RGB 222,223,255, **not white**: the text boxes, the goals list,
+  the results panel, the results text box and the three button panels.
+* Text in the text boxes is black.
+* The goals list text and the achieved rank are dark blue RGB 49,52,123. Ranks not achieved are
+  RGB 165,162,165.
+* Body text lines are on a **14 px pitch** (start/status text tops at y 146, 160, 174 …); goal
+  texts wrap on the same pitch.
+
+Art [STATIC: keys referenced by SCENARIO.DLL / SIMUI.DLL; OBSERVED: placement]:
+* Goal status icon, unmet: `DLG.IXF` group `C2BF3646` instance `252A754F` (32 × 29), drawn at
+  (184, 333 + 40·row).
+* Goal status icon, met: instance `E50ED85A` (38 × 33, the red "SimCity" stamp). The same image
+  marks the achieved rank in the results dialog, at (197,243) there.
+* The goals list chooses icon and text colour per goal from its met flag.
+* Results-dialog logo button: instance `C5171C41`, 292 × 34 = four 73 × 34 cells (0 disabled
+  grey, 1 normal, 2 pressed, 3 hover). Normal is cell 1 at (220,446), (362,446), (504,446), i.e.
+  centred in each 134 px panel.
+* Pop-up icon: `SYS.IXF` MBIcons `82B9B75B:42E55FD4` cell 1 (the yellow warning triangle,
+  32 × 29), at (235,239).
 Each dialog centres itself in the window. All three pause the simulation while open: the date did
 not advance with the game at top speed.
 
@@ -502,7 +522,8 @@ not advance with the game at top speed.
 * Frame (177,101)–(621,498), 444 × 397. The title bar shows the scenario title.
 * Results panel (190,135)–(498,289):
   * heading "Scenario Completed!" (y ≈ 140–157);
-  * "Results for Mayor <name>" (y ≈ 162–173);
+  * "Results for Mayor <name>" (y ≈ 162–173). The mayor's name replaces the `%YOURNAME%` token
+    of the string; it is not appended;
   * the rank list: one line per rank (`cmdAddRankInfo`) at x ≈ 238, y ≈ 193, 212, 231…
   * Ranks not achieved are drawn in grey. The achieved rank is drawn in dark blue, may wrap to two
     lines, and has a red "SimCity" stamp icon at (195,250)–(235,276) to its left.
@@ -513,9 +534,9 @@ not advance with the game at top speed.
   watching the time pass?").
 * Three button panels on a 142 px pitch, each 134 × 76: (189,406)–(323,482), (331,406)–(465,482)
   and (473,406)–(607,482).
-  * Each has a two-line centred caption at y ≈ 415–440: "Replay Scenario", "Play Another
-    Scenario", "Return to Main Menu".
-  * Below the caption, a 66 × 30 "SimCity" logo button centred at y ≈ 449–479.
+  * Each has a caption **centred** and wrapped to two lines at y ≈ 415–440: "Replay Scenario";
+    "Play Another" / "Scenario"; "Return to Main" / "Menu".
+  * Below the caption, the 73 × 34 "SimCity" logo button (art above) at y 446–480.
   * These are outcomes 0, 1, 2 of §4.7.
   * There is no close box or OK button.
 
