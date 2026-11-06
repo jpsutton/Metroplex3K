@@ -433,9 +433,9 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
   // line 4 rows above the bottom edge (the title bar's left end continues as this strip).
   {
     const uint32_t lightEdge = rgb(173, 182, 255);
-    ui.fill({r.x + 5, r.y + 5, 6, r.h - 9}, rgb(123, 146, 255));
-    ui.fill({r.x + 4, r.y + 4, 1, r.h - 7}, lightEdge); ui.fill({r.x + 11, r.y + 4, 1, r.h - 7}, lightEdge);
-    ui.fill({r.x + 4, r.y + r.h - 4, 8, 1}, lightEdge);
+    ui.fill({r.x + 5, r.y + 5, 7, r.h - 10}, rgb(123, 146, 255));   // x 5..11: the right line starts below the title band (row 33)
+    ui.fill({r.x + 4, r.y + 4, 1, r.h - 8}, lightEdge); ui.fill({r.x + 11, r.y + 33, 1, r.h - 37}, lightEdge);
+    ui.fill({r.x + 4, r.y + r.h - 5, 8, 1}, lightEdge);
   }
 
   // Picture (centred on (160, 97) for type 2, (77, 160) for type 3), framed by a 1 px #7B8AFF rectangle outside the image.

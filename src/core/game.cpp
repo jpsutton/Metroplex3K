@@ -416,7 +416,15 @@ bool Game::transportToolEnabled(uint32_t id) const {
     case 0x10004004: flag = 1; break;                                     // bus stop
     case 0x10003006: flag = 2; break;                                     // airport zone
     case 0x10004301: case 0x10004302: flag = 3; break;                    // highway, on-ramp
-    default: return true;
+    default: {
+      // Emergency fly-out: go-to-disaster and the three dispatch items are drawn disabled while no disaster is in progress [OBSERVED, #24].
+      auto it = menu_.items.find(id);
+      if (it != menu_.items.end()) {
+        const uint32_t t = it->second.target;
+        if ((t == 0xC30177CA || t == 0x029A52DD || t == 0x229A528C || t == 0xA5354652) && !disasterActive()) return false;
+      }
+      return true;
+    }
   }
   return !managersReady_ || advisors_.transportTech(flag);
 }
