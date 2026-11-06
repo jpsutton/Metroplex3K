@@ -820,7 +820,7 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
     // The original lists every named neighbour, including one whose `exists` byte is 0 (Hawkin's Creek in Berlin).
     if (!nb.exists && nb.cityName.empty()) continue;
     outline(ox, oy, 47, 2, rgb(0x6B, 0x92, 0xF7));
-    if (selected == i) outline(ox + 0.5, oy + 1.5, 46, 3, rgb(255, 0, 0));   // box (137,147)-(228,238) on the original (observed)
+    if (selected == i) outline(ox + 0.5, oy + 1.5, 46, 3, rgb(239, 56, 0));   // (239,56,0) [OBSERVED]; box (137,147)-(228,238) on the original (observed)
     const int ncx = int(cx + ox), ncy = int(cy + oy);
     // A neighbour without a land link (`exists` 0) gets an arrow pointing out of the map (000005E5:28 up-left, 2B up-right,
     // 29 down-left, 23 down-right), under its name. Placement measured for the up-left arrow (Hawkin's Creek in
@@ -844,14 +844,14 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
     }
     std::string nm = nb.cityName.empty() ? "Neighbour " + std::to_string(i + 1) : nb.cityName;
     std::string pop = groupDigits(nb.population);
-    ui.text(int(cx + ox) - ui.textWidth(nm, "main9") / 2, int(cy + oy) - 22, nm, "main9", white);
-    ui.text(int(cx + ox) - ui.textWidth(pop, "main9") / 2, int(cy + oy) - 1, pop, "main9", white);
+    ui.text(int(cx + ox) - ui.textWidth(nm, "main9") / 2, int(cy + oy) - 21, nm, "main9", white);   // labels 1 px lower [OBSERVED]
+    ui.text(int(cx + ox) - ui.textWidth(pop, "main9") / 2, int(cy + oy), pop, "main9", white);
     if (ui.clicked(hit)) selected = i;
   }
   if (!cityName.empty()) {
     std::string pop = groupDigits(cityPop);
-    ui.text(int(cx) - ui.textWidth(cityName, "main9") / 2, int(cy) - 11, cityName, "main9", white);
-    ui.text(int(cx) - ui.textWidth(pop, "main9") / 2, int(cy) + 10, pop, "main9", white);
+    ui.text(int(cx) - ui.textWidth(cityName, "main9") / 2, int(cy) - 10, cityName, "main9", white);
+    ui.text(int(cx) - ui.textWidth(pop, "main9") / 2, int(cy) + 11, pop, "main9", white);
   }
   wui::compassRose(ui, E, r.x + 50, r.y + 80, rot);
   ui.text(r.x + 242, r.y + 52, E.win(0x165, "Nat'l Pop"), "main9", lav);
@@ -875,8 +875,8 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
   ui.text(r.x + 185, r.y + 357, E.win(0x29B, "Rate:"), "main9", lav);
   { std::string mc = E.win(0x13E, "Monthly Contribution:"); size_t sp = mc.find(' ');
     std::string a = sp == std::string::npos ? mc : mc.substr(0, sp), b2 = sp == std::string::npos ? "" : mc.substr(sp + 1);
-    ui.text(r.x + 294 - ui.textWidth(a, "main9") / 2, r.y + 350, a, "main9", lav);
-    ui.text(r.x + 294 - ui.textWidth(b2, "main9") / 2, r.y + 364, b2, "main9", lav); }
+    ui.text(r.x + 295 - ui.textWidth(a, "main9") / 2, r.y + 350, a, "main9", lav);
+    ui.text(r.x + 295 - ui.textWidth(b2, "main9") / 2, r.y + 364, b2, "main9", lav); }
   Rect lr{r.x + 30, r.y + 380, 311, 60};
   ui.fill(lr, rgb(0xDE, 0xDF, 0xFF)); sunkenLines(ui, lr);
   if (haveSel) {

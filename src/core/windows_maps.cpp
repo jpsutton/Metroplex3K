@@ -499,7 +499,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   // Frame: dark top/left (123,142,255), white right/bottom [OBSERVED].
   ui.fill({box.x, box.y, box.w, 1}, rgb(123, 142, 255)); ui.fill({box.x, box.y, 1, box.h}, rgb(123, 142, 255));
   ui.fill({box.x + box.w - 1, box.y, 1, box.h}, rgb(255, 255, 255)); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, rgb(255, 255, 255));
-  const int x0 = r.x + 46, x1 = r.x + 300, yTop = r.y + 56, yBot = r.y + 214;
+  const int x0 = r.x + 46, x1 = r.x + 300, yTop = r.y + 65, yBot = r.y + 217;   // 0..max over y243..112 on the original (131 px) [OBSERVED]
   struct Lab { std::string text; int endY; uint32_t col; int y = 0; };
   std::vector<Lab> labs;
   int nPts = 0;
@@ -740,12 +740,12 @@ bool pieChartArt(Ui& ui, const WinEnv& E, int ox, int oy, const std::vector<PieS
 // x 225 (y 249 / 265); the five page radios centred at x ~197 (y = 314 + 20 i).
 WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const ChartsData& d) {
   WindowResult R;
-  const Rect box{r.x + 52, r.y + 50, 357, 189}, plot{r.x + 144, r.y + 52, 264, 153};
+  const Rect box{r.x + 52, r.y + 50, 356, 189}, plot{r.x + 144, r.y + 52, 264, 153};   // right border column x447 on every chart page [OBSERVED]
   // Frame: (123,142,255) left / top, white bottom [OBSERVED]; outside the plot the interior is (222,223,255).
   const bool agePage = tab <= 2;
   const uint32_t frameTL = agePage ? rgb(123, 142, 255) : rgb(123, 138, 255), frameBR = agePage ? rgb(255, 255, 255) : rgb(255, 243, 255);   // the pie pages' frame colours differ [OBSERVED]
   ui.fill({box.x, box.y, 1, box.h}, frameTL); ui.fill({box.x, box.y, box.w, 1}, frameTL);
-  ui.fill({box.x + box.w - (agePage ? 1 : 2), box.y, 1, box.h}, frameBR); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, frameBR);
+  ui.fill({box.x + box.w - 1, box.y, 1, box.h}, frameBR); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, frameBR);
   // Stripe bands (spec 09 7.1.1): each page has its band period and the row of the first edge, counted from the plot top (y = 51); the Workforce
   // band draws them from the page's pink tile (5E5:31 Health 15 px, 33 Education 17 px, 35 Population 12 px), the rest of the plot draws the
   // same bands in lavender. The pie pages keep the Education pattern.
@@ -794,7 +794,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
       const size_t sp = tab == 0 ? t.find(' ') : std::string::npos;
       const int hgt = ui.fonts->get("system9").height();
       auto put = [&](const std::string& s, int x, int dy = 0) { verticalText(ui, x, r.y + 170 - ui.textWidth(s, "main9") / 2 + dy, s, "main9", kAxisInk); };
-      if (sp == std::string::npos) put(t, r.x + 80 - hgt / 2);
+      if (sp == std::string::npos) put(t, r.x + 68, 199 - ui.textWidth(t, "main9") - (170 - ui.textWidth(t, "main9") / 2));   // x110, bottom edge y232 (Population y173..232, Health y197..232) [OBSERVED]
       else { put(t.substr(0, sp), r.x + 67); put(t.substr(sp + 1), r.x + 81, 4); }   // ink columns x110 and x124 [OBSERVED]
     }
     for (int i = 0; i < 15; i++) {   // one bar per 5-year bucket, ages 0-4 .. 70-74
@@ -845,14 +845,14 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     // heading at the top left of the box, then one colour bar per category present
     { std::string head = E.win(el ? 0x28A : 0x1F3, el ? "Annually Averaged" : "% Garbage Goes To:");
       auto lines = wrap(ui, head, 168, "main10");
-      ui.text(box.x + 7, box.y + 5, lines.empty() ? head : lines[0], "main10", rgb(49, 52, 123)); }   // the first line only; the legend bars cover the rest
+      ui.text(box.x + 7, box.y + 5, lines.empty() ? head : lines[0], "main9", rgb(49, 56, 132)); }   // the first line only; the legend bars cover the rest
     std::vector<PieSlice> slices;
     int by = box.y + 20;
     const int barH = el ? 14 : 23, barPitch = el ? 16 : 25;   // legend bars x 98..264: 14 rows at a 16 px pitch (electricity), 23 rows at 25 (garbage) [OBSERVED]
     for (const Cat& c : cats) {
       if (c.v <= 0) continue;
       ui.fill({box.x + 6, by, 167, barH}, c.col);
-      ui.text(box.x + 8, by + (barH - 12) / 2 - 1, E.win(c.id, c.fb), "main10", (int(c.col & 255) + int((c.col >> 8) & 255) + int((c.col >> 16) & 255)) < 385 ? rgb(255, 255, 255) : rgb(0, 0, 0));   // by the 8-bit source colour [OBSERVED]
+      ui.text(box.x + 8, by + (barH - 12) / 2 - 1, E.win(c.id, c.fb), "main9", (int(c.col & 255) + int((c.col >> 8) & 255) + int((c.col >> 16) & 255)) < 385 ? rgb(255, 255, 255) : rgb(0, 0, 0));   // by the 8-bit source colour [OBSERVED]
       by += barPitch;
       slices.push_back({"", c.v, c.col});
     }
@@ -860,7 +860,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     cap1 = capText(E, el ? 0x289 : 0x1F8, el ? "Total Electricity Usage Annually = %s MW-h" : "Total Garbage Produced Annually = %s Tons", groupDigits(!el && d.garbageProduced >= 0 ? int64_t(std::llround(d.garbageProduced / 10.0)) : int64_t(total)));
   }
   const int capDy = -6;   // the caption lines sit 6 px higher on every chart page (observed)
-  ui.textCentered({r.x + 56, r.y + 248 + capDy, 340, 14}, cap1, "main9", agePage ? kAxisInk : kInkBlue);   // the caption lines are MAIN9 [OBSERVED on the pie pages; the age pages' text starts 2 px right of main10's]
+  ui.textCentered({r.x + 56, r.y + 248 + capDy, 340, 14}, cap1, "main9", kAxisInk);   // all caption lines are (49,56,132) except the orange workforce line [OBSERVED]   // the caption lines are MAIN9 [OBSERVED on the pie pages; the age pages' text starts 2 px right of main10's]
   if (!cap2.empty()) ui.textCentered({r.x + 56, r.y + 264 + capDy, 340, 14}, cap2, "main9", rgb(247, 142, 90));
   static const uint32_t tid[5] = {0x1DD, 0x1E0, 0x1E1, 0x1DE, 0x1DF};
   static const char* const tfb[5] = {"Education", "Health", "Population", "Electricity", "Garbage"};
