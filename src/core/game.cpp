@@ -748,7 +748,7 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
       ui_.fill(r, rgb(255, 255, 224));
       ui_.fill({r.x, r.y, r.w, 1}, 0xFF000000u); ui_.fill({r.x, r.y + r.h - 1, r.w, 1}, 0xFF000000u);
       ui_.fill({r.x, r.y, 1, r.h}, 0xFF000000u); ui_.fill({r.x + r.w - 1, r.y, 1, r.h}, 0xFF000000u);
-      ui_.text(r.x + 3, r.y + (r.h - ui_.fonts->get(font).height()) / 2, ui_.tooltip, font, 0);
+      ui_.text(r.x + 3, r.y + (r.h - ui_.fonts->get(font).height()) / 2, ui_.tooltip, font, 0xFF000000u);   // black: colour 0 would mean the default ink (navy)
     }
   }
   drawFpsCounter(dtMs);
