@@ -661,7 +661,10 @@ before building, and also refuses if the price exceeds funds `[STATIC]`.
    * **Not yet decoded.** One more call argument, and the exact flag tested at the start-side
      occupant removal.
 4. Bridge attempt (road, rail, power, highway only; path length ≥ 4 tiles): §6.4.
-5. Tunnel attempt (road, rail, and highway): §6.4.
+5. Tunnel attempt (road, rail, and highway): §6.4. [STATIC, SIMNTWRK 0x10014A23] The actual
+   commit order is: start-endpoint levelling; bridge attempt; validate and strip-grade the path
+   (step 1); tunnel attempt, made whenever no bridge was built (not gated on grading); end-point
+   levelling only if no tunnel was built.
 6a. Neighbour-connection offer for path ends on the map edge: §8.
 6. Place pieces: the tile list goes to the tiler (§4.6). For the highway, a second tiler pass is
    run for road (net 1) over the tiles where the new highway meets existing roads, to create the
@@ -895,15 +898,25 @@ Tunnels (agent type 16006, cost key 16006) `[STATIC]`:
 
 1. Road and rail tunnel with the builder below. Highways also have a tunnel builder (see the end
    of this list); an earlier revision said only road and rail can tunnel.
-2. The drag must be straight and axis-aligned: exactly one of the per-step offsets dx, dz is ±1
-   and the other is 0. Travel direction d: 0 = −x, 1 = −z, 2 = +x, 3 = +z (the span direction
-   encoding of `18-sim-transport.md` §5.5 and `10-save-format.md` §6.2.6).
-3. The entrance tile E must lie at the foot of rising ground. Let h = the lowest corner height of
-   the entrance tile.
+2. The direction comes from the **last step** of the drag only: d = last tile − previous tile,
+   which must be a unit axis step. Travel direction d: 0 = −x, 1 = −z, 2 = +x, 3 = +z (the span
+   direction encoding of `18-sim-transport.md` §5.5 and `10-save-format.md` §6.2.6).
+3. The entrance tile E is the **last dragged tile** [STATIC, SIMNTWRK 0x1001C102]. With its
+   corners c0 = (x, z), c1 = (x+1, z), c2 = (x+1, z+1), c3 = (x, z+1) (heights after the strip
+   grade, which runs first), its rise along d is (c1 − c0) + (c2 − c3) for +x,
+   (c0 − c1) + (c3 − c2) for −x, (c3 − c0) + (c2 − c1) for +z, (c0 − c3) + (c1 − c2) for −z. If the
+   rise is < 4 there is no tunnel. Let h = the lowest corner height of E (threshold T = (h + 4)
+   as a byte). The start tile and tiles in the middle of the drag are never examined.
+   [OBSERVED] A road drag on Mount Herrang over a hill from (55,90) to (80,90), ending on a tile
+   that falls along +x, built 26 terrain-following pieces and no tunnel prompt.
 4. **Walk.** Start with L = 1 and P = E + d. Repeat: step to P + d; if that tile is off the map,
    stop with **no tunnel**. Otherwise P ← that tile and L ← L + 1, and continue while the lowest
    corner height of P is ≥ h + 4. The walk ends at the first tile whose lowest corner is below
-   h + 4; that tile is the exit X = E + L·d. If L < 3, no tunnel is built.
+   h + 4; that tile is the exit X = E + L·d. If L < 3, no tunnel is built. The exit therefore
+   always lies beyond the dragged end; the walk alone chooses it. On success the last path tile
+   is replaced by X + d, so the network continues one tile past the exit. Portal shaping: E's
+   hill-side corners → h + 4 and approach side → h; X's hill-side corners → h + 4 and far side →
+   h; the two far corners of X + d → h.
 5. **Price** = (L − 1) × the cost of agent type 16006, charged per tunnel tile. Correction: the
    previous revision guessed once per tunnel. It must not exceed the city's funds, and the player
    confirms with a yes/no prompt (string table `029541F4`, instance `0x253`, price substituted).
