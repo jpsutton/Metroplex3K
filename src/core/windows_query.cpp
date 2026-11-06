@@ -429,6 +429,15 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
   ui.windowRects.push_back(r);
   if (frame(ui, E, r, E.query(1, "Query"))) { R.close = true; R.add(Act::Close); }
 
+  // Left frame strip down the whole body [OBSERVED]: light lines (173,182,255) at x 4 and 11 of the window, fill (123,146,255) between, closed by a light
+  // line 4 rows above the bottom edge (the title bar's left end continues as this strip).
+  {
+    const uint32_t lightEdge = rgb(173, 182, 255);
+    ui.fill({r.x + 5, r.y + 5, 6, r.h - 9}, rgb(123, 146, 255));
+    ui.fill({r.x + 4, r.y + 4, 1, r.h - 7}, lightEdge); ui.fill({r.x + 11, r.y + 4, 1, r.h - 7}, lightEdge);
+    ui.fill({r.x + 4, r.y + r.h - 4, 8, 1}, lightEdge);
+  }
+
   // Picture (centred on (160, 97) for type 2, (77, 160) for type 3), framed by a 1 px #7B8AFF rectangle outside the image.
   if (L.picW > 0) {
     const int cx = L.type == 2 ? 160 : 77, cy = L.type == 2 ? 97 : 160;
@@ -485,8 +494,8 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
   const bool historical = q.growable;
   if (q.canReplace) {
     Rect b = historical ? Rect{r.x + 20, r.y + L.h - 58, 73, 33} : Rect{r.x + 16, r.y + L.h - 38, 73, 33};
-    // The button sits on a (123,146,255) plate that runs left into the window's inset; its label is the regular main9 weight [OBSERVED].
-    ui.fill({r.x + 10, b.y, b.x + b.w - (r.x + 10), b.h}, rgb(123, 146, 255));
+    // The button sits on a (123,146,255) plate the size of the button; its label is the regular main9 weight [OBSERVED].
+    ui.fill(b, rgb(123, 146, 255));
     E.spot("replace", b);
     if (ui.button(b, E.se(0x12C, "Replace"), true, false, "main9")) { R.add(Act::QueryReplace, 0, q.x, q.z); R.close = true; R.add(Act::Close); }
   }
