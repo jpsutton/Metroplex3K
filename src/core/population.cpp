@@ -58,7 +58,7 @@ Population::Population(PopulationConfig c, uint32_t seed) : cfg(c), rng(seed) {
 }
 
 void Population::configureCharts() {
-  popChart = Chart::make(0, 10000, true, 10000);
+  popChart = Chart::make(0, 10000, true, 10000, 1.1);   // residents: round(1.1 x largest), floor 10,000 [DATA, spec 10 6.12]
   eqChart = Chart::make(0, 150, false);
   leChart = Chart::make(0, 89, false);
 }
@@ -368,7 +368,7 @@ void Population::parseState(const uint8_t* p, size_t n) {
   popChart = Chart::parse(r.ptr(), r.remaining()); r.skip(Chart::kBytes);
   eqChart = Chart::parse(r.ptr(), r.remaining()); r.skip(Chart::kBytes);
   leChart = Chart::parse(r.ptr(), r.remaining()); r.skip(Chart::kBytes);
-  popChart.autoScale = true; popChart.floorMax = 10000;
+  popChart.setAutoScale(10000, 1.1);
   schoolStrike = r.u8() != 0;
   healthStrike = r.u8() != 0;
   schoolStrikeMonths = r.u32();

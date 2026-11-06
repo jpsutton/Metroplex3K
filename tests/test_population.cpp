@@ -28,6 +28,21 @@ static void testInitial() {
   for (int a = 0; a < kAges; a++) CHECK(p.hq[a] >= 0);
   CHECK(p.popChart.max == 10000 && p.eqChart.max == 150 && p.leChart.max == 89);
   CHECK(p.popChart.monthly[0] == 0);
+  {  // auto-scale: max = round(1.1 x largest sample), floor 10,000, recomputed when a sample exceeds max (spec 10 6.12) [DATA]
+    Chart c = Chart::make(0, 10000, true, 10000, 1.1);
+    c.pushMonthly(806941); CHECK(c.max == 887635);       // Berlin residents
+    c.pushMonthly(598118); CHECK(c.max == 887635);       // below max: unchanged
+    Chart l = Chart::make(0, 10000, true, 10000, 1.1);
+    l.pushMonthly(598118); CHECK(l.max == 657930);       // London
+    Chart e = Chart::make(0, 10000, true, 10000, 1.1);
+    e.pushMonthly(9000); CHECK(e.max == 10000);          // floor
+    Chart t = Chart::make(100, 200, true, 200, 1.1);     // treasury: rounded, floor 200
+    t.pushMonthly(845); CHECK(t.max == 930);
+    t.pushMonthly(1217); CHECK(t.max == 1339);
+    Chart r = Chart::make(100, 200, true, 200, 1.1);
+    r.pushMonthly(100); CHECK(r.max == 200);             // Roadless Paradise
+    Chart ld; ld.setAutoScale(10000, 1.1); ld.max = 0; ld.pushMonthly(50000); CHECK(ld.max == 55000);
+  }
 }
 
 static void testConfigIni() {

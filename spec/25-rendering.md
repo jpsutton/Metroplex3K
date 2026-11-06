@@ -221,6 +221,39 @@ Each frame is composed back to front in this order: [STATIC partial, INFERRED or
 4. **Overlays.** Data-map tinting, selection highlights, placement previews and the cursor (§9).
 5. **UI windows** on top (`08-ui-framework.md`).
 
+**Draw height of network pieces** [OBSERVED: Berlin road (132,137)/(132,138) and rail ramp
+(147–149,74), view rotation 0]:
+* A network piece lying on the terrain (road, rail, power line and the like, on flat or sloped
+  ground) is registered at the altitude of one fixed corner **in the piece's own frame**: corner
+  (1, 0) of the unrotated piece, turned with the piece rotation r. It does not depend on the view
+  rotation. The screen x anchor stays the left vertex (u_max, v_min).
+  * World corner by piece rotation: r = 0 → (x+1, z); r = 1 → (x, z) [INFERRED];
+    r = 2 → (x, z+1); r = 3 → (x+1, z+1) [INFERRED].
+* Evidence:
+  * Solving H from sprite T over the sloped terrain-bound pieces of 8 shipped cities gives this
+    corner for 877 of 1,108 rot-0 pieces and 809 of 1,017 rot-2 pieces. In the remaining cases the
+    sprite top is not the tile's top corner, so the method does not apply. H is the same at all
+    four camera rotations.
+  * Covered: road 11201/31 (slope along z), road 11202/32 and rail 46/16008 (slope along x).
+  * Rotations 1 and 3 are too rare to confirm (38 and 7 pieces).
+  * Rendering Berlin (132,137), (142,135), (147,125) and (148,74) with this rule gives continuous
+    ramps.
+  * The earlier "world corner (x+1, z+1)" rule held only for some piece families.
+* The stored piece altitude is not used for terrain-bound pieces. The save stores either the
+  lowest or the highest corner (Berlin roads: 91 vs 90).
+* Pieces whose stored altitude is above every corner keep it. These are bridge decks, inclines and
+  elevated pieces, agent types 16003, 16004, 16011, 17003, 17204 and others. Rail incline 17004
+  (piece 59) has its own sprite shape; it was drawn correctly by the front-corner rule at this
+  site.
+* Highway pieces (16001) store y at ground level. The deck elevation is in the sprite and in the
+  path h (+1024, i.e. +4 steps, relative to the highest corner) [DATA].
+* Highway bridge pieces (17204) use the **bridge level** as their vehicle base: the water surface at
+  the tile, not their stored y. Span paths are +1806, transition inclines run 1550 to 1806, and both
+  join the highway (+4 over ground) only on that base [INFERRED, 2 Berlin sites].
+* Vehicle paths use a different base: the **highest** corner. VPATHATT heights on slope pieces are 0 at the high edge and −256
+  per step at the low edge (piece 11201: 0 / −256, piece 31: 0 / −512). So an automaton's height is
+  the max-corner altitude × 256 plus the path h [DATA].
+
 ### 5.2 Depth key
 
 Each object that occupies tiles is entered into a per-frame draw list. Its depth key is computed from
@@ -237,7 +270,29 @@ footprint size s whose view-space anchor tile is (p, q), the box spans [(p − s
 the first axis and [q·256, (q + s)·256] on the second. Objects with the "inset" flag have the box
 shrunk by 100 units on every side. [STATIC] A moving object is drawn after every static object whose
 box lies entirely behind it on both axes, and before any static object in front. The tie-break
-rule is [OPEN].
+rule is given below.
+
+**Mover versus static ordering** [STATIC, SIMSPR FUN_1000c7a6 / FUN_1000c802 / FUN_1000e52a]:
+
+* Every draw-list entry has a layer byte. Statics are always layer 1.
+* Comparator:
+  * If the two entries have the same layer, or their boxes do not overlap (touching counts as
+    overlap), the higher key draws first.
+  * Otherwise the lower layer draws first.
+* A post-pass moves each entry of layer ≥ 2 to after the last of its next 6 entries that should
+  precede it, at most 7 times per position. So a mover of layer ≥ 2 draws over every static whose
+  box it overlaps, whatever the keys.
+* Static box: [(x−s+1)·256, (x+1)·256] × [z·256, (z+s)·256] in unrotated world units. It is shrunk
+  by 100 per side when tile flag bit 1 is set. Bit 1 is forced for footprints with s > 1; for 1 × 1
+  pieces the caller sets it [OPEN which pieces]. The box has no height range.
+* Mover key: 0x40000000 − 0x40·(u'+v') − (z >> 2), with the view-rotated sub-tile position and the
+  height in 1/256 altitude units.
+* Mover box:
+  * flags & 3 = 0: centred on the anchor, with half-size from its screen width (at least 100);
+  * otherwise snapped to its tile (tile·256 − 2 … tile·256 + 258), shrunk by 50 when flags bit 1
+    is set.
+* Which layer and flags cars and trains pass is [OPEN]: they are set by another module. Recommended:
+  layer 2 with the anchor-centred box, so a car draws over the deck it is entering.
 
 For picking (§3) a finer key is used: 0x40000000 − 0x4000·(u + v) − 0x40·h; the smaller value is
 nearer. [STATIC]
@@ -599,9 +654,27 @@ Sprite[zoom,rot,childInst(hex),dx,dy,dz]
 
 Each line attaches a child sprite instance (`6301:6400:childInst`) to the parent's (zoom,
 rotation) slot. When the parent starts animating, each child of the current slot is created at the
-parent's world position + (dx, dy, dz). dx/dy are in 1/256-tile units and dz is in the world-height
-units of §2.3. The engine adds the values without rotating them. The data already gives
-rotation-specific offsets per slot. The child is projected and depth-sorted as a separate object.
+parent's world position + (dx, dy, dz). [STATIC] The child is projected and depth-sorted as a
+separate object.
+
+Coordinate rules [OBSERVED: checked against the parent sprites of records 0x84 (1 × 1), 0xA0 (2 × 2)
+and 0x13B0 (3 × 3) in all four orientations; every predicted point lands on a chimney top]:
+
+* The parent origin is the footprint's **minimum world corner**: world (x·256, z·256) for an
+  occupant whose footprint spans x … x + sizeX − 1 and z … z + sizeZ − 1.
+* dx is added along world x and dy along world z, in 1/256-tile units.
+* dz is a height in the units where one altitude step is 256. On screen it rises dz × A / 256 px,
+  where A is the zoom's pixels per altitude step, the same scale as the parent's altitude.
+* Shipped data repeats the **same** (dx, dy, dz) in all four rotation slots. The offsets are
+  therefore a fixed world point. Camera rotation needs no extra handling: project the world point
+  with the current view rotation, exactly like any other world position.
+* Some slots list fewer children than others (0x13A0 has two extra stacks in slots 0, 2 and 3 but
+  not in slot 1). Always use the children of the slot actually drawn.
+* For an occupant placed with its own rotation r ≠ 0 the offsets must turn with the building
+  [INFERRED: all shipped child-bearing occupants have rotation 0]. The sprite drawn is orientation
+  (r + camera rotation) & 3, so place the child at the screen offset from the parent's anchor that
+  the rule above gives for an unrotated footprint (sizes from the occupant attribute) seen at view
+  rotation (r + camera rotation) & 3.
 It is ticked from the parent's update with the same dt and runs its own scripts (§7.1). When the
 parent stops, all children are removed. [STATIC]
 
@@ -922,4 +995,4 @@ world or view coordinates is [INFERRED: world tile coordinates].
 * None for the view update rate: it is unthrottled in the original; 60 Hz is recommended (§10).
 * The meaning of each SprInstCLSID and of LayerFlags; whether the 2× magnification uses any filtering.
 * Edge-scroll rectangle sizes.
-* The tie-break rule for ordering moving objects against static objects.
+* Which layer and flags cars and trains pass to the sprite manager (§5.2).

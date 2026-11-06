@@ -351,8 +351,16 @@ of `14-sim-clock.md`. [STATIC]
 
 Images `02F78C6D:52FB06E4`–`52FB06E9` (pause/run and four speed buttons; 48×23 and 10×11 parts).
 Tooltips: pause `225872FE:64`, run `65`, speeds 1–4 `66`–`69` (turtle, llama, cheetah, African
-swallow). Selecting a speed un-pauses. Sounds: run 23 `UiPlaySim`, pause 24 `UiPauseSim`, speed 1–4
+swallow). Sounds: run 23 `UiPlaySim`, pause 24 `UiPauseSim`, speed 1–4
 → 25–28 `UiSimSpeed1`–`4`. Speed semantics (ticks per real second) are in `14-sim-clock.md`.
+`[OBSERVED]` Behaviour:
+* Pause stops the clock. Clicking Pause again while paused does nothing; it does not toggle.
+* Run resumes at the currently selected speed.
+* A speed button selects that speed. While paused, it changes the selected speed but does **not**
+  un-pause; Run then resumes at the new speed.
+* The four speed cells show the selected speed as a bar: cells 1…n lit and the rest grey. They are
+  bright green while running and dark green while paused.
+* The `/` hotkey toggles pause (`08`).
 The speed widget updates its highlighted button whenever the pause state or speed changes,
 whatever the cause (hotkeys, modal windows, the simulator), so it always reflects the true state.
 Opening a modal window (budget, ordinances, query, …) raises the city's **pending / modal** count
@@ -366,6 +374,45 @@ counter-clockwise `C`, layer views `A7` (opens §7.1), compass/north indicator `
 terrain grid toggle `A5`. Sounds: zoom in 1 `UiZoomIn`, zoom out 2 `UiZoomOut`, rotate 4
 `UiRotate`. Zoom has 5 levels and rotation 4 orientations (`25-rendering.md`). "Centre" arms a
 one-shot pointer: the next click on the map scrolls that point to the screen centre.
+
+`[OBSERVED]` Navigator button rects (client pixels at 1024 × 768; at 800 × 600 subtract (224, 168)):
+* Zoom In (878, 704) and Zoom Out (984, 704), each 26 × 29.
+* The **left** rotate button (898, 724) is **Rotate Clockwise** (`D`). It turns the map clockwise as
+  seen, like PageDown: the minimap N marker moves from the top corner to the right corner.
+* The **right** rotate button (964, 724) is **Rotate Counterclockwise** (`C`), like PageUp.
+* Both rotate buttons are 26 × 29.
+* Layer Views (978, 610), 36 × 35.
+* Visit SimCity Exchange (830, 680), 33 × 30.
+
+**Visit SimCity Exchange button** [DATA][OBSERVED]:
+* It is a button of its own, not part of the background art. Image `02F78C6D:52FB06F0` is a
+  132 × 30 strip of four 33 × 30 cells in the standard order (`08`):
+  * disabled: a grey glyph;
+  * normal;
+  * pressed: a dark inset frame;
+  * highlighted: a lighter frame.
+* Glyph: a globe and a monitor joined by a yellow cable, on a light-blue rounded tile.
+* Frame, normal cell, column 16:
+  * top rows FFF6FF, DEDEFF, BDBEFF;
+  * bottom rows 5A6DBD, 7385EE;
+  * right edge columns 29–32 at row 15: 293052, 414883, 5A6DBD, 626DC5;
+  * the outside background is 7B91FF.
+* Position:
+  * x = client width − 194;
+  * y = bottom-bar top − 24, so its bottom 6 px overlap nothing; it sits just above the bar,
+    left of the navigator.
+  * At 800 × 600 that is (606, 520), at 1024 × 768 (830, 680).
+* Tooltip: `041F2625:190` "Visit SimCity Exchange", placed above.
+* Click: opens a modal message box titled "Visit SimCity Exchange" with text `041F2625:1F9`
+  ("SimCity will now open your web browser…") and OK / Cancel. OK starts the web browser on the
+  exchange site.
+* Failure messages: `1FA` no Internet connection, `1FB` no web browser installed (both offer to try
+  anyway), `1FC` the browser could not be launched ("Please try browsing to %s manually").
+  `1FD` is "SimCity Exchange". The failure paths are [DATA] by text, not observed.
+* The **normal cell is also baked into the RCI background** `02F78C6D:42FB77F6` (41 × 88) at
+  (7, 0)–(40, 30). That image is drawn at (client width − 201, bottom-bar top − 24). A clone that
+  reuses the slot must draw its button after the RCI background, or mask that region of it.
+* A clone may reuse this slot for its own button.
 
 ### 4.4 News ticker [STATIC]
 
@@ -1791,8 +1838,36 @@ Other behaviour:
 * Items whose button carries a small grid badge open a picker dialog or a fly-out (`08` §7).
 * A second-level column stays open after a dialog launched from it has closed. Clicking its root
   button again closes it.
-* Tooltips appear on hover after a short delay, as small pale-yellow boxes to the left of the
-  item.
+* Tooltips: geometry, look and timing are in `08-ui-framework.md` §3.3a.
+* Root-button tooltip strings (`225872FE`): Landscape `1`, Zone `2`, Build Transportation `3`,
+  Build Utilities `4`, Place Civic/Special Bldgs `5`, Emergency `56`, Meet `6`, Adjust & Review
+  `7`, Change Settings & Exit `8`. Query "?" is `3C`.
+  Transportation sub-items: Road `22`, Highway `9A`, Bus Stop `25`, Rail `26`, Subway `28`,
+  Subway to Rail Connection `2A`, Demolish `1B` [OBSERVED].
+
+**Tool mode and the control buttons** [OBSERVED, Craterville, 1024 × 768]. The tool was detected
+by a map click: a Query panel means Query is armed, a recentre means no tool, and no effect
+means a build tool is still armed.
+* Query "?":
+  * A click arms Query. The button is not drawn latched; it looks the same as before.
+  * Query stays armed after each query; you close the panel with its OK button.
+  * Clicking "?" again while armed leaves Query armed; it does not toggle off.
+  * Esc leaves Query and returns to no tool (map click recentres). A right click on the map does
+    **not** leave Query.
+* A right click on the map does not cancel the Road or bulldozer tool either: after a right click,
+  a left click still builds or demolishes. Only Esc, or a click on a fly-out root button, returns to
+  no tool.
+* Root buttons:
+  * Clicking a root button that opens a fly-out sets the tool to none at once. Observed for
+    Landscape, Zone, Transportation, Utilities, Civic, Emergency, Review and Options, with Query,
+    Road or the bulldozer armed.
+  * Clicking an open root button again (closing its fly-out) also leaves the tool at none.
+  * Meet (opens the Meet window, no fly-out) does **not** change the tool: Query and Road stay
+    armed after Meet is opened and closed.
+* Sub-items: choosing one (e.g. Road) arms its tool. The fly-out stays open, also after clicks on
+  the map.
+* Drawing: the sub-item button is not drawn latched. While its fly-out is open, the root button
+  is drawn joined to the fly-out band.
 
 ### 7a.2 Building pickers and year gating
 

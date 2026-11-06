@@ -391,7 +391,8 @@ class NeighbourDeals {
   int chooseNeighbour(int type, const OfferContext& ctx, SimRng& rng) const;
   bool connectionOk(int type, int neighbour, const OfferContext& ctx) const;
   std::optional<Deal> makeOffer(int type, const OfferContext& ctx, SimRng& rng);   // also queues in `pending`
-  bool accept(size_t pendingIndex);        // moves to active, age 0, sets dealMade
+  bool accept(size_t pendingIndex);        // moves to active, age 0, sets dealMade; erases a same-type deal (flag kept)
+  void removeType(int type);               // erase the type's deal, clear its flag for all neighbours (cancel, decline)
   // Cancel the active deal of `type`. Returns the penalty to add to the budget's accumulator.
   int64_t cancel(int type);
   // Utilities report the current quantity for a deal type (spec 10.4).

@@ -626,8 +626,38 @@ The utilities side reports the current quantity for each deal type (one active d
   penalty. 60 months is therefore the effective contract term. The age is advanced by the deal
   manager's monthly run (§10.6): every deal whose age is not negative gets `age += 1` each month,
   before the rest of that month's deal processing [STATIC].
-* Terminated deals (age −1) are excluded from the deal list shown to the player and are removed
-  by the manager.
+* Terminated deals (age −1) are excluded from the deal list shown to the player. No sweep removes
+  them: they are erased only by the remove operation below, or by accepting a new deal of the same
+  type. Billing ignores the age, so a terminated deal keeps paying until it is erased [STATIC,
+  SIMMISC FUN_10018f95; cost side not checked].
+* **Deal-made flag** [STATIC, SIMMISC]: one byte per (neighbour, deal type).
+  * Accepting a deal sets it to 1 (FUN_10017d45). Accepting also erases any existing deal of the
+    same type, without clearing that deal's flag.
+  * The remove operation (FUN_10017f16) erases the active deal of type d and sets flag[n][d] = 0
+    for all four neighbours. Only that type's byte is cleared.
+  * Player cancellation runs cancel, then remove, so the flag is cleared. Declining an offer also
+    runs remove.
+  * Termination by age −1 alone keeps the flag.
+  * Gating: a new offer of a commodity is impossible while a deal of that type exists, and a
+    neighbour is skipped if either flag of that commodity (both directions) is set.
+* **No automatic expiry**: nothing compares the age with 60 except cancellation. A deal past 60
+  months runs until cancelled or until the connection is lost.
+* **Monthly connection check** (FUN_10018cd5), for every deal with age ≥ 0, after age += 1:
+  * type 0: no power-line connections to that neighbour;
+  * type 1: no connections, or none of them powered;
+  * type 2: no pipe connections;
+  * type 3: no pipe connections, or none carrying water;
+  * types 4/5: (not a land neighbour, or no road, rail or highway connections) and no seaport.
+  On failure the deal is cancelled: age < 60 → terminated with penalty, flag kept; age ≥ 60 →
+  removed, flag cleared.
+* **Pending offers have no timer** [STATIC, SIMADV ~20314–20409]. Each utilities-advisor cycle
+  re-tests the offer:
+  * the offer is cleared if the city's shortage or surplus condition no longer holds, or no
+    neighbour is eligible;
+  * if it still holds and a petition is pending, the neighbour's connection is re-tested; on
+    failure the offer is cleared and the petition withdrawn, otherwise the petition is
+    refreshed.
+  * The petition's own lifetime (spec 22 §3.13.1) also ends it [INFERRED].
 
 ### 10.6 Neighbours and offer eligibility
 

@@ -148,6 +148,38 @@ Frame value is multiplied by the sprite instance's AnimSetCount to give the base
 offset is added at draw time (`25-rendering.md` §4.2). Observed SequenceIDs are 1, 2, 6, 10–14,
 16 and 20, with 20 being the default motion loop. [STATIC]/[DATA]/[INFERRED]
 
+**Orientation slot of an automaton sprite** [STATIC][DATA]. Vehicle and train sprite instances have
+RotCount 32 and ZoomSetCount 48. People have RotCount 8 and ZoomSetCount 8, with no slope slots.
+
+The slot within a zoom set is
+
+  slot = TBL[gradeClass][(VIEWROT[viewRotation] + heading) & 31]
+
+* heading: the automaton's 32-step heading in the original's convention.
+* VIEWROT = {0, 8, 16, 24}. It is the table at STRTSIM 0x1003265C.
+* TBL is the 5 × 32-byte table at STRTSIM 0x10032660:
+
+  | gradeClass | Meaning | Slot by heading |
+  |---|---|---|
+  | 0 | steep downhill (2 steps) | headings 0–3 and 28–31 → 36, 4–11 → 37, 12–19 → 38, 20–27 → 39 |
+  | 1 | gentle downhill (1 step) | same pattern → 44–47 |
+  | 2 | level | identity: slot = heading 0–31 |
+  | 3 | gentle uphill | same pattern → 40–43 |
+  | 4 | steep uphill | same pattern → 32–35 |
+
+  On a slope the heading snaps to the nearest of the four road diagonals.
+* gradeClass = clamp(round(g) + 2, 0, 4), with thresholds at |g| = 0.5 and 1.5. g is the stored grade of the current path:
+  * a VPATHATT path stores g = (h_last − h_first) / √(Δa² + Δb²), in raw path units;
+  * a straight segment stores g = Δh / horizontal distance.
+
+  So a 1-step slope gives g ≈ ±1 and a 2-step slope g ≈ ±2. Turns and curves force class 2. The
+  class is recomputed after every movement step (STRTSIM FUN_10019660; slot lookup FUN_10005072).
+* Rounding is [OBSERVED]: a train in Berlin on rail piece 46 (g = ±1.698) showed the steep frame
+  (slot 38). On piece 16008 (g ±1.016) it showed the gentle frame (slot 46). The float constant
+  itself was not read.
+* Which sign is uphill is [INFERRED] from the sprite extents. On heading-diagonal 0 (facing up the
+  screen), class-4 frames are tall and class-0 frames are short.
+
 ### 3.7 PPATHATT — pedestrian path through a piece (Type A20BF670)
 
 | Offset | Size | Type | Field | Meaning |

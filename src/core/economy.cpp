@@ -185,7 +185,7 @@ Budget::Budget(BudgetConfig c) : cfg(std::move(c)) {
     d.id = id;
     depts.push_back(d);
   }
-  treasuryChart = Chart::make(100, 200, true);   // new city: 32 samples of 100, scale 200 [OBSERVED, spec 30 s6]
+  treasuryChart = Chart::make(100, 200, true, 200, 1.1);   // new city: 32 samples of 100, scale 200 [OBSERVED, spec 30 s6]
   taxDemand.setEntries(cfg.taxEffects);
 }
 
@@ -403,7 +403,7 @@ void Budget::parse(const uint8_t* p, size_t n) {
   for (auto& v : mh) v = rdS64(r);
   Chart ch = Chart::parse(r.ptr(), r.remaining());
   r.skip(Chart::kBytes);
-  ch.autoScale = true;
+  ch.setAutoScale(200, 1.1);   // treasury: round(1.1 x largest), floor 200 [DATA, spec 10 6.12]
   int64_t oty = rdS64(r);
   int64_t oth[12];
   for (auto& v : oth) v = rdS64(r);
@@ -854,15 +854,7 @@ void NeighbourDeals::monthly(int month, SimRng& rng) {
     for (auto& n : neighbours) n.population = growPopulation(n.population, n.populationCap, rng);
   for (auto& d : active)
     if (d.monthCounter >= 0) d.monthCounter++;
-  for (auto it = active.begin(); it != active.end();) {
-    if (it->terminated()) {
-      if (it->neighbourIndex < kNeighbours && it->dealType < kDealTypes)
-        neighbours[it->neighbourIndex].dealMade[it->dealType] = false;   // [INFERRED] frees the slot
-      it = active.erase(it);
-    } else {
-      ++it;
-    }
-  }
+  // No sweep of terminated deals (age -1): they keep their deal-made flag and stay until removed or replaced (spec 19 10.5).
 }
 
 int32_t NeighbourDeals::amountFor(const DealConfig& c, const Deal& d) {
@@ -886,7 +878,7 @@ NeighbourDeals::Money NeighbourDeals::monthlyMoney() {
 }
 
 bool NeighbourDeals::dealOfType(int type) const {
-  for (auto& d : active) if (d.dealType == type && !d.terminated()) return true;
+  for (auto& d : active) if (d.dealType == type) return true;   // a terminated deal still occupies its type (spec 19 10.5)
   return false;
 }
 
@@ -966,23 +958,32 @@ bool NeighbourDeals::accept(size_t i) {
   Deal d = pending[i];
   pending.erase(pending.begin() + i);
   d.monthCounter = 0;
+  // An existing deal of the same type is erased without clearing its flag (spec 19 10.5).
+  active.erase(std::remove_if(active.begin(), active.end(), [&](const Deal& o) { return o.dealType == d.dealType; }), active.end());
   if (d.neighbourIndex < kNeighbours && d.dealType < kDealTypes) neighbours[d.neighbourIndex].dealMade[d.dealType] = true;
   active.push_back(d);
   return true;
 }
 
+// The remove operation (spec 19 10.5): erase the active deal of the type and clear that type's flag for all four
+// neighbours. Player cancellation and declining an offer both end in it.
+void NeighbourDeals::removeType(int type) {
+  active.erase(std::remove_if(active.begin(), active.end(), [&](const Deal& o) { return o.dealType == type; }), active.end());
+  if (type >= 0 && type < kDealTypes)
+    for (auto& n : neighbours) n.dealMade[type] = false;
+}
+
+// Player cancellation: before 60 months the penalty is returned for the caller to charge, from 60 months on none;
+// either way the deal is then removed and its flag cleared.
 int64_t NeighbourDeals::cancel(int type) {
-  for (auto it = active.begin(); it != active.end(); ++it) {
-    if (it->dealType != type || it->terminated()) continue;
-    if (it->monthCounter < 60) {
-      it->monthCounter = -1;
-      return it->penalty;
-    }
-    if (it->neighbourIndex < kNeighbours) neighbours[it->neighbourIndex].dealMade[it->dealType] = false;
-    active.erase(it);
-    return 0;
+  int64_t penalty = 0;
+  for (auto& d : active) {
+    if (d.dealType != type || d.terminated()) continue;
+    if (d.monthCounter < 60) penalty = d.penalty;
+    break;
   }
-  return 0;
+  removeType(type);
+  return penalty;
 }
 
 void NeighbourDeals::reportQuantity(int type, int32_t q) {

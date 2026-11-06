@@ -1,6 +1,7 @@
 // 132-byte graph-history block (spec/10-save-format.md §6.12 / Q-BL).
 #pragma once
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include "core/bytes.h"
 
@@ -15,10 +16,10 @@ struct Chart {
   // Behaviour properties (not stored in the file).
   bool autoScale = false;
   uint32_t floorMax = 10;
-  float scaleFactor = 1.0f;
+  double scaleFactor = 1.0;   // auto-scale: max = round(largest sample * factor), never below floorMax (spec 10 6.12)
 
   // New chart: initial sample in all 32 slots, creation scale in max.
-  static Chart make(uint32_t initial, uint32_t scale, bool autoScale = false, uint32_t floorMax = 10) {
+  static Chart make(uint32_t initial, uint32_t scale, bool autoScale = false, uint32_t floorMax = 10, double scaleFactor = 1.0) {
     Chart c;
     for (auto& v : c.monthly) v = initial;
     for (auto& v : c.yearly) v = initial;
@@ -26,8 +27,11 @@ struct Chart {
     c.max = scale;
     c.autoScale = autoScale;
     c.floorMax = floorMax;
+    c.scaleFactor = scaleFactor;
     return c;
   }
+  // Auto-scale behaviour of a chart loaded from a file (the properties are not stored).
+  void setAutoScale(uint32_t floor, double factor) { autoScale = true; floorMax = floor; scaleFactor = factor; }
   // Spec 10 §6.12 [STATIC Q-BL]: index 0 = newest (FIFO insert at 0).
   void pushMonthly(uint32_t v) { push(monthly, 12, v); }
   void pushYearly(uint32_t v) { push(yearly, 10, v); }
@@ -63,7 +67,7 @@ struct Chart {
     for (int i = n - 1; i > 0; i--) arr[i] = arr[i - 1];  // Q-BL: index 0 = newest
     arr[0] = v;
     if (autoScale && v > max) {
-      uint32_t m = uint32_t(float(largest()) * scaleFactor);
+      const uint32_t m = uint32_t(std::floor(double(largest()) * scaleFactor + 0.5));   // rounded to nearest, [DATA]
       max = std::max(m, floorMax);
     }
   }

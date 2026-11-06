@@ -771,7 +771,7 @@ void Game::applyPetitionEffect(const PetitionEffect& e) {
     auto& pend = c.neighbours.pending;
     for (size_t i = 0; i < pend.size(); i++)
       if (pend[i].dealType == type) {
-        if (e.accepted) c.neighbours.accept(i); else pend.erase(pend.begin() + long(i));
+        if (e.accepted) c.neighbours.accept(i); else { pend.erase(pend.begin() + long(i)); c.neighbours.removeType(type); }
         dirty_ = true;
         break;
       }

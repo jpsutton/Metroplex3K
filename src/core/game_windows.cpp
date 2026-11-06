@@ -652,7 +652,11 @@ void Game::handleWindowResult(const WindowResult& r) {
         if (petView_ && petView_->isDeal) {
           size_t i = size_t(e.id);
           if (e.act == Act::AcceptDeal) city.neighbours.accept(i);
-          else if (i < city.neighbours.pending.size()) city.neighbours.pending.erase(city.neighbours.pending.begin() + long(i));
+          else if (i < city.neighbours.pending.size()) {
+            const int dt = city.neighbours.pending[i].dealType;
+            city.neighbours.pending.erase(city.neighbours.pending.begin() + long(i));
+            city.neighbours.removeType(dt);   // declining runs the remove operation (spec 19 10.5)
+          }
           petView_.reset();
           dirty_ = true;
         }

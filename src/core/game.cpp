@@ -1017,7 +1017,8 @@ void Game::drawHud() {
   // Pause / run / speed (spec 09 4.2). With the skin the art is anchored at P2 (pause), P1 (run) and P4 (speed lights).
   auto tip = [&](uint32_t id, const char* fb) { std::string t = str(0x225872FE, id); return t.empty() ? std::string(fb) : t; };
   const int fbx = 520;  // fallback (no art) button strip
-  auto setSpeedBtn = [&](int sp) { speed_ = sp; setPaused(false); sound(24 + sp); };
+  // A speed button only selects the speed; while paused it does not un-pause, Run then resumes at it (spec 09 4.2 [OBSERVED]).
+  auto setSpeedBtn = [&](int sp) { speed_ = sp; sound(24 + sp); };
   const Image* imPause = skinBar ? skin_.get("pause") : nullptr;
   if (skinBar && imPause && skin_.get("run") && skin_.get("speed.0")) {
     Rect pr{place.p2x, place.p2y, 22, 22}, rr{place.p1x, place.p1y, 26, 22};
@@ -1062,7 +1063,7 @@ void Game::drawHud() {
   } else {
     if (ui_.button({fbx, H_ - bh + 3, 44, 24}, paused_ ? "Run" : "Pause")) { setPaused(!paused_); sound(paused_ ? 24 : 23); }
     for (int i = 1; i <= 4; i++)
-      if (ui_.button({fbx + 48 + (i - 1) * 26, H_ - bh + 3, 24, 24}, std::to_string(i), true, !paused_ && speed_ == i)) setSpeedBtn(i);
+      if (ui_.button({fbx + 48 + (i - 1) * 26, H_ - bh + 3, 24, 24}, std::to_string(i), true, speed_ == i)) setSpeedBtn(i);
     if (ui_.button({fbx + 156, H_ - bh + 3, 44, 24}, "M3K", true, false)) openWindow("engine");
   }
 

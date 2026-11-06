@@ -580,11 +580,11 @@ static void testDeals() {
   // age advances monthly and deal can be cancelled with penalty before 60 months
   nd.monthly(3, rng);
   CHECK(nd.active[0].monthCounter == 1);
-  int64_t pen = nd.cancel(0);
-  CHECK(pen == nd.active[0].penalty && nd.active[0].terminated());
-  CHECK(nd.monthlyMoney().cost == 0);   // terminated deals are not billed
-  nd.monthly(4, rng);
-  CHECK(nd.active.empty() && !nd.neighbours[0].dealMade[0] && !nd.neighbours[1].dealMade[0]);
+  const int64_t expectPen = nd.active[0].penalty;
+  int64_t pen = nd.cancel(0);   // cancel then remove: gone at once, every flag of the type cleared (spec 19 10.5)
+  CHECK(pen == expectPen && pen > 0 && nd.active.empty());
+  for (int i = 0; i < 4; i++) CHECK(!nd.neighbours[i].dealMade[0]);
+  CHECK(nd.monthlyMoney().cost == 0);
   // after 60 months: removed without penalty
   nd.pending.clear();
   auto o2 = nd.makeOffer(0, ctxFor(100000), rng);
@@ -614,7 +614,12 @@ static void testDeals() {
   s.reportQuantity(1, 6000);   // city cannot deliver: terminated, no penalty
   CHECK(s.active[0].terminated());
   s.monthly(2, rng);
-  CHECK(s.active.empty());
+  // No sweep: the terminated deal stays, keeps its flag and still occupies its type until it is removed or replaced.
+  CHECK(s.active.size() == 1 && s.active[0].terminated() && s.dealOfType(1) && s.neighbours[s.active[0].neighbourIndex].dealMade[1]);
+  CHECK(s.monthlyMoney().income == 0);   // billing of terminated deals is not modelled (spec 19 10.5: cost side unchecked)
+  s.removeType(1);
+  CHECK(s.active.empty() && !s.dealOfType(1));
+  for (int i = 0; i < 4; i++) CHECK(!s.neighbours[i].dealMade[1]);
   // unpowered connection: no sell offer
   NeighbourDeals u;
   u.newCity(rng, 64, 64);
