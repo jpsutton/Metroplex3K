@@ -25,6 +25,9 @@ static void testFundingCurve() {
   // Station rule: rounded upkeep must exceed base for saturation (tiny base upkeep: 1 * 1.004 rounds to 1).
   r = applyStationFunding(1, c, 101);
   CHECK(r.upkeep == 1 && near(r.x, 1.01, 1e-6));
+  // Police rule (spec 17 2.2): any x > 1 saturates even when the rounded upkeep does not exceed the base.
+  r = applyStationFunding(1, c, 101, false);
+  CHECK(r.upkeep == 1 && r.x > 1.01 && r.x < 1.2);
   // Facility rule: any x > 1 saturates.
   CHECK(applyFacilityFunding(1, c, 101).x > 1.01 && applyFacilityFunding(1, c, 101).x < 1.2);
   CHECK(applyStationFunding(5, c, 150).upkeep == 8);  // 7.5 ties-to-even -> 8

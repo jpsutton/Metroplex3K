@@ -654,8 +654,7 @@ void Game::handleWindowResult(const WindowResult& r) {
         sound(e.b ? 15 : 32);
         break;
       case Act::SetOrdinance:
-        advisors_.ordinanceChanged(e.id, e.a != 0);
-        dirty_ = true;
+        dirty_ = true;   // no advisor announcement here: it is sent when an ordinance becomes available (spec 22 3.6)
         break;
       case Act::AcceptDeal: case Act::DeclineDeal:
         if (petView_ && petView_->isDeal) {

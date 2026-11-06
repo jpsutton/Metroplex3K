@@ -31,7 +31,8 @@ struct FundingCurve {
 
 struct FundedResult { int upkeep = 0; double x = 0; };
 // Stations: x replaced only when rounded upkeep exceeds the base upkeep.
-FundedResult applyStationFunding(int upkeep0, const FundingCurve& c, int fundingPct);
+// `fireRule`: the fire setter tests the rounded upkeep U > U0 for over-funding, the police setter (and the facility setters) test x > 1.0 (spec 17 2.2).
+FundedResult applyStationFunding(int upkeep0, const FundingCurve& c, int fundingPct, bool fireRule = true);
 // Hospitals/schools: x replaced whenever x > 1.
 FundedResult applyFacilityFunding(int upkeep0, const FundingCurve& c, int fundingPct);
 

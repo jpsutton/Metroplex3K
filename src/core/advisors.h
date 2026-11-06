@@ -81,7 +81,8 @@ class TopicList {
   int mood(const MoodTable& m) const;
   // Forced topics (cheats / events): raised as raise(topic) after the update.
   std::vector<uint32_t> forced;
-  void raiseForced() { for (uint32_t t : forced) raise(t); }
+  std::vector<uint32_t> queued;                    // one-shot forced topics (ordinance announcements, spec 22 3.6); raised at the next evaluation
+  void raiseForced() { for (uint32_t t : forced) raise(t); for (uint32_t t : queued) raise(t); queued.clear(); }
 
   // P.1 record (Group = advisor id)
   Bytes save() const;
@@ -309,8 +310,9 @@ class AdvisorManager {
   void evaluate(uint32_t advisorId, const AdvisorInputs& in, GameRng& rng, AdvisorOutputs& out);
   // On-demand pass: gather + rules only (no update step).
   void rulesOnly(uint32_t advisorId, const AdvisorInputs& in, GameRng& rng);
-  // "Ordinance changed" acknowledgement topic (3.6): raised immediately on the owning advisor.
-  void ordinanceChanged(uint32_t ordinanceId, bool enacted);
+  // Ordinance announcement (spec 22 3.6 [STATIC]): sent when an ordinance BECOMES AVAILABLE (not on enact / repeal); the owning advisor queues a forced
+  // topic (a = b = 0) that is raised at its next evaluation.
+  void ordinanceAvailable(uint32_t ordinanceId);
   int mood(uint32_t advisorId) const { return list(advisorId).mood(moods); }
 
   // Persistence: P.1 per advisor, P.3, P.4

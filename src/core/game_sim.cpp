@@ -537,6 +537,8 @@ void Game::dayNotification() {
           for (const auto& o : world_.occupants) if (o.agentType == type) return true;
           return false;
         };
+        // The casino is offered only while the Legalized Gambling ordinance (0xA0D07129) passes the ordinance query [STATIC; "enacted" INFERRED].
+        bi.casinoAllowed = [&c] { return c.ordinances.enacted(0xA0D07129); };
         if (cheats_.active("let's make a deal")) {   // spec 27 s5.3: every eligible deal, all pending together
           for (size_t i : c.business.eligibleDeals(bi)) petitioners_.request(c.business.defs[i].messageId, 0, 48);
         } else if (auto offer = c.evaluateBusinessDeals(bi)) petitioners_.request(c.business.defs[*offer].messageId, 0, 48);
@@ -713,6 +715,7 @@ void Game::applyCheat(const CheatResult& r) {
   else if (phrase == "i love red tape") {
     std::vector<uint32_t> announced;
     cy.ordinances.makeAllAvailable(&announced);
+    for (uint32_t id : announced) advisors_.ordinanceAvailable(id);
   } else if (phrase == "nerdz rool") cy.setCleanIndustryOnly(true);
   else if (phrase == "pay tribute to your king") cheatAllRewards_ = true;
   else if (phrase == "force petitioners to say") {   // spec 27 s5.3 / 22 s5.3: re-requested every petitioner cycle
@@ -870,6 +873,8 @@ void Game::presentPetitions() {
 }
 
 void Game::dayPostStep() {
+  for (uint32_t id : city().announcedOrdinances) advisors_.ordinanceAvailable(id);   // ordinances that became available (spec 22 3.6)
+  city().announcedOrdinances.clear();
   int month = city().clock.date().month;
   if (month != lastMonth_) {
     // Monthly DM already ran inside CitySchedule::runMonth (dedicated item 1, Q-BE) during tickDay.

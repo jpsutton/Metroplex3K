@@ -2257,7 +2257,7 @@ void City::monthlyOrdinances() {
     uint32_t k = o.agentType / 1000;
     if (k == 3) in.residentialBuildings++; else if (k == 5) in.commercialBuildings++; else if (k == 8) in.industrialBuildings++;
   }
-  ordinances.availabilityScan(rng_, in);
+  if (auto id = ordinances.availabilityScan(rng_, in)) announcedOrdinances.push_back(*id);
 }
 
 void City::monthlyPopulation() {

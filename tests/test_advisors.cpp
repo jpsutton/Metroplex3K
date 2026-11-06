@@ -471,8 +471,12 @@ static void testAdvisors() {
   cm.calendarWeek();
   CHECK(cm.calendarDay(in, rng, co) && co.advisorsUpdated.size() == 7);
   CHECK(!cm.calendarDay(in, rng, co));
-  cm.ordinanceChanged(0x00D0723D, true);
+  cm.ordinanceAvailable(0x00D0723D);                       // CPR becomes available: the demographics advisor queues topic 0x2D
+  CHECK(!cm.list(kAdvDemographics).listed(0x2D));
+  cm.evaluate(kAdvDemographics, in, rng, co);
   CHECK(cm.list(kAdvDemographics).listed(0x2D));
+  cm.ordinanceAvailable(0xA0D07129); cm.ordinanceAvailable(0x12345678);   // budget topic 0x1F; unknown ids do nothing
+  CHECK(cm.list(kAdvBudget).queued.size() == 1 && cm.list(kAdvBudget).queued[0] == 0x1F);
   // transport announcements: drawn only when r < 10
   AdvisorManager tm; AdvisorInputs ti = in; ti.year = 2000;
   tm.thr.set("SUBWAY_AVAILABLE", 1910);

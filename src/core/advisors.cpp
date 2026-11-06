@@ -471,14 +471,23 @@ void AdvisorManager::evaluate(uint32_t id, const AdvisorInputs& in, GameRng& rng
   out.advisorsUpdated.push_back(id);
 }
 
-void AdvisorManager::ordinanceChanged(uint32_t ord, bool enacted) {
-  if (!enacted) return;
-  switch (ord) {
-    case 0x00D0723D: list(kAdvDemographics).event(0x2D, 6); break;   // CPR
-    case 0x40D07236: list(kAdvDemographics).event(0x28, 6); break;   // clinics
-    case 0x815B4CEF: list(kAdvSafety).event(0x29, 6); break;         // youth sports [INFERRED advisor]
-    default: break;                                                   // full table [OPEN]
-  }
+void AdvisorManager::ordinanceAvailable(uint32_t ord) {
+  struct E { uint32_t ord, topic; };
+  struct G { uint32_t advisor; std::vector<E> e; };
+  static const G table[] = {
+      {kAdvBudget, {{0xA0D07129, 0x1F}}},
+      {kAdvPlanner, {{0xC2BF1DD1, 0x01}, {0x20D07175, 0x02}, {0x62F6E7CF, 0x03}, {0xA2F6E7DA, 0x04}, {0xE2F6E7EA, 0x05}, {0x02F6E7EF, 0x06}, {0x22F6E7F4, 0x07},
+                     {0xA2F6E7F9, 0x08}, {0xE2F6E7FE, 0x09}, {0xC2F6E804, 0x0A}, {0x62F6E82B, 0x1D}, {0x02F6E7E2, 0x20}}},
+      {kAdvEnvironment, {{0xA2F917CF, 0x0B}, {0xC2BF1E04, 0x14}, {0xA2BF1E43, 0x15}, {0x22BF1E35, 0x16}, {0x42BF1E18, 0x17}, {0x62F6E808, 0x18}, {0x22F6E80C, 0x19},
+                         {0x22F6E814, 0x1A}, {0x22F6E81B, 0x1B}, {0xC2F6E81F, 0x1C}}},
+      {kAdvDemographics, {{0x40D07236, 0x28}, {0x815B4CEF, 0x29}, {0xE0D0722E, 0x2A}, {0xE0D07233, 0x2B}, {0xE0D07239, 0x2C}, {0x00D0723D, 0x2D}}},
+      {kAdvSafety, {{0xC2BF1DEF, 0x32}, {0x62BF1DB9, 0x33}, {0x62BF1DAA, 0x34}, {0xC2BF1DC5, 0x35}}},
+      {kAdvTransport, {{0xE2BF1E2A, 0x3C}, {0xA2BF1DDC, 0x3D}, {0x015B4D1E, 0x3E}, {0xA2BF1DE5, 0x3F}, {0xC2D1B025, 0x40}}},
+      {kAdvUtilities, {{0x82E42E30, 0x46}, {0x02BF1DFA, 0x47}, {0x82B9999B, 0x48}, {0xC2F90EB1, 0x49}}},
+  };
+  for (const G& g : table)
+    for (const E& e : g.e)
+      if (e.ord == ord) { list(g.advisor).queued.push_back(e.topic); return; }
 }
 
 // ---- Budget (3.7) ------------------------------------------------------------------------------

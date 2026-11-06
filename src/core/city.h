@@ -127,6 +127,8 @@ class City {
   // When set, ToolHost::confirmConnection returns this value (Game uses it after the yes/no dialog).
   // Nullopt = accept (tests, scripts, and non-interactive hosts).
   std::optional<bool> connectionConfirmOverride;
+  // Ordinances that became available since the last drain (the game forwards each to the advisors, spec 22 3.6).
+  std::vector<uint32_t> announcedOrdinances;
   bool bulldoze(int x0, int z0, int x1, int z1);
 
   // ---- quotes (spec 09 5.1): dry-run of the player actions. valid=false: nothing in the area is legal.

@@ -439,7 +439,7 @@ class BusinessDeals {
     uint32_t population = 0;
     int currentYear = 1900;
     std::function<bool(uint32_t buildingType)> cityHasBusiness;
-    std::function<bool()> casinoAllowed;   // [OPEN] default: allowed
+    std::function<bool()> casinoAllowed;   // Legalized Gambling enacted (spec 19 11); unset = allowed
   };
   // Weekly advisor evaluation. Returns the offered deal index if a new offer was raised.
   std::optional<size_t> weeklyEvaluate(const Inputs& in, SimRng& rng);

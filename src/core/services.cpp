@@ -27,11 +27,11 @@ double FundingCurve::saturate(double x) const {
   return M - 1.0 / den;
 }
 
-FundedResult applyStationFunding(int upkeep0, const FundingCurve& c, int pct) {
+FundedResult applyStationFunding(int upkeep0, const FundingCurve& c, int pct, bool fireRule) {
   FundedResult r;
   double x = double(float(pct) * 0.01f);
   r.upkeep = int(roundEven(upkeep0 * x));
-  if (r.upkeep > upkeep0) x = c.saturate(x);
+  if (fireRule ? r.upkeep > upkeep0 : x > 1.0) x = c.saturate(x);
   r.x = x;
   return r;
 }
@@ -156,7 +156,7 @@ void CoverageLayer::stamp(int x0, int z0, int x1, int z1, StampParams s, int sig
 }
 
 int CoverageLayer::addStation(int x0, int z0, int x1, int z1) {
-  FundedResult f = applyStationFunding(sp_.upkeep0, FundingCurve::make(sp_.maxEfficiencyPct, sp_.mysticalE), funding_);
+  FundedResult f = applyStationFunding(sp_.upkeep0, FundingCurve::make(sp_.maxEfficiencyPct, sp_.mysticalE), funding_, !police_);
   Station s{nextId_++, x0, z0, x1, z1, stationStamp(sp_, f.x)};
   stations_.push_back(s);
   stamp(x0, z0, x1, z1, s.st, +1);
@@ -170,7 +170,7 @@ bool CoverageLayer::removeStation(int id) {
       const Station s = stations_[i];
       stations_.erase(stations_.begin() + i);
       stamp(s.x0, s.z0, s.x1, s.z1, s.st, -1);
-      FundedResult f = applyStationFunding(sp_.upkeep0, FundingCurve::make(sp_.maxEfficiencyPct, sp_.mysticalE), funding_);
+      FundedResult f = applyStationFunding(sp_.upkeep0, FundingCurve::make(sp_.maxEfficiencyPct, sp_.mysticalE), funding_, !police_);
       upkeepTotal = f.upkeep * int(stations_.size());
       return true;
     }
@@ -180,7 +180,7 @@ bool CoverageLayer::removeStation(int id) {
 void CoverageLayer::setFunding(int pct) {
   funding_ = clampi(pct, 0, 255);
   FundingCurve c = FundingCurve::make(sp_.maxEfficiencyPct, sp_.mysticalE);
-  FundedResult f = applyStationFunding(sp_.upkeep0, c, funding_);
+  FundedResult f = applyStationFunding(sp_.upkeep0, c, funding_, !police_);
   for (auto& s : stations_) {
     stamp(s.x0, s.z0, s.x1, s.z1, s.st, -1);
     s.st = stationStamp(sp_, f.x);
