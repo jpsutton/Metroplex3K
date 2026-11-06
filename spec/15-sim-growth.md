@@ -78,8 +78,10 @@ only through `capPct` (§3.2): once a month each of the residential, commercial 
 layers sets `capPct` of its family valve (3000, 5000, 8000) from the last completed cycle of its
 amenity valve (3001, 5001, 8001), by the rule in §3.2 "Cap rule". In addition:
 
-* valve 8001 is the demand valve of the **seaport** developer: its rules receive 8001's `V` and
-  `Max` [STATIC]. The **airport** developer also holds valve 5001, but it calls its rules with a
+* valve 8001 is held by the **seaport** developer. It reads 8001's `V` and discards it, then
+  calls its rules with (`Max`, `Max`). So seaport growth is not gated by demand either, only by
+  `Max` > 0. Correction: the previous text said the rules receive V and Max [STATIC, checked in
+  the disassembly at the rule call in SIMRCI 0x1002CC5B]. The **airport** developer also holds valve 5001, but it calls its rules with a
   fixed demand of 2000 of 2000, so airport growth is not gated by demand [STATIC] (§7);
 * a third, unnamed valve with ID `0xA2C9E821` is the **landfill store** (§7 and
   `16-sim-utilities.md` §4.4). It is saved inside the pollution record, not with the valve
@@ -1388,7 +1390,9 @@ families; it places landfill pieces (occupants 10006–10015, agent type 12850) 
     tile; zoned land conducts, `12-networks.md` §9.1), `blocked` (radioactive, from the
     pollution layer) and S = the tile has **water service** (the water layer's service bit)
     [STATIC; correction: S was previously INFERRED]:
-    1. If an airport part stands on the tile and the tile is its anchor: if its state is 2 or 4
+    1. If an airport part stands on the tile (the tile entry must also pass the occupant flag
+       test 0x100 and be a building; otherwise the tile takes the empty path) and the tile is
+       its anchor: if its state is 2 or 4
        and S, `powered`, `access` and not `blocked` all hold, it becomes occupied (state 1). No
        result code.
     2. Empty tile: `blocked` → code 10. If S: not `powered` → 14; else if `access`: run the
@@ -1396,7 +1400,23 @@ families; it places landfill pieces (occupants 10006–10015, agent type 12850) 
        always passes and valve 5001 does not gate airport growth; nothing placed → code 9,
        otherwise no code. Without `access` → 16. If not S: not `powered` → 14, not `access` → 16,
        else 15.
-  * seaport (15): demand valve 8001, rules pier and yard of §5.5, same conditions;
+  * seaport (15) [STATIC, SIMRCI 0x1002CA1F]. The inputs are the same as the airport's (access
+    within 6, powered, S = water service, blocked), plus Q = a per-anchor test from another layer
+    (`[OPEN]` which one; the interface init is not decoded). R = the part is developer-removable
+    and has no `0x200` flag.
+    1. Existing part, with the same tile-entry gate and anchor test as the airport:
+       * state 1 and not Q → abandoned (state 2, keeping `0x200`); code 4 if not powered, else
+         6 if S, else 5;
+       * state 2 or 4 with S, powered, access, Q and not blocked → state 1;
+       * state 2 or 4 otherwise → the part is removed if R;
+       * no random roll anywhere.
+    2. Empty tile: the airport's tree, except that a rule call that places nothing gives code 17
+       instead of 9. Rules run only when S holds. Without S: not powered → 14, not access → 16,
+       otherwise 15. There is no valve test before the rules.
+    3. Rules: up to min(5, n) distinct rules in random order, the first success wins. Each is
+       called with category 12330 and demand (`Max`, `Max`) of valve 8001. The lot comes from
+       the §5.3 lot finding with transport distance 6, minimum land value 0, replaced type 0 and
+       the power test active. Both port developers draw from their own random generator.
   * landfill (17): no valve demand test; every visit runs decay, registration and filling above.
   Result code 9 comes from the airport developer and from the landfill developer (below); 17
   comes from the seaport developer (§4.3 table); 8 is never produced [INFERRED].
