@@ -371,8 +371,7 @@ void FlammabilityLayer::run(const std::function<int(int, int)>& baseAt,
     uint8_t v = uint8_t(flammabilityValue(baseAt ? baseAt(x, z) : 0, params_, ord,
                                           noWaterAt ? noWaterAt(x, z) : false));
     grid[size_t(x) * H_ + size_t(z)] = v;
-    sweepSum += v;
-    sweepCount++;
+    if (v != 0) { sweepSum += v; sweepCount++; }   // zero tiles are neither summed nor counted [STATIC SIMSERV 0x1000C523; saved trailers agree]
     cursorX++;
     if (int(cursorX) >= W_) {
       cursorX = 0;
@@ -408,6 +407,10 @@ void FlammabilityLayer::parse(const uint8_t* p, size_t n) {
   grid = flipRows(g, W_, H_);
   cursorX = r.u32(); cursorZ = r.u32(); sweepSum = r.u32(); sweepCount = r.u32();
   tailByte = r.u8();
+  // The tail byte is 0 in every shipped/observed save, so the average is not in it: recompute from the loaded grid (nonzero tiles only) [INFERRED].
+  uint64_t sum = 0, cnt = 0;
+  for (uint8_t v : grid) if (v) { sum += v; cnt++; }
+  avg = uint8_t(cnt ? sum / cnt : 0);
 }
 
 // ======================= Crime =======================

@@ -220,6 +220,10 @@ static void testFlammability() {
   FlammabilityLayer pass; pass.init(16, 16, p);
   for (int r = 0; r < 32; r++) pass.run([](int, int) { return 40; }, nullptr, n);
   CHECK(pass.cursorX == 0 && pass.cursorZ == 0 && pass.avg == 40 && pass.sweepCount == 0);
+  // Zero tiles are neither summed nor counted: half the tiles 0, half 60 -> average 60 (not 30).
+  FlammabilityLayer half; half.init(16, 16, p);
+  for (int r = 0; r < 32; r++) half.run([](int x, int) { return x % 2 ? 60 : 0; }, nullptr, n);
+  CHECK(half.avg == 60);
   for (size_t i = 0; i < fl.grid.size(); i++) fl.grid[i] = uint8_t(i);
   fl.cursorZ = 77; fl.tailByte = 3;
   Bytes b = fl.serialize();
@@ -229,6 +233,8 @@ static void testFlammability() {
   FlammabilityLayer g; g.init(16, 16, p);
   g.parse(b.data(), b.size());
   CHECK(g.grid == fl.grid && g.cursorZ == 77 && g.tailByte == 3 && g.serialize() == b);
+  { uint64_t sum = 0, cnt = 0; for (uint8_t v : g.grid) if (v) { sum += v; cnt++; }
+    CHECK(g.avg == uint8_t(sum / cnt)); }   // loaded average recomputed from the nonzero tiles
   bool threw = false;
   try { g.parse(b.data(), b.size() - 1); } catch (const FormatError&) { threw = true; }
   CHECK(threw);
