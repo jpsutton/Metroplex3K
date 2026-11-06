@@ -215,7 +215,10 @@ void Game::initManagers() {
     AdvisorThresholds thr;
     for (uint32_t id : allAdvisorIds()) {
       IniFile f;
-      if (data_.ini().load(advisorIniName(id), f)) { thr.loadAdvisorIni(id, f); if (id == kAdvPlanner) thr.loadBuildingLists(f); }
+      if (data_.ini().load(advisorIniName(id), f)) {
+        thr.loadAdvisorIni(id, f);
+        if (id == kAdvPlanner) { thr.loadBuildingLists(f); advisors_.rewards.load(f); }   // [REWARD_BUILDINGS] / [BUSINESS_DEAL_BUILDINGS] / [REWARD_BUILDINGS_2]
+      }
     }
     advisors_.thr = thr;
     IniFile pm;
