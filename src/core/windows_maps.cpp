@@ -756,7 +756,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
   const uint32_t lavLight = rgb(231, 231, 255), lavDark = rgb(222, 223, 255);
   ui.fill({box.x + 1, box.y + 1, box.w - 2, box.h - 2}, lavDark);
   for (int row = 0; row < 155; row++)
-    ui.fill({plot.x + 1, r.y + 51 + row, plot.w - 1, 1}, bandIndex(row) % 2 ? lavDark : lavLight);
+    ui.fill({plot.x + 1, r.y + 51 + row, box.x + box.w - 1 - (plot.x + 1), 1}, bandIndex(row) % 2 ? lavDark : lavLight);   // stops before the box's right border column (x447)
   if (!agePage) ui.fill({box.x + 1, box.y + 1, box.w - 2, box.h - 2}, lavDark);   // the pie pages have a plain (222,223,255) background
   std::string cap1, cap2;
   if (agePage) {
@@ -845,7 +845,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     // heading at the top left of the box, then one colour bar per category present
     { std::string head = E.win(el ? 0x28A : 0x1F3, el ? "Annually Averaged" : "% Garbage Goes To:");
       auto lines = wrap(ui, head, 168, "main10");
-      ui.text(box.x + 7, box.y + 5, lines.empty() ? head : lines[0], "main9", rgb(49, 56, 132)); }   // the first line only; the legend bars cover the rest
+      ui.text(box.x + 7, box.y + 5, lines.empty() ? head : lines[0], "main9", rgb(49, 52, 123)); }   // the first line only; the legend bars cover the rest
     std::vector<PieSlice> slices;
     int by = box.y + 20;
     const int barH = el ? 14 : 23, barPitch = el ? 16 : 25;   // legend bars x 98..264: 14 rows at a 16 px pitch (electricity), 23 rows at 25 (garbage) [OBSERVED]
