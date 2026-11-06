@@ -147,7 +147,7 @@ The map is W × H tiles. The traffic subsystem keeps the following grids [STATIC
 | 0x0008 | subway occupant, subway station, subway–rail station | Subway |
 | 0x0010 | transit station building | Station / stop tile |
 | 0x0020 | subway–rail station | Rail↔subway transfer |
-| 0x0040 | highway on-ramp piece: network piece IDs 15130–15141 ("Highway Onramp", agent type 17202) [STATIC] | Road/highway junction tile |
+| 0x0040 | highway on-ramp piece: every network piece whose class word carries 0x200000 (`13-buildings-occupants.md`) [STATIC]. These are the agent type 17202 "OffRamp" pieces: 15107–15110, 15115–15128 and 15130–15141 [INFERRED: class from agent type]. CORRECTION: the earlier text listed only 15130–15141, which shipped cities use for about 60 % of their ramp tiles | Road/highway junction tile |
 | 0x0080 | road/highway piece reports itself damaged: its damaged flag (piece word bit 27, `10-save-format.md` §6.2.6) is set [STATIC] | Damaged (adds `DamagedCostAddToStep`) |
 | 0x0100 | road/highway/rail piece whose record has bit 0 of attribute 0x12D set [STATIC] | Step cost × 0.7. The pieces with the bit are the diagonal ones (highway 11223, 11224, 15052, 15106; road 35, 11207, 11209, 18004; rail 50, 51) [DATA; "diagonal" INFERRED from the 0.7 ≈ 1/√2] |
 | 0x0200 | subway piece with the same bit (subway 11621, 11622, 18015, 18018) | Subway step cost × 0.7 |
@@ -414,7 +414,9 @@ until the annoyance level is reached, and then spills onto quieter tiles.
 
 For modes 1, 4, 8, 0x14, 0x18, 0x30, 0x41 and 0x50, the candidates are the 8-neighbour ring
 around the node rectangle (the rectangle grown by 1, clipped, without its four corners). The
-transition table is [STATIC]:
+scan skips only those four corners: the tiles of the node rectangle itself are also candidates,
+so a 1×1 node can pick its own tile again [STATIC, SimTransit; earlier implementations skipped
+it]. The transition table is [STATIC]:
 
 | From mode | Candidate tile | New mode |
 |---|---|---|
