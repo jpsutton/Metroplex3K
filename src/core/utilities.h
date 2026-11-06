@@ -107,7 +107,7 @@ class PowerLayer {
   std::vector<PlantEvent> monthlyUpdate(const PowerEnv& env, SimRng& rng);
   // Recompute the powered grid from the current plant outputs without ageing plants or touching the
   // production history (used after loading a city, so power is not off until the first month end).
-  void recomputeCoverage(const PowerEnv& env);
+  void recomputeCoverage(const PowerEnv& env, bool rollover = false);   // rollover: the load-time production-record step
 
   bool powered(int x, int z) const { return x >= 0 && z >= 0 && x < W_ && z < H_ && powered_[size_t(x) * H_ + z]; }
   const std::vector<uint8_t>& poweredGrid() const { return powered_; }

@@ -122,7 +122,6 @@ std::vector<uint8_t> computeVertexShade(const World& w) {
 DataOverlay makeDataOverlay(DataLayer layer, const std::vector<uint8_t>& values, int W, int H) {
   DataOverlay o;
   bool categorical = layer == DataLayer::Zones || layer == DataLayer::Power || layer == DataLayer::Water;
-  const bool grey_on_top = layer == DataLayer::Crime || layer == DataLayer::Fire || layer == DataLayer::Traffic;
   switch (layer) {
     // spec 25 9.2 [OBSERVED]: land value, density, power and aura use data1Pal; crime, pollution,
     // flammability (fire) and traffic use data2Pal. (Aura's negative half on data2Pal is not split out.)
@@ -134,8 +133,8 @@ DataOverlay makeDataOverlay(DataLayer layer, const std::vector<uint8_t>& values,
   o.row.assign(size_t(W) * H, 0xFF);
   for (size_t i = 0; i < o.row.size() && i < values.size(); i++) {
     int v = values[i];
+    if (!categorical && v == 0xFF) continue;   // 0xFF = not tinted (it is a sentinel, not a value of 255)
     if (categorical) o.row[i] = v == 0xFF ? 0xFF : uint8_t(std::min(31, v * 4));
-    else if (grey_on_top) o.row[i] = uint8_t(std::min(31, v / 8));   // data2Pal: zero is the grey top row, 31 the dark red [OBSERVED: Berlin zero crime/traffic tiles are grey]
     else o.row[i] = uint8_t(31 - std::min(31, v / 8));  // low values on the grey bottom row [INFERRED]
   }
   return o;
@@ -668,7 +667,8 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, 
 
       if (overlayRow != 0xFF) {
         // Solid-colour tile: palette slot, fixed row, column from shade; no noise, no tint.
-        const Image& im = opt.overlay->slot == 0 ? pal_.basic : pal_.data[std::max(0, std::min(2, opt.overlay->slot - 1))];
+        const int ovSlot = opt.overlay->slots.size() == size_t(w.W) * w.H ? opt.overlay->slots[tIdx] : opt.overlay->slot;
+        const Image& im = ovSlot == 0 ? pal_.basic : pal_.data[std::max(0, std::min(2, ovSlot - 1))];
         for (int i = 0; i < 4; i++) {
           int r, g, b;
           fetch(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])] / 2, r, g, b);
@@ -837,7 +837,8 @@ void Renderer::collectTerrainTris(const Camera& cam, const RenderOptions& opt, s
       for (int i = 0; i < 4; i++) { P[i][0] = qx[i]; P[i][1] = gy[i]; }
 
       if (overlayRow != 0xFF) {
-        const Image& im = opt.overlay->slot == 0 ? pal_.basic : pal_.data[std::max(0, std::min(2, opt.overlay->slot - 1))];
+        const int ovSlot = opt.overlay->slots.size() == size_t(w.W) * w.H ? opt.overlay->slots[tIdx] : opt.overlay->slot;
+        const Image& im = ovSlot == 0 ? pal_.basic : pal_.data[std::max(0, std::min(2, ovSlot - 1))];
         for (int i = 0; i < 4; i++) {
           int r, g, b;
           fetch(im, overlayRow, shade_[w.vIdx(wx[i], wz[i])] / 2, r, g, b);
@@ -1834,7 +1835,7 @@ uint64_t Renderer::terrainLayerKey(const Camera& cam, const RenderOptions& opt) 
   // The road mask (grey network paint) is drawn from the surface pieces only in this mode.
   if (opt.zonePaint && !opt.underground && !netSprites)
     for (const auto& np : w.surface) { mix(uint64_t(uint32_t(np.x)) << 32 | uint32_t(np.z)); }
-  if (opt.overlay) { mix(uint64_t(opt.overlay->slot) + 1); h = hashVec(h, opt.overlay->row); } else mix(0);
+  if (opt.overlay) { mix(uint64_t(opt.overlay->slot) + 1); h = hashVec(h, opt.overlay->row); h = hashVec(h, opt.overlay->slots); } else mix(0);
   return h;
 }
 

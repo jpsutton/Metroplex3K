@@ -811,14 +811,36 @@ gradient that none of the eight layers was seen to use.
 | Flammability | data2Pal | light orange | red-orange | land with buildings or flora |
 | Traffic | data2Pal along networks (grey → orange with load) | — | — | road and rail tiles; zoned tiles are tinted by zone type (greens, a tan/yellow and a blue-violet) |
 
-In every layer, buildings, flora and automata are hidden while the layer is shown. Networks stay
-visible, and land outside the layer's tile set keeps its normal terrain colour. The low end of
-both ramps is the grey bottom row (≈ RGB 189,194,197 lit / 181,186,189 shaded). Colours are shaded
-by relief like terrain, so on-screen values differ slightly from the palette entries.
+In every layer the occupant filter of that view decides what stays drawn [STATIC, SIMSPR
+0x100182BA / 0x10018A22]: Pollution draws no occupants at all; Traffic only occupants with flag
+mask 0x4100 (ordinary roads are hidden, their tiles carry the colour); Electric Power only
+occupants with flag 0x400000 [INFERRED: lines and plants]; Crime occupants with
+(flags & 0x4800) = 0x4800 or flag 0x100 with type 0x334A, Flammability the same with type 0x32CA
+[INFERRED: police / fire stations]; Aura, Land Value and Density use filter group `A1C085DB:1`
+(contents not decoded); the default view draws everything. (Correction: an earlier revision said
+networks stay visible in every layer.) Land outside the layer's tile set keeps its normal terrain
+colour; water and shore tiles are never tinted. The low end of both ramps is the grey bottom row
+(≈ RGB 189,194,197 lit / 181,186,189 shaded). Colours are shaded by relief like terrain.
 
-Quantisation [INFERRED]: row = 31 − ⌊value × 32 / 256⌋, i.e. low values on the bottom grey row and
-high values on the top row of the ramp, consistent with all eight screenshots. The exact band
-edges are [OPEN].
+**Quantisation and tile sets** [STATIC, per-tile dispatcher SIMSPR 0x1001A303]. Colour =
+`T_slot[row][shade >> 1]` (flat tile: column 7). Palette files `Dirt\Palette\data1Pal.bmp`,
+`data2Pal.bmp`, `data3Pal.bmp`; row 0 is the top row of the image as displayed. Standard row =
+trunc((255 − v) · 31/255) (single-float 31/255, truncation): v = 0 → row 31 (grey), v = 255 →
+row 0. "Zoned only" means zone byte ≠ 0.
+
+| View | Value | Tiles tinted | Palette | Row |
+|---|---|---|---|---|
+| Aura | signed byte s | all dry land | s > 0 data1, s ≤ 0 data2 | s > 0: trunc((127 − s)·31/127); s ≤ 0: trunc((s + 126)·31/127) (s ≤ −126 → 0, s = 0 → 30) |
+| Crime | byte | zoned only | data2 | standard |
+| Electric Power | power-layer byte | zoned only | data1 | standard |
+| Flammability | byte v | v ≥ 25 (no zone check) | data2 | standard (rows 0..27) |
+| Land Value | byte | zoned only | data1 | standard |
+| Pollution | u32 v | v > 1, all dry land | data2 | v clamped to max, trunc((max − v)·31/(max − 1)); max read once at layer setup from the pollution layer |
+| Traffic | network tile: max(traffic type 0x15, type 2) | network tiles; other tiles with zone ∉ {0, 0x16} get the zone-type tint of the Zones display | data2 on networks | standard |
+| Density | RCI development byte | zoned only | data1 | standard |
+
+data3Pal is used by none of the eight views. (Correction: the earlier inferred row = 31 −
+⌊value × 32 / 256⌋ is replaced by the formula above.)
 
 **Pollution value for the overlay** [OPEN]:
 * The pollution layer stores 15-bit air and water amounts per 2 × 2-tile cell

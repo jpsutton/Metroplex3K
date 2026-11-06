@@ -34,6 +34,7 @@ enum class DataLayer {
 struct DataOverlay {
   int slot = 3;  // 0 = palBasic (expanded), 1..3 = data1Pal..data3Pal
   std::vector<uint8_t> row;  // W*H
+  std::vector<uint8_t> slots;  // optional W*H: per-tile slot overriding `slot` (City Layer Views: Aura, Traffic)
 };
 // Default mapping (spec 25 9.2): continuous layers use row = 31 - value/8 on data2Pal (Crime, Fire,
 // Pollution, Traffic) or data1Pal (Aura, Density, LandValue);

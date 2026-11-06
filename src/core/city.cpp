@@ -599,7 +599,7 @@ void City::init(World* w, GameData* g, const CityConfig& cfg, uint32_t seed) {
   if (!power.plants().empty()) {   // loaded city: coverage must be valid before the first month end
     power.rebuildConsumption(powerConsumers());
     std::vector<uint8_t> conductive;
-    power.recomputeCoverage(powerEnv(conductive));
+    power.recomputeCoverage(powerEnv(conductive), true);
   }
 }
 

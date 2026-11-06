@@ -306,7 +306,7 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
   return events;
 }
 
-void PowerLayer::recomputeCoverage(const PowerEnv& env) {
+void PowerLayer::recomputeCoverage(const PowerEnv& env, bool rollover) {
   consPct_ = env.ordinances.active(ord::PowerConservation);
   stairPct_ = env.ordinances.active(ord::StairwellLighting);
   // Neighbour deals take part as in the monthly update (a loaded Moscow otherwise browns out until the first month start).
@@ -325,6 +325,13 @@ void PowerLayer::recomputeCoverage(const PowerEnv& env) {
     if (d.amount != 0 && !d.reached && d.tx >= 0 && d.tz >= 0 && d.tx < W_ && d.tz < H_ && !visited[d.tx * H_ + d.tz])
       distribute(d.tx, d.tz, env, visited, cat);
   stats_.unpoweredConsumers = std::max(0, stats_.consumerTiles - stats_.poweredConsumerTiles);
+  if (rollover) {
+    // Loading a city performs one rollover of the production record: the month index advances, the oldest row is replaced by the current
+    // production and the annual totals are adjusted (original Berlin re-saved right after load: index 9 -> 10, new row = row 9, sum 1,908,843
+    // -> 1,906,937) [OBSERVED].
+    monthIndex = (monthIndex + 1) % 12;
+    for (int c = 0; c < 10; c++) { annualTotal[c] -= production[monthIndex][c]; production[monthIndex][c] = int32_t(cat[c]); annualTotal[c] += int32_t(cat[c]); }
+  }
 }
 
 // Column order of the saved production table (spec 09 7.1.1 electricity chart [STATIC]): saved column -> our category (powerPlantTypes() order, 9 = neighbour

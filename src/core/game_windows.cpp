@@ -403,34 +403,102 @@ void Game::applyLayers() {
   ropt_.flora = above && L.flora;
   ropt_.automata = above && L.transport;
   // The Zones layer is a flat palBasic overlay (buildZoneOverlay); the translucent road tint stays only for the Traffic layer.
-  ropt_.zonePaint = view && cityLayerViews()[li].layer == DataLayer::Traffic;
+  ropt_.zonePaint = false;   // the Traffic view's zone tint is part of the layer overlay
   if (above && (!L.transport || !L.powerLines)) {
     const bool t = L.transport, p = L.powerLines;
     ropt_.showNet = [this, t, p](const NetPiece& np) { return sim_.city().kindOf(np) == uint32_t(NetworkKind::Power) ? p : t; };
-  } else if (view && cityLayerViews()[li].layer == DataLayer::Traffic) {
-    ropt_.showNet = [](const NetPiece&) { return false; };   // the original draws no road pieces on the Traffic view: the road tiles carry the colour [OBSERVED]
+  } else if (view && cityLayerViews()[li].layer == DataLayer::Power) {
+    ropt_.showNet = [this](const NetPiece& np) { return sim_.city().kindOf(np) == uint32_t(NetworkKind::Power); };   // only power lines and plants (flag 0x400000)
+  } else if (view && (cityLayerViews()[li].layer == DataLayer::Aura || cityLayerViews()[li].layer == DataLayer::LandValue ||
+                      cityLayerViews()[li].layer == DataLayer::Density)) {
+    ropt_.showNet = nullptr;   // filter group A1C085DB:1, contents not decoded: networks stay
+  } else if (view) {
+    ropt_.showNet = [](const NetPiece&) { return false; };   // Pollution, Traffic (road tiles carry the colour), Crime, Flammability: no network pieces [STATIC 0x1001A303]
   } else ropt_.showNet = nullptr;
   if (above && (!L.zonedBuildings || !L.otherBuildings)) {
     const bool zb = L.zonedBuildings, ob = L.otherBuildings;
     ropt_.showOccupant = [zb, ob](const Occupant& o) { uint32_t k = o.agentType / 1000; return k >= 3 && k <= 9 ? zb : ob; };   // zoned = agent types 3000-9999
-  } else if (view) ropt_.showOccupant = [](const Occupant&) { return false; };
+  } else if (view) {
+    const DataLayer dl = cityLayerViews()[li].layer;
+    // Occupants drawn per view [STATIC]: Crime the police stations, Flammability the fire stations, Electric Power the plants [INFERRED], Pollution and
+    // Traffic none; the other views are undecoded and show none.
+    ropt_.showOccupant = [dl](const Occupant& o) {
+      switch (dl) {
+        case DataLayer::Crime: return o.agentType == 13130;
+        case DataLayer::Fire: return o.agentType == 13002;
+        case DataLayer::Power: return us::powerCategory(o.agentType) >= 0;
+        default: return false;
+      }
+    };
+  }
   else ropt_.showOccupant = nullptr;
   layerOverlay_ = DataOverlay();
   if (view) refreshLayerOverlay();
 }
 
+// City Layer Views tile handler (SIMSPR 0x1001A303) [STATIC]: tinted tile colour = data palette [row][shade / 2], row = trunc((255 - v) * 31/255) with
+// the single-float constant (v = 0 -> the grey bottom row). Water and shore tiles are never tinted; "zoned only" views tint tiles whose zone byte is not 0,
+// the rest show terrain (the grass in the original).
 void Game::refreshLayerOverlay() {
   layerOverlayAge_ = 0;
   bumpCityVisual();
   if (layers_.mode != CityLayers::LayerView || !world_.W) { layerOverlay_ = DataOverlay(); return; }
   const auto& views = cityLayerViews();
   const DataLayer dl = views[size_t(std::max(0, std::min(int(views.size()) - 1, layers_.layer)))].layer;
-  MapSource src; buildMapSource(src, 0);   // pollution: the air layer
-  const std::vector<uint8_t>* v = src.values ? src.values(dl) : nullptr;
-  if (!v) { layerOverlay_ = DataOverlay(); return; }
-  layerOverlay_ = makeDataOverlay(dl, *v, world_.W, world_.H);
-  // Electric Power colours powered tiles only; unpowered land keeps its terrain colour (spec 25 9.2 [OBSERVED]).
-  if (dl == DataLayer::Power) for (auto& r : layerOverlay_.row) if (r != 0) r = 0xFF;
+  City& c = sim_.city();
+  const int W = world_.W, H = world_.H;
+  DataOverlay o;
+  o.slot = 2;
+  o.row.assign(size_t(W) * H, 0xFF);
+  o.slots.assign(size_t(W) * H, 2);
+  const float k31 = 31.0f / 255.0f;
+  auto stdRow = [&](int v) { return int(float(255 - std::max(0, std::min(255, v))) * k31); };
+  auto wet = [&](int x, int z) {   // any corner with water >= terrain (SIMDIRT 0x100065F0)
+    for (int dx = 0; dx <= 1; dx++) for (int dz = 0; dz <= 1; dz++) if (world_.waterAt(x + dx, z + dz) >= world_.altAt(x + dx, z + dz)) return true;
+    return false;
+  };
+  const std::vector<uint8_t>* flam = dl == DataLayer::Fire && c.flammability.grid.size() == size_t(W) * H ? &c.flammability.grid : nullptr;
+  for (int x = 0; x < W; x++)
+    for (int z = 0; z < H; z++) {
+      const size_t ti = world_.tIdx(x, z), vi = size_t(x) * H + z;
+      if (wet(x, z)) continue;
+      const bool zoned = world_.zone[ti] != 0;
+      int row = -1, slot = 2;
+      switch (dl) {
+        case DataLayer::Aura: {   // all dry land: s > 0 on data1, s <= 0 on data2
+          const int s = c.aura.aura(x, z);
+          if (s > 0) { slot = 1; row = int(float(127 - s) * (31.0f / 127.0f)); }
+          else row = std::max(0, int(float(s + 126) * (31.0f / 127.0f)));
+          break;
+        }
+        case DataLayer::Crime: if (zoned) row = stdRow(c.crime.crimeAt(x, z)); break;
+        case DataLayer::Power: if (zoned) { slot = 1; row = stdRow(c.powered(x, z) ? 255 : 0); } break;   // power layer byte: powered = 255 [INFERRED]
+        case DataLayer::Fire: if (flam && (*flam)[vi] >= 25) row = stdRow((*flam)[vi]); break;
+        case DataLayer::LandValue: if (zoned) { slot = 1; row = stdRow(c.landValue.landValueAtTile(x, z)); } break;
+        case DataLayer::Density: if (zoned) { slot = 1; row = stdRow(vi < c.valves.effectMap.size() ? int(c.valves.effectMap[vi]) : 0); } break;
+        case DataLayer::Pollution: {   // every dry tile with v > 1; v clamped to max, row = trunc((max - v) * 31 / (max - 1))
+          const int mx = 11000, v = std::min(mx, c.pollution.airAt(x, z));
+          if (v > 1) row = int(float(mx - v) * (31.0f / float(mx - 1)));
+          break;
+        }
+        case DataLayer::Traffic: {
+          if (!c.traffic) break;
+          if (c.traffic->flags(x, z) & (TF_ROAD | TF_HIGHWAY | TF_RAIL | TF_STATION | TF_XFER))
+            row = stdRow(c.traffic->tileValue(x, z, 0x01 | 0x02 | 0x04 | 0x10 | 0x20));
+          else if (zoned && world_.zone[ti] != 0x16) {   // zoned tiles carry the Zones display tint
+            if (zoneOverlay_.row.size() != size_t(W) * H) buildZoneOverlay();
+            const int zr = zoneOverlay_.row[ti];
+            if (zr != 0xFF) { slot = 0; row = zr; }
+          }
+          break;
+        }
+        default: break;
+      }
+      if (row < 0) continue;
+      o.row[ti] = uint8_t(slot == 0 ? row : std::min(31, row));
+      o.slots[ti] = uint8_t(slot);
+    }
+  layerOverlay_ = std::move(o);
 }
 
 // ---------------------------------------------------------------- query popup

@@ -723,9 +723,10 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
   WindowResult R;
   const Rect box{r.x + 52, r.y + 50, 357, 189}, plot{r.x + 144, r.y + 52, 264, 153};
   // Frame: (123,142,255) left / top, white bottom [OBSERVED]; outside the plot the interior is (222,223,255).
-  ui.fill({box.x, box.y, 1, box.h}, rgb(123, 142, 255)); ui.fill({box.x, box.y, box.w, 1}, rgb(123, 142, 255));
-  ui.fill({box.x + box.w - 1, box.y, 1, box.h}, rgb(255, 255, 255)); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, rgb(255, 255, 255));
   const bool agePage = tab <= 2;
+  const uint32_t frameTL = agePage ? rgb(123, 142, 255) : rgb(123, 138, 255), frameBR = agePage ? rgb(255, 255, 255) : rgb(255, 243, 255);   // the pie pages' frame colours differ [OBSERVED]
+  ui.fill({box.x, box.y, 1, box.h}, frameTL); ui.fill({box.x, box.y, box.w, 1}, frameTL);
+  ui.fill({box.x + box.w - 1, box.y, 1, box.h}, frameBR); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, frameBR);
   // Stripe bands (spec 09 7.1.1): each page has its band period and the row of the first edge, counted from the plot top (y = 51); the Workforce
   // band draws them from the page's pink tile (5E5:31 Health 15 px, 33 Education 17 px, 35 Population 12 px), the rest of the plot draws the
   // same bands in lavender. The pie pages keep the Education pattern.
@@ -826,8 +827,7 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     for (const Cat& c : cats) {
       if (c.v <= 0) continue;
       ui.fill({box.x + 6, by, 167, barH}, c.col);
-      const uint32_t lum = ((c.col & 255) * 30 + ((c.col >> 8) & 255) * 59 + ((c.col >> 16) & 255) * 11) / 100;
-      ui.text(box.x + 8, by + (barH - 12) / 2 - 1, E.win(c.id, c.fb), "main10", lum > 140 ? rgb(0, 0, 0) : rgb(255, 255, 255));
+      ui.text(box.x + 8, by + (barH - 12) / 2 - 1, E.win(c.id, c.fb), "main10", (int(c.col & 255) + int((c.col >> 8) & 255) + int((c.col >> 16) & 255)) < 385 ? rgb(255, 255, 255) : rgb(0, 0, 0));   // by the 8-bit source colour [OBSERVED]
       by += barPitch;
       slices.push_back({"", c.v, c.col});
     }

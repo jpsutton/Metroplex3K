@@ -303,9 +303,10 @@ int main() {
     opt.overlay = nullptr;
   }
   {  // default overlay mapping
-    std::vector<uint8_t> vals = {0, 7, 8, 255, 100};
+    std::vector<uint8_t> vals = {0, 7, 8, 254, 100};
     DataOverlay o = makeDataOverlay(DataLayer::Crime, vals, 5, 1);
-    CHECK(o.slot == 2 && o.row[0] == 0 && o.row[1] == 0 && o.row[2] == 1 && o.row[3] == 31 && o.row[4] == 12);
+    CHECK(o.slot == 2 && o.row[0] == 31 && o.row[1] == 31 && o.row[2] == 30 && o.row[3] == 0 && o.row[4] == 19);
+    { DataOverlay u = makeDataOverlay(DataLayer::Crime, {0xFF, 10}, 2, 1); CHECK(u.row[0] == 0xFF && u.row[1] == 30); }   // 0xFF is not tinted
     DataOverlay z = makeDataOverlay(DataLayer::Zones, {0, 1, 255}, 3, 1);
     CHECK(z.slot == 1 && z.row[1] == 4 && z.row[2] == 0xFF);
   }

@@ -1185,7 +1185,7 @@ void Game::drawHud() {
     for (int i = 0; i < 3; i++) {
       std::string t = str(0x225872FE, 0x41 + i);
       if (t.empty()) t = fb[i];
-      ui_.text(rx + lx[i], ry + RciGeometry::labelTop + 1, t, "main9", ink);
+      ui_.text(rx + lx[i], ry + RciGeometry::labelTop - 2, t, "main9", ink);
     }
   }
   for (int i = 0; i < 3 && !skinRci; i++) {
