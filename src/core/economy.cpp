@@ -73,7 +73,9 @@ BudgetConfig BudgetConfig::fromIni(const IniFile& ini, const IniFile* advisor) {
 
   // Only the [TuningParameters] copy of TaxationDemandEffect is read ([Admin] is dead data).
   std::string s;
-  if (ini.get("TuningParameters", "TaxationDemandEffect", s)) {
+  // A pack that omits a key gets the shipped SC3BudgetLayer.ini value.
+  if (ini.get("TuningParameters", "TaxationDemandEffect", s) ||
+      (s = "3000,-7000,9,0;2000,-9000,7,40000;1000,-11000,7,80000;900,-13000,6,160000;500,-15000,5,320000", true)) {
     std::vector<TaxEffectEntry> es;
     for (auto& ent : splitChar(s, ';')) {
       auto f = splitChar(ent, ',');
@@ -92,7 +94,7 @@ BudgetConfig BudgetConfig::fromIni(const IniFile& ini, const IniFile* advisor) {
       c.taxEffects = es;
     }
   }
-  if (ini.get("TuningParameters", "TireRecyclingOrdEffect", s)) {
+  if (ini.get("TuningParameters", "TireRecyclingOrdEffect", s) || (s = "10:16000,16001,17202,16002,16003,16004,17203,17204,17205,17206", true)) {
     size_t colon = s.find(':');
     if (colon != std::string::npos) {
       int64_t pct;

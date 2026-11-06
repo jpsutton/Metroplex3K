@@ -88,7 +88,7 @@ static void testConfigIni() {
   CHECK(c.placementCostFor(100, h, true) == 500);   // 100 not in the tire list
   // defaults without data
   BudgetConfig d = BudgetConfig::fromIni(IniFile::fromText(""));
-  CHECK(d.maxBonds == 10 && d.maxBondAmt == 25 && d.minAverageLV == 35 && d.taxEffects.size() == 1);
+  CHECK(d.maxBonds == 10 && d.maxBondAmt == 25 && d.minAverageLV == 35 && d.taxEffects.size() == 5);
   IniFile adv = IniFile::fromText("[TREASURY_NUMBERS]\nLOSE_GAME_LEVEL=50000\nTREASURY_LOW=900\n");
   BudgetConfig a = BudgetConfig::fromIni(IniFile::fromText(""), &adv);
   CHECK(a.loseGameLevel == 50000 && a.treasuryLow == 900);
