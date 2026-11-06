@@ -195,6 +195,7 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
   }
   bands(ui, r, {{4, 34, 8, 442}, {4, 75, 489, 8}, {144, 75, 128, 269}, {432, 75, 48, 269}, {4, 336, 489, 8},
                 {4, 446, 64, 30}, {434, 441, 59, 34}});
+  ui.fill(at(5, 34, 6, 1), rgb(0x7B, 0x92, 0xFF));   // the strip's top ring row does not cross the title bar's left end [OBSERVED]
   // Zebra rows of the label list.
   for (int j = 0; j < 5; j++) ui.fill(at(12, 106 + 46 * j, 131, 22), kWhite);
 
@@ -228,7 +229,7 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
       int vt = 0, vb = 0;
       if (!incomeTab && key != "ord.exp" && key != "loans") { vt = key == "deal.exp" ? 2 : 1; vb = key == "deal.exp" ? 1 : 0; }
       whiteField(ui, at(275, fy + vt, 76, 18 - vt + vb));
-      whiteField(ui, at(353, fy + vt, 76, 18 - vt + vb));
+      whiteField(ui, at(353, fy + vt, key == "ord.exp" ? 78 : 76, 18 - vt + vb));   // the Ordinances year-end box is 2 px wider on the right [OBSERVED]
       rightText(ui, r.x + 349, r.y + fy + 2, E.money(ya), F, moneyCol(ya));
       rightText(ui, r.x + 429, r.y + fy + 2, E.money(ye), F, moneyCol(ye));
     }
@@ -267,7 +268,7 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
       ui.fill({r.x + 150, ty + 1, 116, 1}, rgb(8, 12, 24)); ui.fill({r.x + 150, ty + 1, 1, 1}, rgb(57, 56, 123)); ui.fill({r.x + 265, ty + 1, 1, 1}, rgb(255, 255, 255));
       ui.fill({r.x + 150, ty + 2, 116, 1}, rgb(255, 255, 255)); ui.fill({r.x + 150, ty + 2, 1, 1}, rgb(156, 154, 231));
       if (!incomeTab) {   // the 100% marker shows through the track: two columns blended over the bevel
-        ui.fill({r.x + 235, ty, 5, 1}, rgb(107, 105, 165)); ui.fill({r.x + 235, ty + 1, 5, 1}, rgb(41, 36, 74));
+        ui.fill({r.x + 235, ty, 8, 1}, rgb(107, 105, 165)); ui.fill({r.x + 235, ty + 1, 8, 1}, rgb(41, 36, 74));   // the whole 8 px marker band [OBSERVED: x337..344]
       }
       Rect track = at(kKnobX0, fy + 2, kKnobTravel + 18, 15);
       E.spot("fund." + key, track);
@@ -275,12 +276,18 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
       if (ui.in.pressed && ui.hover(track)) ui.activeId = id;
       if (ui.activeId == id && !ui.in.down) ui.activeId = 0;
       int val = std::max(0, std::min(kMaxFundingUi, int(dp->funding)));
+      auto& kp = knobPos_[dr.id];
+      int pos = kp.second == val && kp.first >= 0 ? kp.first : val * kKnobTravel / kMaxFundingUi;
       if (ui.activeId == id && ui.in.down) {
-        int nv = int(std::lround(double(ui.in.mx - (track.x + 10)) * kMaxFundingUi / kKnobTravel   /* the knob's left edge lands 10 px left of the click [OBSERVED: click x347 -> knob x337] */));
+        // Value: pct = 1.2427 * (click x - 263.6) [OBSERVED, 11 clicks on the Police slider, fit within 0.5 %]; the knob's left edge = click x - 9.
+        int nv = int(std::lround((double(ui.in.mx) - (track.x + 10.6)) * 1.2427));
         nv = std::max(0, std::min(kMaxFundingUi, nv));
-        if (nv != dp->funding) { b.setFunding(dr.id, nv); R.add(Act::SetFunding, dr.id, nv); val = nv; }
+        pos = std::max(0, std::min(kKnobTravel - 1, ui.in.mx - 9 - track.x));
+        if (nv != dp->funding) { b.setFunding(dr.id, nv); R.add(Act::SetFunding, dr.id, nv); }
+        val = nv;
+        kp = {pos, val};
       }
-      int kx = track.x + val * kKnobTravel / kMaxFundingUi;
+      int kx = track.x + pos;
       const Image* knob = dlgArt(ui, 0x1C);
       int cell = ui.activeId == id ? CELL_PRESSED : ui.hover({kx, track.y, 18, 15}) ? CELL_HOVER : CELL_NORMAL;
       if (!(knob && !knob->empty() && Skin::drawCell(ui, knob, 4, cell, kx, track.y))) ui.fill({kx, track.y, 18, 15}, kInkDark);

@@ -236,6 +236,9 @@ class BudgetWindow {
   struct Line { std::string key; std::string label; int64_t ytd = 0, est = 0; bool income = false; uint32_t labelId = 0; };
   static std::vector<Line> lines(const WinEnv& E, const Budget& b, const BudgetView& v);
   static constexpr int kMaxFundingUi = 120;
+  // Funding knob position per department as last set by the mouse (pos px from the track start, funding it belongs to): the original draws the knob
+  // at click x - 9 while the value follows its own scale, so the knob is not re-derived from the value until the value changes elsewhere [OBSERVED].
+  std::map<uint32_t, std::pair<int, int>> knobPos_;
 
  private:
   // Main page: Expenditures / Income tabs with inline funding sliders (fund.<dept key>) and tax spinners
