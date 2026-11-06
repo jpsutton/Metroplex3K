@@ -83,6 +83,14 @@ Switching between the two modes keeps `acc` and the minute and hour counters as 
 the minute or hour counters. So when minute mode starts again, the counters continue from their old
 values, and the first simulated day in minute mode can be shorter than 1440 minutes.
 
+[OBSERVED, original under Wine, max speed] While a disaster is active the date crawls: in Lord of
+the Locusts (swarm) and in Criminalville (a large fire) the date advanced about one game day per
+10 minutes of wall time, with the process at 97 % CPU, the news ticker still scrolling and the
+city's automata frozen. This is minute mode with each minute tick costing far more than the 50 ms
+period; `acc` is never clamped, so the simulation thread spends all its time catching up. A modal
+advisor pop-up (e.g. the locust warning) holds the clock completely until it is dismissed. A
+clone should run minute mode faithfully (1440 ticks per day) but need not reproduce the slowness.
+
 A *day tick* runs these steps in this order [STATIC]:
 
 1. Increment the date (JDN + 1).

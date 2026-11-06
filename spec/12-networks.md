@@ -593,8 +593,63 @@ before building, and also refuses if the price exceeds funds `[STATIC]`.
 
 `[STATIC]` unless stated:
 
-1. Validate: walk the tile list and determine the buildable prefix (straight runs longer than 2
-   tiles are checked as a unit) `[INFERRED]`.
+1. Validate (SIMNTWRK 0x1000938B, also used by the preview) [STATIC]: the path is split into
+   straight **runs**, broken at water, at turns (a turn tile belongs to both runs) and at a further
+   per-tile test. Every run of ≥ 3 tiles (≥ 2 for the final run) is **strip-graded**
+   (0x10008064 → 0x100077E7; the highway uses its own grader). If grading a run fails, the
+   buildable prefix stays at the index before that run: that run and all later tiles are invalid
+   (for a single straight drag the whole preview is red and nothing is built).
+   * **Strip grade** (SIMDIRT 0x10007DC0) [STATIC; reconstruction checked against observations].
+     Skipped when every tile of the run is already a valid slope (§6.3). startH = c0 of the first
+     tile if it is flat (then s = 1), else trunc(mean of its 4 corners) (s = 0); endH likewise for
+     the last tile (last = n − 1, minus 1 if the end tile is flat). The walk runs in increasing
+     coordinate (startH/endH swapped for a drag in the negative direction). Along z the *main*
+     vertex of step k is (x + 1, z0 + k) and its *mirror* (x, z0 + k); along x main (x0 + k, z),
+     mirror (x0 + k, z + 1). For k = s … last + 1: lo = max(0, endH − 2 − 2(last − k)),
+     hi = min(255, endH + 2 + 2(last − k)); at k = s also lo = max(lo, startH), hi = min(hi, startH),
+     otherwise lo = max(lo, prev − 2), hi = min(hi, prev + 2); if hi < lo the run fails; the main
+     vertex is clamped into [lo, hi] and becomes prev. Then each mirror vertex is set to its main
+     vertex, and the surroundings are re-sloped ring by ring (|step| ≤ 4) as for the terrain
+     tools. Cost = (RaiseTerrain × raised + LowerTerrain × lowered) >> 2 plus the ring costs.
+   * **Permission**: for every vertex the grade changes, the up to four tiles sharing it are
+     checked in all three layers (surface, pipe, subway) regardless of the network kind. A surface
+     occupant passes if it reports kind 5 or passes the network manager's terrain-change filter and
+     is not in the kind's ID list; pipe/subway occupants must pass the filter and not be in the
+     list (the surface result overwrites rather than ANDs the flag). Any failure fails the run.
+   * At commit the grade is applied and **charged** (terrain apply flag 0); the grader itself only
+     builds the vertex list, the apply writes it and then runs ripple passes (SIMDIRT
+     0x100076E0) that add outer vertices clamped into [max − 4, min + 4] of the neighbouring ring
+     heights (these extra corners are charged too). Afterwards, for net types 1/2/3/5/6
+     (SIMNTWRK 0x10008064), a fix-up loop of up to 100 rounds scans the affected box for drag
+     tiles and same-network tiles; each tile that is neither flat nor a single-axis ramp of ≤ 2
+     is re-graded alone (single-tile branch) [STATIC]. With a = (x,z), b = (x+1,z),
+     c = (x+1,z+1), d = (x,z+1):
+     * if (a = b or c = d) and (b = c or d = a): *step*;
+     * else if a = b or c = d: z-ramp with edges (a + b)/2 and (c + d)/2, gap reduced to 2;
+     * else if b = c or d = a: *step*; else *flatten*;
+     * *step*: a = b → flatten to a; c = d → flatten; else x-ramp with edges (b + c)/2 at x + 1
+       and (a + d)/2 at x, gap reduced to 2;
+     * *flatten*: h = a if a = b or a = d, else c if c = b or c = d, else trunc(mean of the four);
+       all four corners ← h.
+     The derived start/end heights of the strip grade are the truncated mean (not a mode).
+     [OBSERVED, Mount Herrang road (55,90)→(80,90) over a hill] 26 terrain-following pieces
+     (29 flat / 32 slope, end 11225), mirror row z = 91 raised to the main row, end tile left flat
+     at 92 ((81,90) 90 → 92: the grade's mean 91 followed by the flatten rule, a = d = 92; why
+     this tile was re-graded is [INFERRED]), ring corners at z = 92/93 raised, charge 607 =
+     260 + 347.
+   * [OBSERVED, Mount Herrang, road/rail/power/pipe/subway] A drag along +z over six tiles ending
+     on a tile with corners 92/94/92/92 changes only the mirror corner (2,79) 92 → 94 (end tile
+     becomes a clean slope, the tile before it flat) and adds a charge of 25·2 >> 2 = 12. The
+     same drag one tile longer needs a raise at a corner of a water-tower tile and is rejected
+     entirely (whole preview red, nothing built); the reverse drag (end to start) is also
+     rejected.
+   * [OBSERVED, Mount Herrang, pipe, x = 1] Pipe is not in the fix-up set: no single-tile
+     flatten is applied to it. Drag (1,73) → (1,79): seven pieces ((1,78) piece 11647 at y 94,
+     (1,79) piece 11649 at y 92); only corners (1,78) 92 → 94, (1,80) 90 → 91 and (2,80) 92 → 91
+     change; charge 60. Reverse drag (1,78) → (1,73): the start tile (1,78) is levelled first
+     (all four corners → 93, the perimeter mean rounded half up, free; piece 18012 rotation 2 at
+     y 93); charge 30, all of it pieces. The start-endpoint levelling therefore runs before the
+     strip grade (step 5 order) and is not charged.
 2. Check funds ≥ total price; otherwise nothing is built.
 3. Endpoint levelling [STATIC unless marked]. It is done once at the start of the path and once at
    the end. The end call is made only on the non-bridge branch, and only when no tunnel was
@@ -631,7 +686,10 @@ before building, and also refuses if the price exceeds funds `[STATIC]`.
    * **Not yet decoded.** One more call argument, and the exact flag tested at the start-side
      occupant removal.
 4. Bridge attempt (road, rail, power, highway only; path length ≥ 4 tiles): §6.4.
-5. Tunnel attempt (road, rail, and highway): §6.4.
+5. Tunnel attempt (road, rail, and highway): §6.4. [STATIC, SIMNTWRK 0x10014A23] The actual
+   commit order is: start-endpoint levelling; bridge attempt; validate and strip-grade the path
+   (step 1); tunnel attempt, made whenever no bridge was built (not gated on grading); end-point
+   levelling only if no tunnel was built.
 6a. Neighbour-connection offer for path ends on the map edge: §8.
 6. Place pieces: the tile list goes to the tiler (§4.6). For the highway, a second tiler pass is
    run for road (net 1) over the tiles where the new highway meets existing roads, to create the
@@ -754,10 +812,35 @@ E0 + 3a, or 23 if that corner is off the map. The far side's own B is not affect
 builder has the same defect (0x10002D69, 0x10002FB2, then the start-side sets from 0x10003241).
 The W0 − 4a approach altitude uses the same byte.
 
-Every corner change is first checked: a corner may change only if none of the up to four tiles
-that share it holds an occupant that forbids terrain changes (buildings or other network pieces).
-If any check fails, nothing is changed, the "construction discontinued" message (instance `0x285`)
-is shown and the drag is cancelled.
+Every corner change is first checked: the 8 start-bank and 8 far-bank corners are checked before
+anything is written; a corner that already has its target height is not checked. A corner may
+change only if none of the up to four tiles that share it (in the surface, pipe and subway layers)
+holds an occupant that forbids terrain changes (an occupant passes if it reports kind 5, or is in
+the network's terrain-change set and not in the kind's exclusion list). If one of these 16 checks
+fails, nothing is changed, the "construction discontinued" message (instance `0x285`) is shown
+and the drag is cancelled.
+
+**Order and partial failure (road, rail, power)** [STATIC, SIMNTWRK 0x1000122A]: (1) the 16
+checks; (2) the start-bank corners are **written immediately**; (3) the start approach is graded
+with the strip grader of §6.2.6 on the vertex list (W0 − 4a, B), (W0 − 3a, follow), (W0 − 2a,
+follow), (W0 − a, h_w + 5), whose permission test covers the whole affected block; (4) the river
+bed is lowered, the far-bank corners written and the far approach graded; (5) the pieces are
+placed and the price charged. If step 3 or 4 fails, `0x285` is shown and the drag is cancelled
+**without undo and without charge**: the start-bank corners written in step 2 stay. [OBSERVED,
+Roadless Paradise, road (36,155)→(36,180), W = 8, price §800 accepted] No piece was built, funds
+were unchanged, and corners (36,162)/(37,162) were left at 85 (h_w + 5) and (36,163)/(37,163) at
+83 (h_w + 3) with h_w = 80; the approach grade reached the 2 × 2 train station at
+(37..38, 158..159).
+
+**Preview of water tiles** [STATIC, drag path builder SIMNTWRK 0x1000488D]. For road, rail and
+power a water tile is shown valid only if the path is still valid and the straight run before
+it has at least p8 = 3 tiles; only one water crossing is allowed per drag. After the water a
+countdown of 3 land tiles starts; the water tiles (and the countdown tiles) stay pending until a
+valid land tile is reached after the countdown. If the drag ends (or becomes invalid) first,
+every pending tile is set invalid, and validation keeps only the leading buildable tiles.
+[OBSERVED] Road (34,158)→(34,175) on Roadless Paradise ends two land tiles past the water: the
+water tiles were red, only the four approach tiles were built, no bridge was offered, and the
+full 18-tile price (§180) was charged.
 
 **5a. Highway abutments** [STATIC]. The highway builder runs two passes, one per carriageway.
 Record direction: pass 0 uses dir 0 for an x axis and 3 for a z axis; pass 1 uses 2 and 1. A
@@ -840,15 +923,25 @@ Tunnels (agent type 16006, cost key 16006) `[STATIC]`:
 
 1. Road and rail tunnel with the builder below. Highways also have a tunnel builder (see the end
    of this list); an earlier revision said only road and rail can tunnel.
-2. The drag must be straight and axis-aligned: exactly one of the per-step offsets dx, dz is ±1
-   and the other is 0. Travel direction d: 0 = −x, 1 = −z, 2 = +x, 3 = +z (the span direction
-   encoding of `18-sim-transport.md` §5.5 and `10-save-format.md` §6.2.6).
-3. The entrance tile E must lie at the foot of rising ground. Let h = the lowest corner height of
-   the entrance tile.
+2. The direction comes from the **last step** of the drag only: d = last tile − previous tile,
+   which must be a unit axis step. Travel direction d: 0 = −x, 1 = −z, 2 = +x, 3 = +z (the span
+   direction encoding of `18-sim-transport.md` §5.5 and `10-save-format.md` §6.2.6).
+3. The entrance tile E is the **last dragged tile** [STATIC, SIMNTWRK 0x1001C102]. With its
+   corners c0 = (x, z), c1 = (x+1, z), c2 = (x+1, z+1), c3 = (x, z+1) (heights after the strip
+   grade, which runs first), its rise along d is (c1 − c0) + (c2 − c3) for +x,
+   (c0 − c1) + (c3 − c2) for −x, (c3 − c0) + (c2 − c1) for +z, (c0 − c3) + (c1 − c2) for −z. If the
+   rise is < 4 there is no tunnel. Let h = the lowest corner height of E (threshold T = (h + 4)
+   as a byte). The start tile and tiles in the middle of the drag are never examined.
+   [OBSERVED] A road drag on Mount Herrang over a hill from (55,90) to (80,90), ending on a tile
+   that falls along +x, built 26 terrain-following pieces and no tunnel prompt.
 4. **Walk.** Start with L = 1 and P = E + d. Repeat: step to P + d; if that tile is off the map,
    stop with **no tunnel**. Otherwise P ← that tile and L ← L + 1, and continue while the lowest
    corner height of P is ≥ h + 4. The walk ends at the first tile whose lowest corner is below
-   h + 4; that tile is the exit X = E + L·d. If L < 3, no tunnel is built.
+   h + 4; that tile is the exit X = E + L·d. If L < 3, no tunnel is built. The exit therefore
+   always lies beyond the dragged end; the walk alone chooses it. On success the last path tile
+   is replaced by X + d, so the network continues one tile past the exit. Portal shaping: E's
+   hill-side corners → h + 4 and approach side → h; X's hill-side corners → h + 4 and far side →
+   h; the two far corners of X + d → h.
 5. **Price** = (L − 1) × the cost of agent type 16006, charged per tunnel tile. Correction: the
    previous revision guessed once per tunnel. It must not exceed the city's funds, and the player
    confirms with a yes/no prompt (string table `029541F4`, instance `0x253`, price substituted).

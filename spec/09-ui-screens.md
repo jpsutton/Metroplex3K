@@ -300,6 +300,23 @@ confirmation `141`, and "import set from selected city" `140`. User buildings ar
 `Buildings/` (`*.BLD`, `24-bat-buildings.md`). The choice is saved with the city
 (`10-save-format.md`).
 
+**Scheme preview picture** [OBSERVED, exact on the 200×180 preview area for two flora/building
+combinations]. The picture next to the three selectors is composed from the chosen sets' sprites
+(category 0), with top-left corners relative to the dialog:
+
+1. landscape sprite (`3FC0`…`3FC4 0000`, no opacity plane) at (444, 92), opaque copy;
+2. the flora sprite `xxxx0000` again as the right tree at (546, 90) (same sprite and position for every
+   flora set);
+3. the building-set sprite (`3FBA`/`3FBD`/`3FBF 0000`) at (470, 145);
+4. the flora sprite as the left tree at (445, 110).
+
+Each sprite that has an opacity plane (`xxxx0001`, `04-graphics-formats.md` §3.5; all flora and
+building sets) is blended through it. Only pixels where the colour sprite is opaque (its 1-bit
+transparency) are visited. For each one, alpha a = the plane value 0..31 is used unscaled. Each
+channel is blended at 5 bits (green taken as the 6-bit value >> 1):
+r = ⌊(32·d + a·(s − d)) / 32⌋. Green is written back as r << 1, so the green low bit is cleared on
+every visited pixel, including those whose plane value is 0.
+
 ## 4. In-game main UI
 
 The in-game screen consists of the full-window 3-D city view (`25-rendering.md`), the control
@@ -876,6 +893,11 @@ building (`13-buildings-occupants.md`).
 * A double click opens that petitioner's page inside the same window frame. The page shows the
   petition title as the window title, a back button (◄) next to the close box, the petitioner's
   portrait and group, the text, and a "Dismiss Petitioner" toggle.
+* `[OBSERVED, London, 15 pending]` With more than 13 rows the list gets a vertical scrollbar
+  inside the box's right edge (plate x ≈ 362..377, rows 165..346, window-relative), and the rows
+  move down 1 px (first text top y = 168). 13 rows stay visible either way.
+* Headings that contain `%NEIGHBOR%` (neighbour-deal petitions) are expanded with the deal's
+  neighbour in the list, as in the dialog.
 
 Opened by the Meet button (message `724A82D0`) or a portrait in another window. Left: advisor
 portraits (`52DB60A0`, instance `0x0AMM` — advisor A 1–7, mood M 1–5 from
@@ -895,6 +917,34 @@ with "return to petitioner" (`82`), "done" (`83`), "back" (`84`), "OK" (`85`); a
 petitioner" (`2DE`). Choosing a button applies the petition (enact ordinance, accept deal, …) and
 plays a crowd reaction (sounds 70–73: boo, disappointment, neutral, cheer — chosen by the
 petitioner's reaction field). [STATIC; reaction choice rule in `22`]
+
+`[OBSERVED, build 2.0.949, London]` Two page layouts, window at (8, 8), coordinates relative to
+the window:
+
+* **Information petition** (no choice buttons): the message box runs from (121, 58) to the
+  bottom of the window and the left plate holds the round "Dismiss Petitioner" button.
+* **Offer petition** (business deal, reward, neighbour deal, deal complaint, ordinance
+  complaint; any petition with *Button1*/*Button2* strings):
+  * Message box (121, 58)–(378, 259), 258 × 202, with a vertical scrollbar inside its right
+    edge (plate x 364..379, rows 58..259). Text from x = 133, first line top y = 65, 14 px line
+    pitch, 13 lines visible. A line fits when its ink width in the main 9 font is at most
+    216 px (observed: 216 fits, 217 wraps).
+  * "Take Action:" (`78`) plate, L-shaped: a band (5, 263)–(119, 286) and a strip below it
+    (5, 287)–(49, 348), plate colour (123, 146, 255), with a 1 px (173, 182, 255) ring just
+    outside the L on every side. The caption's ink is at (21, 271).
+  * Two big round buttons (the same round art as "Dismiss Petitioner"), ink boxes (20, 290)
+    and (20, 318), each 24 × 24. Labels are the petition's *Button1* / *Button2* strings at
+    x = 58 (e.g. Accept/Reject, Accept/Decline, Accept Deal/Reject Deal, Cancel Deal/Keep
+    Deal, Repeal Ordinance/Ignore Complaint). Neither is pre-selected.
+  * "Impact Analysis:" (`79`) plate (273, 294)–(377, 347), ringed the same way. Two-line caption
+    ink (278, 310)–(329, 334); round "?" button ink (344, 317)–(369, 340).
+  * There is no "Dismiss Petitioner" button on offer pages.
+* Message arguments (`TopicArg` entries saved with the petition) carry a format kind in their
+  index field: 2 = integer with thousands separators ("4,400"), 3 = money ("§396", "§9,900"),
+  4 = neighbour name of slot `a` (`%NEIGHBOR%`). The arguments are substituted before the generic
+  tokens. [DATA, saved London petitions 0x10, 0xBF; OBSERVED rendering]
+* Neighbour-deal petitions (portrait index 18 in the extra-info files) show portrait
+  `52DB60A0:FF10`. [OBSERVED, one neighbour]
 
 ### 6.7 Neighbours window and neighbour deals [STATIC]
 
@@ -1879,6 +1929,12 @@ garbage `1DF` (plus workforce `1E5`). Pages:
   `1F0`, neighbour deals `1F1`; caption `28A`, total `289` (MW-h per year).
 * Garbage — share of garbage by destination (`1F3`): landfill `1F4`, neighbour deals `1F1`,
   incinerators `1F5`, recycling `1F6`, collecting in streets `1F7`; total `1F8` (tons per year).
+  [STATIC] Slice sources (city statistics record): landfill = 12-month sum at `+0xD0`; neighbour
+  deals = 12-month sum at `+0xC0` (garbage exported); incinerators = 12-month sums at `+0xCC` plus
+  `+0xC8` (incinerator and waste-to-energy); recycling = 12-month sum at `+0xC4`. "Collecting in
+  streets" is NOT a 12-month sum: it is the current stock of uncollected garbage standing on
+  non-landfill tiles (`+0x74`, not reset by the yearly roll), so it can dominate the pie in a city
+  whose garbage has gone uncollected for a long time.
 
 The underlying statistics are owned by `20-sim-population.md` and `16-sim-utilities.md`.
 
