@@ -474,7 +474,8 @@ enum QueryStatus : uint32_t {
 struct QueryInfo {
   int x = 0, z = 0;
   int elevation = 0;                 // metres
-  int waterDepth = 0;                // > 0: water tile (depth label 17F)
+  int waterDepth = 0;                // metres of depth (label 17F), see waterTile
+  bool waterTile = false;            // any corner of the tile is wet
   bool saltWater = false;
   int zoneCode = 0;                  // spec 09 5.2 zone codes; 0 unzoned
   int landValue = -1;                // byte, -1 = not shown

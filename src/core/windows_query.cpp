@@ -23,6 +23,7 @@ uint32_t pollutionBandId(int p, int b) {
 
 namespace {
 
+const uint32_t kQueryInk = rgb(49, 48, 123);   // query text colour [OBSERVED]
 const char* const kG4[] = {"Poor", "Fair", "Good", "Excellent"};
 const char* const kG5[] = {"Poor", "Fair", "Average", "Good", "Excellent"};
 const char* const kU4[] = {"Low", "Moderate", "High", "Very high"};
@@ -82,7 +83,7 @@ const std::vector<Spec>& specsFor(QueryClass c) {
     {QueryClass::Road, {{Band, 0x3C, "Traffic:", 0x3D, nullptr, 0, 5, kU5}}},
     {QueryClass::Rail, {{Band, 0x43, "Rail Usage:", 0x44, nullptr, 0, 5, kU5}}},
     {QueryClass::Subway, {{Band, 0x49, "Rail Usage:", 0x4A, nullptr, 0, 5, kU5}}},
-    {QueryClass::Station, {{Num, 0x37, "Passengers Per Day:", 0x38, "%s", 0, 0, nullptr}}},   // service quality (181-185) not traced
+    {QueryClass::Station, {{Band, 0x181, "Service Quality:", 0x182, nullptr, 1, 4, kG4}, {Num, 0x37, "Passengers Per Day:", 0x38, "%s", 0, 0, nullptr}}},   // quality bands 182-185 [observed: Excellent at full funding; the metric is INFERRED to be the transit funding efficiency]
     {QueryClass::Airport, {{Band, 0xFE, "Air Traffic:", 0xFF, nullptr, 0, 4, kU4, false, 8u}, {Num, 0x103, "On Time Flights:", 0x104, "%d%%", 1, 0, nullptr}}},
     {QueryClass::Seaport, {{Band, 0x105, "Port Traffic:", 0x106, nullptr, 0, 4, kU4, false, 8u}}},
     // Utility "Usage" lines show a number, not a band word (spec 09 6.12); a current capacity of 0 is drawn red.
@@ -142,7 +143,7 @@ Target targetOf(const QueryInfo& q) {
     case QueryClass::WaterBuilding: case QueryClass::Recycling: return Target::Utility;
     case QueryClass::Marina: return Target::Marina;
     case QueryClass::Landmark: return q.canReplace ? Target::Reward : Target::Wall;
-    case QueryClass::None: return q.waterDepth > 0 ? Target::Water : Target::Bare;
+    case QueryClass::None: return q.waterTile ? Target::Water : Target::Bare;
     default: return Target::Service;
   }
 }
@@ -152,7 +153,7 @@ Target targetOf(const QueryInfo& q) {
 std::string queryDisplayName(const WinEnv& E, const QueryInfo& q) {
   if (!q.name.empty()) return q.name;
   if (q.cls == QueryClass::None) {
-    if (q.waterDepth > 0) return q.saltWater ? E.query(0xC3, "Salt Water") : E.query(0xC2, "Fresh Water");
+    if (q.waterTile) return q.saltWater ? E.query(0xC3, "Salt Water") : E.query(0xC2, "Fresh Water");
     return E.query(0xC1, "Dirt");
   }
   return std::string();
@@ -442,15 +443,18 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
   if (L.picW > 0) {
     const int cx = L.type == 2 ? 160 : 77, cy = L.type == 2 ? 97 : 160;
     Rect box{r.x + cx - L.picW / 2, r.y + cy - L.picH / 2, L.picW, L.picH};
-    ui.fill({box.x - 1, box.y - 1, box.w + 2, 1}, rgb(0x7B, 0x8A, 0xFF)); ui.fill({box.x - 1, box.y + box.h, box.w + 2, 1}, rgb(0x7B, 0x8A, 0xFF));
-    ui.fill({box.x - 1, box.y, 1, box.h}, rgb(0x7B, 0x8A, 0xFF)); ui.fill({box.x + box.w, box.y, 1, box.h}, rgb(0x7B, 0x8A, 0xFF));
+    // Picture box [OBSERVED]: flat (222,223,255) interior one pixel larger each way than the layout box, dark (123,138,255) left / top and light (255,243,255)
+    // right / bottom lines just outside it.
+    ui.fill({box.x, box.y, box.w + 1, box.h + 1}, rgb(222, 223, 255));
+    ui.fill({box.x - 1, box.y - 1, box.w + 3, 1}, rgb(123, 138, 255)); ui.fill({box.x - 1, box.y, 1, box.h + 2}, rgb(123, 138, 255));
+    ui.fill({box.x + box.w + 1, box.y - 1, 1, box.h + 3}, rgb(255, 243, 255)); ui.fill({box.x - 1, box.y + box.h + 1, box.w + 3, 1}, rgb(255, 243, 255));
     spriteCentred(ui, E.data, q.picture, box, box);
   }
 
   // Name and status (main10).
   const int nameX = L.type == 3 ? 140 : 22, nameTop = L.type == 2 ? 160 : 42;
-  if (!name.empty()) ui.text(r.x + nameX, r.y + nameTop, name, "main10");
-  if (!status.empty()) ui.text(r.x + nameX + 15, r.y + nameTop + 20, status, "main10");
+  if (!name.empty()) ui.text(r.x + nameX, r.y + nameTop, name, "main10", kQueryInk);
+  if (!status.empty()) ui.text(r.x + nameX + 15, r.y + nameTop + 20, status, "main10", kQueryInk);
   const int firstRow = (status.empty() ? nameTop : nameTop + 20) + 29;
 
   // Rows (main9, 14 px pitch). Labels wrap before the value column, values wrap inside it; a value sits on its label's last line.
@@ -486,8 +490,8 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
   for (int i = 0; i < visible && i + scroll_ < int(rows.size()); i++) {
     const Row& w = rows[size_t(i + scroll_)];
     const int y = r.y + firstRow + i * 14;
-    if (!w.label.empty()) ui.text(r.x + labelX, y, w.label, "main9");
-    if (!w.value.empty()) ui.text(r.x + valueX, y, w.value, "main9", w.red ? red : 0);
+    if (!w.label.empty()) ui.text(r.x + labelX, y, w.label, "main9", kQueryInk);
+    if (!w.value.empty()) ui.text(r.x + valueX, y, w.value, "main9", w.red ? red : kQueryInk);
   }
 
   // Buttons.

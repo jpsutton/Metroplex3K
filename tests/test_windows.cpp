@@ -667,7 +667,7 @@ void testQuery() {
   for (auto& l : buildQueryLines(h.E, bare)) if (l.label == "Powered:" || l.label == "Watered:") CHECK(l.value == "Yes" && !l.red);
 
   // Water: Depth, Air Pollution, Water Pollution.
-  QueryInfo water; water.waterDepth = 5; water.saltWater = true; water.airPollution = 0; water.waterPollution = 0;
+  QueryInfo water; water.waterDepth = 5; water.waterTile = true; water.saltWater = true; water.airPollution = 0; water.waterPollution = 0;
   CHECK(queryDisplayName(h.E, water) == "Salt Water");
   auto R1 = rowsOf(water);
   CHECK(R1.size() == 3 && R1[0] == "Depth:" && R1[1] == "Air Pollution:" && R1[2] == "Water Pollution:");
@@ -737,7 +737,7 @@ void testQuery() {
   QueryInfo sub; sub.name = "Subway"; sub.cls = QueryClass::Subway; sub.underground = true;
   auto R7 = rowsOf(sub); CHECK(R7.size() == 1 && R7[0] == "Rail Usage:");
   // Marina: Depth | Boats Berthed. Zoned building: no blank rows.
-  QueryInfo mar; mar.name = "Marina"; mar.cls = QueryClass::Marina; mar.waterDepth = 3;
+  QueryInfo mar; mar.name = "Marina"; mar.cls = QueryClass::Marina; mar.waterDepth = 3; mar.waterTile = true;
   auto R8 = rowsOf(mar); CHECK(R8.size() == 3 && R8[0] == "Depth:" && R8[1] == "|" && R8[2] == "Boats Berthed:");
   QueryInfo zq; zq.name = "House"; zq.cls = QueryClass::Zoned; zq.zoneCode = 1; zq.landValue = 100; zq.crime = 80;
   auto R9 = rowsOf(zq); CHECK(R9.size() == 9 && std::find(R9.begin(), R9.end(), "|") == R9.end());

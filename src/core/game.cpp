@@ -1082,8 +1082,8 @@ void Game::drawHud() {
     ui_.textCentered(r, t, "main9", col ? col : rgb(24, 40, 140));   // spec 08 4.2: text centred in its field rect; main9 in (24,40,140) [OBSERVED]
   };
   if (skinBar) {
-    centredField(place.fieldA, world_.info.cityName, 0);
-    centredField(place.fieldB, "Pop: " + groupDigits(hud.pop), 0);
+    { Rect fa = place.fieldA; fa.x += 1; centredField(fa, world_.info.cityName, 0); }   // city and Pop text 1 px right of the centred position (observed)
+    { Rect fb2 = place.fieldB; fb2.x += 1; centredField(fb2, "Pop: " + groupDigits(hud.pop), 0); }
     centredField(place.fieldC, funds, fundsCol);
     centredField(place.fieldD, std::to_string(hud.month) + "/" + std::to_string(hud.day) + "/" + std::to_string(hud.year), 0);   // m/d/yyyy, no leading zeros [OBSERVED]
   } else {

@@ -55,6 +55,23 @@ void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::strin
   if (pitch <= 0) pitch = fbW;
   int x = x0, y = y0;
   uint32_t cr = col & 255, cg = (col >> 8) & 255, cb = (col >> 16) & 255;
+  // Caller-coloured anti-aliased (ramp) fonts go through the original's recolour palette [OBSERVED exact on all 15 levels of the scenario dialog title]:
+  // T = the text colour packed to 565 and unpacked (r5 * 255 / 31, g6 * 255 / 63), B = the palette entry of the colour key (atlas pixel (0,0), the
+  // background shade) unpacked the same way; entry[i + 1] = pack565(T + trunc((B - T) * i / 16)) per 8-bit channel, packed by truncation, i = 0..14.
+  // Opaque pixels, no blending; the key index is transparent.
+  uint32_t rampPx[17] = {};
+  const bool recolour = ramp_ && !multi_ && col != 0xFFFFDFDEu && !atlas_.empty();
+  if (recolour) {
+    auto un5 = [](uint32_t v) { return int(v * 255 / 31); };
+    auto un6 = [](uint32_t v) { return int(v * 255 / 63); };
+    const uint16_t bp = pal_[atlas_[0]];
+    const int tr = un5(cr >> 3), tg = un6(cg >> 2), tb = un5(cb >> 3);
+    const int br = un5((bp >> 11) & 31), bg = un6((bp >> 5) & 63), bb = un5(bp & 31);
+    for (int i = 0; i < 15; i++) {
+      const int r8 = tr + (br - tr) * i / 16, g8 = tg + (bg - tg) * i / 16, b8 = tb + (bb - tb) * i / 16;
+      rampPx[i + 1] = expand16(uint16_t(((r8 >> 3) << 11) | ((g8 >> 2) << 5) | (b8 >> 3)), 7);
+    }
+  }
   for (unsigned char c : s) {
     if (c == '\n') { x = x0; y += glyphH_ + 1; continue; }
     if (c == '\r') continue;
@@ -73,6 +90,10 @@ void Font::draw(uint32_t* fb, int fbW, int fbH, int x0, int y0, const std::strin
         if (ramp_ && !multi_ && col == 0xFFFFDFDEu) {
           if (idx == atlas_[0] || idx == 0 || idx > 16) continue;
           d = expand16(pal_[idx], 7);
+          continue;
+        }
+        if (recolour && !(overlay && (d >> 24) != 255)) {
+          if (idx >= 1 && idx <= 15 && idx != atlas_[0]) d = rampPx[idx];
           continue;
         }
         if (multi_) {

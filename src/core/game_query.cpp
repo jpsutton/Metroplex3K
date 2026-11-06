@@ -268,6 +268,7 @@ void Game::fillServiceValues(QueryInfo& q, const Occupant& o) {
     case QueryClass::Station: {
       const bool strike = c.traffic && c.traffic->rec().strikeState == STRIKE_STRIKING;
       q.v[0] = strike ? 0 : 4.3 * c.trafficDensityAt(o.x, o.z);   // 4.3 x the station value at the tile [INFERRED: live density]
+      { const float eff = c.traffic ? c.traffic->transitEfficiency() : 1.0f; q.band[1] = uint8_t(std::max(0, std::min(255, int(eff * 255.0f)))); }   // service quality [INFERRED]
       break;
     }
     case QueryClass::Landmark: {
@@ -311,11 +312,17 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
 
   // Terrain: tile elevation = mean of the four corner altitudes; water depth from the surface vertex.
   int a00 = w.altAt(x, z), a10 = w.altAt(x + 1, z), a01 = w.altAt(x, z + 1), a11 = w.altAt(x + 1, z + 1);
-  q.elevation = (a00 + a10 + a01 + a11) / 4;
-  int lo = std::min(std::min(a00, a10), std::min(a01, a11));
-  int surf = w.waterAt(x, z);
-  if (surf > lo) {
-    q.waterDepth = std::max(1, surf - lo);
+  // Elevation and depth in metres [STATIC SIMDIRT, observed: altitude 82 over sea level 80 reads 26 Meters, a salt-water depth of 11 reads 143]:
+  // N = trunc(4.0f x 3.266f x delta) (13.064 m per altitude unit); land: delta = alt[anchor corner] - sea level (no clamp); a tile counts as water when any
+  // corner is wet, delta = max(0, water - alt) at the anchor corner only.
+  const float kMetres = 4.0f * 3.266f;
+  q.elevation = int(kMetres * float(a00 - w.seaLevel));
+  const int surf = w.waterAt(x, z);
+  bool wet = false;
+  for (int dx = 0; dx <= 1; dx++) for (int dz = 0; dz <= 1; dz++) if (w.waterAt(x + dx, z + dz) >= w.altAt(x + dx, z + dz)) wet = true;
+  if (wet) {
+    q.waterTile = true;
+    q.waterDepth = int(kMetres * float(std::max(0, surf - a00)));
     q.saltWater = surf <= w.seaLevel;   // raised lakes / rivers above sea level are fresh [INFERRED]
   }
   q.zoneCode = ti < w.zone.size() ? w.zone[ti] : 0;

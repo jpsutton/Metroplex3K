@@ -517,7 +517,8 @@ void Game::drawWindows(uint32_t dtMs) {
     finish(viewData_.draw(ui_, E, src, series, cd), showMap_);
   }
   if (showLayers_) finish(layersDlg_.draw(ui_, E, ropt_.grid), showLayers_);
-  if (showNeigh_) {
+  // The Neighbors Map opened from the Budget window is drawn on top of it (observed): with the Budget open it is drawn after the Budget block below.
+  auto drawNeighbours = [&] {
     neighWin_.cityName = world_.info.cityName; neighWin_.cityPop = city.population();
     // The SimNation population is the newest sample of the world layer's fifth chart (Berlin: 41,000,660 = the original's value).
     uint64_t np = city.valves.world.charts[4].w[0];
@@ -529,7 +530,9 @@ void Game::drawWindows(uint32_t dtMs) {
     neighWin_.regionMap = neighRegion_.empty() ? nullptr : &neighRegion_;
     neighWin_.viewRotation = cam_.rot;
     finish(neighWin_.draw(ui_, E, city.neighbours), showNeigh_);
-  }
+  };
+  const bool budgetOpen = showBudget_;
+  if (showNeigh_ && !budgetOpen) drawNeighbours();
   if (showGoals_) {
     ScenarioGoalsView v;
     if (scen_) v = scen_->goalsView(); else v.inScenario = false;
@@ -551,6 +554,7 @@ void Game::drawWindows(uint32_t dtMs) {
     BudgetView v; buildBudgetView(v);
     finish(budgetWin_.draw(ui_, E, city.budget, v), showBudget_);
   }
+  if (showNeigh_ && budgetOpen) drawNeighbours();
   if (showOrd_) {
     OrdinanceMoneyInput money; money.population = uint32_t(std::max(0, city.population())); money.world = city.footprintTiles();
     finish(ordWin_.draw(ui_, E, city.ordinances, money), showOrd_);

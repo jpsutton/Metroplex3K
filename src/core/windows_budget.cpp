@@ -178,9 +178,6 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
   for (auto& l : L) { if (l.income) { incY += l.ytd; incE += l.est; } else { expY += l.ytd; expE += l.est; } }
 
   ui.panel(r, E.win(0x89, "Budget"));
-  if (ui.skin) {   // the Budget title band is 1 px wider than the common frame's (right edge line at r.x + r.w - 5, observed)
-    ui.fill({r.x + r.w - 6, r.y + 5, 1, 29}, rgb(123, 146, 255)); ui.fill({r.x + r.w - 5, r.y + 4, 1, 31}, rgb(173, 182, 255));
-  }
   // Title-bar page tabs (42DEC7D2:01, 4 cells 54x31, stretched; active page = pressed cell).
   {
     const Image* tab = dlgArt(ui, 0x01);
@@ -253,10 +250,10 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
     // Tax-rate spinner + value box (income page).
     for (int g = 0; g < 3; g++) {
       if (key != kTaxKey[g]) continue;
-      int d = spinner(ui, E, kTaxKey[g], r.x + 190, r.y + fy + 1);
+      int d = spinner(ui, E, kTaxKey[g], r.x + 190, r.y + fy - 1, 2);   // up half 2 px higher, a 2 row gap, down half unchanged (observed)
       int rate = std::max(0, std::min(kMaxTaxRate, b.tax[g].rate + d));
       if (d && rate != b.tax[g].rate) { b.setTaxRate(g, rate); R.add(Act::SetTax, uint32_t(g), rate); }
-      whiteField(ui, at(206, fy, 20, 23));
+      whiteField(ui, at(206, fy - 2, 20, 23));
       rightText(ui, r.x + 222, r.y + fy + 2, std::to_string(b.tax[g].rate), F, kInkDark);
     }
     // Funding slider (expenditures page): track + knob 42DEC7D2:1C.
@@ -270,7 +267,7 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
       ui.fill({r.x + 150, ty + 1, 116, 1}, rgb(8, 12, 24)); ui.fill({r.x + 150, ty + 1, 1, 1}, rgb(57, 56, 123)); ui.fill({r.x + 265, ty + 1, 1, 1}, rgb(255, 255, 255));
       ui.fill({r.x + 150, ty + 2, 116, 1}, rgb(255, 255, 255)); ui.fill({r.x + 150, ty + 2, 1, 1}, rgb(156, 154, 231));
       if (!incomeTab) {   // the 100% marker shows through the track: two columns blended over the bevel
-        ui.fill({r.x + 234, ty, 2, 1}, rgb(107, 105, 165)); ui.fill({r.x + 234, ty + 1, 2, 1}, rgb(41, 36, 74));
+        ui.fill({r.x + 235, ty, 5, 1}, rgb(107, 105, 165)); ui.fill({r.x + 235, ty + 1, 5, 1}, rgb(41, 36, 74));
       }
       Rect track = at(kKnobX0, fy + 2, kKnobTravel + 18, 15);
       E.spot("fund." + key, track);
@@ -539,8 +536,8 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
   Rect r = placedAt(ui, 8, 8, 384, 354);
   ui.panel(r, E.win(0x76, "Ordinances"));
   // All positions below are measured on the original at 800 x 600 (window at 8, 8); main9 is the 9 pt UI face (cap height 9 rows).
-  ui.text(r.x + 6, r.y + 42, E.win(0x1C2, "Ordinance"), "main9", ink);
-  rightText(ui, r.x + 350, r.y + 42, E.win(0x1C3, "Current Monthly Cost"), "main9", ink);
+  ui.text(r.x + 6, r.y + 41, E.win(0x1C2, "Ordinance"), "main9", ink);
+  rightText(ui, r.x + 350, r.y + 41, E.win(0x1C3, "Current Monthly Cost"), "main9", ink);
   const Rect list{r.x + 4, r.y + 58, 376, 228};   // frame: dark top / left, light bottom / right; flat interior
   ui.fill(list, rgb(222, 223, 255)); insetBevel(ui, list);
   static const uint32_t order[7] = {kAdvUtilities, kAdvDemographics, kAdvSafety, kAdvEnvironment, kAdvPlanner, kAdvTransport, kAdvBudget};
@@ -576,7 +573,7 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
       if (y + 26 > bottom) break;
       const Rect bd{list.x + 4, y, bodyR - (list.x + 4) - 8, 26};
       ui.fill(bd, bandEdge); ui.fill({bd.x + 1, bd.y + 1, bd.w - 2, bd.h - 2}, band);
-      ui.text(bd.x + 4, bd.y + 7, it.name, "main9", ink);   // ink rows 80..88: 9 below the band top
+      ui.text(bd.x + 4, bd.y + 6, it.name, "main9", ink);   // ink rows 80..88: 9 below the band top
       bool c = false;
       const Rect q{bd.x + bd.w - 27, bd.y + 2, 23, 23};
       E.spot("adv." + std::to_string(it.id), q);
@@ -598,9 +595,9 @@ WindowResult OrdinancesWindow::drawFramed(Ui& ui, const WinEnv& E, Ordinances& o
         const bool ok = en ? o.repeal(it.id) : o.enact(it.id);
         if (ok) R.add(Act::SetOrdinance, it.id, !en);
       }
-      ui.text(list.x + 20, y, it.name, "main9", ink);   // ink x 32, cap top y + 2
+      ui.text(list.x + 19, y - 1, it.name, "system9", ink);   // SYSTEM9 (not bold), ink x 31, cap top 101
       const int64_t val = en ? o.monthlyValue(it.id, money) : o.ifEnactedValue(it.id, money);   // not enacted: the cost it would have, in grey
-      rightText(ui, list.x + 350, y, E.money(val), "main9", en ? (val < 0 ? rgb(0xC0, 0, 0) : 0) : grey);
+      rightText(ui, list.x + 350, y - 1, E.money(val), "system9", en ? (val < 0 ? rgb(0xC0, 0, 0) : 0) : grey);
     }
     y += advance(i);
   }
@@ -668,7 +665,7 @@ WindowResult BusinessDealsWindow::draw(Ui& ui, const WinEnv& E, BusinessDeals& d
   Rect r = centered(ui, 328, 196);
   ui.panel(r, E.win(0x1FE, "Business Deals"));   // no close box in the original; the check mark (or Esc) closes
   auto T = [&](int x, int y, const std::string& s) { ui.text(r.x + x, r.y + y, s, "main9", ink); };
-  auto plus = [&](int64_t v) { return (v >= 0 ? "+" : "") + E.money(v); };
+  auto plus = [&](int64_t v) { return (v > 0 ? "+" : "") + E.money(v); };   // no "+" for zero [OBSERVED]
   T(24, 43, E.win(0x1D0, "Current Business Deals:"));
   T(178, 43, E.win(0x13E, "Monthly Contribution:"));
   Rect lr{r.x + 7, r.y + 59, 315, 69};
@@ -692,8 +689,8 @@ WindowResult BusinessDealsWindow::draw(Ui& ui, const WinEnv& E, BusinessDeals& d
     ui.text(r.x + 304 - ui.textWidth(vs, "main9"), row.y, vs, "main9", on ? white : ink);
     if (ui.clicked(row)) selType = on ? -1 : int(t);
   }
-  T(92, 129, E.win(0x239, "Total Monthly Contribution:"));
-  { std::string tv = plus(d.monthlyIncome()); ui.text(r.x + 303 - ui.textWidth(tv, "main9"), r.y + 129, tv, "main9", ink); }
+  T(113, 129, E.win(0x239, "Total Monthly Contribution:"));
+  { std::string tv = plus(d.monthlyIncome()); ui.text(r.x + 304 - ui.textWidth(tv, "main9"), r.y + 129, tv, "main9", ink); }
   // Plates.
   blueBand(ui, {r.x + 86, r.y + 155, 44, 34});
   blueBand(ui, {r.x + 271, r.y + 155, 44, 34});

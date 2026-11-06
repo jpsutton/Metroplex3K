@@ -393,7 +393,10 @@ void textBox(Ui& ui, const WinEnv& E, Rect box, const std::string& text, int& sc
 WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGoalsView& v) {
   WindowResult R;
   Rect r = centered(ui, 474, 432);
-  if (frame(ui, E, r, v.title.empty() ? "Scenario goals" : v.title)) { R.close = true; R.add(Act::Close); }
+  ui.titleRecolour = true;
+  const bool framed = frame(ui, E, r, v.title.empty() ? "Scenario goals" : v.title);
+  ui.titleRecolour = false;
+  if (framed) { R.close = true; R.add(Act::Close); }
   if (!v.inScenario) { ui.text(r.x + 20, r.y + 50, "-"); return R; }
   auto at = [&](int x, int y, int w, int h) { return Rect{r.x + x, r.y + y, w, h}; };
   const uint32_t ink = rgb(0x31, 0x36, 0x7C);
@@ -458,6 +461,9 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
       }
       acc += rowH[gi];
     }
+  }
+  {   // bottom band holding the OK button: x 167..632, y 478..510, 1 px (173,182,255) border, (123,146,255) fill [OBSERVED]
+    ui.fill(at(4, 394, 466, 33), rgb(173, 182, 255)); ui.fill(at(5, 395, 464, 31), rgb(123, 146, 255));
   }
   const bool done = checkButton(ui, E, "ok", at(426, 395, 42, 32));
   if (done || ui.in.key[K_ESC]) {
