@@ -279,9 +279,29 @@ grammar of §4.5 (all rules have key 256) `[DATA]`; they are loaded by the zone 
 
 * `<NET>_GRND_SlopeRULES.txt`: valid rule-grammar files (keys 5, 10, 20, 40, 80, 160) that encode
   the slope-piece choice; the program uses the hard-coded table of §6.3 instead `[STATIC]`.
-* `<NET>_Exits.txt` (ROAD, RAIL, SUBW): `count` (344) then 344 pairs `occupantID, bitmask` giving
-  per-occupant connection-side masks (0 for no connection) `[DATA]`; the program takes this from
-  occupant data instead `[INFERRED]`.
+* `<NET>_Exits.txt` (ROAD, RAIL, SUBW): `count` (344) then 344 pairs `occupantID, value`. The values
+  are identical to the piece attributes 0x136 (road/highway), 0x137 (rail) and 0x138 (subway) for
+  all 310 IDs that have an attribute record [DATA]. The program uses the attributes.
+
+**Exposed sides for the final-pass mask** (§4.6 step 2) [DATA: reproduces the stored pieces of
+all 14 shipped cities]:
+* Take the low 16 bits of the piece's matrix: 0x136 for road and highway, 0x137 for rail, 0x138
+  for subway. This is the spec 18 §5.4 turn matrix, half B = true.
+* The piece exposes side k (0 W/−x, 1 N/−z, 2 E/+x, 3 S/+z) at rotation r iff some set bit b
+  satisfies ((b mod 4) + r) mod 4 = k. In other words: OR the four nibbles, then rotate that 4-bit
+  mask left by r.
+* Examples at r = 0:
+  * 29, 32, 69, 11202, 11204: W, E
+  * 31, 11201: N, S
+  * 35, 11203: W, S
+  * 39, 15098: W, N, S
+  * 11225: S
+  * 11258: W, E, S
+  * 43: all four sides
+* A piece without a matrix is treated as open on all sides.
+* Re-tiling the stored networks with this rule and the neighbour connections gives identical pieces
+  for 99.7 % of road and 99.97 % of rail tiles. Without it (every neighbour counted as open) the
+  figures are 99.3 % and 99.4 %.
 * `networkIntesection.txt`: a 3×3 matrix of quoted hexadecimal packed pieces, row/column 0 = road,
   1 = rail, 2 = power line; diagonal `"0"`. Road×rail = occupant 0x45 (69), road×power = 0x43 (67),
   rail×power = 0x47 (71); rotation 0 or 1 depending on which network runs along the first axis
