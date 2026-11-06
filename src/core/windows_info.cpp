@@ -125,8 +125,10 @@ WindowResult PreferencesDialog::draw(Ui& ui, const WinEnv& E, PrefsState& s) {
   Rect block{r.x + 372, r.y + 46, 96, 110};
   ui.fill(block, blue); ui.fill({block.x, block.y, block.w, 1}, dark); ui.fill({block.x, block.y + block.h - 1, block.w, 1}, dark);
   ui.fill({block.x, block.y, 1, block.h}, dark); ui.fill({block.x + block.w - 1, block.y, 1, block.h}, dark);
-  // Level wedge: seven bars rising left to right (drawn, approximating the original's decoration).
-  for (int k = 0; k < 7; k++)
+  // Level wedge: the volume-ramp art 22DEC92D:00000001 (68 x 10) drawn unscaled at (386, 50) [OBSERVED, 0 px]; without art, seven drawn bars.
+  const Image* ramp = sk ? sk->image(skin_group::Other, 1) : nullptr;
+  if (ramp) ui.blit(*ramp, r.x + 386, r.y + 50);
+  else for (int k = 0; k < 7; k++)
     for (int x = 0; x < 8; x++) {
       int gx = 16 + k * 10 + x, top = 59 - (gx - 16) * 9 / 67;
       ui.fill({r.x + 370 + gx, r.y + top, 1, 60 - top}, rgb(0xD6, 0xDB, 0xFF));

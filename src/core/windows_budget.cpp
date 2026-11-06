@@ -838,9 +838,12 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
   ui.text(r.x + 239, r.y + 318, E.win(0x29C, "Discuss Deal:"), "main9", ink);
   { Rect db{r.x + 322, r.y + 310, 38, 33};
     E.spot("discuss", db);
+    // Disabled while the selected neighbour has no land link (`exists` 0): the original draws the button grey for Hawkin's Creek in Berlin [OBSERVED; the
+    // rule is INFERRED].
+    const bool canDeal = haveSel && n.neighbours[selected].exists;
     bool c = false; const Image* art = E.img(0x42DEC7D2, 0x10);
-    if (!(ui.skin && art && ui.skin->imageButtonCells(ui, art, 4, db, "", false, haveSel, c))) c = ui.button(db, "?", haveSel);
-    if (c && haveSel) R.add(Act::DiscussDeal, uint32_t(selected)); }
+    if (!(ui.skin && art && ui.skin->imageButtonCells(ui, art, 4, db, "", false, canDeal, c))) c = ui.button(db, "?", canDeal);
+    if (c && canDeal) R.add(Act::DiscussDeal, uint32_t(selected)); }
   // Current deals with the selected neighbour.
   ui.text(r.x + 48, r.y + 357, E.win(0x13D, "Current Deals:"), "main9", lav);
   ui.text(r.x + 185, r.y + 357, E.win(0x29B, "Rate:"), "main9", lav);

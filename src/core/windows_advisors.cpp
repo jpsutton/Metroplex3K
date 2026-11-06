@@ -124,7 +124,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
       E.spot("petition." + std::to_string(p->id), row);
       const bool sel = petSel == int(p->id);
       if (sel) ui.fill({r.x + 28, ty, lr.x + lr.w - 1 - (r.x + 28), 13}, rgb(0, 0, 255));
-      for (int c = 0; c < 4; c++) ui.fill({r.x + 23 + c, ty + 6 - (3 - c), 1, 2 * (3 - c) + 1}, sel ? kWhite : kInk);
+      for (int k2 = 0; k2 < 9; k2++) ui.fill({r.x + 23, ty + k2, k2 < 5 ? k2 + 1 : 9 - k2, 1}, sel ? kWhite : kInk);   // 5 x 9 triangle, rows 175..183 [observed]
       ui.text(r.x + 34, ty - 3, ellipsize(ui, h, lr.x + lr.w - (r.x + 34) - 6), "main9", sel ? kWhite : kInk);   // main9: first ink row 175 (observed)
       if (ui.clicked(row)) {
         if (sel && frameNo - petClickFrame <= 30) R.add(Act::OpenPetitioner, p->id);
