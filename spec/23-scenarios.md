@@ -462,6 +462,63 @@ The scenario engine only forwards these values; it never recomputes them.
   playing the city. [STATIC][INFERRED outcome labels]
 * Time limits are expressed purely by timeline delays or `cmdGetMonthsElapsed` comparisons. [DATA]
 
+#### 4.7.1 Observed layouts at 800 × 600 `[OBSERVED]` (A Better Betterfeld)
+
+Coordinates are window client pixels, as (left, top)–(right, bottom), right/bottom exclusive. All
+three dialogs use the standard light-blue dialog skin (panel fill RGB 123,146,255; light bevels).
+Each dialog centres itself in the window. All three pause the simulation while open: the date did
+not advance with the game at top speed.
+
+**Start dialog** (scenario start) and **status dialog** (Review ▸ Scenario Status, tooltip
+"Scenario Status"):
+* Frame (163,84)–(637,516). The title bar shows the scenario title.
+* Upper-left panel (176,118)–(504,296):
+  * Start dialog: heading "Greetings Mayor:" plus an editable mayor-name field (≈ (322,128)–(503,145)),
+    then the text box (181,155)–(503,294) with a vertical scroll bar at x 487–503 when the text overflows.
+  * Status dialog: heading "Scenario Status:" and no name field; the text box starts at y 140.
+  * Text = the `cmdMakeDialogText` string, black on white.
+* Presenter panel (513,119)–(633,296): portrait frame (527,140)–(618,254), about 91 × 114.
+  Presenter name centred below it at y ≈ 271–280 ("Karen Frawl"). Advisor presenters show their
+  advisor portrait; no title line is drawn.
+* "Scenario Goals:" heading at y ≈ 312, then a goals list box (181,329)–(633,470). One row per goal
+  on a 40 px pitch (first row top ≈ 333): a 28 px status icon at x 185–212 (unmet = black "!" on a
+  white triangle), then the goal text at x ≈ 220 in two-line wrap.
+* OK (check-mark) button ≈ (589,479)–(627,511) at the bottom right.
+
+**Pop-up** (`cmdPopUpMsg`):
+* Frame (204,181)–(595,418), 391 × 237. The title bar shows the presenter's dialog title
+  ("Environment Advisor" for an advisor presenter).
+* Close box at the top right ≈ (564,190)–(582,207).
+* Text panel (227,222)–(462,371): a 32 px icon at (234,237) (the yellow warning triangle), then
+  the text from x 278, y ≈ 232, wrapped at x ≈ 445. A scroll bar at x 445–461 appears only when
+  the text overflows.
+* Presenter panel (470,221)–(591,371): portrait frame (485,222)–(576,336), name centred at
+  y ≈ 348–358.
+* Button strip (205,378)–(594,413): OK (check-mark) button ≈ (544,383)–(581,408).
+* A pop-up does not end until OK or close is clicked. The next pop-up of a timeline appears in the
+  same place.
+
+**Results dialog** (`cmdEndScenario`):
+* Frame (177,101)–(621,498), 444 × 397. The title bar shows the scenario title.
+* Results panel (190,135)–(498,289):
+  * heading "Scenario Completed!" (y ≈ 140–157);
+  * "Results for Mayor <name>" (y ≈ 162–173);
+  * the rank list: one line per rank (`cmdAddRankInfo`) at x ≈ 238, y ≈ 193, 212, 231…
+  * Ranks not achieved are drawn in grey. The achieved rank is drawn in dark blue, may wrap to two
+    lines, and has a red "SimCity" stamp icon at (195,250)–(235,276) to its left.
+* Presenter panel (498,135)–(617,289): portrait frame (511,135)–(603,250), name centred at
+  y ≈ 264–275. The portrait used the **mood** of `cmdSetResultsDlgText` (sad face for mood 4 with
+  the lowest rank).
+* Text box (190,304)–(617,393): the `cmdSetResultsDlgText` string ("Were you playing or just
+  watching the time pass?").
+* Three button panels on a 142 px pitch, each 134 × 76: (189,406)–(323,482), (331,406)–(465,482)
+  and (473,406)–(607,482).
+  * Each has a two-line centred caption at y ≈ 415–440: "Replay Scenario", "Play Another
+    Scenario", "Return to Main Menu".
+  * Below the caption, a 66 × 30 "SimCity" logo button centred at y ≈ 449–479.
+  * These are outcomes 0, 1, 2 of §4.7.
+  * There is no close box or OK button.
+
 ## 5. Scenario-specific simulation modifications
 
 There is no separate "rules" record: everything a scenario changes is either in the embedded city
