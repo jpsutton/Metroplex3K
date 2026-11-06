@@ -309,6 +309,19 @@ static void testEndOddCorner() {
   CHECK(m.occupantAt(2, 8, LAYER_SURFACE).present && m.occupantAt(2, 9, LAYER_SURFACE).present);
 }
 
+// The strip grader's permission check: the reverse drag over the same slope would lower vertex (3,9), which touches a building at (3,8); the whole run
+// fails, so nothing is valid (observed: Mount Herrang reverse drag next to the water tower, red, nothing built).
+static void testStripGradePermission() {
+  SimpleNetworkMap m(20, 20);
+  setupRoadFlags(m);
+  m.setCornerHeight(2, 9, 28); m.setCornerHeight(2, 10, 28); m.setCornerHeight(3, 10, 28);
+  RoutedPath ok = routePath(m, TOOL_ROAD, {2, 9}, {2, 4});
+  CHECK(!ok.blocked && ok.validPrefix == 6);
+  m.addForeign(3, 8, 99999, 0, false);
+  RoutedPath rp = routePath(m, TOOL_ROAD, {2, 9}, {2, 4});
+  CHECK(rp.blocked && rp.validPrefix == 0);
+}
+
 // Highway commit: every vertex row across the two carriageways is set to its minimum (interim rule), and terrain levelling is charged
 // LevelTerrain x sum|dh| >> 2.
 static void testHighwayCrossRows() {
@@ -725,6 +738,7 @@ int main() {
   testBlockedShore();
   testHighwayCrossRows();
   testEndOddCorner();
+  testStripGradePermission();
   testTunnel();
   testConnections();
   testOnRamp();

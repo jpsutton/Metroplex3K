@@ -60,28 +60,97 @@ bool slopesAlong(const INetworkMap& m, int x, int z, bool alongX) {
   return alongX ? (c[1] != c[0] || c[2] != c[3]) : (c[3] != c[0] || c[2] != c[1]);
 }
 
-// Odd-corner levelling of the second-to-last tile [OBSERVED, Mount Herrang, road/rail/power/pipe/subway drags ending on a slope; the rule is INFERRED from
-// those drags]: when B (the second-to-last tile) has three corners at one level and a single odd corner, the odd corner moves to that level, B becomes
-// flat and the last tile T a clean one-direction slope; nothing else moves. Succeeds only when T is then flat or a valid slope.
-struct OddCornerFix { int vx = 0, vz = 0, h = 0, delta = 0; };
-bool oddCornerFix(const INetworkMap& m, const PathTile& b, const PathTile& t, OddCornerFix& out) {
-  if (!m.onMap(b.x, b.z) || !m.onMap(t.x, t.z)) return false;
-  int c[4]; m.tileCorners(b.x, b.z, c);
-  int odd = -1, lvl = 0;
-  for (int i = 0; i < 4 && odd < 0; i++) {
-    // corner i is odd when the other three are equal and it differs
-    int o1 = c[(i + 1) % 4], o2 = c[(i + 2) % 4], o3 = c[(i + 3) % 4];
-    if (o1 == o2 && o2 == o3 && c[i] != o1) { odd = i; lvl = o1; }
+// Strip grader [STATIC SIMNTWRK manager vt+0xC0, reconstruction checked against the Mount Herrang drags; the decompile is partly garbled]. The drag is
+// split into straight runs (breaks at water and at skipped tiles; a turn tile belongs to both runs). A run of >= 3 tiles, or >= 2 for the final run, is
+// graded as a strip: the vertex rows along the run are clamped into a window anchored by the start and end heights, mirror vertices copy their main
+// vertex, and every changed vertex needs all four tiles around it free of occupants. A failing run invalidates itself and everything after it.
+// Not modelled yet [OPEN]: the |dh| <= 4 ring smoothing around the strip and the vt+0x158 run break.
+struct GradeVertex { int x, z, h; };
+struct StripGrade {
+  std::vector<GradeVertex> verts;   // changed vertices only
+  int raised = 0, lowered = 0;
+  size_t failFrom = size_t(-1);     // first tile index of the failing run, -1 = none
+};
+
+static StripGrade planStripGrade(const INetworkMap& m, const std::vector<std::pair<int, int>>& tiles, const std::vector<char>& skip) {
+  StripGrade g;
+  const size_t N = tiles.size();
+  std::vector<std::pair<size_t, size_t>> runs;   // inclusive tile index ranges
+  auto breaker = [&](size_t i) { return (i < skip.size() && skip[i]) || !m.onMap(tiles[i].first, tiles[i].second) || m.isWaterTile(tiles[i].first, tiles[i].second); };
+  size_t i = 0;
+  while (i < N) {
+    if (breaker(i)) { i++; continue; }
+    const size_t a = i;
+    int pdx = 0, pdz = 0;
+    size_t b = i;
+    while (b + 1 < N && !breaker(b + 1)) {
+      const int dx = tiles[b + 1].first - tiles[b].first, dz = tiles[b + 1].second - tiles[b].second;
+      if (b > a && (dx != pdx || dz != pdz)) break;   // a turn: this tile ends the run and starts the next
+      pdx = dx; pdz = dz; b++;
+    }
+    runs.push_back({a, b});
+    i = (b + 1 < N && !breaker(b + 1) && b > a) ? b : b + 1;   // the turn tile starts the next run
+    if (b == a) i = b + 1;
   }
-  if (odd < 0) return false;
-  out.vx = b.x + (odd == 1 || odd == 2); out.vz = b.z + (odd == 2 || odd == 3); out.h = lvl;
-  out.delta = std::abs(c[odd] - lvl);
-  if (!m.canChangeCorner(out.vx, out.vz)) return false;
-  int tc[4]; m.tileCorners(t.x, t.z, tc);
-  const int vxs[4] = {t.x, t.x + 1, t.x + 1, t.x}, vzs[4] = {t.z, t.z, t.z + 1, t.z + 1};
-  for (int i = 0; i < 4; i++) if (vxs[i] == out.vx && vzs[i] == out.vz) tc[i] = lvl;
-  const bool flat = tc[0] == tc[1] && tc[1] == tc[2] && tc[2] == tc[3];
-  return flat || isValidSlope(tc);
+  std::map<std::pair<int, int>, int> target;   // vertex -> graded height (later runs override)
+  for (size_t r = 0; r < runs.size(); r++) {
+    const size_t a = runs[r].first, b = runs[r].second;
+    const size_t n = b - a + 1;
+    const bool finalRun = r + 1 == runs.size() && b + 1 == N;
+    if (n < (finalRun ? 2u : 3u)) continue;
+    bool collinear = true;
+    for (size_t k = a; k <= b; k++) {
+      if (tiles[k].first != tiles[a].first && tiles[k].second != tiles[a].second) collinear = false;
+      if (tiles[k].first != tiles[a].first && tiles[k].second != tiles[a].second) collinear = false;
+    }
+    const bool alongZ = tiles[a].first == tiles[b].first;
+    if (alongZ) { for (size_t k = a; k <= b; k++) if (tiles[k].first != tiles[a].first) collinear = false; }
+    else { for (size_t k = a; k <= b; k++) if (tiles[k].second != tiles[a].second) collinear = false; }
+    if (!collinear) { g.failFrom = a; return g; }
+    // all tiles already a valid slope (or flat): nothing to grade
+    bool allValid = true;
+    for (size_t k = a; k <= b; k++) { int c[4]; m.tileCorners(tiles[k].first, tiles[k].second, c); if (!(isValidSlope(c) || (c[0] == c[1] && c[1] == c[2] && c[2] == c[3]))) allValid = false; }
+    if (allValid) continue;
+    int c0[4], c1[4];
+    m.tileCorners(tiles[a].first, tiles[a].second, c0);
+    m.tileCorners(tiles[b].first, tiles[b].second, c1);
+    const bool sFlat = c0[0] == c0[1] && c0[1] == c0[2] && c0[2] == c0[3], eFlat = c1[0] == c1[1] && c1[1] == c1[2] && c1[2] == c1[3];
+    int startH = sFlat ? c0[0] : (c0[0] + c0[1] + c0[2] + c0[3]) / 4, endH = eFlat ? c1[0] : (c1[0] + c1[1] + c1[2] + c1[3]) / 4;
+    const int s = sFlat ? 1 : 0, last = int(n) - 1 - (eFlat ? 1 : 0);
+    const bool negative = alongZ ? tiles[b].second < tiles[a].second : tiles[b].first < tiles[a].first;
+    if (negative) std::swap(startH, endH);
+    const int minX = std::min(tiles[a].first, tiles[b].first), minZ = std::min(tiles[a].second, tiles[b].second);
+    int prev = 0;
+    std::vector<GradeVertex> main, mirror;
+    bool fail = false;
+    for (int k = s; k <= last + 1; k++) {
+      int lo = std::max(0, endH - 2 - 2 * (last - k)), hi = std::min(255, endH + 2 + 2 * (last - k));
+      if (k == s) { lo = std::max(lo, startH); hi = std::min(hi, startH); }
+      else { lo = std::max(lo, prev - 2); hi = std::min(hi, prev + 2); }
+      if (hi < lo) { fail = true; break; }
+      const int mx = alongZ ? tiles[a].first + 1 : minX + k, mz = alongZ ? minZ + k : tiles[a].second;
+      const int qx = alongZ ? tiles[a].first : minX + k, qz = alongZ ? minZ + k : tiles[a].second + 1;
+      if (mx < 0 || mz < 0 || mx > m.width() || mz > m.height()) { prev = std::max(lo, std::min(hi, prev)); continue; }
+      const int h = std::max(lo, std::min(hi, m.cornerHeight(mx, mz)));
+      prev = h;
+      main.push_back({mx, mz, h});
+      if (qx >= 0 && qz >= 0 && qx <= m.width() && qz <= m.height()) mirror.push_back({qx, qz, h});
+    }
+    if (!fail) {
+      std::vector<GradeVertex> all = main; all.insert(all.end(), mirror.begin(), mirror.end());
+      for (const auto& v : all)
+        if (v.h != m.cornerHeight(v.x, v.z) && !m.canChangeCorner(v.x, v.z)) { fail = true; break; }   // permission: occupants around every changed vertex
+      if (!fail) for (const auto& v : all) target[{v.x, v.z}] = v.h;
+    }
+    if (fail) { g.failFrom = a; return g; }
+  }
+  for (const auto& kv : target) {
+    const int cur = m.cornerHeight(kv.first.first, kv.first.second);
+    if (cur == kv.second) continue;
+    g.verts.push_back({kv.first.first, kv.first.second, kv.second});
+    if (kv.second > cur) g.raised += kv.second - cur; else g.lowered += cur - kv.second;
+  }
+  return g;
 }
 }  // namespace
 
@@ -208,6 +277,12 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
     cx = nx; cz = nz;
     stepsTaken++;
     addTile(cx, cz, alongX);
+  }
+  if (!P.wide && tool != TOOL_ONRAMP) {   // the strip grader runs with the validation, in the preview and at commit
+    std::vector<std::pair<int, int>> ts;
+    for (const RoutedTile& t : rp.tiles) { if (!t.valid) break; ts.push_back({t.x, t.z}); }
+    StripGrade g = planStripGrade(m, ts, {});
+    if (g.failFrom != size_t(-1)) { for (size_t k = g.failFrom; k < rp.tiles.size(); k++) rp.tiles[k].valid = false; blocked = true; }
   }
   rp.blocked = blocked;
   rp.validPrefix = 0;
@@ -641,14 +716,6 @@ static int levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool
   if (lane.empty()) return 0;
   const PathTile& a = start ? lane.front() : lane.back();
   const PathTile& b = highway && lane.size() > 1 ? (start ? lane[1] : lane[lane.size() - 2]) : a;
-  if (!highway && !start && lane.size() >= 2) {   // the drag's far end: the odd-corner levelling of the second-to-last tile, else the average below
-    const PathTile& prev = lane[lane.size() - 2];
-    OddCornerFix fx;
-    if (!m.occupantAt(prev.x, prev.z, LAYER_SURFACE).present && !m.occupantAt(a.x, a.z, LAYER_SURFACE).present && oddCornerFix(m, prev, a, fx)) {
-      m.setCornerHeight(fx.vx, fx.vz, fx.h);
-      return fx.delta;
-    }
-  }
   for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return 0;
   bool bothValid = true, bothFlat = true;
   for (const PathTile* t : {&a, &b}) {
@@ -825,6 +892,13 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
   // Terrain operations are charged LevelTerrain x k >> 2, k = the sum of the absolute corner changes [STATIC SIMDIRT level plan 0x1000A750; observed 25
   // for four corners moving 1 each].
   int levelK = 0;
+  if (P.kind != NK_HIGHWAY) {   // strip grade of the straight runs (charged: LevelTerrain x raised/lowered >> 2)
+    std::vector<std::pair<int, int>> ts; std::vector<char> sk;
+    for (const PathTile& t : path) { ts.push_back({t.x, t.z}); sk.push_back(skip.count({t.x, t.z}) ? 1 : 0); }
+    StripGrade g = planStripGrade(m, ts, sk);
+    if (g.failFrom == size_t(-1)) for (const auto& v : g.verts) m.setCornerHeight(v.x, v.z, v.h);
+    levelK += g.raised + g.lowered;
+  }
   if (P.kind == NK_HIGHWAY) {
     std::vector<PathTile> lane0;
     for (const PathTile& t : path) if (t.carriage == 0 && !skip.count({t.x, t.z})) lane0.push_back(t);
