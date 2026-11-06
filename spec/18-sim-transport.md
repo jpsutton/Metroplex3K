@@ -433,6 +433,7 @@ it]. The transition table is [STATIC]:
 | 8 subway | subway, not station | 8 |
 | 8 subway | station with 0x20 | 0x30 |
 | 8 subway | station with subway and without road/rail | 0x18 |
+| 8 subway | station with subway **and** with road or rail (flags & 5), e.g. a bus stop or rail station above the line | 8 (stays on the subway layer) [STATIC, SimTransit asm 0x10007ba5–0x10007c28; 0x20 is tested before 0x08] |
 | 0x14 rail stn | rail, not station, and previous mode ≠ 4 | 4 (board) |
 | 0x18 subway stn | subway, not station, and previous mode ≠ 8 | 8 (board) |
 | 0x30 | (rail allowed) rail, not station, previous ≠ 4 | 4 |
@@ -474,6 +475,15 @@ in the order north/−y, west/−x, south/+y, east/+x) is evaluated as follows [
 | 0x42 | highway | 0x42, or 0x43 if 0x40 | highway |
 | 0x43 | road | 0x41, or 0x43 if 0x40 | surface |
 | 0x43 | highway (no road) | 0x42 / 0x43 | highway |
+
+**New node rectangle** [STATIC, SimTransit dc ~5476–5499 and the first step]: after the choice, the new
+node is the **chosen tile's occupant rectangle** (occupant vf 0xCC, anchor to anchor + size − 1,
+inclusive), not the single tile. Every tile of that rectangle receives the parent's visit code. For
+1×1 network pieces this is the tile itself. For a 2×2 rail station (agent type 12230) the node covers
+all four tiles, so the next ring scan surrounds the whole station and track touching any of its sides
+can be boarded. Spans are the exception (§5.1: a one-tile node on the landing tile). [DATA: London, a
+reimplementation with this rule and the subway row above reaches monthly fares of 932 / 999 / 878
+against the original's 936 / 1018 / 1030, up from 906 / 817 / 803.]
 
 Selection among the permitted neighbours: the first is taken. A later one replaces it only if its
 density is below `TrafficAnnoyanceLevel`; in that case the node is flagged "alternatives exist".
