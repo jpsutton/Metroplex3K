@@ -106,9 +106,9 @@ factor applied before the age curve [STATIC]:
 * *O* = the age curve above applied to *pre* instead of *C*.
 
 So a wind plant gives 40 %–100 % of *C* (140 of 200 on flat ground) and has no monthly random
-factor. Which terrain height array and scale the accessor reads is open: with the vertex heights
-at the plant's (x, z) corner Berlin's eight turbines would draw about 960 units in the saved month,
-while the saved wind column is 823 (`Open questions`). Solar and all other types use *C*.
+factor. The height is the terrain vertex height at the plant tile's (x, z) corner, raw byte
+[DATA: Berlin's eight turbines, in two separate components with their own ratios (§2.7), give the
+saved wind column 823 exactly with this height]. Solar and all other types use *C*.
 
 ### 2.5 Overwork and explosion
 
@@ -639,5 +639,4 @@ absent, re-derive *Lmax* and *Ld* (§2.3) and start *W* at 0. [STATIC layout][IN
   at the start of every component.
 * Closed: Water Conservation = `0x02BF1DFA`, Water Meters = `0xC2F90EB1` (§3.4 / `19` §9.5).
 * Whether *m* in §3.3 step 5 is the constant `MaxWaterPolluteForUI` or a running maximum.
-* Power: which terrain height (array, corner/centre, scale) the wind-site factor reads (§2.4);
-  which code path performs the load-time production roll (Persisted state).
+* Power: which code path performs the load-time production roll (Persisted state).
