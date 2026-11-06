@@ -164,7 +164,7 @@ const MainRow kIncRows[] = {
 };
 
 // Funding slider geometry: knob 18x15 travels x 150..247 for 0..kMaxFundingUi (100% sits on the marker bar).
-constexpr int kKnobX0 = 148, kKnobTravel = 97;   // knob travel starts 2 px left of the first measurement (observed at 800 x 600)
+constexpr int kKnobX0 = 149, kKnobTravel = 97;   // knob travel starts 2 px left of the first measurement (observed at 800 x 600)
 
 }  // namespace
 
@@ -216,7 +216,7 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
   // Rows.
   const MainRow* rows = incomeTab ? kIncRows : kExpRows;
   int nRows = incomeTab ? int(std::size(kIncRows)) : int(std::size(kExpRows));
-  if (!incomeTab) ui.fillAlpha(at(233, 177, 8, 139), kWhite, 0.33f);   // 100% funding marker behind the sliders
+  if (!incomeTab) ui.fillAlpha(at(234, 177, 8, 139), kWhite, 0.33f);   // 100% funding marker behind the sliders
   for (int k = 0; k < nRows; k++) {
     const MainRow& row = rows[k];
     if (!row.key) continue;
@@ -264,9 +264,13 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
       Department* dp = b.dept(dr.id);
       if (!dp) continue;
       int ty = r.y + fy + 8;
-      ui.fill({r.x + 150, ty, 116, 1}, rgb(0x39, 0x38, 0x7B));
-      ui.fill({r.x + 151, ty + 1, 114, 1}, rgb(0x08, 0x0C, 0x18));
-      ui.fill({r.x + 150, ty + 2, 116, 1}, rgb(0x9C, 0x9A, 0xE7));
+      // Track bevel, 116 x 3 [OBSERVED pixel by pixel]: top (24,20,74) / (57,56,123) / (156,154,231); middle (57,56,123) / (8,12,24) / white; bottom (156,154,231) / white.
+      ui.fill({r.x + 150, ty, 116, 1}, rgb(57, 56, 123)); ui.fill({r.x + 150, ty, 1, 1}, rgb(24, 20, 74)); ui.fill({r.x + 265, ty, 1, 1}, rgb(156, 154, 231));
+      ui.fill({r.x + 150, ty + 1, 116, 1}, rgb(8, 12, 24)); ui.fill({r.x + 150, ty + 1, 1, 1}, rgb(57, 56, 123)); ui.fill({r.x + 265, ty + 1, 1, 1}, rgb(255, 255, 255));
+      ui.fill({r.x + 150, ty + 2, 116, 1}, rgb(255, 255, 255)); ui.fill({r.x + 150, ty + 2, 1, 1}, rgb(156, 154, 231));
+      if (!incomeTab) {   // the 100% marker shows through the track: two columns blended over the bevel
+        ui.fill({r.x + 234, ty, 2, 1}, rgb(107, 105, 165)); ui.fill({r.x + 234, ty + 1, 2, 1}, rgb(41, 36, 74));
+      }
       Rect track = at(kKnobX0, fy + 2, kKnobTravel + 18, 15);
       E.spot("fund." + key, track);
       int id = ui.nextId();

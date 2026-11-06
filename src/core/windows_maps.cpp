@@ -472,11 +472,11 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
       if (series[i].fallback == "City Size" || series[i].fallback == "Funds" || series[i].fallback == "Power %") enabledMask |= 1u << i;
     maskInit = true;
   }
-  const Rect box{r.x + 44, r.y + 50, 357, 189};
+  const Rect box{r.x + 44, r.y + 50, 356, 189};
   // Stripes measured on the original (screen rows 85.. = local 51..): base (222,223,255) 51..64, then 17 px bands (edges 65, 82, ... 201) alternating
   // with (231,231,255) through local 217; below the 2 px axis (local 218..219) the base colour again to the frame (local 220..237).
   ui.fill({box.x, box.y, box.w, box.h}, rgb(222, 223, 255));
-  for (int y = 51; y < 218; y++) ui.fill({box.x, r.y + y, box.w, 1}, (y < 65 ? 0 : 1 + (y - 65) / 17) % 2 ? rgb(231, 231, 255) : rgb(222, 223, 255));
+  for (int y = 51; y < 218; y++) ui.fill({box.x, r.y + y, 257, 1}, (y < 65 ? 0 : 1 + (y - 65) / 17) % 2 ? rgb(231, 231, 255) : rgb(222, 223, 255));
   // Frame: dark top/left (123,142,255), white right/bottom [OBSERVED].
   ui.fill({box.x, box.y, box.w, 1}, rgb(123, 142, 255)); ui.fill({box.x, box.y, 1, box.h}, rgb(123, 142, 255));
   ui.fill({box.x + box.w - 1, box.y, 1, box.h}, rgb(255, 255, 255)); ui.fill({box.x, box.y + box.h - 1, box.w, 1}, rgb(255, 255, 255));
@@ -538,7 +538,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   for (int c = 0; c < 3; c++)
     for (int row = 0; row < colSize[c] && idx < series.size() && idx < 16; row++, idx++) {
       const bool on = (enabledMask & (1u << idx)) != 0;
-      const Rect cb{r.x + colX[c], r.y + 253 + 24 * row, 12, 12};
+      const Rect cb{r.x + colX[c], r.y + 252 + 24 * row, 12, 12};
       const Rect hit{cb.x, cb.y, 112, 14};
       E.spot("series." + std::to_string(idx), hit);
       // The same check-box art as the Preferences window (dark outline, dark check mark) [OBSERVED].
@@ -551,7 +551,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
           for (int k = 0; k < 5; k++) ui.fill({cb.x + 4 + k, cb.y + 7 - k, 1, 2}, kInkBlue);
         }
       }
-      ui.text(cb.x + 14, cb.y + (12 - ui.fonts->get("system9").height()) / 2, E.win(series[idx].labelId, series[idx].fallback), "system9", kInkBlue);
+      ui.text(cb.x + 15, cb.y + 1 + (12 - ui.fonts->get("system9").height()) / 2, E.win(series[idx].labelId, series[idx].fallback), "system9", kInkBlue);
       if (ui.clicked(hit)) { if (on) enabledMask &= ~(1u << idx); else enabledMask |= 1u << idx; }
     }
   // range radios

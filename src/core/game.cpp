@@ -1079,7 +1079,7 @@ void Game::drawHud() {
   // (spec 08 4.2 observed). Both are anchored to the window, not to the bar art.
   const int navX = navigatorRect(bh).x;
   auto centredField = [&](const Rect& r, const std::string& t, uint32_t col) {
-    ui_.textCentered(r, t, "main10", col);   // spec 08 4.2: text centred in its field rect
+    ui_.textCentered(r, t, "main9", col ? col : rgb(24, 40, 140));   // spec 08 4.2: text centred in its field rect; main9 in (24,40,140) [OBSERVED]
   };
   if (skinBar) {
     centredField(place.fieldA, world_.info.cityName, 0);

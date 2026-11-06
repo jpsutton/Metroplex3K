@@ -174,7 +174,7 @@ void blueBand(Ui& ui, Rect r);
 // White edit field with the original's outline (main9 text, dark ink); keyboard focus by click. `multiLine` wraps the
 // text and adds the inner bottom line of the description box. `filter` drops these characters. Returns true if edited.
 bool editField(Ui& ui, const WinEnv& E, const std::string& name, Rect r, std::string& val, int focusId, size_t maxLen = 31,
-               bool multiLine = false, const char* filter = nullptr);
+               bool multiLine = false, const char* filter = nullptr, bool plain = false);   // plain: a 1 px black frame round a white interior (scenario mayor field)
 // Colour sprite from the mounted sprite data blended through its opacity plane (id + 1, 0..31), drawn at
 // (ax, ay) minus the sprite's span origin. Missing sprite: nothing drawn.
 void spriteAt(Ui& ui, GameData* gd, uint32_t cat, uint32_t id, int ax, int ay);

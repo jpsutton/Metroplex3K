@@ -57,6 +57,7 @@ WindowResult PreferencesDialog::draw(Ui& ui, const WinEnv& E, PrefsState& s) {
   };
   auto lab = [&](int x, int y, const std::string& t, uint32_t c) { ui.text(r.x + x, r.y + y, t, "main9", c); };
   ui.fill({r.x + 6, r.y + 42, 200, 300}, rgb(222, 223, 255));   // flat fill inside the Performance and General Options panels (observed)
+  ui.fill({r.x + 212, r.y + 42, 262, 300}, rgb(222, 223, 255));   // the Sound / Music Choices panel is flat too
   ui.fill({r.x + 6, r.y + 346, 468, 76}, rgb(222, 223, 255));
   sunkenLines({r.x + 6, r.y + 42, 200, 300});
   sunkenLines({r.x + 212, r.y + 42, 262, 300});
@@ -438,21 +439,17 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
   auto at = [&](int x, int y, int w, int h) { return Rect{r.x + x, r.y + y, w, h}; };
   const uint32_t ink = rgb(0x31, 0x36, 0x7C);
   // Upper-left panel: heading, (start dialog: the mayor's name), the scrollable text.
-  ui.fill(at(13, 34, 328, 178), kPanelFill);
-  {   // light heading box: top line (173,182,255), vertical gradient (239,239,255) -> (231,227,255), bottom line (123,138,255) [OBSERVED]
-    const Rect hb = at(13, 34, 328, 37);
-    for (int i = 1; i < hb.h - 1; i++) {
-      const float t = float(i - 1) / float(hb.h - 3);
-      ui.fill({hb.x, hb.y + i, hb.w, 1}, rgb(uint8_t(239 - 8 * t + 0.5f), uint8_t(239 - 12 * t + 0.5f), 255));
-    }
-    ui.fill({hb.x, hb.y, hb.w, 1}, rgb(173, 182, 255)); ui.fill({hb.x, hb.y + hb.h - 1, hb.w, 1}, rgb(123, 138, 255));
-  }
+  // The left panel is transparent (the dialog's cloud tile shows through) inside a 1 px border (173,182,255) that runs round the whole panel, x 13..349 and
+  // y 34..211 of the dialog; the frame keeps its blue band to the left of it (light line at x 4, fill x 5..12, rows 16..425) [OBSERVED].
+  ui.fill(at(5, 16, 8, 410), rgb(123, 146, 255)); ui.fill(at(4, 16, 1, 410), rgb(173, 182, 255));
+  { const uint32_t pe = rgb(173, 182, 255);
+    ui.fill(at(13, 34, 337, 1), pe); ui.fill(at(13, 34, 1, 178), pe); ui.fill(at(349, 34, 1, 178), pe); ui.fill(at(13, 211, 337, 1), pe); }
   const std::string head = v.startMode ? E.se(3, "Greetings Mayor:") : (v.statusLabel.empty() ? std::string("Scenario Status:") : v.statusLabel);
   ui.text(r.x + 20, r.y + 39, head, "title12", ink);
   int textTop = 56;
   if (v.startMode) {
     if (!mayorInit) { mayorEdit = v.mayor; mayorInit = true; }
-    editField(ui, E, "mayor", at(160, 46, 180, 14), mayorEdit, 0x53434D59, 31);
+    editField(ui, E, "mayor", at(160, 46, 180, 14), mayorEdit, 0x53434D59, 31, false, nullptr, true);
     textTop = 71;
   } else mayorInit = false;
   textBox(ui, E, at(18, textTop - 1, 323, 211 - textTop), v.briefing, scroll);   // frame (181,154)-(503,293) on the start dialog

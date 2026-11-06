@@ -337,15 +337,20 @@ void blueBand(Ui& ui, Rect b) {
 }
 
 bool editField(Ui& ui, const WinEnv& E, const std::string& name, Rect fr, std::string& val, int id, size_t maxLen, bool multiLine,
-               const char* filter) {
+               const char* filter, bool plain) {
   const uint32_t ink = rgb(0x31, 0x34, 0x7B);
   E.spot(name, fr);
   ui.fill(fr, rgb(255, 255, 255));
-  ui.fill({fr.x, fr.y, fr.w, 1}, rgb(0x6B, 0x71, 0xBD)); ui.fill({fr.x, fr.y, 1, fr.h}, rgb(0x6B, 0x71, 0xBD));
-  ui.fill({fr.x + 1, fr.y + 1, fr.w - 2, 1}, ink); ui.fill({fr.x + 1, fr.y + 1, 1, fr.h - 2}, ink);
-  ui.fill({fr.x + fr.w - 2, fr.y + 1, 1, fr.h - 2}, rgb(0x7B, 0x82, 0xBD));
-  if (multiLine) ui.fill({fr.x + 1, fr.y + fr.h - 2, fr.w - 2, 1}, rgb(0x7B, 0x82, 0xBD));
-  ui.fill({fr.x + fr.w - 1, fr.y, 1, fr.h}, rgb(0xB5, 0xB6, 0xE7)); ui.fill({fr.x, fr.y + fr.h - 1, fr.w, 1}, rgb(0xB5, 0xB6, 0xE7));
+  if (plain) {   // `fr` is the white interior; a 1 px black frame is drawn just outside it
+    ui.fill({fr.x - 1, fr.y - 1, fr.w + 2, 1}, 0xFF000000u); ui.fill({fr.x - 1, fr.y + fr.h, fr.w + 2, 1}, 0xFF000000u);
+    ui.fill({fr.x - 1, fr.y, 1, fr.h}, 0xFF000000u); ui.fill({fr.x + fr.w, fr.y, 1, fr.h}, 0xFF000000u);
+  } else {
+    ui.fill({fr.x, fr.y, fr.w, 1}, rgb(0x6B, 0x71, 0xBD)); ui.fill({fr.x, fr.y, 1, fr.h}, rgb(0x6B, 0x71, 0xBD));
+    ui.fill({fr.x + 1, fr.y + 1, fr.w - 2, 1}, ink); ui.fill({fr.x + 1, fr.y + 1, 1, fr.h - 2}, ink);
+    ui.fill({fr.x + fr.w - 2, fr.y + 1, 1, fr.h - 2}, rgb(0x7B, 0x82, 0xBD));
+    if (multiLine) ui.fill({fr.x + 1, fr.y + fr.h - 2, fr.w - 2, 1}, rgb(0x7B, 0x82, 0xBD));
+    ui.fill({fr.x + fr.w - 1, fr.y, 1, fr.h}, rgb(0xB5, 0xB6, 0xE7)); ui.fill({fr.x, fr.y + fr.h - 1, fr.w, 1}, rgb(0xB5, 0xB6, 0xE7));
+  }
   if (ui.in.pressed) { if (fr.contains(ui.in.mx, ui.in.my)) ui.focusId = id; else if (ui.focusId == id) ui.focusId = 0; }
   bool focus = ui.focusId == id, edited = false;
   if (focus) {
@@ -354,7 +359,7 @@ bool editField(Ui& ui, const WinEnv& E, const std::string& name, Rect fr, std::s
     if (ui.in.key[K_BACKSPACE] && !val.empty()) { val.pop_back(); edited = true; }
   }
   std::string shown = val + (focus ? "|" : "");
-  if (!multiLine) ui.text(fr.x + 4, fr.y + 3, shown, "main9", ink);
+  if (!multiLine) { if (plain) ui.text(fr.x + 1, fr.y, shown, "main9", ink); else ui.text(fr.x + 4, fr.y + 3, shown, "main9", ink); }
   else {
     int y = fr.y + 3;
     for (const auto& l : wrap(ui, shown, fr.w - 8, "main9")) { if (y + 14 > fr.y + fr.h - 2) break; ui.text(fr.x + 4, y, l, "main9", ink); y += 14; }
