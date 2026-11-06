@@ -291,17 +291,22 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
     stepsTaken++;
     addTile(cx, cz, alongX);
   }
-  // A bridge needs the first water tile of the span to be flat or a valid slope: without it the water tiles and everything after them are invalid and only
-  // the land prefix builds [OBSERVED, Roadless Paradise (34,158)->(34,175): the far water tile (34,173) 80 82 82 82 made all water and far land red;
-  // INFERRED rule, the interior water tiles may be irregular as on the x=36 crossing].
-  if (!P.wide && P.minRun > 0 && tool != TOOL_ONRAMP && rp.tiles.size() >= 4) {
+  // Water crossing countdown [STATIC, the drag-path builder 0x1000488D]: after the water, minRun land tiles are counted down, and the water tiles stay pending
+  // until a valid land tile (flat or a valid slope) follows the countdown. A drag that ends (or turns invalid) first sets every pending tile red; only the
+  // leading buildable tiles remain (Roadless Paradise (34,158)->(34,175): the water at z162..173 and two land tiles after it, all red).
+  if (!P.wide && P.minRun > 0 && tool != TOOL_ONRAMP) {
     size_t w0 = rp.tiles.size();
     for (size_t k = 0; k < rp.tiles.size(); k++) if (rp.tiles[k].valid && m.onMap(rp.tiles[k].x, rp.tiles[k].z) && m.isWaterTile(rp.tiles[k].x, rp.tiles[k].z)) { w0 = k; break; }
     if (w0 < rp.tiles.size()) {
       size_t j = w0;
       while (j < rp.tiles.size() && rp.tiles[j].valid && m.onMap(rp.tiles[j].x, rp.tiles[j].z) && m.isWaterTile(rp.tiles[j].x, rp.tiles[j].z)) j++;
-      auto fine = [&](size_t k) { int c[4]; m.tileCorners(rp.tiles[k].x, rp.tiles[k].z, c); return (c[0] == c[1] && c[1] == c[2] && c[2] == c[3]) || isValidSlope(c); };
-      if (j < rp.tiles.size() && !fine(w0)) {   // the near-shore tile only: x=36's far water tile (rise 3) is bridged in the original
+      bool confirmed = false;
+      for (size_t k = j + size_t(P.minRun); k < rp.tiles.size() && rp.tiles[k].valid && !confirmed; k++) {
+        if (m.isWaterTile(rp.tiles[k].x, rp.tiles[k].z)) break;
+        int c[4]; m.tileCorners(rp.tiles[k].x, rp.tiles[k].z, c);
+        if ((c[0] == c[1] && c[1] == c[2] && c[2] == c[3]) || isValidSlope(c)) confirmed = true;
+      }
+      if (!confirmed) {
         for (size_t k = w0; k < rp.tiles.size(); k++) rp.tiles[k].valid = false;
         blocked = true;
       }
@@ -427,7 +432,8 @@ BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, co
     return std::min(std::max(B, lo), hi);
   };
   const int rows = kind == NK_HIGHWAY ? 3 : 2;
-  auto addCorner = [&](int vx, int vz, int h) { if (vOn(vx, vz)) pl.corners.push_back({vx, vz, h}); };
+  int grp = 0;
+  auto addCorner = [&](int vx, int vz, int h) { if (vOn(vx, vz)) pl.corners.push_back({vx, vz, h, grp}); };
   auto side = [&](int bx, int bz, int sgn, int B) {
     // sgn = -1: start side (W0 - n a), +1: far side (E0 + n a)
     // Order [OBSERVED, Roadless Paradise road bridge refused next to a train station: the R and D rows were already graded, the B rows were not]: the
@@ -447,7 +453,9 @@ BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, co
     Bf = std::min(std::max((h1 + h2 + h3) / 3, hw - 2), hw + 6);
     Bs = h1;
   }
+  grp = 0;
   side(pl.x0, pl.z0, -1, Bs);
+  grp = 1;
   // River bed: after the start side and before the far side, the interior corners of the water rows that stand above the water level go down
   // to it (spec 12 6.4; k = 1 .. W-1 along the span, the same rows as the abutments).
   for (int k = 1; k < pl.W; k++)
@@ -455,9 +463,14 @@ BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, co
       const int vx = pl.x0 + k * pl.ax + q * pl.px, vz = pl.z0 + k * pl.az + q * pl.pz;
       if (vOn(vx, vz) && m.cornerHeight(vx, vz) > hw) addCorner(vx, vz, hw);
     }
+  grp = 2;
   side(ex, ez, +1, Bf);
-  for (auto& c : pl.corners)
+  // The permission check covers the start-bank and far-bank corners (8 each) and skips a corner whose height already equals its target [STATIC];
+  // the river-bed corners are written later without a check of their own.
+  for (auto& c : pl.corners) {
+    if (kind != NK_HIGHWAY && (c.group == 1 || m.cornerHeight(c.vx, c.vz) == c.h)) continue;
     if (!m.canChangeCorner(c.vx, c.vz)) { pl.terrainBlocked = true; break; }
+  }
 
   // 6. pieces
   const int rampY = kind == NK_POWER ? hw + 1 : kind == NK_HIGHWAY ? hw + 2 : (pl.axis == 0 ? hw + 5 : hw + 7);   // highway ramps at hw + 2 (spec 12 6.4)
@@ -480,9 +493,62 @@ BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, co
   return pl;
 }
 
+// Approach strip: the rows along the axis from the bank row (pinned) to the deck-side row (pinned) with the strip grader's window; every row copies to
+// its perpendicular partner. The whole block must be changeable when any approach tile is not a valid slope [permission over the affected block: the
+// original's failure at the train station in the Roadless Paradise x=36 case; the exact block is INFERRED].
+static bool gradeApproach(INetworkMap& m, const BridgePlan& pl, int baseX, int baseZ, int sgn, int startH, int endH, int firstRow, int rowStep, int rowsN, int tileFirst, int tilesN) {
+  auto vOn = [&](int vx, int vz) { return vx >= 0 && vz >= 0 && vx <= m.width() && vz <= m.height(); };
+  bool need = false;
+  std::vector<std::pair<int, int>> block;
+  for (int t = 0; t < tilesN; t++) {
+    const int tx = baseX + sgn * (tileFirst + t) * pl.ax, tz = baseZ + sgn * (tileFirst + t) * pl.az;
+    if (!m.onMap(tx, tz)) continue;
+    int c[4]; m.tileCorners(tx, tz, c);
+    if (!(c[0] == c[1] && c[1] == c[2] && c[2] == c[3]) && !isValidSlope(c)) need = true;
+    for (int dx = 0; dx <= 1; dx++) for (int dz = 0; dz <= 1; dz++) block.push_back({tx + dx, tz + dz});
+  }
+  if (!need) return true;
+  for (const auto& v : block) if (vOn(v.first, v.second) && !m.canChangeCorner(v.first, v.second)) return false;
+  const int last = rowsN - 2;
+  int prev = 0;
+  for (int k = 0; k < rowsN; k++) {
+    const int rx = baseX + sgn * (firstRow + rowStep * k) * pl.ax, rz = baseZ + sgn * (firstRow + rowStep * k) * pl.az;
+    int lo = std::max(0, endH - 2 - 2 * (last - k)), hi = std::min(255, endH + 2 + 2 * (last - k));
+    if (k == 0) { lo = std::max(lo, startH); hi = std::min(hi, startH); }
+    else { lo = std::max(lo, prev - 2); hi = std::min(hi, prev + 2); }
+    if (hi < lo) return false;
+    if (!vOn(rx, rz)) { prev = std::max(lo, std::min(hi, prev)); continue; }
+    const int h = std::max(lo, std::min(hi, m.cornerHeight(rx, rz)));
+    prev = h;
+    for (int q = 0; q < 2; q++) { const int vx = rx + q * pl.px, vz = rz + q * pl.pz; if (vOn(vx, vz)) m.setCornerHeight(vx, vz, h); }
+  }
+  return true;
+}
+
+bool buildBridgeTerrain(INetworkMap& m, BridgePlan& pl) {
+  if (!pl.ok || pl.terrainBlocked) return false;
+  const int D = pl.kind == NK_POWER ? 1 : 5;
+  const int ex = pl.x0 + pl.W * pl.ax, ez = pl.z0 + pl.W * pl.az;
+  int Bs = 0, Bf = 0;   // the banks' B heights as planned (the B rows of each side)
+  for (const auto& c : pl.corners) {
+    const bool startSide = c.group == 0;
+    const int d = startSide ? std::abs((c.vx - pl.x0) * pl.ax + (c.vz - pl.z0) * pl.az) : std::abs((c.vx - ex) * pl.ax + (c.vz - ez) * pl.az);
+    if (d >= 3) { if (startSide) Bs = c.h; else Bf = c.h; }
+  }
+  pl.terrainDone = true;
+  for (const auto& c : pl.corners) if (c.group == 0) m.setCornerHeight(c.vx, c.vz, c.h);   // start bank, written at once
+  // start approach: rows W0-4a .. W0-a (B -> hw + D), tiles W0-4a .. W0-a
+  if (!gradeApproach(m, pl, pl.x0, pl.z0, -1, Bs, pl.hw + D, 4, -1, 4, 1, 4)) return false;
+  for (const auto& c : pl.corners) if (c.group == 1) m.setCornerHeight(c.vx, c.vz, c.h);   // river bed
+  for (const auto& c : pl.corners) if (c.group == 2) m.setCornerHeight(c.vx, c.vz, c.h);   // far bank
+  // far approach: rows E0+a .. E0+4a (hw + D -> B), tiles E0 .. E0+3a
+  if (!gradeApproach(m, pl, ex, ez, +1, pl.hw + D, Bf, 1, +1, 4, 0, 4)) return false;
+  return true;
+}
+
 bool applyBridge(INetworkMap& m, BridgePlan& pl) {
   if (!pl.ok || pl.terrainBlocked) return false;
-  for (auto& c : pl.corners) m.setCornerHeight(c.vx, c.vz, c.h);
+  if (!pl.terrainDone) for (auto& c : pl.corners) m.setCornerHeight(c.vx, c.vz, c.h);
   for (auto& pp : pl.pieces) {
     if (!m.onMap(pp.x, pp.z)) continue;
     m.placePiece(pp.x, pp.z, layerOfKind(pl.kind), pp.id, pp.rot, pp.y);
@@ -849,13 +915,18 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
       }
       if (!host.confirmBridge(total, P.kind == NK_POWER)) { res.status = COMMIT_CANCELLED; return res; }
       for (auto& b : bridges)
-        if (b.terrainBlocked) {
-          // The grading runs until the first vertex with an occupant next to it, is kept, is not charged, and nothing is built [OBSERVED].
-          for (auto& c : b.corners) { if (!m.canChangeCorner(c.vx, c.vz)) break; m.setCornerHeight(c.vx, c.vz, c.h); }
+        if (b.terrainBlocked) {   // a bank corner with an occupant next to it: nothing is written
           host.message("construction discontinued");
           res.status = COMMIT_CANCELLED;
           return res;
         }
+      if (P.kind != NK_HIGHWAY)
+        for (auto& b : bridges)
+          if (!buildBridgeTerrain(m, b)) {   // refused at a grade: what was written stays, nothing is built or charged [OBSERVED]
+            host.message("construction discontinued");
+            res.status = COMMIT_CANCELLED;
+            return res;
+          }
       for (auto& b : bridges) {
         applyBridge(m, b);
         for (auto& c : b.coveredTiles()) { skip.insert(c); context.push_back(c); }

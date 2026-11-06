@@ -281,23 +281,19 @@ static void testBlockedShore() {
   setupRoadFlags(m);
   for (int x = 6; x <= 9; x++) m.setWater(x, 3, true);
   m.setCornerHeight(8, 4, 31);   // tile (7,3): corners 30 30 31 30 = not flat, not a valid slope, an interior water tile: allowed
-  { RoutedPath wr = routePath(m, TOOL_ROAD, {2, 3}, {12, 3}); CHECK(!wr.blocked && wr.tiles.size() == 11); }
-  {  // an irregular first water tile leaves no bridge (the far end may be irregular): the water tiles and what follows are invalid
-    SimpleNetworkMap e(20, 8);
-    setupRoadFlags(e);
-    for (int x = 6; x <= 9; x++) e.setWater(x, 3, true);
-    e.setCornerHeight(6, 4, 31);   // tile (6,3), the first water tile: 30 30 30 31
-    RoutedPath er = routePath(e, TOOL_ROAD, {2, 3}, {12, 3});
+  { RoutedPath wr = routePath(m, TOOL_ROAD, {2, 3}, {17, 3}); CHECK(!wr.blocked && wr.tiles.size() == 16); }
+  {  // the drag ends before the countdown (3 land tiles) and a valid land tile follow the water: the water and the land after it are invalid
+    RoutedPath er = routePath(m, TOOL_ROAD, {2, 3}, {12, 3});
     CHECK(er.blocked && er.validPrefix == 4);
   }
   m.addForeign(6, 3, 99999, 0, false);
-  RoutedPath rp = routePath(m, TOOL_ROAD, {2, 3}, {12, 3});
-  CHECK(rp.tiles.size() == 11 && rp.blocked && rp.validPrefix == 4 && rp.tiles[3].valid && !rp.tiles[4].valid && !rp.tiles[10].valid);
+  RoutedPath rp = routePath(m, TOOL_ROAD, {2, 3}, {17, 3});
+  CHECK(rp.tiles.size() == 16 && rp.blocked && rp.validPrefix == 4 && rp.tiles[3].valid && !rp.tiles[4].valid && !rp.tiles[10].valid);
   PlacementCosts costs;
   costs.byType[16000] = 10;
   TestHost host;
   CommitResult r = commitPath(m, rules, costs, host, TOOL_ROAD, rp);
-  CHECK(r.status == COMMIT_OK && host.charged == 110);
+  CHECK(r.status == COMMIT_OK && host.charged == 160);
   CHECK(m.occupantAt(5, 3, LAYER_SURFACE).present && !m.occupantAt(7, 3, LAYER_SURFACE).present);
 }
 

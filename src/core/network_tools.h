@@ -109,9 +109,10 @@ struct BridgePlan {
   BridgeDesign design;
   std::vector<std::pair<int, int>> spanTiles;
   // Terrain corner changes (vertex coordinates).
-  struct Corner { int vx, vz, h; };
+  struct Corner { int vx, vz, h; int group = 0; };   // group 0 start bank, 1 river bed, 2 far bank
   std::vector<Corner> corners;
-  bool terrainBlocked = false;  // some corner may not change ("construction discontinued")
+  bool terrainBlocked = false;  // some bank corner may not change ("construction discontinued")
+  bool terrainDone = false;     // buildBridgeTerrain wrote the corners (applyBridge must not rewrite them)
   // Pieces to place (slope/straight stubs are filled in by applyBridge after terrain changes).
   std::vector<PlacedPiece> pieces;
   std::vector<std::pair<int, int>> stubTiles;  // W0-3a, W0-2a, E0+a, E0+2a
@@ -123,6 +124,9 @@ BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, co
                       const PlacementCosts& costs, int carriagePass = 0);
 // Sets terrain and places pieces. Returns false (and changes nothing) when terrainBlocked.
 bool applyBridge(INetworkMap& m, BridgePlan& plan);
+// Staged terrain of a road/rail/power bridge [STATIC SIMNTWRK 0x1000122A, per the original's decode]: the start-bank corners are written at once, the start
+// approach is graded, then the river bed, far bank and far approach. false = refused at a grade (what was written stays; no pieces, no charge).
+bool buildBridgeTerrain(INetworkMap& m, BridgePlan& plan);
 // Body occupant ids that set the per-tile pier flag (section 6.4 step 6).
 bool isBridgePierId(uint32_t id);
 
