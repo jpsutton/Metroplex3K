@@ -138,7 +138,7 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
     const bool bar = int(pending.size()) > 13;
     const int visibleRows = 13;   // 13 rows in both cases [OBSERVED]
     if (bar) {
-      const Rect br{lr.x + 343, lr.y + 3, 16, lr.h - 6};
+      const Rect br{lr.x + 343, lr.y + 5, 16, lr.h - 6};
       ui.fill(br, rgb(0x7B, 0x92, 0xFF));
       scenarioScrollBar(ui, E, br, lr, int(pending.size()), visibleRows, petScroll);
     } else petScroll = 0;
@@ -154,8 +154,9 @@ WindowResult AdvisorWindow::draw(Ui& ui, const WinEnv& E, AdvisorManager& am, co
       E.spot("petition." + std::to_string(p->id), row);
       const bool sel = petSel == int(p->id);
       if (sel) ui.fill({r.x + 28, ty, lr.x + lr.w - 1 - (r.x + 28) - (bar ? 18 : 0), 13}, rgb(0, 0, 255));
-      for (int k2 = 0; k2 < 9; k2++) ui.fill({r.x + 23, ty + k2, k2 < 5 ? k2 + 1 : 9 - k2, 1}, sel ? kWhite : kInk);   // 5 x 9 triangle, rows 175..183 [observed]
-      ui.text(r.x + 34, ty - 3, ellipsize(ui, h, lr.x + lr.w - (r.x + 34) - 6), "main9", sel ? kWhite : kInk);   // main9: first ink row 175 (observed)
+      const int bx = bar ? 1 : 0;   // with the scrollbar the row text and arrows sit 1 px further right [OBSERVED]
+      for (int k2 = 0; k2 < 9; k2++) ui.fill({r.x + 23 + bx, ty + k2, k2 < 5 ? k2 + 1 : 9 - k2, 1}, sel ? kWhite : kInk);   // 5 x 9 triangle, rows 175..183 [observed]
+      ui.text(r.x + 34 + bx, ty - 3, ellipsize(ui, h, lr.x + lr.w - (r.x + 34) - 6), "main9", sel ? kWhite : kInk);   // main9: first ink row 175 (observed)
       if (ui.clicked(row)) {
         if (sel && frameNo - petClickFrame <= 30) R.add(Act::OpenPetitioner, p->id);
         petSel = int(p->id); petClickFrame = frameNo;
@@ -367,21 +368,23 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
   if (offer) {
     // Text panel x129..386 y66..267 with a scrollbar inside its right edge; 13 lines of 14 px; "Take Action:" plate with two radio buttons; "Impact Analysis:"
     // plate with the round "?" button [OBSERVED at 800 x 600, window at (8, 8)].
-    const auto lines = wrap(ui, v.message, 214, "main9");
+    const auto lines = wrap(ui, v.message, 217, "main9");   // a line fits while its ink is <= 216 px [OBSERVED]
     const int visible = 13;
     const bool over = int(lines.size()) > visible;
     if (over) {
-      ui.fill({r.x + 364, r.y + 60, 16, 198}, rgb(0x7B, 0x92, 0xFF));
-      scenarioScrollBar(ui, E, {r.x + 364, r.y + 60, 16, 198}, mb, int(lines.size()), visible, scroll);
+      ui.fill({r.x + 363, r.y + 58, 16, 202}, rgb(0x7B, 0x92, 0xFF));
+      scenarioScrollBar(ui, E, {r.x + 363, r.y + 58, 16, 202}, mb, int(lines.size()), visible, scroll);   // y66..267 [OBSERVED]
     } else scroll = 0;
     for (int i = 0; i < visible && scroll + i < int(lines.size()); i++) ui.text(r.x + 133, r.y + 62 + 14 * i, lines[size_t(scroll + i)], "main9", rgb(0, 0, 0));
     const uint32_t plate = rgb(0x7B, 0x92, 0xFF);
     ui.fill({r.x + 5, r.y + 263, 115, 24}, plate); ui.fill({r.x + 5, r.y + 287, 45, 62}, plate);
+    { const uint32_t ring = rgb(173, 182, 255);   // 1 px ring: top row, the band's right edge, the strip's right edge [OBSERVED]
+      ui.fill({r.x + 12, r.y + 262, 108, 1}, ring); ui.fill({r.x + 120, r.y + 262, 1, 25}, ring); ui.fill({r.x + 50, r.y + 287, 1, 62}, ring); }
     ui.text(r.x + 21, r.y + 268, "Take Action:", "main9", kInk);
     const std::string labels[2] = {v.button1, v.button2};
     for (int k = 0; k < 2; k++) {   // the big round button art (the Dismiss button's 42DEC7D2:02) as radio, ink x28..51 y298..321 / y326..349
-      Rect hit{r.x + 19, r.y + 289 + 28 * k, 26 + 4 + ui.textWidth(labels[k], "main9") + 8, 25};
-      Rect rb{r.x + 19, r.y + 289 + 28 * k, 26, 25};
+      Rect hit{r.x + 19, r.y + 290 + 28 * k, 26 + 4 + ui.textWidth(labels[k], "main9") + 8, 25};
+      Rect rb{r.x + 19, r.y + 290 + 28 * k, 26, 25};
       E.spot(t + (k ? ".button2" : ".button1"), hit);
       bool c = false;
       const Image* art = E.img(0x42DEC7D2, 0x02);
@@ -389,7 +392,7 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
       ui.text(r.x + 58, r.y + 292 + 28 * k, labels[k], "main9", kInk);
       if (c || ui.clicked(hit)) answer(k == 0);
     }
-    ui.fill({r.x + 273, r.y + 294, 105, 54}, plate);
+    blueBand(ui, {r.x + 273, r.y + 294, 105, 54});   // plate with the 1 px ring
     ui.text(r.x + 278, r.y + 307, "Impact", "main9", kInk); ui.text(r.x + 278, r.y + 321, "Analysis:", "main9", kInk);
     {
       Rect q{r.x + 342, r.y + 317, 26, 24};

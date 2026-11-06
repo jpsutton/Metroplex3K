@@ -339,7 +339,13 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
     Rect f{r.x + x, r.y + y, 132, 20};
     E.spot(name, f);
     const bool on = edit.mode == mode, down = ui.hover(f) && ui.in.down;
-    if (on || down) {
+    const Image* hdrArt = sk ? sk->image(skin_group::Sys, 0xE2B99E02) : nullptr;   // 120 x 30, 4 cells of 30: 3-slice 10 / 10 tiled / 10, cell 2 on, cell 1 off [OBSERVED, 100 % of pixels]
+    if (hdrArt && hdrArt->w >= 120 && hdrArt->h >= 30) {
+      const int cell = on || down ? 2 : 1, ax = f.x - 2, ay = f.y - 4, tw = 138;
+      ui.blitRect(*hdrArt, ax, ay, cell * 30, 0, 10, 30);
+      for (int off = 10; off < tw - 10; off += 10) ui.blitRect(*hdrArt, ax + off, ay, cell * 30 + 10, 0, std::min(10, tw - 10 - off), 30);
+      ui.blitRect(*hdrArt, ax + tw - 10, ay, cell * 30 + 20, 0, 10, 30);
+    } else if (on || down) {
       // The original's plate art [OBSERVED, column x = 100]: a 3-row darkening ring above (and a 1 px one left of) the white field, the field one row lower, its
       // inner top line 2 rows below that and the inner bottom line on its last row, then the two shadow rows and a 3-row light glow.
       ui.fill({f.x, f.y - 2, f.w, 1}, rgb(123, 138, 247)); ui.fill({f.x, f.y - 1, f.w, 1}, rgb(107, 130, 231)); ui.fill({f.x, f.y, f.w, 1}, rgb(99, 113, 198));
@@ -419,7 +425,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
   E.spot("grid", grid);
   { bool c = false;
     std::string tip = E.gui(0x74, "Grid");
-    if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::UiBig, 0x22F96E31), 4, grid, tip, gridOn, true, c, Ui::kTipLeft))) c = ui.button(grid, "#", true, gridOn);
+    if (!(sk && sk->imageButtonCells(ui, sk->image(skin_group::UiBig, 0x45CBC2F3), 4, grid, tip, gridOn, true, c, Ui::kTipLeft))) c = ui.button(grid, "#", true, gridOn);
     if (c) R.add(Act::ToggleGrid); }
   Rect done{r.x + 246, r.y + 295, 42, 32};
   E.spot("ok", done);
