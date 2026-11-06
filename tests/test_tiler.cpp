@@ -291,6 +291,26 @@ static void testBlockedShore() {
   CHECK(m.occupantAt(5, 3, LAYER_SURFACE).present && !m.occupantAt(6, 3, LAYER_SURFACE).present);
 }
 
+// Highway commit: every vertex row across the two carriageways is set to its minimum (interim rule), and terrain levelling is charged
+// LevelTerrain x sum|dh| >> 2.
+static void testHighwayCrossRows() {
+  auto rules = makeRules({{"ROAD_GRND_final.txt", roadFinal()}});
+  SimpleNetworkMap m(14, 14);
+  setupRoadFlags(m);
+  m.setCornerHeight(7, 5, 29);   // row vz5 across vx 5..7 reads 30 30 29
+  RoutedPath rp = routePath(m, TOOL_HIGHWAY, {5, 2}, {5, 8});
+  CHECK(rp.tiles.size() == 14 && !rp.blocked && rp.pairDx == 1);
+  PlacementCosts costs;
+  costs.byType[16001] = 150;
+  costs.levelTerrain = 25;
+  TestHost host;
+  CommitResult r = commitPath(m, rules, costs, host, TOOL_HIGHWAY, rp);
+  CHECK(r.status == COMMIT_OK);
+  CHECK(m.cornerHeight(5, 5) == 29 && m.cornerHeight(6, 5) == 29 && m.cornerHeight(7, 5) == 29);   // the row went to its minimum
+  CHECK(m.cornerHeight(5, 4) == 30 && m.cornerHeight(6, 6) == 30);                                    // other rows untouched
+  CHECK(host.charged == 14 * 150 + ((25 * 2) >> 2));                                                // two corners moved by 1: 25 x 2 >> 2 = 12
+}
+
 static void testBridge() {
   std::string bridges = "2\n14 0 1  1 " + std::to_string(P(200, 0)) + " 1 " + std::to_string(P(201, 0)) + " 2 " +
                         std::to_string(P(202, 0)) + " " + std::to_string(P(203, 0)) + " 1 " + std::to_string(P(204, 0)) +
@@ -685,6 +705,7 @@ int main() {
   testRouting();
   testBridge();
   testBlockedShore();
+  testHighwayCrossRows();
   testTunnel();
   testConnections();
   testOnRamp();
