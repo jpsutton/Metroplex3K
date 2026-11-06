@@ -515,11 +515,14 @@ Positions in dialog coordinates:
 * Original defect: for kind 2 (and any kind ≥ 3), the pop-up does not store the "portrait found"
   result. Its draw flag is then a leftover value, normally 0, so these pop-ups show no portrait.
   Start and results dialogs are not affected.
-* Observed panel at 800 × 600 (start dialog, kind 0), identical to the advisor case:
-  * inset (512,119)–(632,296), fill (123,146,255);
-  * portrait frame x 526–617, y 140–254, with a dark top/left line (66,65,66) and a white
-    right/bottom line;
-  * name ink rows 272–282, colour (49,52,123);
+* Observed panel at 800 × 600 (start dialog, kind 0), identical to the advisor case. Screen
+  coordinates; the window client origin is at the screen origin:
+  * inset fill (123,146,255), with one-pixel border lines (173,182,255) on the left at x = 512, on
+    the right at x = 632 and at the bottom at y = 295; there is no top border line, and the fill
+    continues up to the title area;
+  * portrait frame: a dark line (66,65,66) on the top at y = 139 and on the left at x = 526, and a
+    white line on the right at x = 617 and at the bottom at y = 253;
+  * name ink rows 271–281, x 527–616, colour (49,52,123);
   * no title line.
 
 #### 4.7.1 Observed layouts at 800 × 600 `[OBSERVED]` (A Better Betterfeld)
