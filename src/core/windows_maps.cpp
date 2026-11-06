@@ -576,10 +576,10 @@ ChartsData chartsFromPopulation(const Population& p, uint32_t cityPop) {
     d.population.push_back(float(p.peopleAt(i, cityPop)));
   }
   d.populationEQ = p.cityEQ();
-  d.workforceEQ = p.qEQ(18, std::min(89, p.oldestAge));
+  d.workforceEQ = p.qEQ(20, 65);   // Q(20, 65) [OBSERVED: Berlin 119.55 -> 120]
   d.populationLE = p.cityLifeExpectancy();
   double s = 0; int n = 0;
-  for (int i = 18; i <= std::min(89, p.oldestAge); i++) { s += p.le[i]; n++; }
+  for (int i = 20; i <= 65 && i <= p.oldestAge; i++) if (p.peopleAt(i, cityPop) > 0) { s += p.le[i]; n++; }
   d.workforceLE = n ? float(s / n) : 0;
   d.totalPopulation = cityPop;
   d.workforcePercent = int(p.workforceFraction() * 100.f + 0.5f);
@@ -695,7 +695,11 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     }
     for (int i = 0; i < 15; i++) {   // one bar per 5-year bucket, ages 0-4 .. 70-74
       float sum = 0; int n = 0;
-      for (int a = i * 5; a < i * 5 + 5 && a < int(src.size()); a++) { sum += src[size_t(a)]; n++; }
+      // Education / Health buckets are Q-style means: the unweighted mean over the ages of the bucket that have people (spec 20 4.5) [OBSERVED].
+      for (int a = i * 5; a < i * 5 + 5 && a < int(src.size()); a++) {
+        if (tab < 2 && a < int(d.population.size()) && d.population[size_t(a)] <= 0.f) continue;
+        sum += src[size_t(a)]; n++;
+      }
       float v = n ? sum / float(n) : 0.f;
       if (tab == 2) v = d.totalPopulation > 0 ? sum * 100.f / float(d.totalPopulation) : 0.f;   // percent of the population in the bucket
       const int h = std::max(0, std::min(plot.h - 4, int(v * pxPerUnit)));

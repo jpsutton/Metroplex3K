@@ -618,7 +618,7 @@ bool Skin::drawDialogFrame(Ui& ui, Rect r, const std::string& title) const {
   Rect bar{r.x + 4, r.y + 4, r.w - 8, 31};   // right edge line at r.x + r.w - 5 [OBSERVED: Preferences, Loans, Business Deals, Budget]
   ui.fill(bar, rgb(173, 182, 255));
   ui.fill({bar.x + 1, bar.y + 1, bar.w - 2, bar.h - 2}, rgb(123, 146, 255));
-  ui.text(r.x + 8, r.y + 8, title, "title12", ui.titleRecolour ? rgb(222, 222, 255) : rgb(222, 223, 255));   // (222,222,255) takes the recolour path (scenario dialogs)
+  ui.text(r.x + 8 - (ui.titleRecolour ? 1 : 0), r.y + 8, title, "title12", ui.titleRecolour ? rgb(222, 222, 255) : rgb(222, 223, 255));   // (222,222,255) takes the recolour path (scenario dialogs)
   return true;
 }
 

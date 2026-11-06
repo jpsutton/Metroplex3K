@@ -932,6 +932,7 @@ bool Game::drawSkinnedToolMenu() {
     auto ii = menu_.items.find(b.item);
     std::string tip = ii != menu_.items.end() ? str(ii->second.nameTable, ii->second.nameId) : std::string();
     if (tip.empty() && b.sub) tip = menuTitle(b.sub);   // a button with a fly-out is named after the fly-out
+    if (b.sub == 0xD1008100) { const std::string t = menuTitle(b.sub); if (!t.empty()) tip = t; }   // the snapshot button reads "Take Snapshots", not its first entry (observed)
     const Image* strip = skin_.toolStrip(b.id);
     bool clicked = false;
     // A button that owns a fly-out (spec 08 7 [OBSERVED, 50 fps capture]): the fly-out appears on mouse-down, within one frame, and stays only
@@ -942,9 +943,12 @@ bool Game::drawSkinnedToolMenu() {
       if (!b.sub) { execute(b.item); if (tool_ != ToolKind::Unavailable) openRoot_ = 0; return; }
       if (openFly_ == b.sub) activateFlyEntry(b.sub, 0);   // released over the button after a press (or a hold)
     };
-    if (strip && skin_.imageButtonCells(ui_, strip, 4, r, tip, openFly_ == b.sub && b.sub, true, clicked, Ui::kTipLeft)) {
+    // Disabled items (Scenario Status outside a scenario, ...) draw the strip's disabled (grey) cell and do nothing when pressed.
+    const bool btnEnabled = (ii == menu_.items.end() || ii->second.enabled) && (b.sub || transportToolEnabled(b.item));
+    if (b.sub && !btnEnabled) openFly_ = openFly_ == b.sub ? 0 : openFly_;
+    if (strip && skin_.imageButtonCells(ui_, strip, 4, r, tip, openFly_ == b.sub && b.sub, btnEnabled, clicked, Ui::kTipLeft)) {
       if (clicked) onClick();
-    } else if (ui_.button(r, tip.empty() ? "?" : tip.substr(0, 6))) {
+    } else if (ui_.button(r, tip.empty() ? "?" : tip.substr(0, 6), btnEnabled)) {
       onClick();
     }
     if (b.sub && openFly_ == b.sub) { flyOpen = b.sub; flyAnchor = r; }
