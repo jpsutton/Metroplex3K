@@ -279,10 +279,12 @@ void BudgetWindow::drawMainPage(Ui& ui, const WinEnv& E, Budget& b, const Budget
       auto& kp = knobPos_[dr.id];
       int pos = kp.second == val && kp.first >= 0 ? kp.first : val * kKnobTravel / kMaxFundingUi;
       if (ui.activeId == id && ui.in.down) {
-        // Value: pct = 1.2427 * (click x - 263.6) [OBSERVED, 11 clicks on the Police slider, fit within 0.5 %]; the knob's left edge = click x - 9.
-        int nv = int(std::lround((double(ui.in.mx) - (track.x + 10.6)) * 1.2427));
+        // Value = floor((click x - (track + 12)) * 120 / 94) percent: fits the 8 clicks measured on the Police slider exactly [OBSERVED: 280 -> 21, 300 -> 47,
+        // 320 -> 72, 335 -> 91, 343 -> 102, 347 -> 107, 350 -> 111, 360 -> 120 clamped]. The knob's left edge sits 10 px left of the click (it measures 9 in the
+        // hover cell), clamped at the travel end.
+        int nv = int(std::floor(double(ui.in.mx - (track.x + 12)) * kMaxFundingUi / 94.0));
         nv = std::max(0, std::min(kMaxFundingUi, nv));
-        pos = std::max(0, std::min(kKnobTravel - 1, ui.in.mx - 9 - track.x));
+        pos = std::max(0, std::min(kKnobTravel, ui.in.mx - 10 - track.x));
         if (nv != dp->funding) { b.setFunding(dr.id, nv); R.add(Act::SetFunding, dr.id, nv); }
         val = nv;
         kp = {pos, val};
