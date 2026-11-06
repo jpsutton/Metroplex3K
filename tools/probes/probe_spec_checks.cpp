@@ -386,6 +386,17 @@ int main(int argc, char** argv) {
       std::printf("   at load (after the load-time roll): slot %d row (our category order, 9 = neighbours):", c.power.monthIndex);
       for (int k = 0; k < 10; k++) std::printf(" %d", c.power.production[c.power.monthIndex][k]);
       std::printf("   produced %lld consumed %lld unpowered consumers %d\n", (long long)c.power.stats().produced, (long long)c.power.stats().consumed, c.power.stats().unpoweredConsumers);
+      {  // consumers the load-time distribution left unpowered (tile, consumption byte): the part of the demand we lose
+        long long total = 0, lost = 0; int n = 0;
+        for (int x = 0; x < s.game.world().W; x++)
+          for (int z = 0; z < s.game.world().H; z++) {
+            int u = c.power.consumption(x, z);
+            if (!u) continue;
+            total += u;
+            if (!c.power.powered(x, z)) { lost += u; if (n++ < 60) std::printf("   unpowered consumer (%d,%d) use %d\n", x, z, u); }
+          }
+        std::printf("   consumption bytes: total %lld, on unpowered tiles %lld (%d tiles)\n", total, lost, n);
+      }
       for (const auto& k : c.power.components())
         std::printf("   load component seed (%d,%d): %d tiles, %d plants, raw S %lld, supplied %lld, r %.4f\n", k.sx, k.sz, k.tiles, k.plants, (long long)k.rawS, (long long)k.supplied, k.rawS > 0 ? double(k.supplied) / double(k.rawS) : 0.0);
       for (int d = 0; d < 35; d++) s.game.sim().tickDay();
