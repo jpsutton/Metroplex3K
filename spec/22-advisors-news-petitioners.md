@@ -688,7 +688,7 @@ the residential record stores (`10-save-format.md` §6.11) [STATIC]:
 |---|---|---|---|
 | strike flag | healthStrike | schoolStrike | collegeStrike |
 | F_s | healthRating (0–4) | schoolRating (0–4) | collegeRating (0–4) |
-| D_s | patients | schoolAgePop (ages 7–18) | collegeAgePop (ages 19–24) |
+| D_s | patients | schoolAgePop (ages 6–18) | collegeAgePop (ages 19–24) |
 | C_s | hospitalBeds | schoolDesks | collegeDesks |
 | W_s | ⌊r_health / 100⌋ | ⌊r_school / 100⌋ | ⌊r_college / 100⌋ |
 
