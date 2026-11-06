@@ -826,6 +826,26 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
         if (d > h - w && d <= h) ui.fill({x, y, 1, 1}, col);
       }
   };
+  // Region borders [OBSERVED, Berlin at window (50, 50)]: 1 px staircase lines, each a pair of x+y (u) or x-y (v) values between two limits on the other axis. The long ones
+  // are the 3 x 3 grid's cell boundaries, the short ones the rims of the three existing neighbour cells (3 px outside the shared boundary). The six short rims are only
+  // drawn when exactly three neighbours exist (the observed case); otherwise each existing neighbour gets a diamond rim.
+  int existing = 0;
+  for (int i = 0; i < kNeighbours; i++) if (n.neighbours[i].exists) existing++;
+  const bool drawn3 = existing == 3 && rot == 0;
+  if (drawn3) {
+    const uint32_t bc = rgb(0x6B, 0x92, 0xF7);
+    const int ox0 = r.x - 50, oy0 = r.y - 50;
+    struct Ln { bool isU; int a, lo, hi; };
+    static const Ln lines[10] = {{true, 425, -154, 134}, {true, 520, -154, 134}, {false, -58, 329, 617}, {false, 37, 329, 617},
+                                 {true, 422, -56, 36}, {true, 523, -56, 36}, {true, 618, -56, 36}, {false, -156, 427, 519}, {false, 40, 427, 519}, {false, 135, 427, 519}};
+    for (const Ln& l : lines)
+      for (int y = r.y + 90; y < r.y + 300; y++)
+        for (int x = r.x + 80; x < r.x + 290; x++) {
+          const int xo = x - ox0, yo = y - oy0, u = xo + yo, v = xo - yo;
+          const int a = l.isU ? u : v, b = l.isU ? v : u;
+          if ((a == l.a || a == l.a + 1) && b >= l.lo && b <= l.hi) ui.fill({x, y, 1, 1}, bc);
+        }
+  }
   for (int i = 0; i < kNeighbours; i++) {
     const Neighbour& nb = n.neighbours[i];
     double ox = offs[i][0], oy = offs[i][1];
@@ -833,7 +853,7 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
     E.spot("nb." + std::to_string(i), hit);
     // The original lists every named neighbour, including one whose `exists` byte is 0 (Hawkin's Creek in Berlin).
     if (!nb.exists && nb.cityName.empty()) continue;
-    if (nb.exists) outline(ox, oy, 47.5, 2, rgb(0x6B, 0x92, 0xF7));   // a neighbour without a land link has no border diamond (its arrow instead) [OBSERVED]
+    if (nb.exists && !drawn3) outline(ox, oy, 47.5, 2, rgb(0x6B, 0x92, 0xF7));   // a neighbour without a land link has no border diamond (its arrow instead) [OBSERVED]
     if (selected == i) outline(ox + 0.5, oy + 1.5, 46, 3, rgb(239, 56, 0));   // (239,56,0) [OBSERVED]; box (137,147)-(228,238) on the original (observed)
     const int ncx = int(cx + ox), ncy = int(cy + oy);
     // A neighbour without a land link (`exists` 0) gets an arrow pointing out of the map (000005E5:28 up-left, 2B up-right,
