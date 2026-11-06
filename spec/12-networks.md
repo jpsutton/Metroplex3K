@@ -221,24 +221,49 @@ the ordered list of path tiles, and the map. Steps `[STATIC]`:
 3. **Slopes.** Every remaining tile whose four corner heights are not all equal, but which is a
    *valid slope* (see §6.3), gets its slope piece from the hard-coded slope table (§6.3) and is
    removed from the set. Other non-flat tiles are left for the rules.
+Before step 3, the tiler copies the working set S (after clearing and the removal of
+   protected tiles) into a list **C**, which it keeps unchanged [STATIC, SIMNTWRK].
 4. **Simple pass** (SIMPLERULES, neighbourhood radius 1, mask over directions 0–7, Convert view):
-   evaluate every tile in the set; tiles that received results leave the set. Repeat the whole pass
-   while the set size changes.
-5. **Complex pass** (COMPLEXRULES, radius 2, all 24 directions, Complex_Convert view): evaluate the
-   remaining tiles (for power: plus the queued protected tiles); repeat while at least one tile
-   changed, at most 5 times.
-6. **Final pass** (final, radius 1, mask over directions 0–3, Convert view): evaluate every tile
-   still in the set once.
+   evaluate every tile in S. A rule's result **targets** (T + result offset), not the evaluated
+   tile, are collected during the pass:
+   * after the pass, every collected target is removed from S;
+   * targets of (ID 0, rot 0) results go to the final-pass queue instead.
+   A tile whose rule has no self result therefore stays in S. Targets are collected even if
+   placing the piece failed. Repeat the whole pass while the size of S changes.
+5. **Complex pass** (COMPLEXRULES, radius 2, all 24 directions plus the tile itself, Complex_Convert
+   view):
+   * It evaluates **every tile of C**, the full re-tile set, including tiles that the simple pass
+     already tiled. For power, the queued protected tiles are added to C.
+   * The neighbourhood includes the tile itself as dir 31, with its current piece. So rules with a
+     self condition (e.g. subway: self = 11611 r0, east = 11611, west = 16039 → self = 16012
+     "Subway Double Wide"; the highway sign family 15145–15148) fire on pieces placed earlier in
+     this run.
+   * Result targets are removed from S, never from C.
+   * Repeat while the previous iteration applied at least one result other than (ID 0, rot 0),
+     at most 5 iterations.
+   CORRECTION: the earlier text evaluated only tiles the simple pass had left.
+6. **Final pass** (final, radius 1, mask over directions 0–3, Convert view): evaluate once every
+   tile still in S (never a simple or complex target) plus the queued (ID 0, rot 0) targets.
+
+[DATA] Re-tiling all stored networks of the 14 shipped cities with steps 4–6 as above, together
+with the exit sides of §4.8, gives identical pieces for:
+* highway: 99.1 % (93.9 % with the old reading);
+* subway: 70.3 % (40.7 % with the old reading);
+* power: 86.1 % (82.4 % with the old reading);
+* road and rail: unchanged at 99.7 % and 99.97 %.
 
 **Evaluating one tile T against a rule table:**
 
 1. Skip T unless it is flat (all four corner heights equal).
 2. Build the *neighbourhood description* of T: a list of entries (dir, ID, rot) and a mask.
-   * For every tile N in the neighbourhood (3×3 for simple/final, 5×5 for complex; clipped to the
-     map for simple/final): if N holds a piece of this network (occupant flag test, §5.1), add
-     (dir, ID, rot) after applying the Convert view; if N holds a foreign occupant, add (dir, 0, 0)
-     (or (dir, 0, 5) if the occupant has the "ignorable" flag 0x400); if N is empty add (dir, 0, 5),
-     or (dir, 0, 1) when N is a tile of the path being drawn. In the complex pass, positions off the
+   * Simple and final passes (3×3, clipped to the map): only tiles holding a piece of this network
+     add an entry (dir, ID, rot), after the Convert view. Empty and foreign tiles add no entry, and
+     the tile itself is not included [STATIC].
+   * Complex pass (5×5 including the tile itself as dir 31): a piece of this network adds
+     (dir, ID, rot) after the Complex_Convert view; a foreign occupant adds (dir, 0, 0), or
+     (dir, 0, 5) if it has the "ignorable" flag 0x400; an empty tile adds (dir, 0, 5), or (dir, 0, 1)
+     when the tile is in list C. No shipped rule file has a condition with ID 0, so these
+     special entries never decide a shipped match [DATA]. In the complex pass, positions off the
      map add (dir, 0, 5), changed to (dir, 0, 1) when the position is exactly one step outside the
      map edge on the side that holds a neighbour connection of this network.
    * The **mask** is a bit set: bit d is set when the neighbour in direction d (d below the pass
