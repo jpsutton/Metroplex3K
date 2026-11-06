@@ -140,7 +140,7 @@ void verticalText(Ui& ui, int x, int y, const std::string& s, const char* font, 
 bool radio(Ui& ui, const WinEnv& E, const std::string& name, Rect r, const std::string& label, bool selected, const char* font) {
   const Skin* sk = ui.skin;
   const Image* art = sk ? sk->get("radio") : nullptr;
-  const uint32_t ink = rgb(0x31, 0x38, 0x84);
+  const uint32_t ink = rgb(49, 52, 123);   // radio label ink [OBSERVED]
   E.spot(name, r);
   const bool hot = ui.hover(r);
   const int box = 12, by = r.y + (r.h - box) / 2;
@@ -755,8 +755,13 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
   WindowResult R;
   if (alarm) { alarm = false; R.add(Act::PlaySound, 0, 54); }
   std::vector<uint32_t> buf(size_t(r.w) * r.h);
-  for (int y = 0; y < r.h; y++)
-    for (int x = 0; x < r.w; x++) buf[size_t(y) * r.w + x] = rgb(0, 0, 0);   // the ticker strip is pure black [OBSERVED]
+  for (int y = 0; y < r.h; y++)   // the bar art around the strip stays: copy what is there
+    for (int x = 0; x < r.w; x++) { const int dx = r.x + x, dy = r.y + y; buf[size_t(y) * r.w + x] = (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) ? ui.at(dx, dy) : 0u; }
+  // The strip: a (99,109,198) top border row, then pure black for 16 rows; 472 px wide (x8..479 on the original), rows y549 / y550..565 at a ticker rect of y544 [OBSERVED].
+  for (int x = 0; x < r.w - 8; x++) {
+    if (5 < r.h) buf[size_t(5) * r.w + x] = rgb(99, 109, 198);
+    for (int y = 6; y < 22 && y < r.h; y++) buf[size_t(y) * r.w + x] = rgb(0, 0, 0);
+  }
   Ui sub = ui; sub.setTarget(&buf, r.w, r.h);
   int fh = ui.fonts->ui().height();
   int ty = (r.h - fh) / 2;
@@ -780,7 +785,6 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
       int dx = r.x + x, dy = r.y + y;
       if (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) ui.at(dx, dy) = buf[size_t(y) * r.w + x];
     }
-  ui.frame(r, false);
   return R;
 }
 

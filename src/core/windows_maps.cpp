@@ -120,7 +120,7 @@ uint32_t zoneTint(const Image* pal, int cat, int lvl) {
     default: return categoryColour(pal, DataLayer::Zones, cat);   // seaports, airports: palette row 8 [unobserved on the map]
   }
 }
-const uint32_t kBandBlue = rgb(123, 146, 255), kLabelInk = rgb(123, 125, 181), kInkBlue = rgb(49, 52, 123);   // label ink (49,52,123) [OBSERVED]
+const uint32_t kBandBlue = rgb(123, 146, 255), kLabelInk = rgb(123, 125, 181), kInkBlue = rgb(49, 52, 123), kAxisInk = rgb(49, 56, 132);   // radio/caption ink (49,52,123); the axis ticks and axis titles keep (49,56,132) [OBSERVED]
 
 // Inset legend box (spec 09 7.1.1): left/top lines (123,138,255), right/bottom highlight (255,243,255); `cut` = 18 px diagonal at the top left.
 void insetBox(Ui& ui, Rect b, bool cut) {
@@ -439,7 +439,7 @@ WindowResult CityLayersDialog::draw(Ui& ui, const WinEnv& E, bool gridOn) {
 // ================================================================ graphs (7.3)
 std::vector<uint32_t> GraphsWindow::samples(const Chart& c, int range) {
   std::vector<uint32_t> v;
-  if (range == 0) for (int i = 11; i >= 0; i--) v.push_back(c.monthly[i]);
+  if (range == 0) for (int i = 10; i >= 0; i--) v.push_back(c.monthly[i]);   // the 12-month plot skips the oldest slot; the caller appends the live value [OBSERVED]
   else if (range == 1) for (int i = 9; i >= 0; i--) v.push_back(c.yearly[i]);
   else for (int i = 9; i >= 0; i--) v.push_back(c.decade[i]);
   return v;
@@ -506,6 +506,7 @@ WindowResult GraphsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const std::
   for (size_t i = 0; i < series.size() && i < 16; i++) {
     if (!(enabledMask & (1u << i)) || !series[i].chart) continue;
     auto s = samples(*series[i].chart, range);
+    if (range == 0) s.push_back(uint32_t(series[i].live >= 0 ? series[i].live : int64_t(series[i].chart->monthly[0])));   // 12th point = the live current value (the newest saved sample when unknown)
     if (s.size() < 2) continue;
     nPts = int(s.size());
     uint32_t lo = 0, hi = series[i].chart->max;
@@ -781,20 +782,20 @@ WindowResult ChartsWindow::drawBody(Ui& ui, const WinEnv& E, Rect r, const Chart
     for (int v = 0; v <= top; v += step) {
       // Label tops 235 - round(v * 143 / top) on the original (Education: 235, 215, 194, 174, 153, 133, 112, 92), right-aligned at x 160.
       const int ly = 198 - int(143.f * float(v) / float(top) + 0.5f);
-      rightText(ui, r.x + 120, r.y + ly, std::to_string(v), "main9", kInkBlue);
+      rightText(ui, r.x + 138, r.y + ly, std::to_string(v), "main9", kAxisInk);
     }
     for (int n = 10; n <= 90; n += 10) {   // x labels, 26 px per 10 years, "10" at x ~ 164
       const std::string t = std::to_string(n);
-      ui.text(r.x + 138 + 26 * n / 10 - ui.textWidth(t, "system9") / 2 - (n > 10 ? 1 : 0), r.y + 208, t, "system9", kInkBlue);   // row y244, lefts 199 / 223 / 249 ... [OBSERVED]
+      ui.text(r.x + 138 + 26 * n / 10 - ui.textWidth(t, "system9") / 2 - (n > 10 ? 1 : 0), r.y + 208, t, "system9", kAxisInk);   // row y244, lefts 199 / 223 / 249 ... [OBSERVED]
     }
-    ui.text(r.x + 217, r.y + 218, E.win(0x1E6, "Resident Age"), "main9", kInkBlue);   // bold, ink from x257 [OBSERVED]
+    ui.text(r.x + 218, r.y + 218, E.win(0x1E6, "Resident Age"), "main9", kAxisInk);   // bold, ink from x257 [OBSERVED]
     {   // vertical axis caption, rotated: Education Quotient on two lines, Health and Population on one
       const std::string t = E.win(tab == 0 ? 0x1E4u : tab == 1 ? 0x1E0u : 0x1E1u, tab == 0 ? "Education Quotient" : tab == 1 ? "Health" : "Population");
       const size_t sp = tab == 0 ? t.find(' ') : std::string::npos;
       const int hgt = ui.fonts->get("system9").height();
-      auto put = [&](const std::string& s, int x) { verticalText(ui, x, r.y + 170 - ui.textWidth(s, "main9") / 2, s, "main9", kInkBlue); };
+      auto put = [&](const std::string& s, int x) { verticalText(ui, x, r.y + 170 - ui.textWidth(s, "main9") / 2, s, "main9", kAxisInk); };
       if (sp == std::string::npos) put(t, r.x + 80 - hgt / 2);
-      else { put(t.substr(0, sp), r.x + 68); put(t.substr(sp + 1), r.x + 68 + hgt + 2); }
+      else { put(t.substr(0, sp), r.x + 67); put(t.substr(sp + 1), r.x + 81); }   // ink columns x110 and x124 [OBSERVED]
     }
     for (int i = 0; i < 15; i++) {   // one bar per 5-year bucket, ages 0-4 .. 70-74
       float sum = 0; int n = 0;
