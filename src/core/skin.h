@@ -160,6 +160,7 @@ class Skin {
   size_t imageCount() const { return names_.size(); }
 
  private:
+  mutable Image buttonRaw_;   // the GZBtn strip before keyButtonPlate (see skinBlitScaled)
   void bind(const std::string& name, uint32_t group, uint32_t inst);
   void buildShowButton();
   void buildCogButton();      // synthesise "cog" from the exchange-button strip (slimmer cog in its frame)
@@ -178,6 +179,7 @@ class Skin {
 };
 
 // Stretch-blit a source rect to a destination rect (nearest), skipping transparent pixels.
-void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst);
+// `raw`: optional unkeyed twin of `im` (same size); where a partial-alpha pixel lands on exactly the baked plate colour the original's pixel is drawn as is.
+void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst, const Image* raw = nullptr);
 
 }  // namespace m3k

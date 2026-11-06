@@ -110,7 +110,7 @@ BottomBarLayout bottomBarLayout(int screenW) {
 }
 
 // ---- blitting -------------------------------------------------------------------------------
-void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst) {
+void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst, const Image* raw) {
   if (!ui.pixels || im.empty() || src.w <= 0 || src.h <= 0 || dst.w <= 0 || dst.h <= 0) return;
   for (int j = 0; j < dst.h; j++) {
     int dy = dst.y + j; if (dy < 0 || dy >= ui.H) continue;
@@ -123,6 +123,10 @@ void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst) {
       uint32_t p = im.px[size_t(sy) * im.w + sx];
       uint32_t a = p >> 24;
       if (a == 255) { ui.at(dx, dy) = p; continue; }
+      if (raw && raw->w == im.w && raw->h == im.h && !ui.overlay) {   // on the baked plate colour the original's own pixel (plate x shadow, vignette) is drawn, opaque
+        uint32_t& dd = ui.at(dx, dy);
+        if (dd == rgb(0x7B, 0x92, 0xFF)) { dd = raw->px[size_t(sy) * im.w + sx] | 0xFF000000u; continue; }
+      }
       if (!a) continue;
       uint32_t& d = ui.at(dx, dy);   // partial alpha (button shadow): blend over what is there
       if (ui.overlay && (d >> 24) != 255) { d = overlayOver(d, float(p & 255), float(p >> 8 & 255), float(p >> 16 & 255), float(a) / 255.f); continue; }
@@ -163,7 +167,7 @@ const Image* Skin::fetch(uint32_t group, uint32_t inst) const {
   if (r) {
     try {
       Image im = decodeUiImage(r.data, r.available, true);
-      if (group == Sys && inst == 0xE2B66DB8) keyButtonPlate(im);
+      if (group == Sys && inst == 0xE2B66DB8) { buttonRaw_ = im; keyButtonPlate(im); }
       if (!im.empty()) return &(cache_[k] = std::move(im));
     } catch (const FormatError&) {}
   }
@@ -579,12 +583,13 @@ bool Skin::drawButton3(Ui& ui, const Image* s, int cells, int cell, Rect r, cons
   if (third <= 0) return false;
   int sx = cell * cw;
   int lw = std::min(third, r.w / 2), rw = lw;
-  skinBlitScaled(ui, *s, {sx, 0, lw, s->h}, {r.x, r.y, lw, r.h});
-  skinBlitScaled(ui, *s, {sx + cw - rw, 0, rw, s->h}, {r.x + r.w - rw, r.y, rw, r.h});
+  const Image* rawArt = (s == get("button") && !buttonRaw_.empty()) ? &buttonRaw_ : nullptr;
+  skinBlitScaled(ui, *s, {sx, 0, lw, s->h}, {r.x, r.y, lw, r.h}, rawArt);
+  skinBlitScaled(ui, *s, {sx + cw - rw, 0, rw, s->h}, {r.x + r.w - rw, r.y, rw, r.h}, rawArt);
   if (r.w > lw + rw) {   // the middle slice is tiled, not stretched [OBSERVED: seam columns every 18 px on the pill buttons]
     const int mw = cw - 2 * third;
     for (int off = 0; off < r.w - lw - rw; off += mw)
-      skinBlitScaled(ui, *s, {sx + third, 0, mw, s->h}, {r.x + lw + off, r.y, std::min(mw, r.w - lw - rw - off), r.h});
+      skinBlitScaled(ui, *s, {sx + third, 0, mw, s->h}, {r.x + lw + off, r.y, std::min(mw, r.w - lw - rw - off), r.h}, rawArt);
   }
   if (!label.empty() && ui.fonts) {
     int off = cell == CELL_PRESSED ? 1 : 0;
