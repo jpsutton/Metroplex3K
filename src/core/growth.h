@@ -86,6 +86,20 @@ struct IndustrialTuning : DeveloperTuning {
 };
 
 struct GrowthConfig {
+  // Developer tunables default to the shipped SC3Tune.ini values (a pack that omits a key).
+  GrowthConfig() {
+    res.noServicePercentage = 15; res.constructionTimeFactor = 75;
+    res.higherLandValuePct = res.lowerLandValuePct = res.higherDensityPct = 30; res.anarchyFactor = 300;
+    com.noServicePercentage = 35; com.maxDistFromTransport = 2; com.constructionTimeFactor = 75;
+    com.higherLandValuePct = com.lowerLandValuePct = com.higherDensityPct = 30; com.anarchyFactor = 100;
+    ind.noServicePercentage = 30; ind.maxDistFromTransport = 4; ind.constructionTimeFactor = 75;
+    ind.higherLandValuePct = 30; ind.lowerLandValuePct = 10; ind.higherDensityPct = 30; ind.anarchyFactor = 100;
+    ind.pctChanceAg = 90; ind.minAgAirPollution = ind.minAgWaterPollution = 450; ind.maxAgAirPollution = ind.maxAgWaterPollution = 451;
+    ind.lawnChemBanOrdEffect = ind.farmersMarketOrdEffect = 10;
+    ind.maxMinCleanInd = 1; ind.minMaxCleanInd = 1; ind.minCleanIndFlatYear = 2100; ind.maxCleanIndFlatYear = 2200;
+    ind.cleanAirOrd = 3; ind.touristPromotionOrd = 3; ind.conservationCorpsOrd = 4; ind.indPolluteFeeOrd = 4; ind.cleanIndAssocOrd = 2;
+    ind.electronicsIncentiveOrd = 3; ind.aerospaceIncentiveOrd = 4; ind.electronicsJobFairOrd = 5; ind.biotechIncentiveOrd = 4; ind.publicAccessCableOrd = 2;
+  }
   std::map<int, ZoneDescription> zones;
   std::map<int, std::vector<DevRule>> rules;          // per zone
   DeveloperTuning res, com;

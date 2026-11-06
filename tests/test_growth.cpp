@@ -207,6 +207,7 @@ int main() {
     Fixture f; SimRand rng(11);
     ZoneManager zm; zm.setConfig(&f.cfg);
     auto make = [&]() { TestCity c = makeRes(); c.fillZone(1, 1, 1, 1, 9); return c; };
+    f.cfg.ind.pctChanceAg = 0;   // the shipped default (90) would pick the agricultural set
     f.cfg.ind.minMinCleanInd = f.cfg.ind.maxMinCleanInd = 100; f.cfg.ind.minMaxCleanInd = f.cfg.ind.maxMaxCleanInd = 100;
     { TestCity c = make(); zm.visitTile(c, rng, 1, 1); CHECK(c.lots.size() == 1 && c.lots[0].agentType == 8200); CHECK(zm.minClean == 100 && zm.maxClean == 100); }
     f.cfg.ind.minMinCleanInd = f.cfg.ind.maxMinCleanInd = 0; f.cfg.ind.minMaxCleanInd = f.cfg.ind.maxMaxCleanInd = 0; zm.curveYear = -1;
