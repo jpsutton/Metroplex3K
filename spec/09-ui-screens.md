@@ -1879,6 +1879,12 @@ garbage `1DF` (plus workforce `1E5`). Pages:
   `1F0`, neighbour deals `1F1`; caption `28A`, total `289` (MW-h per year).
 * Garbage — share of garbage by destination (`1F3`): landfill `1F4`, neighbour deals `1F1`,
   incinerators `1F5`, recycling `1F6`, collecting in streets `1F7`; total `1F8` (tons per year).
+  [STATIC] Slice sources (city statistics record): landfill = 12-month sum at `+0xD0`; neighbour
+  deals = 12-month sum at `+0xC0` (garbage exported); incinerators = 12-month sums at `+0xCC` plus
+  `+0xC8` (incinerator and waste-to-energy); recycling = 12-month sum at `+0xC4`. "Collecting in
+  streets" is NOT a 12-month sum: it is the current stock of uncollected garbage standing on
+  non-landfill tiles (`+0x74`, not reset by the yearly roll), so it can dominate the pie in a city
+  whose garbage has gone uncollected for a long time.
 
 The underlying statistics are owned by `20-sim-population.md` and `16-sim-utilities.md`.
 

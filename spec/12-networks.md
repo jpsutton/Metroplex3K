@@ -643,6 +643,13 @@ before building, and also refuses if the price exceeds funds `[STATIC]`.
      same drag one tile longer needs a raise at a corner of a water-tower tile and is rejected
      entirely (whole preview red, nothing built); the reverse drag (end to start) is also
      rejected.
+   * [OBSERVED, Mount Herrang, pipe, x = 1] Pipe is not in the fix-up set: no single-tile
+     flatten is applied to it. Drag (1,73) → (1,79): seven pieces ((1,78) piece 11647 at y 94,
+     (1,79) piece 11649 at y 92); only corners (1,78) 92 → 94, (1,80) 90 → 91 and (2,80) 92 → 91
+     change; charge 60. Reverse drag (1,78) → (1,73): the start tile (1,78) is levelled first
+     (all four corners → 93, the perimeter mean rounded half up, free; piece 18012 rotation 2 at
+     y 93); charge 30, all of it pieces. The start-endpoint levelling therefore runs before the
+     strip grade (step 5 order) and is not charged.
 2. Check funds ≥ total price; otherwise nothing is built.
 3. Endpoint levelling [STATIC unless marked]. It is done once at the start of the path and once at
    the end. The end call is made only on the non-bridge branch, and only when no tunnel was

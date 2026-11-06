@@ -748,16 +748,31 @@ after the city's own demand, and nothing is reserved in advance. Deal type codes
   reduced by D − L (the amount actually drawn). Bought power can therefore also feed a sale
   [INFERRED]. Settlement: a purchase is billed on the amount used (`buy − remBuy`); for a sale,
   **any undelivered amount (`remSell ≠ 0`, even 1 unit) cancels the deal**.
-* **Water** (SIMUTIL 0x1000E8C4): with a connected buy deal the supply budget is unlimited;
-  otherwise it is the sum of facility outputs (no 10 % bonus), divided by k. A sale receives
-  `min(contract − delivered, leftover)`. A purchase records the amount drawn; at settlement the
-  billed amount is `max(used, contract)` [INFERRED: argument meaning] and a sale with
-  `delivered < contract` is cancelled.
-* **Garbage** (SIMECO 0x100094A2 disposal): the city's own facilities are used first; with an
-  export deal **all** remaining garbage goes to the neighbour, uncapped (without one the overflow
-  is capped); the monthly bill uses the amount exported. An import deal pushes `units/30` per
-  pass through the same disposal, competing with the city's own garbage for its capacity. No
-  cancellation for garbage deals was found.
+* **Water** (SIMUTIL 0x1000E8C4) [STATIC]: with a connected buy deal the supply budget is
+  unlimited; otherwise it is the sum of facility outputs (no 10 % bonus), divided by k. The deal
+  record passed to the water code carries units (contract, +0x2C) and *amount* (the monthly money
+  figure, +0x30; not a rate). A **sale** (per network) adds `min(units − sold, leftover ×
+  conservation factor)` to *sold* and never reports a quantity to the deal manager; at
+  settlement revenue = sold × amount / 1000, and if sold < units (strict) the deal is cancelled
+  (only when the deal's edge is connected). A **purchase** adds max(0, used − local pump supply)
+  to *bought*; at settlement bought = max(bought, units), cost = amount × bought / 1000, and the
+  manager is told `(2, bought)`, which sets units to it (the contract can only ratchet up). The
+  water code never cancels a purchase.
+* **Garbage** (SIMECO 0x100094A2 disposal) [STATIC]: disposal order is the two facility lists,
+  the store, then — with an export deal — **all** remaining garbage goes to the neighbour,
+  uncapped; without one the overflow is "abducted" up to a cap. Monthly the manager is told
+  `(4, total exported this month)`, setting units to it (possibly 0). An import deal adds
+  units/30 per pass to the imported and produced totals, pushed through the same disposal; the
+  leftover is forced into the store; no quantity is reported for imports. The garbage code never
+  cancels a deal.
+* **Connection check** (deal manager monthly, SIMMISC 0x10018CD5) [STATIC]: types 0/2 are
+  cancelled when their edge connection is gone; types 1/3 when no plant/pump remains at that
+  edge; types 4/5 when (no edge flag, or the road, rail and highway connection counts are all 0)
+  and the city has no seaport (type 0x302A).
+* **Quantity update** (manager slot 0xA0, SIMMISC 0x100182AB) [STATIC]: for the buy types
+  (0, 2, 4) units ← the reported quantity; for the sell types (1, 3, 5), if units < the reported
+  quantity the deal's age is set to −1 (terminated, no penalty, no age check); in practice only
+  power sales reach this.
 * **Cancellation penalty** (deal manager slot 0x80, SIMMISC 0x10017F89): if the deal's age is
   below 60 (months, [INFERRED]) it is ended and its penalty (`MULT × amount` from the offer) is
   added to a pending amount charged as a month-end expense; at age ≥ 60 it is removed with no
