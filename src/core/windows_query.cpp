@@ -497,7 +497,7 @@ WindowResult QueryWindow::draw(Ui& ui, const WinEnv& E, const QueryInfo& q) {
     // The button sits on a (123,146,255) plate the size of the button; its label is the regular main9 weight [OBSERVED].
     ui.fill(b, rgb(123, 146, 255));
     E.spot("replace", b);
-    if (ui.button(b, E.se(0x12C, "Replace"), true, false, "main9")) { R.add(Act::QueryReplace, 0, q.x, q.z); R.close = true; R.add(Act::Close); }
+    if (ui.button(b, E.se(0x12C, "Replace"), true, false, "title9")) { R.add(Act::QueryReplace, 0, q.x, q.z); R.close = true; R.add(Act::Close); }
   }
   if (historical) {
     const int bx = r.x + (L.type == 3 ? 138 : 20), by = r.y + L.h - 23;
