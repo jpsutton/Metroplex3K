@@ -1366,6 +1366,27 @@ std::vector<std::pair<int, int>> City::routeNetworkPath(NetworkKind k, int x0, i
   return path;
 }
 
+std::string City::describeRoute(NetworkKind k, int x0, int z0, int x1, int z1) const {
+  std::string out;
+  if (!world_ || !cfg_.haveTiling) return "no tiling rules\n";
+  Tool tool = k == NetworkKind::Road ? TOOL_ROAD : k == NetworkKind::Rail ? TOOL_RAIL : k == NetworkKind::Power ? TOOL_POWER
+            : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
+  WorldNetworkMap map(*const_cast<World*>(world_), flagsFromRuleSets(cfg_.tiling));
+  configureMap(map);
+  RoutedPath rp = ::m3k::routePath(map, tool, {x0, z0}, {x1, z1});
+  char buf[160];
+  std::snprintf(buf, sizeof buf, "route: %zu tiles, validPrefix %d, blocked %d, truncated %d, crossed %d\n", rp.tiles.size(), rp.validPrefix, int(rp.blocked), int(rp.truncated), int(rp.crossed));
+  out += buf;
+  for (const auto& t : rp.tiles) {
+    int c[4]; map.tileCorners(t.x, t.z, c);
+    const TileOcc o = map.occupantAt(t.x, t.z, LAYER_SURFACE);
+    std::snprintf(buf, sizeof buf, "  (%d,%d) carriage %d %s corners %d %d %d %d%s%s\n", t.x, t.z, t.carriage, t.valid ? "valid  " : "INVALID", c[0], c[1], c[2], c[3],
+                  map.isWaterTile(t.x, t.z) ? " water" : "", o.present ? " occupied" : "");
+    out += buf;
+  }
+  return out;
+}
+
 City::Quote City::quoteOnRamp(int ax, int az) const {
   Quote q;
   if (!world_ || !cfg_.haveTiling) return q;

@@ -104,6 +104,8 @@ class City {
   bool buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path);
   // Spec 12 §6.2 drag router (highway dual carriageway, per-tool water/slope). Empty when tiling is off.
   std::vector<std::pair<int, int>> routeNetworkPath(NetworkKind k, int x0, int z0, int x1, int z1) const;
+  // Text dump of the routed drag (every tile with carriage, validity, corner heights, water) for the probes.
+  std::string describeRoute(NetworkKind k, int x0, int z0, int x1, int z1) const;
   // Spec 12 §7: highway on-ramp point tool (menu 02B5DEBB). Places the 3×2 piece group.
   bool buildOnRamp(int ax, int az);
   // Spec 12 §6.4 / §8: first yes/no confirm a drag would raise (bridge, then tunnel, then connection).
