@@ -442,7 +442,8 @@ void schemePreview(Ui& ui, GameData* gd, int x, int y, uint32_t land, uint32_t f
   put(land, 444, 92);
   // The right tree's place depends on the tree set; observed for the default pines (3FBE0000) and the broadleaf set
   // (3FBB0000). Other sets use the pine position until observed (the sprite spans do not explain the difference).
-  if (flora == 0x3FBB0000) put(flora, 546, 90); else put(flora, 554, 133);
+  // Each flora choice has two sprites, A (xxxx0000, left front) and B (xxxx0001, right behind) [SII/SC3CityScheme.ini decode; which side is which INFERRED].
+  if (flora == 0x3FBB0000) put(flora + 1, 546, 90); else put(flora + 1, 554, 133);
   put(building, 470, 145);
   put(flora, 445, 110);
 }
