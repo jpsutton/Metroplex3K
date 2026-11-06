@@ -210,7 +210,10 @@ people = `N × p[a]` (after steps 2–3 of §3.3). Then: [STATIC]
    * `MonthlyJrSportsOrdEffect`, if junior sports (0x815B4CEF) is enacted and *a* is in its ages.
 3. `EQ[a] += Δ_ord + Δ_fac`.
 4. Statistics. These age windows are hard-coded and independent of the INI ages.
-   * If 7 ≤ *a* ≤ 18: `G_school += Δ_fac` and `schoolAgePop += round(people)`.
+   * If 6 ≤ *a* ≤ 18 (13 ages, matching the 1/13 of §4.4): `G_school += Δ_fac` and
+     `schoolAgePop += round(people)`. CORRECTION: the earlier text said 7 ≤ *a*. [DATA: the saved
+     schoolAgePop of Berlin (two saves), Madrid and Madison equals the 6–18 sum within the same
+     0.1 % month drift as collegeAgePop. The 7–18 sum is about 8 % lower.]
    * If 19 ≤ *a* ≤ 24: `G_college += Δ_fac` and `collegeAgePop += round(people)`.
 5. If *a* < `AgeOfRebellion`: `EQ[a] += E_par`.
 6. If *a* ≤ 26 and `EQ[a] < 85·a / 26` (computed as 85·a × 0.03846154), set `EQ[a] = 85·a / 26`.

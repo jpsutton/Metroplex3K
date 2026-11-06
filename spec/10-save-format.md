@@ -1208,7 +1208,7 @@ Residential state (offsets relative to the end of the second valve block):
 | 0x19C | 1 | u8 | collegeStrike | 1 while colleges are on strike |
 | 0x19D | 4 | u32 | collegeStrikeMonths | College strike month counter |
 | 0x1A1 | 1 | u8 | collegeRating | College rating 0–4 |
-| 0x1A2 | 4 | u32 | schoolAgePop | People aged 7–18 (sum of rounded per-age counts) |
+| 0x1A2 | 4 | u32 | schoolAgePop | People aged 6–18 (sum of rounded per-age counts) |
 | 0x1A6 | 4 | u32 | collegeAgePop | People aged 19–24 |
 | 0x1AA | 4 | u32 | schoolDesks | Σ desk capacity of all schools |
 | 0x1AE | 4 | u32 | collegeDesks | Σ desk capacity of all colleges |

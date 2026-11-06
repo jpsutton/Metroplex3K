@@ -554,11 +554,25 @@ void testScenarioGoals() {
   for (int i = 0; i < 30; i++) v.goals.push_back({"Extra goal " + std::to_string(i), false});
   h.frame();
   h.click("scroll.down"); h.click("scroll.down");
-  CHECK(w.scroll == 2);
+  CHECK(w.goalScroll >= 1);   // the goals list scrolls (the text box only gets a bar when its text overflows)
   v.inScenario = false; h.frame(); CHECK(h.inked() > 500);
   WindowResult r = h.click("close"); CHECK(r.close);
   v.inScenario = true;
   r = h.click("ok"); CHECK(r.close);
+  {  // pop-up and results dialogs (spec 23 4.7.1)
+    Harness hp; ScenarioPopupView pv; pv.text = "A short message."; pv.presenterAdvisor = 0;
+    ScenarioPopupWindow pw;
+    hp.drawFn = [&] { return pw.draw(hp.ui, hp.E, pv); };
+    hp.frame(); CHECK(hp.inked() > 1000);
+    WindowResult pr = hp.click("ok"); CHECK(pr.close);
+    Harness he; ScenarioEndView ev; ev.title = "Betterfeld"; ev.resultsFor = "Results for Mayor Bob"; ev.ranks = {"Gold", "Silver"}; ev.achieved = 1;
+    ev.text = "Well played.";
+    ScenarioEndWindow ew; int choice = -2;
+    he.drawFn = [&] { choice = ew.draw(he.ui, he.E, ev); return WindowResult(); };
+    he.frame(); CHECK(he.inked() > 1000 && choice == -1);
+    he.click("end.2"); CHECK(choice == 2);
+    he.click("end.0"); CHECK(choice == 0);
+  }
 }
 
 

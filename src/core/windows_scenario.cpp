@@ -44,6 +44,9 @@ ScenarioGoalsView makeScenarioGoalsView(const std::function<std::string(uint32_t
     v.goals.push_back(g);
   }
   v.status = std::to_string(met) + " of " + std::to_string(v.goals.size()) + " goals met";
+  if (file) v.presenterAdvisor = file->header.effectivePresenter();
+  v.presenterMood = st.presenterMood ? int(st.presenterMood) : 3;
+  v.mayor = ctx.mayor;
   return v;
 }
 

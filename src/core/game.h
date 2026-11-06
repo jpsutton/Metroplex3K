@@ -11,6 +11,7 @@
 #pragma once
 #include <functional>
 #include <array>
+#include <deque>
 #include <map>
 #include <set>
 #include <memory>
@@ -472,6 +473,10 @@ class Game {
   CityPropsState propsState_;
   Image neighRegion_;   // Neighbors Map region image (spec 11 section 9), rebuilt when the window opens
   ScenarioGoalsWindow goalsWin_;
+  fs::path lastScenarioFile_;   // for "Replay Scenario" on the results dialog
+  ScenarioPopupWindow scenPopupWin_;
+  ScenarioEndWindow scenEndWin_;
+  std::deque<ScenarioPopupView> scenPopups_;   // cmdPopUpMsg pop-ups waiting for OK, shown one at a time (spec 23 4.7.1)
   ViewDataWindow viewData_;   // data maps, charts and graphs in one window (spec 09 7.1)
   CityLayersDialog layersDlg_;
   CityLayers layers_;            // applied View City Layers settings

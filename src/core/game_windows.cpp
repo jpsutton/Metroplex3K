@@ -74,7 +74,7 @@ void Game::syncScreenPending() {
 bool Game::anyBlockingWindow() const {
   // Spec 14 §2.3 / 09 §4.2 (Q-AZ): these raise pending/modal, not the player pause count.
   return showBudget_ || showOrd_ || showDeals_ || showAdv_ || showProps_ || showPicker_ || showTip_ || showPrefs_ || showEngine_ ||
-         showQuery_ || showGoals_ || showLayers_ || showBrm_ || showBle_ || msgBox_.active || petView_ != nullptr;
+         showQuery_ || showGoals_ || !scenPopups_.empty() || showLayers_ || showBrm_ || showBle_ || msgBox_.active || petView_ != nullptr;
 }
 
 void Game::closeAllWindows() {
@@ -536,6 +536,11 @@ void Game::drawWindows(uint32_t dtMs) {
     finish(goalsWin_.draw(ui_, E, v), showGoals_);
   }
   drawQueryPopup();
+  if (!scenPopups_.empty()) {   // scenario pop-ups: one at a time in the same place, until OK or the close box
+    WindowResult pr = scenPopupWin_.draw(ui_, E, scenPopups_.front());
+    if (pr.close) { scenPopups_.pop_front(); scenPopupWin_.scroll = 0; }
+    if (scen_) scen_->setPopupOpen(!scenPopups_.empty());
+  }
 
   // Modal.
   if (showBudget_) {

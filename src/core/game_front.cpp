@@ -235,7 +235,7 @@ void Game::loadFile(const fs::path& p) {
   }
 }
 
-bool Game::loadScenarioFile(const fs::path& p) { fileKind_ = 3; loadFile(p); return scenarioActive(); }
+bool Game::loadScenarioFile(const fs::path& p) { fileKind_ = 3; lastScenarioFile_ = p; loadFile(p); return scenarioActive(); }
 
 void Game::saveCurrent(const std::string& name, const fs::path& into) {
   fs::path dir = into.empty() ? resolveCI(root_, "Cities") : into;
@@ -1138,17 +1138,22 @@ void Game::drawCredits(uint32_t dtMs) {
 }
 
 void Game::drawScenarioEnd() {
-  Rect r = ui_.movable({W_ / 2 - 260, H_ / 2 - 180, 520, 360});
-  ui_.panel(r, str(0x041F2625, 4).empty() ? "Scenario over" : str(0x041F2625, 4));
   ScenarioController::Outcome o;
   if (scen_) o = scen_->outcome();
-  ui_.text(r.x + 20, r.y + 44, o.win ? "Scenario completed!" : "Scenario failed.", "title12");
-  ui_.text(r.x + 20, r.y + 74, "Rank: " + (o.rankTitle.empty() ? std::to_string(o.rank) : o.rankTitle));
-  ui_.text(r.x + 20, r.y + 96, "Goals met: " + std::to_string(o.goalsMet) + " of " + std::to_string(o.goalsTotal));
-  if (!o.text.empty()) wui::paragraph(ui_, {r.x + 20, r.y + 124, r.w - 40, 160}, o.text);
-  if (ui_.button({r.x + 20, r.y + r.h - 50, 150, 32}, "Keep playing")) scr_ = Screen::InCity;
-  if (ui_.button({r.x + 185, r.y + r.h - 50, 150, 32}, "Another scenario")) { saveMode_ = false; refreshFiles(3); scr_ = Screen::LoadList; }
-  if (ui_.button({r.x + 350, r.y + r.h - 50, 150, 32}, "Main menu")) scr_ = Screen::MainMenu;
+  ScenarioEndView v;
+  v.title = o.title.empty() ? str(0x041F2625, 4) : o.title;
+  const std::string head = str(0x041F2625, 7);   // "Scenario Completed!" (spec 09, string 7)
+  v.heading = head.empty() ? std::string(o.win ? "Scenario Completed!" : "Scenario Failed") : head;
+  v.resultsFor = (str(0x041F2625, 0x25).empty() ? std::string("Results for Mayor ") : str(0x041F2625, 0x25) + " ") + o.mayor;
+  v.ranks = o.ranks; v.achieved = o.achieved; v.text = o.text;
+  v.presenterAdvisor = o.presenterAdvisor; v.mood = o.mood;
+  v.captions[0] = str(0x041F2625, 8); v.captions[1] = str(0x041F2625, 9); v.captions[2] = str(0x041F2625, 0xA);
+  WinEnv E = env();
+  uiHit_ = true;
+  const int c = scenEndWin_.draw(ui_, E, v);
+  if (c == 0) { if (!lastScenarioFile_.empty()) loadScenarioFile(lastScenarioFile_); else scr_ = Screen::InCity; }   // Replay Scenario: load it again
+  else if (c == 1) { saveMode_ = false; refreshFiles(3); scr_ = Screen::LoadList; }
+  else if (c == 2) scr_ = Screen::MainMenu;
 }
 
 }  // namespace m3k

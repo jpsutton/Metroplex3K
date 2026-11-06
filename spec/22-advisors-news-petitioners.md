@@ -141,6 +141,12 @@ The ordinance-petition thresholds (`POPULATION_FOR_GAMBLING`, `MAX_GAMBLING_AURA
 any advisor file. They are in `PetitionerManager.ini [PETITIONER_ORDINANCE_TRIGGER_MAPPINGS]`
 (section 5).
 
+Keys that are loaded but never read by any rule or petition (dead data; reproduce by ignoring)
+[STATIC]: `RESIDENTIAL_/COMMERCIAL_/INDUSTRIAL_DEMAND_NEGATIVE`, `INDUSTRIAL_DEMAND_POSITIVE`,
+`HEALTH_FUNDING_*`, `EDUCATION_FUNDING_*`, `COLLEGE_POPULATION_MINIMUM`, `OVERALL_POLLUTION_*`,
+`POWER_FUNDING_*`, `WATER_FUNDING_*`, `WATER_CONSUMPTION_CRITICAL/HIGH`, `WATER_CONSERVATION_YEAR`,
+`POLICE_STATION_RATIO`, `MIN_POWER_SELL`, `MIN_WATER_SELL`, `MIN_GARBAGE_IMPORT`.
+
 No petition chance is configurable. Every petition probability in sections 3.7–3.13 is a constant
 in code.
 
@@ -682,7 +688,7 @@ the residential record stores (`10-save-format.md` §6.11) [STATIC]:
 |---|---|---|---|
 | strike flag | healthStrike | schoolStrike | collegeStrike |
 | F_s | healthRating (0–4) | schoolRating (0–4) | collegeRating (0–4) |
-| D_s | patients | schoolAgePop (ages 7–18) | collegeAgePop (ages 19–24) |
+| D_s | patients | schoolAgePop (ages 6–18) | collegeAgePop (ages 19–24) |
 | C_s | hospitalBeds | schoolDesks | collegeDesks |
 | W_s | ⌊r_health / 100⌋ | ⌊r_school / 100⌋ | ⌊r_college / 100⌋ |
 
@@ -1344,11 +1350,19 @@ entry that is not a deal and not owned, with N = population, Y = current year:
 | 13871 university | `0x97` | city EQ > `EQ_NEEDED_FOR_UNIVERSITY` and ordinance `0xE0D07233` (pro-reading) enacted |
 | 13872 medical research | `0x8E` | life expectancy > `LE_NEEDED_FOR_MEDICAL_CENTER` |
 | 13874 science/R&D centre | `0x84` | city EQ > `EQ_NEEDED_FOR_SCIENCE_CENTER` |
-| 14003 national park | `0x88` | number of agent-type 14310 buildings > `PARKS_NEEDED_FOR_NATIONAL_PARK`; the population test uses a different population measure [OPEN] |
+| 14003 national park | `0x88` | park measure PM > `PARKS_NEEDED_FOR_NATIONAL_PARK` (PM defined below; CORRECTION: not a count of agent type 14310); the population test uses a different population measure [OPEN] |
 | 14325 theme park | `0x8D` | number of airport buildings (12310) > 5 and ordinance `0x62F6E7CF` (tourism promotion) enacted |
 | 14550 lighthouse | `0x8B` | population test uses the same alternative measure as national park [OPEN: likely coastal/seaport related] |
-| 20001 haunted house (Holidays) | `0x12C` | Holidays building set enabled; month index 7–9 (0-based: Aug–Oct) [INFERRED 0-based]; not in certain game modes [OPEN] |
-| 20002 skating rink (Holidays) | `0x12F` | Holidays building set enabled; month index 9–11 (Oct–Dec); number of agent-type 14310 buildings > 29 |
+| 20001 haunted house (Holidays) | `0x12C` | Holidays building set enabled; calendar month m (1 = January) with 6 < m < 10, i.e. July–September [STATIC; CORRECTION of the earlier 0-based reading]; not offered when the player's **country** (`27-platform.md` §1) is 30 Italy, 31 Japan, 32 Korea, 34 Netherlands or 49 Taiwan [STATIC: the values and the country-name table; INFERRED: that the application getter returns the country index] |
+| 20002 skating rink (Holidays) | `0x12F` | Holidays building set enabled; calendar month 8 < m < 12, i.e. September–November [STATIC]; park measure PM > 29 |
+
+**Park measure PM** [STATIC]: a weighted sum of park buildings by agent type, counting each type
+present: 14311 small park ×1, 14312 big park ×9, 14313 baseball ×16, 14314 playground ×4,
+14315 pond ×4, 14316 fountain ×1. Agent type 14310 ("Park", the parent of these in
+`[AgentTypeHierarchy]`) is counted separately and is not part of PM. [DATA check] An original
+save of Berlin in September 2067 had both `0x12C` and `0x12F` pending. That needs month 9 to be
+inside both ranges, and PM > 29 (Berlin has 1059 park buildings of types 14311–14316).
+The month is the calendar month from the city date, 1–12.
 
 When the condition holds:
 

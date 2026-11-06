@@ -170,6 +170,13 @@ ScenarioController::Outcome ScenarioController::outcome() const {
   ScenarioTextContext c = p_->ctx();
   if (r.rankTitle.id) o.rankTitle = expandScenarioTokens(p_->res(r.rankTitle.group, r.rankTitle.id), c);
   if (r.resultsText.id) o.text = expandScenarioTokens(p_->res(r.resultsText.group, r.resultsText.id), c);
+  for (const auto& kv : p_->rt->state().ranks) {
+    if (int(kv.first) == r.rank) o.achieved = int(o.ranks.size());
+    o.ranks.push_back(expandScenarioTokens(p_->res(kv.second.group, kv.second.id), c));
+  }
+  o.presenterAdvisor = p_->file.header.effectivePresenter();
+  o.mood = p_->rt->state().presenterMood ? int(p_->rt->state().presenterMood) : 3;   // the mood of cmdSetResultsDlgText
+  o.title = title(); o.mayor = c.mayor;
   return o;
 }
 

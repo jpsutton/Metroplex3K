@@ -867,9 +867,21 @@ itself.
 
 `[OBSERVED]` (1024 × 768, Health & Education fly-out):
 * **Opening.** A plain click on a second-level button that owns a fly-out immediately selects the
-  fly-out's currently checked entry and activates its tool. Pressing **and holding** the button
-  for about a second opens the fly-out. Moving onto an entry and releasing the mouse there
-  selects it.
+  fly-out's currently checked entry and activates its tool. Moving onto an entry and releasing
+  the mouse there selects it.
+* CORRECTION `[OBSERVED 640 × 480, Residential, 50 fps capture]`: there is **no hold delay**. The
+  fly-out appears on mouse-**down**, within one 20 ms frame, and stays only while the button is
+  held. A quick click shows it for the duration of the press only (80 ms press → 4 frames).
+  Release:
+  * over the sub-button itself, after any hold time (tested 80 ms and 1.5 s): the fly-out closes
+    (the checked entry is used, as for a plain click);
+  * over an entry: that entry becomes the checked one and the fly-out closes;
+  * anywhere else (for example the map): the fly-out closes and the checked entry does not change.
+
+  The sub-menu column stays open in all three cases, and also after a later map click and Escape.
+  The checked entry is **not** saved in `SC3.cfg`: the file was rewritten byte-identical on exit
+  after Dense was checked, and after a restart Light Residential was checked again. Whether a city
+  save carries it was not tested.
 * **Placement.** The fly-out opens to the **left** of the button, because the column sits at the
   right edge of the window. Its right side touches the column, and its first entry sits about
   7 px above the button's centre.

@@ -50,7 +50,13 @@ class ScenarioController {
   bool started() const;
   void setPopupOpen(bool open);
   ScenarioGoalsView goalsView() const;
-  struct Outcome { bool ended = false, win = false; int rank = -1; std::string rankTitle, text; int goalsMet = 0, goalsTotal = 0; };
+  struct Outcome {
+    bool ended = false, win = false; int rank = -1; std::string rankTitle, text; int goalsMet = 0, goalsTotal = 0;
+    std::vector<std::string> ranks;   // every rank line (cmdAddRankInfo), in id order
+    int achieved = -1;                // index of the achieved rank in `ranks`
+    uint32_t presenterAdvisor = 0; int mood = 3;
+    std::string title, mayor;
+  };
   Outcome outcome() const;
   std::string title() const;
   std::string briefing() const;

@@ -762,7 +762,11 @@ bool Game::scenarioActive() const { return scen_ && scen_->active(); }
 void Game::startScenarioHooks() {
   if (!scen_) return;
   ScenarioHooks h;
-  h.popUp = [this](const std::string& text, int, uint32_t, int, bool) { message(text); };
+  h.popUp = [this](const std::string& text, int, uint32_t adv, int mood, bool) {
+    ScenarioPopupView v; v.text = text; v.presenterAdvisor = adv; v.mood = mood;
+    scenPopups_.push_back(std::move(v));
+  };
+  h.ended = [this](int) { scr_ = Screen::ScenarioEnd; };
   h.ticker = [this](const std::string& text, int, bool) { statusLine_ = text; };
   h.sound = [this](int id) { sound(id); };
   h.moveCamera = [this](int x, int z, int zoom) { setView(x, z, zoom); };

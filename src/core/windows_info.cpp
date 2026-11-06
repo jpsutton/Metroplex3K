@@ -313,32 +313,145 @@ WindowResult CityPropertiesDialog::draw(Ui& ui, const WinEnv& E, CityPropsState&
   return R;
 }
 
-// ================================================================ Scenario goals (6.10)
+// ================================================================ Scenario dialogs (6.10, spec 23 4.7.1)
+namespace {
+const uint32_t kPanelFill = 0xFFFF927Bu;   // (123,146,255) in the frame's 0xAABBGGRR order
+
+// Presenter panel: the advisor portrait (92 x 115 cells) in a 1 px frame, and the person's name centred below it.
+void presenterPanel(Ui& ui, const WinEnv& E, Rect panel, int portraitX, int portraitY, int nameY, uint32_t advisor, int mood) {
+  ui.fill(panel, kPanelFill);
+  const int idx = AdvisorWindow::advisorIndex(advisor);
+  if (idx < 1) return;
+  const Rect pr{portraitX, portraitY, 91, 114};
+  if (const Image* im = E.img(0x52DB60A0, AdvisorWindow::portraitInstance(idx, mood)))
+    ui.blitRect(*im, pr.x, pr.y, 0, 0, std::min(92, im->w), std::min(115, im->h));
+  ui.frame({pr.x - 1, pr.y - 1, pr.w + 2, pr.h + 2}, false);
+  const std::string name = AdvisorWindow::personName(E, advisor);
+  ui.textCentered({panel.x, nameY, panel.w, 14}, name, "main9", rgb(0x31, 0x36, 0x7C));
+}
+
+bool checkButton(Ui& ui, const WinEnv& E, const char* spot, Rect r) {
+  E.spot(spot, r);
+  bool ok = false;
+  if (!(ui.skin && ui.skin->imageButtonCells(ui, ui.skin->image(skin_group::Sys, 0xA2DEFD9A), 4, r, "", false, true, ok))) ok = ui.button(r, E.app(0xB4, "OK"));
+  return ok;
+}
+
+// A white text box with an optional scroll bar (only when the text overflows).
+void textBox(Ui& ui, const WinEnv& E, Rect box, const std::string& text, int& scroll) {
+  ui.fill(box, rgb(255, 255, 255));
+  const int lh = lineHeight(ui);
+  const auto lines = wrap(ui, text, box.w - 24, "main10");
+  const int visible = std::max(1, box.h / lh);
+  const bool overflow = int(lines.size()) > visible;
+  if (overflow) scrollBar(ui, E, {box.x + box.w - 16, box.y, 16, box.h}, int(lines.size()), visible, scroll); else scroll = 0;
+  for (int i = 0; i < visible && i + scroll < int(lines.size()); i++) ui.text(box.x + 4, box.y + 2 + i * lh, lines[size_t(i + scroll)], "main10", 0xFF000000u);
+}
+}  // namespace
+
 WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGoalsView& v) {
   WindowResult R;
-  int lh = lineHeight(ui);
-  Rect r = centered(ui, 540, 420);
+  Rect r = centered(ui, 474, 432);
   if (frame(ui, E, r, v.title.empty() ? "Scenario goals" : v.title)) { R.close = true; R.add(Act::Close); }
-  int x0 = r.x + 16, y = r.y + 36;
-  if (!v.inScenario) { ui.text(x0, y, "-"); return R; }
-  ui.text(x0, y, v.briefingLabel.empty() ? "Briefing" : v.briefingLabel, "title12");
-  y += lh + 6;
-  y += paragraph(ui, {x0, y, r.w - 32, 110}, v.briefing) + 10;
-  ui.text(x0, y, v.goalsLabel.empty() ? "Goals" : v.goalsLabel, "title12");
-  y += lh + 6;
-  int rowH = lh + 4, bottom = r.y + r.h - 70;
-  int visible = std::max(1, (bottom - y) / rowH);
-  scrollBar(ui, E, {x0, y, r.w - 32, visible * rowH}, int(v.goals.size()), visible, scroll);
-  for (int i = 0; i < visible && scroll + i < int(v.goals.size()); i++) {
-    const auto& g = v.goals[size_t(scroll + i)];
-    Rect box{x0, y + i * rowH + 2, 12, 12};
-    ui.fill(box, rgb(255, 255, 255)); ui.frame(box, false);
-    if (g.met) ui.fill({box.x + 3, box.y + 3, 6, 6}, rgb(0, 150, 0));
-    ui.text(x0 + 20, y + i * rowH + 2, g.text, "main10", g.met ? rgb(0, 110, 0) : 0);
+  if (!v.inScenario) { ui.text(r.x + 20, r.y + 50, "-"); return R; }
+  auto at = [&](int x, int y, int w, int h) { return Rect{r.x + x, r.y + y, w, h}; };
+  const uint32_t ink = rgb(0x31, 0x36, 0x7C);
+  // Upper-left panel: heading, (start dialog: the mayor's name), the scrollable text.
+  ui.fill(at(13, 34, 328, 178), kPanelFill);
+  const std::string head = v.startMode ? E.se(0x20, "Greetings Mayor:") : (v.statusLabel.empty() ? std::string("Scenario Status") : v.statusLabel) + ":";
+  ui.text(r.x + 20, r.y + 40, head, "title12", ink);
+  int textTop = 56;
+  if (v.startMode) {
+    const Rect nm = at(146, 44, 181, 17);
+    ui.fill(nm, rgb(255, 255, 255)); ui.frame(nm, false);
+    ui.text(nm.x + 3, nm.y + 2, v.mayor, "main10", 0xFF000000u);
+    textTop = 71;
   }
-  ui.text(x0, r.y + r.h - 62, (v.statusLabel.empty() ? std::string("Status") : v.statusLabel) + ": " + v.status);
-  if (button(ui, E, "ok", {r.x + r.w - 104, r.y + r.h - 34, 90, 24}, E.app(0xB4, "OK"))) { R.close = true; R.add(Act::Close); }
+  textBox(ui, E, at(18, textTop, 322, 210 - textTop), v.briefing, scroll);
+  presenterPanel(ui, E, at(350, 35, 120, 177), r.x + 364, r.y + 56, r.y + 187, v.presenterAdvisor, v.presenterMood);
+  // Goals: one row per goal on a 40 px pitch, a 28 px status icon, the text wrapped on two lines.
+  ui.text(r.x + 18, r.y + 224, v.goalsLabel.empty() ? "Scenario Goals:" : v.goalsLabel, "title12", ink);
+  const Rect lb = at(18, 245, 452, 141);
+  ui.fill(lb, rgb(255, 255, 255)); ui.frame(lb, false);
+  const int rows = std::max(1, (lb.h - 4) / 40);
+  for (int i = 0; i < rows && goalScroll + i < int(v.goals.size()); i++) {
+    const auto& g = v.goals[size_t(goalScroll + i)];
+    const int y = r.y + 249 + i * 40;
+    const int ix = r.x + 22;
+    if (g.met) {   // green disc with a white tick
+      for (int yy = 0; yy < 28; yy++) for (int xx = 0; xx < 28; xx++) { const int dx = xx - 14, dy = yy - 14; if (dx * dx + dy * dy <= 196) ui.fill({ix + xx, y + yy, 1, 1}, rgb(0, 150, 0)); }
+      for (int k = 0; k < 5; k++) ui.fill({ix + 7 + k, y + 14 + k, 2, 3}, rgb(255, 255, 255));
+      for (int k = 0; k < 9; k++) ui.fill({ix + 11 + k, y + 18 - k, 2, 3}, rgb(255, 255, 255));
+    } else {       // white triangle with a black "!"
+      for (int yy = 0; yy < 26; yy++) { const int half = yy / 2 + 1; ui.fill({ix + 14 - half, y + 1 + yy, half * 2, 1}, rgb(255, 255, 255)); }
+      ui.fill({ix + 13, y + 9, 3, 10}, 0xFF000000u); ui.fill({ix + 13, y + 21, 3, 3}, 0xFF000000u);
+    }
+    const auto lines = wrap(ui, g.text, lb.w - 60, "main10");
+    for (size_t k = 0; k < lines.size() && k < 2; k++) ui.text(r.x + 57, y + 4 + int(k) * lineHeight(ui), lines[k], "main10", g.met ? rgb(0, 110, 0) : 0xFF000000u);
+  }
+  if (int(v.goals.size()) > rows) scrollBar(ui, E, {lb.x + lb.w - 16, lb.y, 16, lb.h}, int(v.goals.size()), rows, goalScroll);
+  if (checkButton(ui, E, "ok", at(426, 395, 42, 32))) { R.close = true; R.add(Act::Close); }
+  if (ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
   return R;
+}
+
+// Pop-up (cmdPopUpMsg), spec 23 4.7.1: 391 x 237, text panel with the warning icon on the left, presenter panel on the right.
+WindowResult ScenarioPopupWindow::draw(Ui& ui, const WinEnv& E, const ScenarioPopupView& v) {
+  WindowResult R;
+  Rect r = centered(ui, 391, 237);
+  const std::string title = v.presenterAdvisor ? AdvisorWindow::advisorName(E, v.presenterAdvisor) : std::string();
+  if (frame(ui, E, r, title.empty() ? "Message" : title)) { R.close = true; R.add(Act::Close); }
+  auto at = [&](int x, int y, int w, int h) { return Rect{r.x + x, r.y + y, w, h}; };
+  const Rect tp = at(23, 41, 236, 150);
+  ui.fill(tp, kPanelFill);
+  if (ui.skin) Skin::drawCell(ui, ui.skin->image(skin_group::Sys, 0x42E55FD4), 4, 1, r.x + 30, r.y + 56);   // the yellow warning triangle
+  const int lh = lineHeight(ui);
+  const auto lines = wrap(ui, v.text, 167, "main10");
+  const int visible = std::max(1, 138 / lh);
+  const bool overflow = int(lines.size()) > visible;
+  if (overflow) scrollBar(ui, E, {r.x + 241, tp.y, 16, tp.h}, int(lines.size()), visible, scroll); else scroll = 0;
+  for (int i = 0; i < visible && i + scroll < int(lines.size()); i++) ui.text(r.x + 74, r.y + 51 + i * lh, lines[size_t(i + scroll)], "main10", rgb(0x31, 0x36, 0x7C));
+  presenterPanel(ui, E, at(266, 40, 121, 150), r.x + 281, r.y + 41, r.y + 167, v.presenterAdvisor, v.mood);
+  if (checkButton(ui, E, "ok", at(338, 199, 42, 32)) || ui.in.key[K_ENTER] || ui.in.key[K_ESC]) { R.close = true; R.add(Act::Close); }
+  return R;
+}
+
+// Results dialog (cmdEndScenario), spec 23 4.7.1: 444 x 397, no close box or OK. Returns the chosen outcome 0 replay, 1 another scenario,
+// 2 main menu, or -1.
+int ScenarioEndWindow::draw(Ui& ui, const WinEnv& E, const ScenarioEndView& v) {
+  Rect r = centered(ui, 444, 397);
+  ui.panel(r, v.title);
+  auto at = [&](int x, int y, int w, int h) { return Rect{r.x + x, r.y + y, w, h}; };
+  const uint32_t ink = rgb(0x31, 0x36, 0x7C);
+  ui.fill(at(13, 34, 308, 154), kPanelFill);
+  ui.text(r.x + 20, r.y + 39, v.heading.empty() ? "Scenario Completed!" : v.heading, "title12", ink);
+  ui.text(r.x + 20, r.y + 61, v.resultsFor, "main10", ink);
+  int y = r.y + 92;
+  for (size_t i = 0; i < v.ranks.size(); i++) {
+    const bool got = int(i) == v.achieved;
+    if (got) {   // the red stamp left of the achieved rank
+      const Rect st = at(18, int(y - r.y) - 12, 40, 26);
+      ui.fill(st, rgb(200, 30, 30)); ui.frame(st, true);
+      ui.textCentered(st, "SimCity", "main9", rgb(255, 255, 255));
+    }
+    const auto lines = wrap(ui, v.ranks[i], 250, "main10");
+    for (size_t k = 0; k < lines.size() && k < 2; k++) ui.text(r.x + 61, y + int(k) * lineHeight(ui), lines[k], "main10", got ? rgb(0x10, 0x20, 0x90) : rgb(150, 150, 150));
+    y += 19 + (lines.size() > 1 ? lineHeight(ui) : 0);
+  }
+  presenterPanel(ui, E, at(321, 34, 119, 154), r.x + 334, r.y + 34, r.y + 163, v.presenterAdvisor, v.mood);
+  int scr = 0;
+  textBox(ui, E, at(13, 203, 427, 89), v.text, scr);
+  int choice = -1;
+  static const char* kDefault[3] = {"Replay Scenario", "Play Another Scenario", "Return to Main Menu"};
+  for (int i = 0; i < 3; i++) {
+    const Rect bp = at(12 + i * 142, 305, 134, 76);
+    ui.fill(bp, kPanelFill);
+    paragraph(ui, {bp.x + 4, bp.y + 10, bp.w - 8, 32}, v.captions[i].empty() ? kDefault[i] : v.captions[i], "main10", ink);
+    const Rect logo{bp.x + 34, bp.y + 43, 66, 30};
+    E.spot("end." + std::to_string(i), logo);
+    if (ui.button(logo, "SimCity")) choice = i;
+  }
+  return choice;
 }
 
 // ================================================================ Building picker (6.11)

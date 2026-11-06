@@ -390,10 +390,20 @@ class CityPropertiesDialog {
 // ---- 6.10 Scenario goals --------------------------------------------------------------------------------------------------------------------------------------------------
 class ScenarioGoalsWindow {
  public:
-  int scroll = 0;
+  int scroll = 0, goalScroll = 0;
   // The view is built by makeScenarioGoalsView() (windows_scenario.h; separate because scenario.h and
   // news.h cannot be included in one translation unit).
   WindowResult draw(Ui& ui, const WinEnv& E, const ScenarioGoalsView& v);
+};
+
+class ScenarioPopupWindow {
+ public:
+  int scroll = 0;
+  WindowResult draw(Ui& ui, const WinEnv& E, const ScenarioPopupView& v);   // OK / close box / Enter / Esc -> Close
+};
+class ScenarioEndWindow {
+ public:
+  int draw(Ui& ui, const WinEnv& E, const ScenarioEndView& v);   // chosen outcome 0..2 or -1
 };
 
 // ---- 6.11 Building picker ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
