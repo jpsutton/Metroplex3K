@@ -51,6 +51,10 @@ int main(int argc, char** argv) {
     if (cx0 < 0) return;
     std::printf("corners %s (rows = z, columns = x %d..%d):\n", tag, cx0, cx1);
     for (int z = cz0; z <= cz1; z++) { std::printf("  z%-4d", z); for (int x = cx0; x <= cx1; x++) std::printf(" %3d", int(ww.altAt(x, z))); std::printf("\n"); }
+    if (std::getenv("M3K_WATER")) {
+      std::printf("water %s:\n", tag);
+      for (int z = cz0; z <= cz1; z++) { std::printf("  z%-4d", z); for (int x = cx0; x <= cx1; x++) std::printf(" %3d", int(ww.waterAt(x, z))); std::printf("\n"); }
+    }
   };
   window(w, "before");
   const int64_t fundsBefore = s.game.sim().funds;

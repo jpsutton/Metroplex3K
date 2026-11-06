@@ -279,9 +279,17 @@ static void testBlockedShore() {
   auto rules = makeRules({{"ROAD_GRND_final.txt", roadFinal()}});
   SimpleNetworkMap m(20, 8);
   setupRoadFlags(m);
-  for (int x = 6; x <= 8; x++) m.setWater(x, 3, true);
-  m.setCornerHeight(7, 4, 31);   // tile (6,3): corners 30 30 31 30 = not flat, not a valid slope, and a water tile
+  for (int x = 6; x <= 9; x++) m.setWater(x, 3, true);
+  m.setCornerHeight(8, 4, 31);   // tile (7,3): corners 30 30 31 30 = not flat, not a valid slope, an interior water tile: allowed
   { RoutedPath wr = routePath(m, TOOL_ROAD, {2, 3}, {12, 3}); CHECK(!wr.blocked && wr.tiles.size() == 11); }
+  {  // an irregular tile at either end of the water span leaves no bridge: the water tiles and what follows are invalid
+    SimpleNetworkMap e(20, 8);
+    setupRoadFlags(e);
+    for (int x = 6; x <= 9; x++) e.setWater(x, 3, true);
+    e.setCornerHeight(10, 4, 31);   // tile (9,3), the last water tile: 30 30 31 30
+    RoutedPath er = routePath(e, TOOL_ROAD, {2, 3}, {12, 3});
+    CHECK(er.blocked && er.validPrefix == 4);
+  }
   m.addForeign(6, 3, 99999, 0, false);
   RoutedPath rp = routePath(m, TOOL_ROAD, {2, 3}, {12, 3});
   CHECK(rp.tiles.size() == 11 && rp.blocked && rp.validPrefix == 4 && rp.tiles[3].valid && !rp.tiles[4].valid && !rp.tiles[10].valid);

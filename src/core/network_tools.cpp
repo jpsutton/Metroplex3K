@@ -291,6 +291,22 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
     stepsTaken++;
     addTile(cx, cz, alongX);
   }
+  // A bridge needs both ends of the water span to be flat or valid slopes: without one the water tiles and everything after them are invalid and only
+  // the land prefix builds [OBSERVED, Roadless Paradise (34,158)->(34,175): the far water tile (34,173) 80 82 82 82 made all water and far land red;
+  // INFERRED rule, the interior water tiles may be irregular as on the x=36 crossing].
+  if (!P.wide && P.minRun > 0 && tool != TOOL_ONRAMP && rp.tiles.size() >= 4) {
+    size_t w0 = rp.tiles.size();
+    for (size_t k = 0; k < rp.tiles.size(); k++) if (rp.tiles[k].valid && m.onMap(rp.tiles[k].x, rp.tiles[k].z) && m.isWaterTile(rp.tiles[k].x, rp.tiles[k].z)) { w0 = k; break; }
+    if (w0 < rp.tiles.size()) {
+      size_t j = w0;
+      while (j < rp.tiles.size() && rp.tiles[j].valid && m.onMap(rp.tiles[j].x, rp.tiles[j].z) && m.isWaterTile(rp.tiles[j].x, rp.tiles[j].z)) j++;
+      auto fine = [&](size_t k) { int c[4]; m.tileCorners(rp.tiles[k].x, rp.tiles[k].z, c); return (c[0] == c[1] && c[1] == c[2] && c[2] == c[3]) || isValidSlope(c); };
+      if (j < rp.tiles.size() && (!fine(w0) || !fine(j - 1))) {
+        for (size_t k = w0; k < rp.tiles.size(); k++) rp.tiles[k].valid = false;
+        blocked = true;
+      }
+    }
+  }
   if (!P.wide && tool != TOOL_ONRAMP) {   // the strip grader runs with the validation, in the preview and at commit
     std::vector<std::pair<int, int>> ts;
     for (const RoutedTile& t : rp.tiles) { if (!t.valid) break; ts.push_back({t.x, t.z}); }

@@ -1405,6 +1405,17 @@ std::string City::describeRoute(NetworkKind k, int x0, int z0, int x1, int z1) c
     for (const auto& t : rp.tiles) all.push_back({t.x, t.z});
     out += describeStripGrade(map, all);   // planned grade over every routed tile (debug)
   }
+  if (k == NetworkKind::Road || k == NetworkKind::Rail || k == NetworkKind::Power) {   // the bridge the commit would offer (debug)
+    std::vector<PathTile> vp = toPathTiles(rp, true);
+    PlacementCosts pc = makeCosts(budget, cfg_);
+    BridgePlan bp = planBridge(map, cfg_.tiling.nets[netKindToTable(toolParams(tool).kind)], toolParams(tool).kind, vp, pc, 0);
+    if (!bp.ok) out += "bridge: none\n";
+    else {
+      std::snprintf(buf, sizeof buf, "bridge: W %d axis %d W0 (%d,%d) hw %d price %d terrainBlocked %d\n", bp.W, bp.axis, bp.x0, bp.z0, bp.hw, bp.price, int(bp.terrainBlocked));
+      out += buf;
+      for (const auto& c : bp.corners) { std::snprintf(buf, sizeof buf, "  corner (%d,%d) %d -> %d%s\n", c.vx, c.vz, map.cornerHeight(c.vx, c.vz), c.h, map.canChangeCorner(c.vx, c.vz) ? "" : " BLOCKED"); out += buf; }
+    }
+  }
   return out;
 }
 
