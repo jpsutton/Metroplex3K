@@ -351,8 +351,16 @@ of `14-sim-clock.md`. [STATIC]
 
 Images `02F78C6D:52FB06E4`–`52FB06E9` (pause/run and four speed buttons; 48×23 and 10×11 parts).
 Tooltips: pause `225872FE:64`, run `65`, speeds 1–4 `66`–`69` (turtle, llama, cheetah, African
-swallow). Selecting a speed un-pauses. Sounds: run 23 `UiPlaySim`, pause 24 `UiPauseSim`, speed 1–4
+swallow). Sounds: run 23 `UiPlaySim`, pause 24 `UiPauseSim`, speed 1–4
 → 25–28 `UiSimSpeed1`–`4`. Speed semantics (ticks per real second) are in `14-sim-clock.md`.
+`[OBSERVED]` Behaviour:
+* Pause stops the clock. Clicking Pause again while paused does nothing; it does not toggle.
+* Run resumes at the currently selected speed.
+* A speed button selects that speed. While paused, it changes the selected speed but does **not**
+  un-pause; Run then resumes at the new speed.
+* The four speed cells show the selected speed as a bar: cells 1…n lit and the rest grey. They are
+  bright green while running and dark green while paused.
+* The `/` hotkey toggles pause (`08`).
 The speed widget updates its highlighted button whenever the pause state or speed changes,
 whatever the cause (hotkeys, modal windows, the simulator), so it always reflects the true state.
 Opening a modal window (budget, ordinances, query, …) raises the city's **pending / modal** count

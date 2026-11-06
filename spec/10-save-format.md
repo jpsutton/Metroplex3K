@@ -1362,10 +1362,25 @@ Rules [STATIC]:
   the chart is created; it is not stored). Fixed-scale: `max` is the scale given at creation, and
   on load and on each new sample any sample greater than `max` is clamped to `max`.
   Auto-scale: after load and whenever a new sample exceeds the current `max`, `max` is recomputed
-  as trunc(largest of the 32 samples × scale factor), but never below a floor (10 by default; the
+  as round(largest of the 32 samples × scale factor), but never below a floor (10 by default; the
   factor is 1.0 by default). A loader may simply take the stored `max`.
 * Verified: the power chart (auto-scale) stores max = max(largest sample, 10) in 59/59 files; the
   water chart (fixed scale) stores 100 in 59/59 [DATA].
+* Factors and floors seen in the shipped cities (Berlin, London, Madrid, Craterville, Roadless
+  Paradise) [DATA]:
+  * population chart (residents) and the five world-layer charts (City Size, Com, Ind, Nat'l Pop):
+    factor **1.1**, rounded to nearest (Berlin residents 806,941 → 887,635; London 598,118 →
+    657,930). Population floor **10,000**: an empty city stores 10,000.
+  * treasury chart: factor 1.1, rounded (845 → 930, 1,217 → 1,339), floor **200**: Roadless
+    Paradise has largest sample 100 and max 200.
+  * power: factor 1.0, floor 10.
+  * Fixed scales: education 150, life expectancy 89, pollution 100, crime 260, aura 260,
+    unemployment 100, water 100.
+* Treasury samples are (max(funds, −100,000) + 100,000) / 1000, an integer in $1000 with 0 =
+  −$100,000. The label reverses this (sample × 1000 − 100,000) [STATIC, SIMMISC 6382–6461].
+* The Graphs window plots each series as sample × 100 / max, with 0 at the bottom of the plot. It
+  uses no minimum, no nice steps and no extra headroom; a series whose max is 0 is not drawn
+  [STATIC, SIMUI FUN_1002ed75].
 * A writer must emit all 33 words; a new chart holds the subsystem's initial sample in all 32
   slots (often 0; 127 for the aura) and its creation scale in `max`.
 
