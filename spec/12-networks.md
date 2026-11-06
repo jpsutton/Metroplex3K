@@ -784,10 +784,35 @@ E0 + 3a, or 23 if that corner is off the map. The far side's own B is not affect
 builder has the same defect (0x10002D69, 0x10002FB2, then the start-side sets from 0x10003241).
 The W0 − 4a approach altitude uses the same byte.
 
-Every corner change is first checked: a corner may change only if none of the up to four tiles
-that share it holds an occupant that forbids terrain changes (buildings or other network pieces).
-If any check fails, nothing is changed, the "construction discontinued" message (instance `0x285`)
-is shown and the drag is cancelled.
+Every corner change is first checked: the 8 start-bank and 8 far-bank corners are checked before
+anything is written; a corner that already has its target height is not checked. A corner may
+change only if none of the up to four tiles that share it (in the surface, pipe and subway layers)
+holds an occupant that forbids terrain changes (an occupant passes if it reports kind 5, or is in
+the network's terrain-change set and not in the kind's exclusion list). If one of these 16 checks
+fails, nothing is changed, the "construction discontinued" message (instance `0x285`) is shown
+and the drag is cancelled.
+
+**Order and partial failure (road, rail, power)** [STATIC, SIMNTWRK 0x1000122A]: (1) the 16
+checks; (2) the start-bank corners are **written immediately**; (3) the start approach is graded
+with the strip grader of §6.2.6 on the vertex list (W0 − 4a, B), (W0 − 3a, follow), (W0 − 2a,
+follow), (W0 − a, h_w + 5), whose permission test covers the whole affected block; (4) the river
+bed is lowered, the far-bank corners written and the far approach graded; (5) the pieces are
+placed and the price charged. If step 3 or 4 fails, `0x285` is shown and the drag is cancelled
+**without undo and without charge**: the start-bank corners written in step 2 stay. [OBSERVED,
+Roadless Paradise, road (36,155)→(36,180), W = 8, price §800 accepted] No piece was built, funds
+were unchanged, and corners (36,162)/(37,162) were left at 85 (h_w + 5) and (36,163)/(37,163) at
+83 (h_w + 3) with h_w = 80; the approach grade reached the 2 × 2 train station at
+(37..38, 158..159).
+
+**Preview of water tiles** [STATIC, drag path builder SIMNTWRK 0x1000488D]. For road, rail and
+power a water tile is shown valid only if the path is still valid and the straight run before
+it has at least p8 = 3 tiles; only one water crossing is allowed per drag. After the water a
+countdown of 3 land tiles starts; the water tiles (and the countdown tiles) stay pending until a
+valid land tile is reached after the countdown. If the drag ends (or becomes invalid) first,
+every pending tile is set invalid, and validation keeps only the leading buildable tiles.
+[OBSERVED] Road (34,158)→(34,175) on Roadless Paradise ends two land tiles past the water: the
+water tiles were red, only the four approach tiles were built, no bridge was offered, and the
+full 18-tile price (§180) was charged.
 
 **5a. Highway abutments** [STATIC]. The highway builder runs two passes, one per carriageway.
 Record direction: pass 0 uses dir 0 for an x axis and 3 for a z axis; pass 1 uses 2 and 1. A
