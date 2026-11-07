@@ -161,4 +161,9 @@ Known gaps, guesses and verification tasks are tracked as [GitHub issues](https:
 
 ## License
 
-The owner has not chosen a license yet. Until one is added, all rights are reserved. See [docs/LICENSING.md](docs/LICENSING.md).
+Metroplex3K is free software, licensed under the **GNU General Public License, version 3 or (at your option) any
+later version** (`GPL-3.0-or-later`). The full text is in [LICENSE](LICENSE). Contributions are accepted under the same
+terms. The license covers this repository's code and documentation only. It grants no rights to *SimCity 3000
+Unlimited* or any of its assets, which you must own and supply yourself. *SimCity* is a trademark of Electronic Arts
+Inc.; this project is not affiliated with or endorsed by EA or Maxis. See [docs/LICENSING.md](docs/LICENSING.md) for
+third-party notes.
