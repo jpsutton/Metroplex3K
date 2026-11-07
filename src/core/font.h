@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // FBF bitmap fonts and text drawing. See spec/05-text-and-fonts.md section 4.
 #pragma once
 #include <map>

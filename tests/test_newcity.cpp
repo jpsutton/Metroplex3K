@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // New-city state against the records the original writes right after New City (spec/30-new-city-template.md).
 #include "core/city.h"
 #include "core/newcity_template.h"

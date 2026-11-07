@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/tiler.h"
 #include <algorithm>
 #include <cstdlib>
@@ -378,7 +381,7 @@ void Tiler::describe(Ctx& c, int pass, int x, int z, std::vector<RuleCond>& entr
   (void)radius;
 }
 
-// One tile of a pass (spec 12 4.6, SIMNTWRK pass driver). The evaluated tile is NOT removed from the working set: the result targets (tile + result
+// One tile of a pass (spec 12 4.6). The evaluated tile is NOT removed from the working set: the result targets (tile + result
 // offset) are collected in `targets` even when placement fails, and the caller removes them after the whole pass. A (0, 0) result queues its
 // target for the final pass instead.
 bool Tiler::evalTile(Ctx& c, int pass, int x, int z, std::vector<std::pair<int, int>>& targets) {

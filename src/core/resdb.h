@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Resource database: a stack of mounted IXF segments. Most recently mounted segment wins
 // (spec/02-containers.md 7.4).
 #pragma once

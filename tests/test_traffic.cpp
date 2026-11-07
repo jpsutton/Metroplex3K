@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Tests for spec/18-sim-transport.md using synthetic fixtures.
 #include <cmath>
 #include "core/traffic.h"

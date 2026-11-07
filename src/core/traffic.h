@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Traffic / transit simulation (spec/18-sim-transport.md) and the traffic simulator record
 // 206C6E7C:029CA804:0 (version 9). Platform independent.
 #pragma once

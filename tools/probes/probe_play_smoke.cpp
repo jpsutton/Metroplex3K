@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Builds a small city from empty land with the public game API (roads, zones, coal plant, pump, power, pipes) and runs
 // it for 10 years. Prints population each year; zero or collapsing population means the basic growth loop is broken.
 // The generated save goes to the temp directory; the install is only read.

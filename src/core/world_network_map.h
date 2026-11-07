@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Adapter: INetworkMap over a World (spec/12-networks.md). Header-only.
 // Pieces live in World::surface/pipes/subway; other occupants (buildings) block the surface layer.
 // Occupant flags come from `flagsOf(occupantId)`; build one from the Set files with
@@ -51,8 +54,7 @@ class WorldNetworkMap : public INetworkMap {
   bool isWaterTile(int x, int z) const override {
     if (waterFn_) return waterFn_(x, z);
     if (!w_.inTiles(x, z)) return false;
-    // ANY of the four corners has water >= terrain (equality counts); a corner off the map is not water [STATIC SIMDIRT 0x100065F0, the test the
-    // bridge builders and the drag router call through 0x10016D69; spec 11 tile water test].
+    // ANY of the four corners has water >= terrain (equality counts); a corner off the map is not water [STATIC, spec 11 tile water test].
     for (int dx = 0; dx <= 1; dx++)
       for (int dz = 0; dz <= 1; dz++) {
         const int vx = x + dx, vz = z + dz;

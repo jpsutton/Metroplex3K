@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Game shell core: menu tree, tool menu, tool dispatch, HUD, map interaction, frame loop.
 // See game.h for the split over game_front.cpp / game_windows.cpp / game_sim.cpp.
 #include "core/game.h"
@@ -287,7 +290,7 @@ void Game::dropPath(const std::string& path) {
   }
   if (fs::is_regular_file(p, ec) && haveData_) { loadFile(p); return; }
   fs::path r = findGameRoot(p, 3);
-  if (r.empty()) { message("No SimCity 3000 Unlimited data found in that location."); return; }
+  if (r.empty()) { message("No game data found in that location."); return; }
   std::string err;
   if (!init(r, err)) message(err);
 }
@@ -1196,7 +1199,7 @@ void Game::drawHud() {
     if (hgt >= 0) ui_.fill({cx, H_ - bh + 15 - hgt, 10, hgt}, cols[i]); else ui_.fill({cx, H_ - bh + 16, 10, -hgt}, cols[i]);
     ui_.text(cx, H_ - bh + 8, nm[i]);
   }
-  // M3K Options in the slot of the original's "Visit SimCity Exchange" button (x = W - 194, y = bar top - 24, 33 x 30; an on-line service that is gone,
+  // M3K Options in the slot of the original's online-service button (x = W - 194, y = bar top - 24, 33 x 30; an on-line service that is gone,
   // spec 09 4.3). Drawn after the RCI indicator, whose background image holds that button's normal-state picture in the same corner.
   if (skinBar && skin_.get("cog")) {
     const Rect sx{W_ - 194, H_ - bh - 24, 33, 30};

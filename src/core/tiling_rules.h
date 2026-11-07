@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // TilingRules language parser (spec/12-networks.md section 3-4). Platform independent: files are
 // supplied through a reader callback, not read from disk here.
 #pragma once

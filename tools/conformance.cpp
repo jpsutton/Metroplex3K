@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // L0 conformance tool (spec/28-conformance.md section 2): parse every shipped file with the
 // engine's parsers and print coverage statistics.
 //   conformance [--strict] [--verbose] <game install path>

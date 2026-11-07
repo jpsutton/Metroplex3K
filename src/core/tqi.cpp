@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/tqi.h"
 #include <algorithm>
 #include <cmath>
@@ -5,6 +8,10 @@
 namespace m3k {
 
 namespace {
+// Provenance: the MPEG-1 intra quantiser matrix and the run/level VLC tables below are standard data from
+// ISO/IEC 11172-2 (table B.14). They were transcribed with reference to the FFmpeg project's TQI decoder
+// (FFmpeg is LGPL-2.1-or-later; credit to the FFmpeg developers) and the MultimediaWiki format page. This file is
+// distributed under GPL-3.0-or-later, the same license as the rest of Metroplex3K (see docs/LICENSING.md).
 // MPEG-1 table B.14 (standard data), listed as code/len + run/level in code-length order.
 const uint16_t kAcCode[113][2] = {
  { 0x3, 2 }, { 0x4, 4 }, { 0x5, 5 }, { 0x6, 7 }, { 0x26, 8 }, { 0x21, 8 }, { 0xa, 10 }, { 0x1d, 12 },

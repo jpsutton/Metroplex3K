@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/network_tools.h"
 #include <algorithm>
 #include <map>
@@ -62,11 +65,11 @@ bool slopesAlong(const INetworkMap& m, int x, int z, bool alongX) {
   return alongX ? (c[1] != c[0] || c[2] != c[3]) : (c[3] != c[0] || c[2] != c[1]);
 }
 
-// Strip grader [STATIC SIMNTWRK manager vt+0xC0, reconstruction checked against the Mount Herrang drags; the decompile is partly garbled]. The drag is
+// Strip grader [STATIC, reconstruction checked against the Mount Herrang drags]. The drag is
 // split into straight runs (breaks at water and at skipped tiles; a turn tile belongs to both runs). A run of >= 3 tiles, or >= 2 for the final run, is
 // graded as a strip: the vertex rows along the run are clamped into a window anchored by the start and end heights, mirror vertices copy their main
 // vertex, and every changed vertex needs all four tiles around it free of occupants. A failing run invalidates itself and everything after it.
-// Not modelled yet [OPEN]: the |dh| <= 4 ring smoothing around the strip and the vt+0x158 run break.
+// Not modelled yet [OPEN]: the |dh| <= 4 ring smoothing around the strip and the run break.
 struct GradeVertex { int x, z, h; };
 struct StripGrade {
   std::vector<GradeVertex> verts;   // changed vertices only
@@ -293,7 +296,7 @@ RoutedPath routePath(const INetworkMap& m, Tool tool, std::pair<int, int> S, std
     stepsTaken++;
     addTile(cx, cz, alongX);
   }
-  // Water crossing countdown [STATIC, the drag-path builder 0x1000488D]: after the water, minRun land tiles are counted down, and the water tiles stay pending
+  // Water crossing countdown [STATIC]: after the water, minRun land tiles are counted down, and the water tiles stay pending
   // until a valid land tile (flat or a valid slope) is reached: the last tile of the countdown or a later one (Roadless Paradise (35,155)->(35,176): the
   // third land tile (35,175) clears the pending tiles, the drag's own last tile (35,176) need not be valid). A drag that ends (or turns invalid) first sets every pending tile red; only the
   // leading buildable tiles remain (Roadless Paradise (34,158)->(34,175): the water at z162..173 and two land tiles after it, all red).
@@ -478,7 +481,7 @@ BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, co
   };
   int Bs = bank(pl.x0, pl.z0, -1, 20), Bf = bank(ex, ez, +1, hw + 1);
   if (kind == NK_HIGHWAY) {
-    // Two defects of the original's highway builders [STATIC, disassembly]: the start-side B corners take the raw height of the far-bank
+    // Two defects of the original's highway builders [STATIC]: the start-side B corners take the raw height of the far-bank
     // corner E0 + 3a (23 off the map) because a byte variable is overwritten by the first far-bank read, and the far B averages
     // h(E0+3a), h(E0+3a+2p) and h(W0-3a+2p). The permission checks use the real B.
     const int fx = ex + 3 * pl.ax, fz = ez + 3 * pl.az;
@@ -645,7 +648,7 @@ TunnelPlan planTunnel(const INetworkMap& m, int kind, const std::vector<PathTile
     if (tp.pairDx == 0 && tp.pairDz == 0) return tp;  // need a second carriageway
   }
   if (!tp.highway) {
-    // Road and rail [STATIC SIMNTWRK 0x10014A23 + builder 0x1001C102]: the entrance is the LAST dragged tile and the direction comes from the last step
+    // Road and rail [STATIC]: the entrance is the LAST dragged tile and the direction comes from the last step
     // only (heights as they stand after the strip grade). The tile must climb by >= 4 along d: rise = the sum of the two edge differences. The loop walks
     // on while the lowest corner stays >= h + 4 (E + d is never tested); the exit always lies beyond the drag's end.
     const PathTile& E = primary.back(); const PathTile& Pv = primary[primary.size() - 2];
@@ -905,7 +908,7 @@ static int levelEndpoint(INetworkMap& m, const std::vector<PathTile>& path, bool
   const PathTile& b = highway && lane.size() > 1 ? (start ? lane[1] : lane[lane.size() - 2]) : a;
   for (const PathTile* t : {&a, &b}) if (!m.onMap(t->x, t->z) || m.occupantAt(t->x, t->z, LAYER_SURFACE).present) return 0;
   if (!highway && !start && fixup) {   // (the fix-up loop covers net types road, rail, power, subway; not pipe)
-    // The fix-up loop of the original's commit (FUN_10008064) re-grades a single end tile with FLATTEN; observed on the hill road's end tile 92/91/91/92 (a ramp
+    // The fix-up loop of the original's commit re-grades a single end tile with FLATTEN; observed on the hill road's end tile 92/91/91/92 (a ramp
     // of gap 1) -> flat 92, while a gap-2 ramp (Mount Herrang (2,79) 94/94/92/92) stays. The trigger is INFERRED; the fix-up is free [charge 607 = 260 + 287 + 60].
     int c[4]; m.tileCorners(a.x, a.z, c);
     if (isValidSlope(c) && std::abs(c[2] - c[0]) == 1) {
@@ -1122,7 +1125,7 @@ CommitResult commitPath(INetworkMap& m, const TilingRuleSet& rules, const Placem
     }
   }
   // Endpoint levelling: at the start always, at the end only when neither a bridge nor a tunnel was built.
-  // Terrain operations are charged LevelTerrain x k >> 2, k = the sum of the absolute corner changes [STATIC SIMDIRT level plan 0x1000A750; observed 25
+  // Terrain operations are charged LevelTerrain x k >> 2, k = the sum of the absolute corner changes [STATIC; observed 25
   // for four corners moving 1 each].
   if (P.kind == NK_HIGHWAY) {
     std::vector<PathTile> lane0;

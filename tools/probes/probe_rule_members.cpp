@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Lists the members of the non-scatter developer rules (spec 15 s5.5) with their size and building flag word, so the
 // member-list filing by flag bits can be checked against the shipped families.
 //   probe_rule_members [GAME_DIR] [ruleIdHex ...]

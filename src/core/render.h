@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Software isometric renderer. Output is an RGBA8 framebuffer (u32 = A<<24|B<<16|G<<8|R); the app
 // blits it with SDL. Follows spec/25-rendering.md: terrain (section 6), sprites/draw order
 // (sections 4-5), overlays (section 9), picking (section 3).

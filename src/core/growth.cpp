@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/growth.h"
 #include <algorithm>
 #include <iterator>
@@ -1334,7 +1337,7 @@ int ZoneManager::visitRCI(GrowthCity& c, SimRand& rng, int x, int z, const ZoneD
 }
 
 int ZoneManager::visitPort(GrowthCity& c, SimRand& rng, int x, int z, const ZoneDescription& zd) {
-  // Airport (zone 14, SIMRCI 0x10004784) and seaport (zone 15, 0x1002CA1F) per-tile step, spec 15 s7 [STATIC]; S = water service.
+  // Airport (zone 14) and seaport (zone 15) per-tile step, spec 15 s7 [STATIC]; S = water service.
   const bool airport = zd.developerClass == kDevAirport;
   const bool pw = c.powered(x, z), S = c.watered(x, z), blocked = c.radioactive(x, z);
   const bool acc = c.hasAccess(x, z, 6);   // the s4.2 access box with d = 6

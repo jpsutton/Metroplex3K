@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Checks rules of the growth and utility spec revisions against the saved state of each shipped city, without running
 // the simulation forward (issue #78):
 //   * land value: recompute every block right after load and compare with the saved grid (mean ratio, correlation);

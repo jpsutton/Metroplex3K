@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Disaster visuals: animated effect sprites and the flying "automata" of the disasters (spec 21 section 12, spec 26 5.9, spec 04 4.4).
 // Platform independent apart from the sprite archives: the owner feeds DisasterCommands (one-shot effects, flying objects) and a
 // DisasterManager snapshot (state-driven effects: tornado funnels, toxic puffs, flames, debris launcher), advances it in real time, and

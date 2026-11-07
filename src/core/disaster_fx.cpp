@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Disaster visuals (see disaster_fx.h). Sprite ID layouts, frame periods, speeds and sequences follow spec 21 section 12 [STATIC][DATA];
 // anything that spec leaves open is marked [INFERRED].
 #include "core/disaster_fx.h"

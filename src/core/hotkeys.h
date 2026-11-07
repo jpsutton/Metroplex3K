@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Keyboard bindings (spec/08-ui-framework.md section 5): Res/Hotkeys/<LANGUAGE>.IXF tables, matching rule and
 // the command numbers of the original. Windows virtual-key codes are the interface to the host.
 #pragma once

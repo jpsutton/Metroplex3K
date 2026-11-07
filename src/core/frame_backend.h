@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Host frame present interface (Phase 0). Core stays free of SDL / GPU APIs; the desktop host
 // (and later a compute-backed host) supply a FrameBackend. Headless tools call Game::frame
 // without one and read Game::screen().

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Scenario controller used by Game (spec 23). Separate header/TU because scenario.h / script.h share names
 // (GameRng, Script, TickerStyle) with news.h / automata.h; this header only uses plain types.
 #pragma once

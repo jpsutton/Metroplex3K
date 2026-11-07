@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Game: query popup data (spec 09 6.12), news ticker strip (09 4.4), snapshots (09 6.13).
 #include <cmath>
 #include <algorithm>
@@ -312,7 +315,7 @@ void Game::buildQueryInfo(int x, int z, QueryInfo& q) {
 
   // Terrain: tile elevation = mean of the four corner altitudes; water depth from the surface vertex.
   int a00 = w.altAt(x, z), a10 = w.altAt(x + 1, z), a01 = w.altAt(x, z + 1), a11 = w.altAt(x + 1, z + 1);
-  // Elevation and depth in metres [STATIC SIMDIRT, observed: altitude 82 over sea level 80 reads 26 Meters, a salt-water depth of 11 reads 143]:
+  // Elevation and depth in metres [STATIC, observed: altitude 82 over sea level 80 reads 26 Meters, a salt-water depth of 11 reads 143]:
   // N = trunc(4.0f x 3.266f x delta) (13.064 m per altitude unit); land: delta = alt[anchor corner] - sea level (no clamp); a tile counts as water when any
   // corner is wet, delta = max(0, water - alt) at the anchor corner only.
   const float kMetres = 4.0f * 3.266f;

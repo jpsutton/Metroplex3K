@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Re-runs the network tiler over each saved road, rail and power network and compares the result with the pieces the
 // original game stored (issue #47). Rotation never differs in shipped data; differences are piece ids.
 //   probe_retile [GAME_DIR] [city-name-substring ...]

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // News ticker (spec/22-advisors-news-petitioners.md section 4). Platform independent; text comes from a
 // caller-supplied resolver (GameData::string), presentation is left to the shell.
 #pragma once

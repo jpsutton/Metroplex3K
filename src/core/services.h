@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // City services (spec/17-sim-services.md): funding curve, police/fire coverage, flammability,
 // crime, pollution (+garbage disposal pipeline), aura, health/education facility funding and
 // the byte-exact records of spec/10-save-format.md section 6.9, 6.10, 6.15, 6.16.

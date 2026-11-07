@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/economy.h"
 
 #include <algorithm>
@@ -884,7 +887,7 @@ int32_t NeighbourDeals::amountFor(const DealConfig& c, const Deal& d) {
 NeighbourDeals::Money NeighbourDeals::monthlyMoney() {
   Money m;
   for (auto& d : active) {
-    if (d.dealType >= kDealTypes) continue;   // no age test: a terminated deal (age -1) keeps billing income and cost until it is erased (SIMMISC 0x10018F95 / 0x10019000)
+    if (d.dealType >= kDealTypes) continue;   // no age test: a terminated deal (age -1) keeps billing income and cost until it is erased
     // [OBSERVED] shipped saves: units * rate / Base reproduces neither sell deals (Berlin 26,775 * 20 / 1000 = 535 vs saved
     // 1,071) nor buy deals (the saved rate field equals the amount), so a loaded deal keeps its saved amount.
     if (!(d.fromSave && d.monthlyAmount > 0)) d.monthlyAmount = amountFor(cfg, d);

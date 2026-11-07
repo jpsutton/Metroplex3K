@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Renders the skinned chrome using synthetic art to PNG. Usage: skin_demo [outdir]  -> skin_<h>.png
 // With a real install: skin_demo outdir GAMEDIR uses the real art.
 #include <iostream>

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Data-driven path test: a synthetic install on disk, Game::init, growth with real-data configuration,
 // sprites drawn via composite-sprite records, save to the install and reload.
 #include <cmath>

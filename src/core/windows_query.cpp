@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Query tool popups (spec 09 section 6.12): line builder for every occupant family plus the popup window.
 #include <algorithm>
 #include "core/skin.h"

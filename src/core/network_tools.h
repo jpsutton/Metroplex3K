@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Network placement tools, bridges/tunnels, ramps, neighbour connections, power/water topology,
 // road condition and persisted network records. spec/12-networks.md sections 6-10 and Persisted
 // state. No SDL; all world access goes through INetworkMap / ToolHost.
@@ -74,7 +77,7 @@ struct PathPrice {
 };
 // 6.2.5: marks tiles after `buildablePrefix` invalid, price = valid tiles * tileCost, whole path
 // invalid when price > funds.
-// Ripple pass after a strip grade [STATIC FUN_100076E0; the clamp rule fits the hill road's five outer corners]: every vertex next to a changed vertex is
+// Ripple pass after a strip grade [STATIC; the clamp rule fits the hill road's five outer corners]: every vertex next to a changed vertex is
 // clamped into [max - 4, min + 4] of its changed neighbours' heights, and a vertex that moves joins the changed set (cascade). Each moved vertex is charged
 // LevelTerrain x |dh| >> 2 on its own. Returns the total charge; vertices with an occupant next to them are left alone.
 int rippleRing(INetworkMap& m, const std::vector<std::pair<int, int>>& changed, int levelTerrain);
@@ -129,7 +132,7 @@ BridgePlan planBridge(const INetworkMap& m, const NetworkRules& nr, int kind, co
                       const PlacementCosts& costs, int carriagePass = 0);
 // Sets terrain and places pieces. Returns false (and changes nothing) when terrainBlocked.
 bool applyBridge(INetworkMap& m, BridgePlan& plan);
-// Staged terrain of a road/rail/power bridge [STATIC SIMNTWRK 0x1000122A, per the original's decode]: the start-bank corners are written at once, the start
+// Staged terrain of a road/rail/power bridge [STATIC]: the start-bank corners are written at once, the start
 // approach is graded, then the river bed, far bank and far approach. false = refused at a grade (what was written stays; no pieces, no charge).
 bool buildBridgeTerrain(INetworkMap& m, BridgePlan& plan);
 // Body occupant ids that set the per-tile pier flag (section 6.4 step 6).
@@ -147,7 +150,7 @@ struct TunnelPlan {
   std::vector<std::pair<int, int>> hidden;  // tiles strictly between portals (both carriageways for highway)
   int price = 0;
   struct Corner { int vx, vz, h; };
-  std::vector<Corner> corners;              // road/rail shaping of the entrance and exit [STATIC 0x1001C102]
+  std::vector<Corner> corners;              // road/rail shaping of the entrance and exit [STATIC]
   bool blocked = false;                     // a shaped corner has an occupant next to it: message 0x284, nothing placed
   std::pair<int, int> continueTile{-1, -1}; // road/rail: the tile one past the exit that replaces the dragged end
 };

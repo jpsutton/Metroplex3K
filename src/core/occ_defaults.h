@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Per-class property values written for a newly placed building (spec 10 6.2.5, open issue 1.2).
 #pragma once
 #include "core/world.h"

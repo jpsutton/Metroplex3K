@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Headless end-to-end test: drives Game through scripted Input on synthetic data.
 #include <cmath>
 #include "core/game.h"

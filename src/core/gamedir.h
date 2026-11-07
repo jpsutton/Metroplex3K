@@ -1,4 +1,7 @@
-// Locating the user's SimCity 3000 Unlimited installation, and remembering it.
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Locating the user's installation of the original game, and remembering it.
 #pragma once
 #include <string>
 #include <vector>
@@ -16,7 +19,7 @@ std::vector<fs::path> defaultGameLocations();
 
 // Auto-detect: environment variable M3K_GAME_DIR, saved config, then defaults.
 // `exeDir` (optional): folder of the executable, searched too. Also searched: the working directory, its parent
-// (so a sibling 'SimCity 3000 Unlimited' folder is found) and the exe folder's parent.
+// (so a sibling game folder is found) and the exe folder's parent.
 fs::path detectGameRoot(const fs::path& exeDir = {});
 
 // Per-user config directory for this application (created on demand).
@@ -24,7 +27,7 @@ fs::path configDir();
 bool saveGameRoot(const fs::path& root);
 fs::path loadSavedGameRoot();
 
-// Path of an installer executable pattern (GOG "setup_simcity_3000...exe") -> true.
+// Path of an installer executable pattern (a GOG "setup_...exe" installer) -> true.
 bool looksLikeGogInstaller(const fs::path& p);
 // Extract a GOG (Inno Setup) installer into `dest` using `innoextract` if present on PATH.
 // Returns the game root on success, empty path otherwise; `msg` receives a human-readable note.

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/services.h"
 
 #include <algorithm>
@@ -371,7 +374,7 @@ void FlammabilityLayer::run(const std::function<int(int, int)>& baseAt,
     uint8_t v = uint8_t(flammabilityValue(baseAt ? baseAt(x, z) : 0, params_, ord,
                                           noWaterAt ? noWaterAt(x, z) : false));
     grid[size_t(x) * H_ + size_t(z)] = v;
-    if (v != 0) { sweepSum += v; sweepCount++; }   // zero tiles are neither summed nor counted [STATIC SIMSERV 0x1000C523; saved trailers agree]
+    if (v != 0) { sweepSum += v; sweepCount++; }   // zero tiles are neither summed nor counted [STATIC; saved trailers agree]
     cursorX++;
     if (int(cursorX) >= W_) {
       cursorX = 0;

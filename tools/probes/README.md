@@ -1,6 +1,6 @@
 # Probes
 
-Small command-line checks that run the engine against a **real** SimCity 3000 Unlimited install and print numbers
+Small command-line checks that run the engine against a **real** install of the original game and print numbers
 to compare against what the shipped saves record. They never modify the install and ship no game data.
 
 Built with the other tools (`M3K_BUILD_PROBES`, default ON; they are not CTest tests because CI has no install).

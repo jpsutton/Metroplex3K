@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // City: owns every World-attached simulation subsystem and runs them in the order of
 // spec/14-sim-clock.md (CitySchedule daily / weekly / monthly cascades). Also loads each layer from the
 // city file's inner records (World::raw) and writes them back (City::flush).

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Engine options dialog: Metroplex3K-only settings (no counterpart in the original). Uses the original dialog
 // frame, check boxes and check-mark OK button when the skin provides them, the flat fallback look otherwise.
 #include "core/skin.h"

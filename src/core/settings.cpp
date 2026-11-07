@@ -1,4 +1,8 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/settings.h"
+#include "core/compat_names.h"
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -156,7 +160,7 @@ bool isOurKey(const std::string& path) {
   std::string p = toLower(path);
   std::string q;  // collapse doubled backslashes (Wine) and normalise to single
   for (char c : p) { if (c == '\\' && !q.empty() && q.back() == '\\') continue; q.push_back(c); }
-  const std::string tail = "electronic arts\\maxis\\simcity 3000 unlimited";
+  const std::string tail = compat::kRegistryKeyTail;
   if (q.size() < tail.size() || q.compare(q.size() - tail.size(), tail.size(), tail) != 0) return false;
   std::string head = q.substr(0, q.size() - tail.size());
   return head.empty() || head.back() == '\\';

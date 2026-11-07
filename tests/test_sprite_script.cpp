@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Sprite-script VM (spec 25 7.1): robustness against targets outside the script (original-written saves reach odd scripts).
 #include "core/sprite_script.h"
 #include "testutil.h"

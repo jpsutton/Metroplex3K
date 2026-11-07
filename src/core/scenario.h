@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Scenario files (.SNR), header/tables, run-time state record, scenario runtime and .SSC templates.
 // spec/23-scenarios.md.
 #pragma once

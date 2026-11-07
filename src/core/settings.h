@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Platform settings: language/country selection, command line, display modes, machine profile,
 // SC3.cfg preferences and an own key/value preferences file. spec/27-platform.md, spec/05 section 2.
 #pragma once
@@ -52,7 +55,7 @@ struct CountryInputs {
 int chooseCountry(const CountryInputs& in);
 
 // Registry-equivalent values (spec 27 section 1): the original's key
-// HKLM\\Software\\Electronic Arts\\Maxis\\SimCity 3000 Unlimited (or the WOW6432Node twin).
+// HKLM\\Software\\<publisher>\\<game> (see compat_names.h; or the WOW6432Node twin).
 struct RegistryValues {
   std::string installedPath, scenarioCreator, ergc;
   std::optional<uint32_t> languageDword, countryDword, sku;

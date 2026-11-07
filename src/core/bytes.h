@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Little-endian byte helpers and a bounds-checked reader.
 #pragma once
 #include <cstddef>

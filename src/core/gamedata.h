@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Access to the user's installed game data: mounts the resource segments listed in Default.ini and
 // provides decoded sprites, occupant attributes and composite-sprite records.
 #pragma once

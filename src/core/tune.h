@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Small helpers for reading tunables from IniFile with defaults (used by clock/economy/population).
 #pragma once
 #include <cstdint>

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Tree tool (spec 11 4.1 [OBSERVED]): plants on bare land and replaces flora, refused on buildings and networks.
 #include "core/game.h"
 #include "testutil.h"

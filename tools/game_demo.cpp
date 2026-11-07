@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Headless UI smoke test: drives Game with scripted input and writes PNG screenshots.
 //   game_demo [--game DIR] out_prefix
 #include <iostream>

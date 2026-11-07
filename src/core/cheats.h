@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Cheat phrase table, matching, active flags and the cheat log records. spec/27-platform.md
 // section 5, spec/10-save-format.md section 3.6.
 #pragma once

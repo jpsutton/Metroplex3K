@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Network tiler (spec/12-networks.md sections 4.6, 5, 6.3). Operates on the abstract
 // INetworkMap so it can be tested with synthetic rule text and maps.
 #pragma once

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Game shell front end: intro movie, main menu, new city, terrain editor, load/save, credits, settings.
 #include <algorithm>
 #include <cmath>
@@ -506,9 +509,9 @@ void Game::drawNeedData() {
   Rect r{W_ / 2 - 300, H_ / 2 - 150, 600, 300};
   ui_.panel(r, "Metroplex3K - game data needed");
   ui_.text(r.x + 16, r.y + 40, "Metroplex3K needs the data files of your own copy of", "main10");
-  ui_.text(r.x + 16, r.y + 58, "SimCity 3000 Unlimited (e.g. the GOG release). Nothing is bundled.", "main10");
+  ui_.text(r.x + 16, r.y + 58, "the original game this engine is compatible with (see the README, e.g. the GOG release). Nothing is bundled.", "main10");
   ui_.text(r.x + 16, r.y + 90, "- Drag the installed game folder (the one containing 'Apps') onto this window,", "main10");
-  ui_.text(r.x + 16, r.y + 108, "- or drag the GOG installer (setup_simcity_3000...exe) here (needs 'innoextract'),", "main10");
+  ui_.text(r.x + 16, r.y + 108, "- or drag the GOG installer (the setup .exe) here (needs 'innoextract'),", "main10");
   ui_.text(r.x + 16, r.y + 126, "- or type the folder path below and press Enter.", "main10");
   ui_.textBox({r.x + 16, r.y + 160, r.w - 32, 24}, pathInput_, 400);
   if (ui_.focusId == 0) ui_.focusId = 1;

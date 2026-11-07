@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/traffic.h"
 #include <algorithm>
 #include <cmath>
@@ -432,7 +435,7 @@ uint8_t TrafficSim::classify(uint8_t from, uint8_t prev, uint16_t f, bool rail, 
       if (!stn) return subF ? TM_SUBWAY : 0;
       if (xfer) return TM_XFER_STN;
       if (subF && !road && !railF) return TM_SUBWAY_STN;
-      return subF ? TM_SUBWAY : 0;   // a subway line under a bus stop or rail station stays on the subway layer (SimTransit 0x10007ba5)
+      return subF ? TM_SUBWAY : 0;   // a subway line under a bus stop or rail station stays on the subway layer
     case TM_RAIL_STN: case TM_SUBWAY_STN: case TM_XFER_STN: {
       if (!stn) {
         if (from == TM_RAIL_STN && railF && prev != TM_RAIL) return TM_RAIL;
@@ -479,7 +482,7 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
   // Visit mask (spec 18 5.1, 5.7) [STATIC]: one u8 per tile holding the OR of raw mode codes. A scan in mode m skips a
   // tile when (v & m) == m. The chosen node's tiles get the scanning (parent's) code; ring tiles with no valid transition
   // get the scanning branch's code (1 road, 4 rail, 8 subway, 0x10 station, 0x41 bus, 0x50 bus stop); candidates that
-  // lose the choice are not marked. The default since the dirty side's recheck (rail density swings both ways between months, no
+  // lose the choice are not marked. The default since a recheck (rail density swings both ways between months, no
   // systematic effect); M3K_PRIVATEBITS=1 brings back the old one-private-bit-per-mode marking for comparisons.
   static const bool privateBits = std::getenv("M3K_PRIVATEBITS") != nullptr;
   const int bit = privateBits ? (1 << modeBit(scanMode)) : int(scanMode);
@@ -544,7 +547,7 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
       }
       (void)bus;
       if (!nm) { if (!privateBits) visit_[k] |= uint16_t(rejectBit); continue; }
-      int d = densityOf(uint8_t(layerMode), x, z);   // no span check on the highway neighbours (SimTransit)
+      int d = densityOf(uint8_t(layerMode), x, z);   // no span check on the highway neighbours
       if (!have) { best = {x, z, nm, d, false, f}; have = true; }
       else if (d < p_.annoyanceLevel) { best = {x, z, nm, d, false, f}; alt = true; }
     }
@@ -595,8 +598,7 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
   nn.r = TripRect{best.x, best.z, best.x, best.z};
   int mult = 1;
   {
-    // A bridge or tunnel: the one-tile node moves onto the landing tile and the step cost is multiplied by the span length (SimTransit
-    // [STATIC]); it used to become a rectangle over the whole span, which also credited density to every span tile and dead-ended trips
+    // A bridge or tunnel: the one-tile node moves onto the landing tile and the step cost is multiplied by the span length [STATIC]; it used to become a rectangle over the whole span, which also credited density to every span tile and dead-ended trips
     // whose next exit was read from the span's start tile.
     SpanInfo sp; bool isSpan;
     spanOk(best.x, best.z, sp, isSpan);
@@ -607,7 +609,7 @@ bool TrafficSim::nextStep(Ctx& c, std::vector<TripNode>& stack, bool first) {
       nn.r = TripRect{ex, ez, ex, ez};
       mult = sp.len;
     } else if ((best.f & TF_STATION) && stationRectOf) {
-      // A station node is the station occupant's whole footprint (SimTransit dc ~5476): rail stations are 2 x 2, all their tiles take the
+      // A station node is the station occupant's whole footprint: rail stations are 2 x 2, all their tiles take the
       // parent's visit code, and track touching any side boards.
       TripRect sr;
       if (stationRectOf(best.x, best.z, sr)) nn.r = TripRect{std::max(0, sr.x0), std::max(0, sr.z0), std::min(W_ - 1, sr.x1), std::min(H_ - 1, sr.z1)};
@@ -654,8 +656,7 @@ TripResult TrafficSim::routeTrip(const TripRequest& req) {
       return res;
     }
     // A subway-permitted trip that reaches a subway station (0x18) boards: the popped node becomes mode 8 after the arrival test and before its
-    // neighbours are scanned and it joins the path, so it scans as subway, takes subway density and gets visit code 8 (SimTransit FUN_100070d0
-    // [STATIC]). Its step cost was charged as the station when it was created. Trips without subway permission keep 0x18.
+    // neighbours are scanned and it joins the path, so it scans as subway, takes subway density and gets visit code 8 [STATIC]. Its step cost was charged as the station when it was created. Trips without subway permission keep 0x18.
     if (c.subway && cur.mode == TM_SUBWAY_STN) cur.mode = TM_SUBWAY;
     // Budget test at the start of the step (spec 18 5.6): a node whose cost exceeds B is not expanded (cost == B is).
     if (cur.cost <= c.budget && nextStep(c, stack, false)) continue;
@@ -756,7 +757,7 @@ bool TrafficSim::fireBuilding(const TripBuilding& b) {
   if (b.x < 0 || b.z < 0 || b.x >= W_ || b.z >= H_) return false;
   TripRect origin{b.x, b.z, b.x + b.w - 1, b.z + b.h - 1};
   size_t first = size_t(b.x) * H_ + b.z;
-  // The draws follow the original's order: destination, threshold, counting test, mass transit (SimTransit FUN_100097b9).
+  // The draws follow the original's order: destination, threshold, counting test, mass transit.
   TripRequest req;
   req.origin = origin;
   req.originCategory = b.category;

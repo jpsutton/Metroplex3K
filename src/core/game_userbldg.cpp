@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Game glue for the user-made buildings dialogs (Building Replacement Manager, Building List Editor).
 #include <algorithm>
 #include <fstream>

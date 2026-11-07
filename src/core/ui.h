@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Immediate-mode UI toolkit drawing into an RGBA framebuffer. Platform independent: the host feeds
 // mouse/keyboard state each frame. Used for all menus, dialogs and the in-city HUD.
 #pragma once

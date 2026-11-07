@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Checks every shipped city-view cursor (spec 08 section 8): the .cur decodes (loadCursor shows the .cur picture), its hotspot lies
 // inside the image, and how the colour design preview (.bmp twin) differs from it (informational: the game shows the .cur).
 //   probe_cursors [GAME_DIR] [sheet.png]

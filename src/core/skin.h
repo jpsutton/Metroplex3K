@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Original UI art ("skin"): loads UI images (type 62B9DA24) from the mounted resource segments and
 // exposes the layouts and draw helpers needed to render the authentic chrome (spec/08 sections 2, 4,
 // 7; spec/09 sections 1.2, 2.5, 3.1, 4). Every draw helper returns false (and draws nothing) when

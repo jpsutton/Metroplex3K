@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The schedule's hold wait (spec 14 6.3 rule 6) must never block the frame thread: with a modal window open the sim just does not
 // advance. A regression here hangs (ctest times out) instead of failing.
 #include "core/game.h"

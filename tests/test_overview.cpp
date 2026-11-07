@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Overview map colours (core/overview.h): water rule, land bands, zones over terrain, region image.
 #include "core/overview.h"
 #include "core/image.h"

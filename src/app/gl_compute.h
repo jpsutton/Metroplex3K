@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Hidden OpenGL 4.3+ compute device for Phase 2 terrain fill. Independent of SdlPresenter.
 #pragma once
 #include <cstdint>

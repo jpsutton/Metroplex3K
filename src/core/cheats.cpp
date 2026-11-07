@@ -1,4 +1,8 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/cheats.h"
+#include "core/compat_names.h"
 #include <algorithm>
 #include <cstdlib>
 
@@ -53,7 +57,7 @@ const std::vector<CheatInfo>& build() {
     {"mayor", 0x4352E7F6, K::Ticker, false, 0x32F, 0},
     {"hello", 0xA352E800, K::Ticker, false, 0x330, 0},
     {"simon says", 0x03546E10, K::Ticker, true, 0x341, 0},
-    {"simcity", 0xE352E809, K::Ticker, false, 0x331, 0},
+    {compat::kCheatPhraseGame, 0xE352E809, K::Ticker, false, 0x331, 0},
     {"money", 0xA352E814, K::Ticker, false, 0x332, 0},
     {"ticker", 0xE352E822, K::Ticker, false, 0x333, 0},
     {"electronic arts", 0x4352E828, K::Ticker, false, 0x334, 0},

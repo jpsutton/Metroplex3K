@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Replays one network drag on a saved city and prints what our placement tools do (issue #47): the routed tiles with their validity, the quote,
 // the funds charged, every surface piece added / changed / removed and every terrain corner that moved.
 //   probe_drag GAME_DIR SAVE.sc3 KIND X0,Z0 X1,Z1

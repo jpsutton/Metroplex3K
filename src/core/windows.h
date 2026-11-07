@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // In-game windows, dialogs and widgets (spec/09-ui-screens.md sections 4.4, 6, 7; spec/08 section 9).
 //
 // Every window is a small class (or free function) that draws itself with the immediate-mode Ui each

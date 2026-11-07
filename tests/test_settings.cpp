@@ -1,5 +1,9 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <map>
 #include "core/cheats.h"
+#include "core/compat_names.h"
 #include "core/settings.h"
 #include "testutil.h"
 using namespace m3k;
@@ -176,15 +180,17 @@ int main() {
   }
   // registry-equivalent values from a Wine / Windows .reg text
   {
+    std::string wineKey;   // the game key with doubled backslashes, as a Wine registry file writes it
+    for (const char* c = compat::kRegistryKeyTail; *c; c++) { wineKey += *c; if (*c == '\\') wineKey += '\\'; }
     const std::string reg =
         "WINE REGISTRY Version 2\n\n[Software\\\\Other] 1\n\"Language\"=dword:00000001\n\n"
-        "[Software\\\\Wow6432Node\\\\Electronic Arts\\\\Maxis\\\\SimCity 3000 Unlimited] 1600000000\n"
+        "[Software\\\\Wow6432Node\\\\" + wineKey + "] 1600000000\n"
         "#time=1d\n\"InstalledPath\"=\"C:\\\\GOG\\\\SC3U\\\\Apps\"\n\"Language\"=dword:00000409\n"
         "\"Country\"=dword:00000036\n\"ergc\"=\"abc\\\"d\"\n\"SKU\"=dword:00000002\n\n[Software\\\\Next]\n\"Language\"=dword:00000007\n";
     RegistryValues v = parseRegFile(reg);
     CHECK(v.found && v.languageDword && *v.languageDword == 0x409 && v.countryDword && *v.countryDword == 54);
     CHECK(v.installedPath == "C:\\GOG\\SC3U\\Apps" && v.ergc == "abc\"d" && v.sku && *v.sku == 2 && !v.languageString);
-    RegistryValues w = parseRegFile("Windows Registry Editor Version 5.00\r\n\r\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Electronic Arts\\Maxis\\SimCity 3000 Unlimited]\r\n\"Language\"=\"German\"\r\n");
+    RegistryValues w = parseRegFile(std::string("Windows Registry Editor Version 5.00\r\n\r\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\") + compat::kRegistryKeyTail + "]\r\n\"Language\"=\"German\"\r\n");
     CHECK(w.found && !w.languageDword && w.languageString && *w.languageString == "German");
     LanguageInputs li; CountryInputs ci;
     li.installed = [](int id) { return id == 1 || id == 4; };
@@ -203,7 +209,7 @@ int main() {
     CHECK(idset.size() == 21 + 23);
     CheatMatch m = matchCheat("simon says hello there");
     CHECK(m && std::string(m.info->phrase) == "simon says" && m.arg == "hello there" && tickerMessageFor(m) == 0x341);
-    CHECK(std::string(matchCheat("simcity").info->phrase) == "simcity" && std::string(matchCheat("sim").info->phrase) == "sim");
+    CHECK(std::string(matchCheat(compat::kCheatPhraseGame).info->phrase) == compat::kCheatPhraseGame && std::string(matchCheat("sim").info->phrase) == "sim");
     CHECK(tickerMessageFor(matchCheat("MAXIS")) == 0x32B && tickerMessageFor(matchCheat("maxis")) == 0x32C);
     CHECK(tickerMessageFor(matchCheat("help")) == 0x338 && tickerMessageFor(matchCheat("HELP")) == 0x337);
     CHECK(!matchCheat("nonsense") && !matchCheat(""));

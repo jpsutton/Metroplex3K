@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/game_scenario.h"
 #include "core/script_coro.h"
 #include <algorithm>
@@ -111,7 +114,7 @@ struct Host : IScenarioHost {
     if (file) {
       PresenterChoice pc = resolvePresenterChoice(h->text, h->neighbourMayor, *file, pid, kind);
       adv = pc.advisor; pic = pc.pic;
-      if (kind >= 2) pic.group = pic.inst = 0;   // original defect: kind >= 2 pop-ups never store the "portrait found" flag (0x10001A1B): name only
+      if (kind >= 2) pic.group = pic.inst = 0;   // original defect: kind >= 2 pop-ups never store the "portrait found" flag: name only
     } else if (pid) adv = pid;
     h->popUp(t, advisorIndex(adv), adv, r.mood ? r.mood : 3, r.important != 0, pic);
     if (co) co->yield();   // resumes after the OK (ScenarioController::popupClosed)

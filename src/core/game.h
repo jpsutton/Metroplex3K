@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Game shell: screens (intro, main menu, new city, terrain editor, load/save, in-city HUD, windows) built on
 // the Ui toolkit. Platform independent: the host feeds Input each frame; an optional FrameBackend supplies
 // the present target (SDL today, GPU later). Headless tools use screen().

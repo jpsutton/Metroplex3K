@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SDL2 FrameBackend: streaming texture lock → Game draws in place → copy to the window.
 #pragma once
 #include <SDL.h>

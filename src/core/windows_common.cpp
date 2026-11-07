@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -651,7 +654,7 @@ WindowResult CreditsWindow::draw(Ui& ui, const WinEnv& E) {
       if (!s.empty()) { lines.push_back(s); ids.push_back(id); }
     }
     if (lines.empty()) {
-      lines = {"Metroplex3K", "", "A clean-room SimCity 3000 Unlimited compatible engine", "", "Original game by Maxis", "Thanks for playing"};
+      lines = {"Metroplex3K", "", "A clean-room, game-data-compatible engine", "", "Original game by Maxis", "Thanks for playing"};
       for (size_t i = 0; i < lines.size(); i++) ids.push_back(uint32_t(i + 1));
     }
     rows = layoutRows(ids, lines);

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Disaster subsystem (spec/21-disasters.md). Platform independent state machines. The caller supplies
 // a DisasterWorld (map queries) and DisasterInputs (city statistics snapshot); everything the
 // disasters want done to the city comes back as DisasterCommand / DisasterEvent lists.

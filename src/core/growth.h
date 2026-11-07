@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Zone manager and zone developers (spec/15-sim-growth.md sections 4, 5, 7; record spec/10 section 6.4).
 // Standalone state classes driven through the abstract GrowthCity view, so they can be tested
 // synthetically and integrated later. Everything here lives in namespace m3k::growth.

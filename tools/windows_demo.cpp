@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Renders every in-game window headlessly with fake data to PNG files.
 // Usage: windows_demo [outdir]   (default ".") -> win_<name>.png
 #include <cmath>

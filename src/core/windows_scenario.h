@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Builds ScenarioGoalsView from the scenario runtime state (spec 09 6.10, spec 23).
 // Separate header: keeps scenario.h/script.h (ScenarioRng) out of translation units using windows.h.
 #pragma once

@@ -1,5 +1,8 @@
-// One pass/fail harness for the checks that need a real SimCity 3000 Unlimited install (issues #70, #52, #57, #64, #65, #66).
-// It runs on the machine that owns the install (the dirty-side host); the clean side only builds it.
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// One pass/fail harness for the checks that need a real install of the original game (issues #70, #52, #57, #64, #65, #66).
+// It runs on a machine that owns the install; CI only builds it.
 //
 //   probe_verify GAME_DIR [--ref REFDIR] [--only GROUP[,GROUP...]] [--report out.tsv] [--shots OUTDIR]
 //

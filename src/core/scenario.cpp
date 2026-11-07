@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/scenario.h"
 #include <algorithm>
 #include <cstring>
@@ -386,7 +389,7 @@ bool ScenarioFile::load(const Bytes& file, ScenarioFile& o, std::string* err) {
   return true;
 }
 
-// Kind 0: the game-side presenter list of the petitioner manager (spec 23 4.7.0 [STATIC], SIMADV 0x10021B97): P -> picture 62B9DA24:52DB60A0:pic,
+// Kind 0: the game-side presenter list of the petitioner manager (spec 23 4.7.0 [STATIC]): P -> picture 62B9DA24:52DB60A0:pic,
 // name from string table 041F2625, title from 826DD2D0. 0x14..0x17 are the neighbour mayors (picture only here: the name is the mayor's).
 namespace {
 struct GamePresenter { uint32_t p, pic, name, title; };

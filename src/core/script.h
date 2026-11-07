@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Scenario goal scripts: compiled text form, command table and interpreter. spec/23-scenarios.md
 // sections 3-4. City statistics and side effects go through abstract interfaces so the interpreter
 // can run against fake data.

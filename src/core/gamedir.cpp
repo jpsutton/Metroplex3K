@@ -1,4 +1,8 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/gamedir.h"
+#include "core/compat_names.h"
 
 #include <cstdlib>
 #include <fstream>
@@ -39,15 +43,14 @@ static std::string homeDir() {
 std::vector<fs::path> defaultGameLocations() {
   std::vector<fs::path> v;
   std::string h = homeDir();
-  const char* names[] = {"SimCity 3000 Unlimited", "SimCity 3000", "simcity-3000-unlimited", "simcity_3000_unlimited"};
-#ifdef _WIN32
-  for (auto n : names) {
+  #ifdef _WIN32
+  for (auto n : compat::kGameFolderNames) {
     v.push_back(std::string("C:\\GOG Games\\") + n);
     v.push_back(std::string("C:\\Program Files (x86)\\GOG Galaxy\\Games\\") + n);
     v.push_back(std::string("D:\\GOG Games\\") + n);
   }
 #else
-  for (auto n : names) {
+  for (auto n : compat::kGameFolderNames) {
     v.push_back(h + "/GOG Games/" + n);
     v.push_back(h + "/Games/" + n);
     v.push_back(h + "/Games/" + n + "/drive_c/GOG Games/" + n);
@@ -128,7 +131,7 @@ fs::path detectGameRoot(const fs::path& exeDir) {
 bool looksLikeGogInstaller(const fs::path& p) {
   std::string n = toLower(p.filename().string());
   std::string ext = toLower(p.extension().string());
-  return ext == ".exe" && (n.find("simcity") != std::string::npos || n.find("setup") != std::string::npos);
+  return ext == ".exe" && (n.find(compat::kInstallerNameWord) != std::string::npos || n.find("setup") != std::string::npos);
 }
 
 fs::path extractGogInstaller(const fs::path& installer, const fs::path& dest, std::string& msg) {

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Street-sim automata (vehicles, pedestrians, boats, aircraft, trains). spec/26-automata.md.
 // Platform independent: data parsing (VATTRIB/VCLPROD/PATTRIB/PPLPROD/ANSPRATT/PPATHATT/VPATHATT/
 // TRBLKATT/SIMSCRPT/TRNPROD/AIRTRMGR), spawn logic, movement, and sprite selection output.

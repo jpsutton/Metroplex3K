@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Generic save-file record store (spec/10-save-format.md). Keeps every outer IXF record and every
 // inner database record verbatim (known or not), so a loaded city can be re-saved byte-exactly for
 // everything the engine does not interpret. Also: versioned-header / marker helpers, the outer

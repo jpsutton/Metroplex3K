@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Shared helpers for the utility/service simulation layers (spec 16, 17, 10 section 6).
 // Platform independent; no SDL. Grids in memory are indexed x*H+z (x-major); on disk rows are
 // stored last-row-first (row = x), see flipRows().

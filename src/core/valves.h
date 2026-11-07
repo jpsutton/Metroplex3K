@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // RCI demand ("valve") layer, world economy, tax effect and the persisted growth records
 // (spec/15-sim-growth.md section 3; spec/10-save-format.md sections 6.7, 6.11, 6.13).
 // Standalone: takes an abstract per-month input struct, does not touch World/Sim.

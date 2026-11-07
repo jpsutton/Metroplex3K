@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Plain data for the scenario goals window (spec 09 6.10). Kept free of heavy includes so that both
 // windows.h (news.h world) and windows_scenario.h (scenario.h world) can use it.
 #pragma once

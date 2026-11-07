@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Player-facing simulation facade. All simulation work lives in City (city.h); Sim keeps the small
 // API the Game shell uses (funds, valves, tools) and exposes City& for everything else.
 #pragma once

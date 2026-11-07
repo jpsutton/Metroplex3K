@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Headless checks for the async sim (Game::setAsyncSim).
 //   async_check --game DIR --city FILE --determinism DAYS
 //       Runs the same city with the sim on the main thread and on the worker, stops both after the same number of

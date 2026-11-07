@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Headless frame benchmark: times Renderer::render per zoom, Game::frame in a loaded city, and music
 // decode. Prints an FNV-1a hash of each rendered frame so render changes can be checked for pixel identity.
 //   frame_bench --game DIR --city FILE [--size WxH] [--frames N]

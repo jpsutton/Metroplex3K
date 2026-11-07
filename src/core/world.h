@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // In-memory city: terrain, flora, zones, occupants and network pieces. Coordinates follow
 // spec/00-README.md: tile (x, z), y = altitude. Per-vertex grids are (W+1)x(H+1), index x*(H+1)+z.
 // Per-tile grids are WxH, index x*H+z. (Files store rows last-first; the loader converts.)

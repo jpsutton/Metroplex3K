@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Metroplex3K desktop host (SDL2). All game logic is in src/core (Game); this file pumps events and
 // drives a FrameBackend so other hosts (Android, later GPU present) can reuse the core unchanged.
 #include <SDL.h>

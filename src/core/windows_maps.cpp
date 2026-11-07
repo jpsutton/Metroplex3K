@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Map / data-view window, graphs and charts (spec 09 section 7).
 #include <algorithm>
 #include <cmath>
@@ -697,7 +700,7 @@ void pieChart(Ui& ui, int cx, int cy, const std::vector<PieSlice>& sl) {
     ui.text(px - ui.textWidth(t, "main10") / 2, py - 6, t, "main10", 0);
   }
 }
-// The original's pie control (spec 09 7.1.1 [STATIC, SIMUI 0x100749E5]): a 172 x 86 ellipse mask stamped 23 times (ellipse plus 22 px of rim), radial lines in the
+// The original's pie control (spec 09 7.1.1 [STATIC]): a 172 x 86 ellipse mask stamped 23 times (ellipse plus 22 px of rim), radial lines in the
 // slice colours, each slice flood-filled from its label anchor, then the 172 x 108 grey shading image applied per channel (the dither is baked into it), then the
 // percentages. Counter-clockwise from 12 o'clock. Returns false when the art is missing.
 bool pieChartArt(Ui& ui, const WinEnv& E, int ox, int oy, const std::vector<PieSlice>& sl) {

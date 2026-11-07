@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Platform-independent audio engine core: AUDIO.INI, FSC ambient schedules, mixer, music playlist,
 // event sound selection. spec/06-audio.md. No SDL / OS audio: the platform layer calls
 // AudioSystem::mixAudio(out, frames) from its audio callback. AudioMixer locks its own voice list, so

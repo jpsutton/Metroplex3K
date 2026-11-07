@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Decoded image types and sprite/UI image decoders. See spec/04-graphics-formats.md.
 #pragma once
 #include <algorithm>

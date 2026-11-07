@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Overview map colours, measured from the preview thumbnails of every shipped .sc3 and .sct file (36 files):
 // with the rules below every pixel of every thumbnail is reproduced (16-bit display rounding aside).
 #include "core/overview.h"

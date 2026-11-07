@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Mouse cursors (spec/08 section 8): load a cursor by file stem from Res/UI/Shared/Cursors/. The game shows the .cur file
 // itself (monochrome: black / white pixels with a transparency mask, plus the hotspot). The .bmp beside it is a colour
 // design preview that differs from the .cur in more than half of the files (tools/probes/probe_cursors), so it is only used

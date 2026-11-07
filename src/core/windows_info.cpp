@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Preferences, city properties, scenario goals, building picker (spec 09 sections 6.8-6.11).
 #include <algorithm>
 #include "core/skin.h"
@@ -453,7 +456,7 @@ WindowResult ScenarioGoalsWindow::draw(Ui& ui, const WinEnv& E, const ScenarioGo
       const int y = lb.y + acc;
       if (y >= bottom) break;
       const int ix = r.x + 22;
-      const Image* icon = E.img(0xC2BF3646u, g.met ? 0xE50ED85Au : 0x252A754Fu);   // DLG.IXF: the red SimCity stamp (met) / the "!" triangle (unmet)
+      const Image* icon = E.img(0xC2BF3646u, g.met ? 0xE50ED85Au : 0x252A754Fu);   // DLG.IXF: the red stamp (met) / the "!" triangle (unmet)
       if (icon) {
         const int iy = y + (g.met ? -2 : 0);
         ui.blitRect(*icon, r.x + 21 - (g.met ? 3 : 0), iy, 0, 0, icon->w, std::max(0, std::min(icon->h, bottom - iy)));
@@ -517,9 +520,9 @@ int ScenarioEndWindow::draw(Ui& ui, const WinEnv& E, const ScenarioEndView& v) {
   int y = r.y + 84;   // the first rank line (the original: y 193 on screen at 800 x 600)
   for (size_t i = 0; i < v.ranks.size(); i++) {
     const bool got = int(i) == v.achieved;
-    if (got) {   // the red SimCity stamp left of the achieved rank (the same image as a met goal)
+    if (got) {   // the red stamp left of the achieved rank (the same image as a met goal)
       if (const Image* st = E.img(0xC2BF3646u, 0xE50ED85Au)) ui.blit(*st, r.x + 20, r.y + 142);
-      else { const Rect st2 = at(18, 142, 40, 26); ui.fill(st2, rgb(200, 30, 30)); ui.textCentered(st2, "SimCity", "main9", rgb(255, 255, 255)); }
+      else { const Rect st2 = at(18, 142, 40, 26); ui.fill(st2, rgb(200, 30, 30)); ui.textCentered(st2, "M3K", "main9", rgb(255, 255, 255)); }
     }
     const auto lines = wrap(ui, v.ranks[i], 250, "main10");
     for (size_t k = 0; k < lines.size() && k < 2; k++) ui.text(r.x + 61, y + int(k) * kPitch, lines[k], "main10", got ? rgb(49, 52, 123) : rgb(165, 162, 165));
@@ -539,7 +542,7 @@ int ScenarioEndWindow::draw(Ui& ui, const WinEnv& E, const ScenarioEndView& v) {
     E.spot("end." + std::to_string(i), logo);
     bool clicked = false;
     if (ui.skin && ui.skin->imageButtonCells(ui, E.img(0xC2BF3646u, 0xC5171C41u), 4, logo, "", false, true, clicked)) { if (clicked) choice = i; }
-    else if (ui.button(logo, "SimCity")) choice = i;
+    else if (ui.button(logo, "OK")) choice = i;
   }
   return choice;
 }

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/city.h"
 #include "core/occ_defaults.h"
 
@@ -1778,7 +1781,7 @@ std::vector<us::SimOccupant> City::powerConsumers() const {
   std::vector<us::SimOccupant> v;
   if (!game_) return v;
   for (const auto& o : world_->occupants) {
-    // Only occupied lots (state 1 / 513) consume [DATA, clean side: Σ 0xC9 over state-1 lots equals the shipped consumed
+    // Only occupied lots (state 1 / 513) consume [DATA: Σ 0xC9 over state-1 lots equals the shipped consumed
     // total in Berlin 158,275 vs 158,254, Craterville 49,344 vs 49,192, London 0.9 x 127,580 vs 114,858, Madison 38,328 vs
     // 38,303; with abandoned and under-construction lots included every city is 2-12% over].
     if ((o.state & ~0x300u) != 1) continue;
@@ -2223,7 +2226,7 @@ std::string City::debugStats() const {
 
 void City::monthlyNeighbours() {
   neighbours.monthly(clock.date().month, rng_);
-  // Deals whose connection is lost are cancelled, with the penalty charged at the next month end (spec 19 10.5, FUN_10018cd5).
+  // Deals whose connection is lost are cancelled, with the penalty charged at the next month end (spec 19 10.5).
   if (neighbours.active.empty()) return;
   OfferContext ctx;
   for (const auto& o : world_->occupants) if (o.agentType == 12330) { ctx.hasSeaport = true; break; }

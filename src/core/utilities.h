@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Power, water and garbage (spec/16-sim-utilities.md) plus the byte-exact power/water records
 // (spec/10-save-format.md section 6.14). Layers work on abstract inputs; no world dependency.
 #pragma once

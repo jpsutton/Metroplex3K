@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include <cstring>
 #include "core/gamedata.h"
 #include "core/settings.h"
@@ -179,7 +182,7 @@ bool GameData::open(const fs::path& root, std::string& err) {
     }
   }
   if (resolveCI(apps, "Sys/SYS.PAK").empty() && resolveCI(apps, "Sys/Default.ini").empty()) {
-    err = "Missing Sys/SYS.PAK in " + apps.string() + " (not a SimCity 3000 Unlimited install?)";
+    err = "Missing Sys/SYS.PAK in " + apps.string() + " (not a supported game install?)";
     return false;
   }
   root_ = base; apps_ = apps;

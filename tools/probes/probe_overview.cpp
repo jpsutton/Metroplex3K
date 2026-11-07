@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Compare the engine's overview colours (core/overview.h) with the preview thumbnail stored in each shipped
 // city and terrain file. Usage: probe_overview GAME [name-filter...]
 // Prints, per file, how many tiles differ by more than the 16-bit display rounding (8 per channel).

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // INTRO.TGQ ("SCxl" EA chunk stream) container parser, movie audio decoder, playback timing.
 // spec/07-video.md. The TQI video bitstream is NOT defined by the spec (section 4.4, OPEN), so
 // frames are exposed as raw payloads; a TqiDecoder callback can be plugged in. By default the

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Per-frame timing log for the desktop host. Enabled with $M3K_FRAMELOG=FILE or --frame-log FILE.
 // Writes one CSV row per loop iteration (microsecond-resolution timings) and prints a percentile
 // summary to stderr on exit, so frame-rate questions can be answered from data.

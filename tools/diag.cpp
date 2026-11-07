@@ -1,4 +1,7 @@
-// Install diagnostic: reports what the engine can read from a real SimCity 3000 Unlimited install.
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Install diagnostic: reports what the engine can read from a real install of the original game.
 //   diag GAME_DIR [OUT_DIR]     (OUT_DIR gets PNGs of the skin art that resolved)
 // Paste the whole output into a bug report. It never modifies the install.
 #include <cstdio>

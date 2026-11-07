@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Headless test: map cursor follows held modifier keys and the right-button drag-scroll.
 #include <cstring>
 #include "core/game.h"

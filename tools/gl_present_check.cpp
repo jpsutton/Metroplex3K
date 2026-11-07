@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Compares the GL presenter against the CPU renderer. Two games run in lockstep on identical scripted input (pan,
 // zoom, clicks, zone painting, windows): A draws on the CPU (reference); B draws through GlPresenter, with the city
 // composited on the GPU when the presenter supports it. After every frame B's presenter output is read back and

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Simulation clock, calendar, speeds, RNG and update scheduling. See spec/14-sim-clock.md.
 // Pure state classes: no wall-clock access; callers pass millisecond timestamps.
 #pragma once
@@ -26,7 +29,7 @@ bool isLeap(int year);
 int32_t jdnFromDayOfYear(int dayOfYear, int year);
 // Coarse (month + 12*year)*30 + day stamp used by other subsystems (spec 14 s1.2).
 int32_t dateStamp(int month, int day, int year);
-// SimCity 2000 import (spec 14 s9). Returns date and founding year; n < 0 means "missing".
+// Import of the predecessor game's dates (spec 14 s9). Returns date and founding year; n < 0 means "missing".
 struct ImportedDate { Date date; int foundingYear; };
 ImportedDate importSc2(bool haveCount, int32_t elapsedDays, bool haveStartYear, int startYear);
 

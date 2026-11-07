@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/audio.h"
 
 #include <chrono>
@@ -113,7 +116,7 @@ AudioIni AudioIni::parse(const std::string& text, int country) {
       if (parseNum(val, v)) {
         std::string k = lower(key);
         if (k == "musicplayersongdurationmsec" && v == 0) continue;   // stored only if non-zero
-        if (k == "usecdformusic") k = "buildingrandmultiplier";        // original defect: both keys write the same field (AUDIO 0x10006058 / 0x100060EF)
+        if (k == "usecdformusic") k = "buildingrandmultiplier";        // original defect: both keys write the same field
         ini.options.values[k] = int(v);
       }
       continue;

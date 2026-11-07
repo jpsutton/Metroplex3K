@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Starts a disaster in a loaded city, follows its effect sprites with the camera and writes PNG frames, to check the disaster visuals
 // (src/core/disaster_fx.*) against the shipped art.
 //   probe_disaster_fx [GAME_DIR] CITY TYPE OUTPREFIX [frames-between-shots=40] [shots=6] [zoom=3]

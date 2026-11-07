@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Headless growth check: generated terrain, a flattened building site with a road grid, R/C/I zones and
 // a power plant wired through the Sim facade; runs N simulated years and prints yearly stats + a PNG.
 //   city_sim_demo [--game DIR] [--seed N] [--years N] [--size 128] out.png

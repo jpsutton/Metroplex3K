@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Flora layer conversion (spec/10-save-format.md 6.3) and the tree-planting tool (spec/11 section 6).
 #pragma once
 #include <cstdint>

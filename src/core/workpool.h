@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Small persistent thread pool for data-parallel loops (renderer bands). Standard library only.
 #pragma once
 #include <atomic>

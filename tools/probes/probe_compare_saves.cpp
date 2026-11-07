@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Compares our simulation with a save written by the original after running the same shipped city (spec 28 s5.1
 // reference runs). Loads the shipped city, runs it to the observed save's date, loads the observed save in a second
 // session and diffs the layers: land value, air and water pollution, crime, power and water service, lot states.

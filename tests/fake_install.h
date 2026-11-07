@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Builds a tiny synthetic "game install" on disk (SYS.PAK, string table, occupant attributes, building
 // family, composite sprite record and sprites) so the data-driven code paths run without real game files.
 #pragma once

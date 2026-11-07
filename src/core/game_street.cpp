@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Street automata (vehicles, pedestrians, trains, boats) glue: host adapter, source sync, view and sprites.
 #include <algorithm>
 #include <cmath>

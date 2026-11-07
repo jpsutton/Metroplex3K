@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Tests for the disaster effect layer (src/core/disaster_fx.*): flying objects deliver their impacts, and the manager is held open
 // until they have. No game data is needed: without sprites nothing is emitted, but the movement and impact logic still runs.
 #include <algorithm>

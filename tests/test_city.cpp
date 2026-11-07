@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // End-to-end City test on a synthetic city (no game data): roads, zones, power plant, power coverage,
 // several simulated years, ordinance, save/load round trip with unknown raw records.
 #include "core/city.h"

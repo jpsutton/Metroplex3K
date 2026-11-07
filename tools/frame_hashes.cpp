@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Prints an FNV-1a hash of every screen frame of a scripted, deterministic run (sync sim, fixed dt, seeded input:
 // pan, zoom, clicks, zone painting, windows). Build it on two commits and diff the output to check that a render
 // change left every pixel of every frame alone, moving vehicles included.

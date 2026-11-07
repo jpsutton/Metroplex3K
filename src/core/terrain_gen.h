@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Random terrain generator for New City. Follows spec/11-world-terrain.md section 3 exactly
 // (same RNG, same call order), so equal seeds give the original's terrain.
 #pragma once

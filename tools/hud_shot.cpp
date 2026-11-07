@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Headless UI screenshot. Optionally loads a city file, then runs scripted steps in order:
 //   hud_shot --game DIR [--city FILE] --size WxH [--do STEP]... out.png
 // STEP: move:X,Y | click:X,Y | hold:X,Y (press, 90 frames, release) | frames:N | shot:FILE | ctrl:0|1 | cmd:HEXID[,HEXARG] | win:NAME | dirty | fps

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // A minimal coroutine on a helper thread with strict hand-off: only one of the caller and the helper ever runs, so the code in
 // the helper may touch the same (unsynchronised) game objects as the caller. Used by the scenario scripts, whose pop-up
 // command must suspend the script at once and resume it after the player's OK (spec 23 4.7.1, observed).

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Observed initial state of a brand-new city (spec/30-new-city-template.md). The original was made to save a city
 // right after New City, before the simulator ran; fourteen such saves (four map sizes, three difficulties, three
 // start years) were compared byte for byte.

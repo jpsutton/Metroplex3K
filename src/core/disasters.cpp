@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Disaster subsystem implementation (spec/21-disasters.md).
 #include "core/disasters.h"
 #include <algorithm>
@@ -1594,7 +1597,7 @@ int64_t DisasterManager::toxicScore(const DisasterInputs& in) const {
   return score;
 }
 
-// Advisor flag Ra (spec 22 s3.9 [STATIC, SIMDSTR 0x10014FC8]): no cloud active, the occurrence countdown at >= 80 % of its interval, score above the
+// Advisor flag Ra (spec 22 s3.9 [STATIC]): no cloud active, the occurrence countdown at >= 80 % of its interval, score above the
 // threshold. The interval here is the fixed mean (AverageDurationBetweenOccurrences months); the original redraws it triangularly [INFERRED approximation].
 bool DisasterManager::toxicImminent(const DisasterInputs& in) const {
   if (!clouds_.empty() || !in.disastersEnabled) return false;

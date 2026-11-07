@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Async sim (opt-in): the sim day tick runs on a worker thread while the owner thread renders and draws the HUD
 // from snapshots. See SimWorker for the thread/mailbox contract.
 //

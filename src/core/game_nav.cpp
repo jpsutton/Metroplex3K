@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Navigator panel (bottom-right): mini-map diamond, zoom / rotate / layers buttons.
 // Geometry measured from the original at 800x600 (panel 160x164 anchored to the window's bottom-right corner):
 // diamond centre (79,81) panel-relative, 128 px wide and tall; zoom-in (26,112), zoom-out (133,112),

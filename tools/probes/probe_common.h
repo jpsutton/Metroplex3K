@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Shared helpers for the probes in this directory: locate the install, boot a Game, load a saved city by name.
 #pragma once
 #include <algorithm>
@@ -61,7 +64,7 @@ struct Session {
 
 inline bool needInstall(const fs::path& root, const char* usage) {
   if (!root.empty()) return false;
-  std::fprintf(stderr, "no SimCity 3000 Unlimited install found.\nusage: %s\n(or set M3K_GAME_DIR)\n", usage);
+  std::fprintf(stderr, "no game install found.\nusage: %s\n(or set M3K_GAME_DIR)\n", usage);
   return true;
 }
 }  // namespace probe

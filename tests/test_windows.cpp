@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Headless tests for the in-game windows (windows*.cpp): drive each window with scripted Input clicks
 // (controls are found through WinEnv::spots) and assert the events and the subsystem edits.
 #include <set>
@@ -783,7 +786,7 @@ void testQuery() {
 }
 
 // ---------------------------------------------------------------- map window / graphs / charts
-// Tooltip placement measured on the original (spec 08 3.3a, 1024 x 768): the examples of the dirty side's report.
+// Tooltip placement measured on the original (spec 08 3.3a, 1024 x 768): the observed examples.
 void testTooltipBox() {
   auto eq = [](Rect r, int x, int y, int w, int h) { return r.x == x && r.y == y && r.w == w && r.h == h; };
   CHECK(eq(tooltipBox(Ui::kTipLeft, {961, 100, 56, 32}, 53, 1024, 0, 0), 901, 108, 58, 16));   // Landscape root
@@ -792,7 +795,7 @@ void testTooltipBox() {
   CHECK(eq(tooltipBox(Ui::kTipAbove, {773, 713, 40, 39}, 28, 1024, 0, 0), 776, 695, 33, 16));   // Query
   CHECK(eq(tooltipBox(Ui::kTipAbove, {878, 704, 26, 29}, 40, 1024, 0, 0), 869, 686, 45, 16));   // Zoom In
   CHECK(eq(tooltipBox(Ui::kTipBelow, {48, 72, 26, 26}, 73, 1024, 0, 0), 22, 100, 78, 16));      // View Data Aura icon
-  CHECK(eq(tooltipBox(Ui::kTipAbove, {830, 680, 33, 30}, 109, 1024, 0, 0), 790, 662, 114, 16));   // Visit SimCity Exchange
+  CHECK(eq(tooltipBox(Ui::kTipAbove, {830, 680, 33, 30}, 109, 1024, 0, 0), 790, 662, 114, 16));   // online-service button
   CHECK(tooltipBox(Ui::kTipAbove, {990, 704, 26, 29}, 121, 1024, 0, 0).x + 126 == 1022);        // clamped to end 2 px inside the right edge
   CHECK(tooltipBox(Ui::kTipPointer, {}, 50, 1024, 100, 200).y == 218);
 }

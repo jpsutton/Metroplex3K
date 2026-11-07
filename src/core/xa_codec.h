@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Maxis XA (EA-XA ADPCM) decoder, WAV loader, EA ADPCM movie-chunk decoder. See spec/06-audio.md
 // sections 2-3 and spec/07-video.md section 4.3. Platform independent; no I/O.
 #pragma once

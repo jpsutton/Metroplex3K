@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // CPU vs GPU terrain hash parity. Renders Berlin (or any city) at zooms 0–4 with objects off so
 // the compare is pure terrain+background. Requires OpenGL 4.3 compute (same stack as metroplex3k).
 //   render_parity --game DIR --city FILE [--size WxH]

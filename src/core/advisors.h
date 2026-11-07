@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Advisors (spec/22 section 3, 6 and persisted records P.1, P.3, P.4). The seven advisors evaluate once per
 // game week from an explicit AdvisorInputs snapshot; topics live in per-advisor TopicLists (cool-down state
 // machine of 3.4); petition requests are made on a PetitionerManager.
@@ -155,7 +158,7 @@ struct AdvisorInputs {
     int jailUnjailed = 0;                           // prisoners without a cell (police getter +0x78, "jail full") [INFERRED]
     int policeStrength = 0;                         // "police strength measure"
     bool curfewEnacted = false, youthSportsEnacted = false;
-    bool toxicImminent = false, debrisActive = false;   // Ra / Rb flags (spec 22 3.9, SIMDSTR)
+    bool toxicImminent = false, debrisActive = false;   // Ra / Rb flags (spec 22 3.9)
   } safety;
 
   struct Transport {

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // BAT custom buildings: .bld reader/writer, BAT.DAT (rendered-building database), import,
 // user building set (appearance replacement) and occupant attributes. spec/24-bat-buildings.md.
 #pragma once

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Filesystem helpers: case-insensitive path resolution (the original relies on it), file I/O.
 #pragma once
 #include <filesystem>

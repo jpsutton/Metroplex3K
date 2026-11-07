@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // One background thread that runs one job at a time (the sim day tick), plus a mailbox that lets the
 // job hand work back to the owner thread (anything that touches owner-only state, such as the UI).
 //

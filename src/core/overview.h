@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // City overview map colours: the one-pixel-per-tile map stored as the save file's preview thumbnail
 // (spec/10 section 8.4) and shown by the navigator mini-map; and the Neighbors Map region image
 // (spec/11 section 9).

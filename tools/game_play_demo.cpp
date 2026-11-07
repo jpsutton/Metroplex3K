@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Headless play demo: builds a small city through Game and writes screenshots.
 //   game_play_demo [--game DIR] [--size WxH] out_prefix
 #include <cstdio>

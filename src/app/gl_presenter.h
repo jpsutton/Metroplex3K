@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // OpenGL FrameBackend (Phase 3). The SDL window owns a GL context. Stage 1: the CPU frame is uploaded to a texture
 // and drawn as a full-window triangle. With a 4.3 context it also acts as a CityGpuSink: the city is composited by
 // a compute shader (sprite atlas, tiled draw lists) over the CPU-drawn terrain base, and the UI overlay is

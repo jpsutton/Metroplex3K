@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Icons from a Windows executable's resources (the game's own SC3U.exe): the load dialogs show the
 // document icons the program registers for its file kinds. Reads RT_GROUP_ICON / RT_ICON and decodes
 // the DIB (1/4/8/24/32 bpp with AND mask) to RGBA.

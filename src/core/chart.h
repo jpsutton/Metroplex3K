@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // 132-byte graph-history block (spec/10-save-format.md §6.12 / Q-BL).
 #pragma once
 #include <algorithm>

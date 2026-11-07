@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Synthetic UI art for skin tests and the skin demo: builds IXF image resources of type 62B9DA24
 // (raw RGB565, kind 1) with recognisable colours.
 #pragma once

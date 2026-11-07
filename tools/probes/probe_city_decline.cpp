@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Loads saved cities and runs them 450 days. A shipped city is a snapshot of a settled game, so population should
 // stay roughly flat; a large drop means a rule differs from the original (issue #78).
 //   probe_city_decline [GAME_DIR] [city-name-substring ...]

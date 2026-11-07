@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SYS.PAK reader and INI parsing with the original's quirks. See spec/02-containers.md section 5.
 #pragma once
 #include <map>

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/skin.h"
 #include <algorithm>
 #include <cmath>
@@ -331,7 +334,7 @@ void Skin::buildEngineButton() {
   extras_["engine"] = std::move(im);
 }
 
-// Build the 4-cell "cog" strip for the slot of the original's "Visit SimCity Exchange" button (spec 09 4.3): the original's frame ring (3 px) of
+// Build the 4-cell "cog" strip for the slot of the original's online-service button (spec 09 4.3): the original's frame ring (3 px) of
 // strip 02F78C6D:52FB06F0 (four 33 x 30 cells) is kept, the glyph interior is painted with the tile's light blue and a slimmer gear is drawn on it.
 void Skin::buildCogButton() {
   const Image* ex = get("exchange");
@@ -400,7 +403,7 @@ bool Skin::load(ResourceDb& db, int screenH, int screenW) {
   bind("rci", UiBig, 0x42FB77F6);
   for (uint32_t k = 0; k < 6; k++) bind("speed." + std::to_string(k), UiBig, 0x52FB06E4 + k);
   bind("help", UiBig, 0x52FB06EA);
-  bind("exchange", UiBig, 0x52FB06F0);   // the original's "Visit SimCity Exchange" button strip (spec 09 4.3)
+  bind("exchange", UiBig, 0x52FB06F0);   // the original's online-service button strip (spec 09 4.3)
   buildEngineButton();   // Metroplex3K options: same chrome as "help", cog instead of "?"
   buildCogButton();      // the same options button in the exchange button's slot: its chrome, a slimmer cog
   // Navigator panel pieces (bottom-right): top-left, top-right, bottom (160 wide), layers strip, 4 zoom/rotate strips.

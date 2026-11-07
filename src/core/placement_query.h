@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Placement query (#28): on-demand occupancy / clearance helper (spec 14 §6.1 / Q-AV / Q-AW / Q-BA).
 // No save records, no periodic work. Holds live refs to the layers it queries.
 #pragma once

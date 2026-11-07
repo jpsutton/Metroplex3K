@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The game's simulation generators (spec/14-sim-clock.md section 8): integer LCG with Rand/RandInt,
 // plus the separate float generator behind RandRange. Both states are seeded with the same value.
 #pragma once

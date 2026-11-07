@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Sprite-script virtual machine (spec/25-rendering.md section 7.1). One ScriptRun per running script; update()
 // executes one non-label entry per call, like the original's view update.
 #pragma once

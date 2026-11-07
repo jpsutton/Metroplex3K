@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Query panel numbers come from the simulation state (spec 09 6.12): hospital / school / college figures of the population model.
 #include "core/game.h"
 #include "testutil.h"

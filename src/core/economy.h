@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Economy: budget, taxes, funding, bonds, ordinances, neighbour deals, business deals.
 // See spec/19-sim-economy.md. Pure state classes with explicit input structs; records are
 // byte-exact per spec 19 "Persisted state" and spec 10 section 6.6 / 6.8.

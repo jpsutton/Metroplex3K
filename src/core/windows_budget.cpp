@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Budget, ordinances, business deals, neighbours (spec 09 sections 6.1, 6.3, 6.4, 6.7).
 #include <algorithm>
 #include <cmath>
@@ -919,7 +922,7 @@ WindowResult NeighboursWindow::draw(Ui& ui, const WinEnv& E, NeighbourDeals& n) 
   ui.text(r.x + 239, r.y + 318, E.win(0x29C, "Discuss Deal:"), "main9", ink);
   { Rect db{r.x + 322, r.y + 310, 38, 33};
     E.spot("discuss", db);
-    bool canDeal = false;   // enabled only when the selected neighbour has deals in the list below [STATIC SIMUI]
+    bool canDeal = false;   // enabled only when the selected neighbour has deals in the list below [STATIC]
     if (haveSel) for (const Deal& d : n.active) if (d.neighbourIndex == selected && !d.terminated() && d.dealType < kDealTypes) canDeal = true;
     bool c = false; const Image* art = E.img(0x42DEC7D2, 0x10);
     if (!(ui.skin && art && ui.skin->imageButtonCells(ui, art, 4, db, "", false, canDeal, c))) c = ui.button(db, "?", canDeal);

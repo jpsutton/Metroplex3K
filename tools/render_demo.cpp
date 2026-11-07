@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Headless demo: generate terrain (or load a city) and write PNGs. Usage:
 //   render_demo [--game DIR] [--city FILE] [--seed N] [--zoom Z] [--rot R] [--size 128|192|256] out.png
 #include <cstdlib>

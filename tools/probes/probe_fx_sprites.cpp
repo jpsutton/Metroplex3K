@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Dumps the geometry of the disaster / effect sprites: image size, span, strip frame count and whether the id has an
 // opacity plane. Used to build the FX set table in src/core/disaster_fx.cpp from the shipped data.
 //   probe_fx_sprites [GAME_DIR] [hex-id-prefix ...]     (prefix = leading hex digits of the image id, e.g. 3fac FFFE50)

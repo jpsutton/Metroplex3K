@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Weather subsystem (#27): monthly season + temperature update (spec 14 §6.1 item 13 / Q-AT).
 // No save records; state is runtime-only from calendar + map location.
 #pragma once

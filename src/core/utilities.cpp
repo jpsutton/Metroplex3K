@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "core/utilities.h"
 
 #include <algorithm>
@@ -325,7 +328,7 @@ std::vector<PlantEvent> PowerLayer::monthlyUpdate(const PowerEnv& env, SimRng& r
   stats_.unpoweredConsumers = std::max(0, stats_.consumerTiles - stats_.poweredConsumerTiles);
 
   // power % graph sample = SPARE capacity: (100 S - 100 consumed) / S with S the raw sum of plant output, 0 when consumed >= S
-  // [STATIC FUN_10004c1f; OBSERVED Berlin saved samples 17-18, London 51-54].
+  // [STATIC; OBSERVED Berlin saved samples 17-18, London 51-54].
   uint32_t pct = stats_.produced > stats_.consumed ? uint32_t((100 * stats_.produced - 100 * stats_.consumed) / stats_.produced) : 0;
   chart.pushMonthly(pct);
   chart.recomputeAutoMax();

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Population, demographics, EQ, health, life expectancy, strikes, workforce.
 // See spec/20-sim-population.md and spec/10-save-format.md section 6.11.
 #pragma once

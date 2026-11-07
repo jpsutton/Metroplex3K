@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Decodes every shipped .xa file. With ffmpeg on PATH each decode is also compared against ffmpeg's (issue #66):
 // ties-up rounding is bit-identical on almost all files; the default ties-to-even stays within ~28 LSB.
 //   probe_xa [GAME_DIR]

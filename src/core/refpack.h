@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // RefPack (QFS) decompression and the canonical compressor. See spec/02-containers.md section 6.
 #pragma once
 #include "core/bytes.h"

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // User-made buildings dialogs: Building Replacement Manager and Building List Editor (spec 24 section 2.5).
 // Layouts measured on dialog-shots/main-menu--start-new-city--user-made-buildings-select*.png (800x600).
 #include <algorithm>

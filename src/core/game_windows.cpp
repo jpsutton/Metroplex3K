@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Game shell: in-city windows. Builds the window environment, opens/draws every window and applies the
 // events the windows report (spec 09 sections 4.2, 6, 7).
 #include <algorithm>
@@ -106,7 +109,7 @@ void Game::openWindow(const std::string& name) {
   else if (name == "ordinances") { showOrd_ = true; ordWin_.scroll = 0; }
   else if (name == "neighbours" || name == "neighbors") {
     showNeigh_ = true;
-    neighWin_.selected = 1;   // the original opens on area 0, which maps to neighbour (0 + 1) & 3 = the upper-left cell at rotation 0 [STATIC SIMUI 0x1005163d]
+    neighWin_.selected = 1;   // the original opens on area 0, which maps to neighbour (0 + 1) & 3 = the upper-left cell at rotation 0 [STATIC]
     // Region image (spec 11 section 9): the city's heights in the middle, deterministic invented terrain around it,
     // coloured with row 3 of the map ramp 000005E5:21.
     std::array<uint32_t, 12> ramp = neighbourRegionDefaultRamp();
@@ -415,7 +418,7 @@ void Game::applyLayers() {
                       cityLayerViews()[li].layer == DataLayer::Density)) {
     ropt_.showNet = nullptr;   // filter group A1C085DB:1, contents not decoded: networks stay
   } else if (view) {
-    ropt_.showNet = [](const NetPiece&) { return false; };   // Pollution, Traffic (road tiles carry the colour), Crime, Flammability: no network pieces [STATIC 0x1001A303]
+    ropt_.showNet = [](const NetPiece&) { return false; };   // Pollution, Traffic (road tiles carry the colour), Crime, Flammability: no network pieces [STATIC]
   } else ropt_.showNet = nullptr;
   if (above && (!L.zonedBuildings || !L.otherBuildings)) {
     const bool zb = L.zonedBuildings, ob = L.otherBuildings;
@@ -438,7 +441,7 @@ void Game::applyLayers() {
   if (view) refreshLayerOverlay();
 }
 
-// City Layer Views tile handler (SIMSPR 0x1001A303) [STATIC]: tinted tile colour = data palette [row][shade / 2], row = trunc((255 - v) * 31/255) with
+// City Layer Views tile handler [STATIC]: tinted tile colour = data palette [row][shade / 2], row = trunc((255 - v) * 31/255) with
 // the single-float constant (v = 0 -> the grey bottom row). Water and shore tiles are never tinted; "zoned only" views tint tiles whose zone byte is not 0,
 // the rest show terrain (the grass in the original).
 void Game::refreshLayerOverlay() {
@@ -455,7 +458,7 @@ void Game::refreshLayerOverlay() {
   o.slots.assign(size_t(W) * H, 2);
   const float k31 = 31.0f / 255.0f;
   auto stdRow = [&](int v) { return int(float(255 - std::max(0, std::min(255, v))) * k31); };
-  auto wet = [&](int x, int z) {   // any corner with water >= terrain (SIMDIRT 0x100065F0)
+  auto wet = [&](int x, int z) {   // any corner with water >= terrain
     for (int dx = 0; dx <= 1; dx++) for (int dz = 0; dz <= 1; dz++) if (world_.waterAt(x + dx, z + dz) >= world_.altAt(x + dx, z + dz)) return true;
     return false;
   };
@@ -579,8 +582,8 @@ void Game::drawWindows(uint32_t dtMs) {
         series[13].chart = &city.budget.treasuryChart;   // Funds
         series[14].chart = &wc[2];              // Industry
         series[15].chart = &conv[2];            // Power %
-        // The plot is the 12 stored monthly samples (oldest first) with no live point; each label is the newest stored sample [STATIC; the dirty side's
-        // earlier 'live 12th point' came from reference captures taken one sim month after the save].
+        // The plot is the 12 stored monthly samples (oldest first) with no live point; each label is the newest stored sample [STATIC].
+        // An earlier 'live 12th point' came from reference captures taken one sim month after the save.
       }
 
     } else if (viewData_.mode == int(ViewDataWindow::ModeCharts)) {

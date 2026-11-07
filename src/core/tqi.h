@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // EA "TQI" intra-frame video decoder (payload of `pIQT` chunks in TGQ movies, spec/07-video.md 4.4).
 // Written from the public format description (MultimediaWiki "Electronic Arts TQI"): MPEG-1 style
 // intra blocks. No macroblock headers; 16x16 macroblocks of 6 blocks (Y0 Y1 Y2 Y3 Cb Cr), each block

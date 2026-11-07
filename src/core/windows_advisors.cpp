@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Advisor window, petitioner dialog (spec 09 sections 6.5, 6.6).
 #include <algorithm>
 #include "core/skin.h"
@@ -75,7 +78,7 @@ bool sysButton(Ui& ui, const WinEnv& E, const std::string& name, int row, int x,
   else ui.button(hit, row == 1 ? "<" : "x");
   return ui.clicked(hit);
 }
-// Help topics of the Briefings tab: each advisor appends a fixed list of help ids in order [STATIC SIMADV builders]; the heading is the string of table
+// Help topics of the Briefings tab: each advisor appends a fixed list of help ids in order [STATIC]; the heading is the string of table
 // 82B85965 with that id and the body the string of E26EC3B8 (A26EC340 is unused). The city planner's extra "Starter Town" item is not modelled.
 std::vector<uint32_t> briefingIds(uint32_t adv) {
   std::vector<uint32_t> v;

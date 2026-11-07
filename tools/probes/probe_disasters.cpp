@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Starts each disaster type in a loaded city and reports how it ends and what it damages (issues #35, #37).
 // Disasters run at minute resolution while active, so each type can take up to 750 s of play (1500 quarter-second
 // frames); "STILL ACTIVE" at the limit usually means fires are still burning.

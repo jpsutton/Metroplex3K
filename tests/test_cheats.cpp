@@ -1,6 +1,10 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Cheats: phrase -> ID table (spec 27 5.1a), matching, logging rule, ticker table (5.2), log records.
 #include <map>
 #include "core/cheats.h"
+#include "core/compat_names.h"
 #include "testutil.h"
 using namespace m3k;
 
@@ -15,7 +19,7 @@ int main() {
     {"force petitioners to say", 0x031DCE55}, {"force Moe to say", 0x43110C27}, {"force Gus to say", 0xC310F7D4},
     {"stop forcing advice", 0x831109B4},
     {"fund", 0xC352E7AE}, {"advisor", 0x0352E7C2}, {"moremoney", 0x0352E7CC}, {"maxis", 0x8352E7D6}, {"1234", 0x4352E7E1},
-    {"sc3k", 0x4352E7ED}, {"mayor", 0x4352E7F6}, {"hello", 0xA352E800}, {"simon says", 0x03546E10}, {"simcity", 0xE352E809},
+    {"sc3k", 0x4352E7ED}, {"mayor", 0x4352E7F6}, {"hello", 0xA352E800}, {"simon says", 0x03546E10}, {compat::kCheatPhraseGame, 0xE352E809},
     {"money", 0xA352E814}, {"ticker", 0xE352E822}, {"electronic arts", 0x4352E828}, {"erts", 0x0352E873},
     {"will wright", 0x0352E87C}, {"help", 0x0352E885}, {"sim", 0xE352E88F}, {"easter egg", 0x4352E897},
     {"llama", 0xC352E8A2}, {"scurk", 0xC352E8AC}, {"bat", 0xC352E8B4}, {"porntipsguzzardo", 0x8352E8BD},
@@ -42,7 +46,7 @@ int main() {
   CHECK(matchCheat("I AM WEAK").info == findCheatByPhrase("I am weak"));
   CHECK(matchCheat("power TO the Masses").info == findCheatByPhrase("power to the masses"));
   CHECK(matchCheat("simon says  hi there").arg == "hi there");
-  CHECK(matchCheat("simcity").info == findCheatByPhrase("simcity") && matchCheat("sim").info == findCheatByPhrase("sim"));
+  CHECK(matchCheat(compat::kCheatPhraseGame).info == findCheatByPhrase(compat::kCheatPhraseGame) && matchCheat("sim").info == findCheatByPhrase("sim"));
   CHECK(matchCheat("simon says x").info == findCheatByPhrase("simon says"));
   CHECK(matchCheat("traffic lights ON").arg == "ON" && trafficLightsArgOn(matchCheat("traffic lights ON")) &&
         trafficLightsArgOn(matchCheat("traffic lights on")) && !trafficLightsArgOn(matchCheat("traffic lights off")) &&
@@ -55,7 +59,7 @@ int main() {
   // Ticker messages (spec 27 5.2).
   static const struct { const char* typed; uint16_t msg; } tk[] = {
     {"advisor", 0x327}, {"moremoney", 0x32A}, {"MAXIS", 0x32B}, {"maxis", 0x32C}, {"1234", 0x32D}, {"sc3k", 0x32E}, {"mayor", 0x32F},
-    {"hello", 0x330}, {"simcity", 0x331}, {"money", 0x332}, {"ticker", 0x333}, {"electronic arts", 0x334}, {"erts", 0x335},
+    {"hello", 0x330}, {compat::kCheatPhraseGame, 0x331}, {"money", 0x332}, {"ticker", 0x333}, {"electronic arts", 0x334}, {"erts", 0x335},
     {"will wright", 0x336}, {"HELP", 0x337}, {"help", 0x338}, {"SIM", 0x339}, {"sim", 0x33A}, {"easter egg", 0x33B},
     {"llama", 0x33C}, {"scurk", 0x33D}, {"bat", 0x33E}, {"porntipsguzzardo", 0x33F}, {"broccoli", 0x340}, {"simon says go", 0x341},
     {"FUND", 0x325}, {"fund", 0x326},

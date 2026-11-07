@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Intro movie player (spec/07-video.md): turns a parsed TgqMovie into timed frames (15 fps) and
 // PCM audio chunks, and composes frames into a window. No I/O, no SDL; the app supplies the clock.
 #pragma once

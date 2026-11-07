@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Terrain editing tools: raise, lower, level, decorative water, cheat shifts.
 // Implements spec/11-world-terrain.md section 4 (plan/commit phases, ring, slope propagation).
 #pragma once
