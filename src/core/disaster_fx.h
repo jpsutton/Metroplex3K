@@ -96,7 +96,9 @@ class DisasterFx {
     int age = 0, stage = 0;           // stage 0 opening, 1 loop, 2 closing
     int stageMs = 0; bool loopB = false, gone = false; int tx = -1000, tz = -1000;
   };
-  struct PuffView { double x = 0, z = 0, h = 0; int age = 0; int closing = -1; };
+  // Rain column of one puff (spec 21 s12.7): grown length E, retracted top S and texture scroll in world units; steam stage 0 none, 1 open, 2 cycle, 3 close.
+  struct RainState { bool active = false, stopped = false; double lengthWu = 0, E = 0, S = 0, scroll = 0; int steam = 0, steamMs = 0; };
+  struct PuffView { double x = 0, z = 0, h = 0; int age = 0; int closing = -1; RainState rain; };
   struct FlameView { double x = 0, z = 0; int size = 1; int period = 450; int phase = 0; };
   struct CrowdView { double x = 0, z = 0; int walkMs = 0, throwMs = 0, nextThrow = 450, heading32 = 0, ageMs = 0; };
   struct VortexView { double x = 0, z = 0, vx = 0.12 * 0.5, vz = 0.12 * 0.125; int age = 0, life = 0; bool closing = false; int closeAge = 0; int tx = -1, tz = -1; };
@@ -123,6 +125,7 @@ class DisasterFx {
   bool push(std::vector<SceneSprite>& out, uint32_t colourId, int alphaDelta, int frames, int frame, double x, double z, double heightUnits,
             int level = 32, bool mag = false) const;
   // Opacity-plane-only sprite (UFO beam): a flat tint is drawn through the plane.
+  void emitRain(const PuffView& p, int slot, std::vector<SceneSprite>& out) const;
   bool pushTint(std::vector<SceneSprite>& out, uint32_t top, uint32_t planeId, int frames, int frame, double x, double z, double heightUnits) const;
 
   GameData* data_ = nullptr;
@@ -138,6 +141,8 @@ class DisasterFx {
   std::vector<CrowdView> crowds_;
   std::vector<VortexView> vortices_;
   Launcher launcher_;
+  bool raining_ = false;
+  mutable int transientGen_ = 0;
   std::vector<FxImpact> impacts_;
   int locustEdge_ = 0;
   int64_t flameClockMs_ = 0;

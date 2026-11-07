@@ -673,7 +673,7 @@ void Game::disasterFxFrame(uint32_t dtMs) {
           case FxImpact::LocustFlora: burnFlora(im.x, im.z); break;
           case FxImpact::Debris: disasters_.debrisImpact(dw, im.x, im.z, out); break;
           case FxImpact::Rioter: disasters_.rioterAt(dw, im.x, im.z, out); break;   // any occupant that passes the ignition test (spec 21 s8.4)
-          case FxImpact::RioterWalk: disasters_.rioterEntered(im.x, im.z); break;   // the riot site follows the crowd; the mob sprite is drawn below   // the crowd shows as walkers [INFERRED stand-in for the rioter automaton]
+          case FxImpact::RioterWalk: disasters_.rioterEntered(im.x, im.z); break;   // the riot site follows the crowd; the mob sprite is drawn below
           case FxImpact::RioterLost: disasters_.riotRelocate(dw, out); break;   // the crowd is destroyed: the riot relocates (3 tries) or ends
           case FxImpact::TornadoTile: disasters_.tornadoAt(dw, im.id, im.fx, im.fz, out); break;
           case FxImpact::TornadoLeft: disasters_.tornadoLeftMap(im.id); break;

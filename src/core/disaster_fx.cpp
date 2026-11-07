@@ -25,6 +25,8 @@ constexpr uint32_t kPlasmaBall = 0xFFFE1300u;                               // +
 constexpr uint32_t kLocustFly = 0x3FAC0000u, kLocustEat = 0x3FAD0000u;      // + z, alpha +5
 constexpr uint32_t kPieces[4] = {0x3FB20000u, 0x3FB30000u, 0x3FB40000u, 0x3FB50000u};   // + z * 4 + rotation, 6 frames, alpha +0x14
 constexpr uint32_t kCraters[4] = {0x3FC80000u, 0x3FC90000u, 0x3FCA0000u, 0x3FC50000u};   // + z, one frame, alpha +5
+constexpr uint32_t kRainLoop = 0x48590005u, kRainTop = 0x4859000Au, kRainBottom = 0x4859000Fu;   // shifted zoom, one frame each
+constexpr uint32_t kSteamOpen = 0x48580000u, kSteamCycle = 0x4858200Au, kSteamClose = 0x48584014u;   // 4 frames, alpha +0x1005
 constexpr uint32_t kVortexOpen = 0x48590000u, kVortexLoop = 0x4859200Au;    // shifted zoom, 11 frames, alpha +0x1005
 
 int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -207,7 +209,8 @@ void DisasterFx::syncState(const DisasterManager& m) {
   // Toxic puffs: static (never drift); a puff whose cloud is gone fades out.
   {
     std::vector<std::pair<double, double>> cur;
-    for (const CloudInst& c : m.clouds()) for (const auto& p : c.puffs) cur.push_back(p);
+    raining_ = false;
+    for (const CloudInst& c : m.clouds()) { raining_ = raining_ || c.raining; for (const auto& p : c.puffs) cur.push_back(p); }
     size_t live = 0;
     for (const PuffView& p : puffs_) if (p.closing < 0) live++;
     size_t seen = 0;
@@ -392,7 +395,26 @@ void DisasterFx::update(uint32_t dtMs) {
   }
   tornadoes_.erase(std::remove_if(tornadoes_.begin(), tornadoes_.end(), [](const TornadoView& v) { return v.gone; }), tornadoes_.end());
   // Toxic puffs: opacity changes at 0.00015 per ms (about 6.7 s) in and out.
-  for (PuffView& p : puffs_) { p.age += dt; if (p.closing >= 0) p.closing += dt; }
+  for (PuffView& p : puffs_) {
+    p.age += dt; if (p.closing >= 0) p.closing += dt;
+    RainState& r = p.rain;
+    const bool want = raining_ && p.closing < 0;
+    if (want && !r.active) {   // a column hangs from puff y + 0x960 down to (terrain + 4) * 256 (none if that is not below the top)
+      const double L = (p.h - 4.0) * 256.0 + 2400.0;
+      if (L > 0) { r = RainState(); r.active = true; r.lengthWu = L; }
+    }
+    if (r.active) {
+      const double rate = 0.512 * dt;   // 0.000512 world units per microsecond: grow, scroll and drain
+      r.scroll += rate;
+      if (!want && !r.stopped) { r.stopped = true; if (r.steam == 1 || r.steam == 2) { r.steam = 3; r.steamMs = 0; } }
+      if (!r.stopped) r.E = std::min(r.lengthWu, r.E + rate); else r.S += rate;
+      if (!r.stopped && r.E >= r.lengthWu && r.steam == 0) { r.steam = 1; r.steamMs = 0; }
+      r.steamMs += dt;
+      if (r.steam == 1 && r.steamMs >= 800) { r.steam = 2; r.steamMs = 0; }
+      if (r.steam == 3 && r.steamMs >= 800) r.steam = 0;
+      if (r.stopped && r.S >= r.E) r = RainState();
+    } else if (r.steam == 3) { r.steamMs += dt; if (r.steamMs >= 800) r.steam = 0; }
+  }
   puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(), [](const PuffView& p) { return p.closing * 0.00015 >= 1.0; }), puffs_.end());
   // Space-junk launcher.
   if (launcher_.on) {
@@ -542,6 +564,51 @@ void DisasterFx::emitFx(const Fx& f, std::vector<SceneSprite>& out) const {
   }
 }
 
+// Composes one rain column (spec 21 s12.7): loop image tiled vertically and scrolling, top ramp under the top mask riding the retracted top S, bottom
+// ramp under the bottom mask at the grown end E. Sizes in screen px: world length * 2^z / 256 [INFERRED]. Drawn as a generated sprite.
+void DisasterFx::emitRain(const PuffView& p, int slot, std::vector<SceneSprite>& out) const {
+  const RainState& r = p.rain;
+  if (!data_ || !r.active || r.E <= r.S) return;
+  const int z = zoom_, k = z < 4 ? z + 1 : 4, sc = z == 4 ? 2 : 1;
+  const SpriteImage* loop = data_->sprite(0, kRainLoop + uint32_t(k));
+  const Plane* top = data_->spritePlane(0, kRainTop + uint32_t(k));
+  const Plane* bot = data_->spritePlane(0, kRainBottom + uint32_t(k));
+  if (!loop || !top || !bot || loop->img.w <= 0 || loop->img.h <= 0) return;
+  const double pxPerWu = double(1 << z) / 256.0;
+  const int w = loop->img.w * sc, pitch = loop->img.h * sc, topH = top->h * sc, botH = bot->h * sc;
+  const int E = int(std::lround(r.E * pxPerWu)), S = int(std::lround(r.S * pxPerWu));
+  if (E <= S || E <= 0 || E > 4096) return;
+  SpriteImage img; img.img.w = w; img.img.h = E; img.img.px.assign(size_t(w) * size_t(E), 0u);
+  img.L = w / 2; img.T = 0; img.R = w - img.L; img.B = E; img.hasSpan = true;
+  Plane pl; pl.w = w; pl.h = E; pl.v.assign(size_t(w) * size_t(E), 0);
+  const int scrollPx = int(std::lround(r.scroll * pxPerWu));
+  const bool shortCol = (E - S) < topH + botH;
+  const int split = shortCol ? S + int((long long)(E - S) * topH / std::max(1, topH + botH)) : 0;
+  for (int y = S; y < E; y++) {
+    const int ty = (((scrollPx + y) % pitch) + pitch) % pitch;   // loop row
+    int topRow = -1, botRow = -1;
+    if (shortCol) { if (y < split) topRow = y - S; else botRow = (y - split); }
+    else { if (y < S + topH) topRow = y - S; else if (y >= E - botH) botRow = y - (E - botH); }
+    for (int x = 0; x < w; x++) {
+      const uint32_t c = loop->img.px[size_t(ty / sc) * size_t(loop->img.w) + size_t(x / sc)];
+      if (!(c >> 24)) continue;
+      int a = 31;
+      if (topRow >= 0) a = top->v[size_t(std::min(topRow / sc, top->h - 1)) * size_t(top->w) + size_t(std::min(x / sc, top->w - 1))];
+      else if (botRow >= 0) a = bot->v[size_t(std::min(botRow / sc, bot->h - 1)) * size_t(bot->w) + size_t(std::min(x / sc, bot->w - 1))];
+      img.img.px[size_t(y) * size_t(w) + size_t(x)] = c;
+      pl.v[size_t(y) * size_t(w) + size_t(x)] = uint8_t(a);
+    }
+  }
+  const uint32_t id = uint32_t(slot) * 4u + uint32_t(transientGen_ & 3);
+  data_->putTransient(id, std::move(img), std::move(pl));
+  SceneSprite s;
+  s.category = kFxTransientCat; s.spriteId = id; s.hasAlpha = true; s.alphaCategory = kFxTransientCat; s.alphaId = id;
+  s.x = int32_t(std::lround(p.x * 256.0)); s.z = int32_t(std::lround(p.z * 256.0));
+  s.height = groundAt(p.x, p.z) + int32_t(std::lround((p.h + 2400.0 / 256.0) * 256.0));
+  s.moving = true;
+  out.push_back(s);
+}
+
 void DisasterFx::emit(int zoom, int rot, std::vector<SceneSprite>& out) const {
   zoom_ = clampi(zoom, 0, 4); rot_ = rot & 3;
   const int z = zoom_, k = z < 4 ? z + 1 : 4;   // shifted zoom: image k = z + 1 (4 at zoom 4, drawn doubled)
@@ -561,6 +628,18 @@ void DisasterFx::emit(int zoom, int rot, std::vector<SceneSprite>& out) const {
   for (const PuffView& p : puffs_) {
     const double op = p.closing >= 0 ? 1.0 - p.closing * 0.00015 : std::min(1.0, p.age * 0.00015);
     push(out, kPuff + uint32_t(k), 0x100, 0, 0, p.x, p.z, p.h, int(std::lround(op * 32.0)), mag);
+  }
+  ++transientGen_;
+  {
+    int slot = 0;
+    for (const PuffView& p : puffs_) {
+      emitRain(p, slot++, out);
+      if (p.rain.steam) {   // ground steam under a full column: opening -> cycle loop -> close, 200 ms per frame
+        const int fr = p.rain.steamMs / 200;
+        const uint32_t base = p.rain.steam == 1 ? kSteamOpen : p.rain.steam == 2 ? kSteamCycle : kSteamClose;
+        push(out, base + uint32_t(k), 0x1005, 4, fr, p.x, p.z, 0, 32, mag);
+      }
+    }
   }
   for (const VortexView& v : vortices_) {
     const int fp = 250;

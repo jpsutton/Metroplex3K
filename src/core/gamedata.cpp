@@ -320,6 +320,12 @@ const SpriteImage* GameData::sprite(uint32_t cat, uint32_t id) {
   return raw->ok ? raw : nullptr;
 }
 
+void GameData::putTransient(uint32_t id, SpriteImage&& img, Plane&& plane) {
+  img.ok = true;
+  spriteCache_[spriteKey(kFxTransientCat, id)] = std::make_unique<SpriteImage>(std::move(img));
+  planeCache_[spriteKey(kFxTransientCat, id)] = std::make_unique<Plane>(std::move(plane));
+}
+
 const Plane* GameData::spritePlane(uint32_t cat, uint32_t id) {
   uint64_t k = spriteKey(cat, id);
   auto it = planeCache_.find(k);

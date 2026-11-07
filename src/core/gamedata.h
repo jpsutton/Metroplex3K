@@ -37,6 +37,10 @@ constexpr uint32_t kFxTintBeamTop = 0xFB000000u;
 inline uint32_t fxTintBeamCat(int frameWidth, int frame) { return kFxTintBeamTop | (uint32_t(frameWidth) & 0xFFFu) << 12 | (uint32_t(frame) & 0xFFFu); }
 inline bool isFxTintBeamCat(uint32_t cat) { return (cat & 0xFF000000u) == kFxTintBeamTop; }
 
+// Generated sprites (the toxic rain column): put a composed colour image and opacity plane under (kFxTransientCat, id); the renderer finds them
+// through sprite() / spritePlane() like any archive image. The caller reuses a small ring of ids, so an entry is overwritten a few frames later.
+constexpr uint32_t kFxTransientCat = 0xFA000000u;
+
 // Parsed TKB1 occupant attribute record.
 struct OccAttr {
   bool valid = false;
@@ -131,6 +135,7 @@ class GameData {
   const SpriteImage* sprite(uint32_t category, uint32_t id);
   const Plane* spritePlane(uint32_t category, uint32_t id);
 
+  void putTransient(uint32_t id, SpriteImage&& img, Plane&& plane);
   const OccAttr* occupant(uint32_t occupantId, bool network = false, bool port = false);
   const CsAttrib* csattrib(const ResKey& appearance);
   std::string string(uint32_t group, uint32_t instance);
