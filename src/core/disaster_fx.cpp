@@ -25,13 +25,16 @@ constexpr uint32_t kJunkBlast = 0x3FB70000u;                                // k
 constexpr uint32_t kCraters[4] = {0x3FC80000u, 0x3FC90000u, 0x3FCA0000u, 0x3FC50000u};   // 2x2, 3x3, 4x4, 5x5; one frame, alpha +5
 constexpr uint32_t kToxOpen = 0x48580000u, kToxCycle = 0x4858200Au, kToxClose = 0x48584014u;   // 4 frames, alpha +0x1005
 constexpr uint32_t kToxRain = 0x48590000u;                                  // 11 frames, alpha +0x1005
+// Flames of a burning building: 4 sizes x 5 zooms (k = size * 5 + zoom), 15 frames, alpha +0x20. [INFERRED] these are the fire sprites
+// (unlabelled "Size 0..3" blocks at FFFE1000 in EffectSprites.sii) and intensity 0..2 picks size 0..2.
+constexpr uint32_t kFlames = 0xFFFE1000u;
 constexpr uint32_t kVortexOuter = 0x2D490000u, kVortexInner = 0x2D4A0000u;  // 9 frames, alpha +5
 
 int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 }  // namespace
 
 void DisasterFx::clear() {
-  fx_.clear(); incoming_.clear(); crowds_.clear(); tornadoes_.clear(); puffs_.clear(); rain_.clear(); vortices_.clear(); impacts_.clear();
+  fx_.clear(); incoming_.clear(); crowds_.clear(); flames_.clear(); tornadoes_.clear(); puffs_.clear(); rain_.clear(); vortices_.clear(); impacts_.clear();
 }
 
 int32_t DisasterFx::groundAt(double x, double z) const {
@@ -55,6 +58,7 @@ bool DisasterFx::focus(double& x, double& z) const {
   for (const Fx& f : fx_) if (f.delay <= 0 && (f.kind == Kind::Saucer || f.kind == Kind::Locust || f.kind == Kind::Plasma || f.kind == Kind::Junk)) { x = f.x; z = f.z; return true; }
   for (const Fx& f : fx_) if (f.delay <= 0) { x = f.x; z = f.z; return true; }
   if (!puffs_.empty()) { x = puffs_[0].x; z = puffs_[0].z; return true; }
+  if (!flames_.empty()) { x = flames_[0].x; z = flames_[0].z; return true; }
   return false;
 }
 
@@ -168,6 +172,12 @@ void DisasterFx::syncState(const DisasterManager& m) {
     } else v.alive = false;
   }
   for (size_t i = ts.size(); i < tornadoes_.size(); i++) if (tornadoes_[i].alive && tornadoes_[i].fade < 0) tornadoes_[i].fade = 0;
+  // Flames: one per burning occupant (the burn records hold the anchor tile and the intensity 0..2).
+  flames_.clear();
+  for (const BurnRecord& b : m.burning()) {
+    FlameView f; f.x = b.x + 0.5; f.z = b.z + 0.5; f.size = std::max(0, std::min(3, b.intensity)); f.phase = int((b.x * 7 + b.z * 13) % 15);
+    flames_.push_back(f);
+  }
   // Rioter crowds: one per riot that has broken out (phase 2), starting at the riot's site [spec 21 s8.4].
   {
     std::vector<std::pair<int, int>> sites;
@@ -299,7 +309,7 @@ void DisasterFx::update(uint32_t dtMs) {
       impacts_.push_back(im);
     }
   }
-  rainAge_ += dt;
+  rainAge_ += dt; flameAge_ += dt;
   for (VortexView& v : vortices_) v.age += dt;
   vortices_.erase(std::remove_if(vortices_.begin(), vortices_.end(), [](const VortexView& v) { return v.age >= v.life; }), vortices_.end());
 }
@@ -353,6 +363,7 @@ void DisasterFx::emit(int zoom, int rot, std::vector<SceneSprite>& out) const {
   zoom_ = clampi(zoom, 0, 4); rot_ = rot & 3;
   const int z = zoom_;
   for (const Fx& f : fx_) emitFx(f, out);
+  for (const FlameView& f : flames_) push(out, kFlames + uint32_t(f.size * 5 + z), 0x20, 15, int(flameAge_ / kFrameMs) + f.phase, f.x, f.z, 0);
   for (const TornadoView& v : tornadoes_) {
     if (!v.alive) continue;
     const int frame = v.age / kFrameMs;

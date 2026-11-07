@@ -72,8 +72,9 @@ class DisasterFx {
   struct TornadoView { double x = 0, z = 0, tx = 0, tz = 0; int variant = 0; int age = 0; bool alive = false; int fade = -1; };
   struct PuffView { double x = 0, z = 0; int age = 0; int closing = -1; int height = 0; };
   struct RainView { double x = 0, z = 0; };
-  int rainAge_ = 0;
+  int rainAge_ = 0, flameAge_ = 0;
   struct CrowdView { double x = 0, z = 0; int walkMs = 0, burnMs = 0; };
+  struct FlameView { double x = 0, z = 0; int size = 0; int phase = 0; };
   struct VortexView { double x = 0, z = 0; int age = 0, life = 0; };
 
   uint32_t rnd() { rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5; return rng_; }
@@ -101,6 +102,7 @@ class DisasterFx {
   std::vector<RainView> rain_;
   std::vector<VortexView> vortices_;
   std::vector<CrowdView> crowds_;
+  std::vector<FlameView> flames_;
   std::vector<FxImpact> impacts_;
   mutable int zoom_ = 2, rot_ = 0;
 };
