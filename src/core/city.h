@@ -100,6 +100,8 @@ class City {
   // ---- player actions (costs charged to budget) ----
   bool paintZoneType(int x0, int z0, int x1, int z1, int zoneType);  // 0 = dezone
   bool plop(uint32_t occId, int x, int z, int cost);
+  // Places an occupant at (x, z) over whatever stands on its footprint (the UFO's crop circle replaces the farm-field tiles; spec 21 s6.3 [INFERRED]).
+  bool placeOverOccupants(uint32_t occId, int x, int z);
   bool plopAgent(uint32_t occId, uint32_t agentType, int sizeX, int sizeZ, int x, int z, int cost);
   bool buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path);
   // Spec 12 §6.2 drag router (highway dual carriageway, per-tool water/slope). Empty when tiling is off.

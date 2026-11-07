@@ -28,6 +28,7 @@ struct FxImpact {
     Debris,        // a space-junk piece hit (x, z)
     Rioter,        // the riot crowd threw something that landed on (x, z)
     RioterWalk,    // the riot crowd entered road tile (x, z)
+    RioterLost,    // the crowd could not continue (no road ahead): destroyed
     TornadoTile,   // funnel `id` is over a new tile; fx, fz = exact position
     TornadoLeft,   // funnel `id` left the map
     VortexAt,      // whirlpool vortex moved to tile (x, z)

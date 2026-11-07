@@ -529,7 +529,6 @@ static void testRecords() {
   a.locustHistory().entries.push_back({2451000, 1, 2, 3, 4, 5});
   a.whirlHistory().entries.push_back({2451000, 1, 2, 3, 4, 5, 6, 7});
   a.parade().a = 17; a.parade().x = 5; a.parade().z = 9; a.parade().route[0] = 5; a.parade().e = 3;
-  a.layerFlagA = 1; a.layerFlagB = 1;
   a.startFire(w, 10, 10, out);
   int args[8] = {5, 5, 9, 40, 2, 30, 80, 1};
   a.scriptTornado(w, args, out);
@@ -576,9 +575,9 @@ static void testRecords() {
   // layer record with uninitialised cost value kept
   DisasterRecord lay; lay.type = kDisasterLayerType; lay.group = kDisasterLayerGroup;
   put16(lay.data, 0x01F9); put16(lay.data, 2); put32(lay.data, 0xDEADBEEFu);
-  put32(lay.data, 0); put32(lay.data, 1); put32(lay.data, 0); put32(lay.data, 0xCDCDCDCDu); put32(lay.data, 1);
+  put32(lay.data, 777); put32(lay.data, 2); put32(lay.data, 1); put32(lay.data, 0xCDCDCDCDu); put32(lay.data, 1);   // cost, falseAlarms, active, elapsed (filler), EW
   CHECK(c.loadRecord(lay));
-  CHECK(c.emergencyActive() && uint32_t(c.disasterCost()) == 0xCDCDCDCDu);
+  CHECK(c.emergencyActive() && c.disasterCost() == 777 && c.falseAlarms() == 2 && c.emergencyWithDisaster());
   bool same2 = false;
   for (auto& r : c.saveRecords()) if (r.type == kDisasterLayerType) same2 = (r.data == lay.data);
   CHECK(same2);

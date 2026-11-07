@@ -360,6 +360,7 @@ class DisasterManager {
   void debrisImpact(DisasterWorld& w, int x, int z, DisasterOutput& out);
   void rioterAt(DisasterWorld& w, int x, int z, DisasterOutput& out);
   bool riotRelocate(DisasterWorld& w, DisasterOutput& out);
+  void rioterEntered(int x, int z);   // the crowd entered road tile (x, z): the riot site follows it (spec 21 s8.4)
 
   // Generic destroy routine (section 9). Returns false if nothing happened.
   bool destroyOccupant(DisasterWorld& w, const OccInfo& o, int damage, DisasterOutput& out);
@@ -402,7 +403,6 @@ class DisasterManager {
   // Returns false if the record is not ours or is malformed (state left unchanged then).
   bool loadRecord(const DisasterRecord& r);
   // Layer record fields (section "Layer record")
-  uint32_t layerReserved0 = 0, layerFlagA = 0, layerFlagB = 0;
   void resetToNewCity();
 
  private:

@@ -1242,6 +1242,26 @@ bool City::plop(uint32_t id, int x, int z, int cost) {
   return plopAgent(id, agent, sx, sz, x, z, cost);
 }
 
+bool City::placeOverOccupants(uint32_t id, int x, int z) {
+  if (!game_) return false;
+  const OccAttr* a = game_->occupant(id);
+  if (!a) return false;
+  const int sx = int(a->sizeX), sz = int(a->sizeZ);
+  std::set<int> kill;
+  for (int dx = 0; dx < sx; dx++)
+    for (int dz = 0; dz < sz; dz++) {
+      if (!inMap(x + dx, z + dz)) return false;
+      const int i = occupantAt(x + dx, z + dz);
+      if (i >= 0) kill.insert(i);
+    }
+  if (!kill.empty()) removeOccupantIdx(kill, false);
+  Occupant o;
+  o.x = x; o.z = z; o.y = world_->altAt(x, z); o.sizeX = sx; o.sizeZ = sz; o.occId = id;
+  o.keyType = T_OCC_ATTR; o.agentType = a->agentType; o.state = 1;
+  addOccupant(o);
+  return true;
+}
+
 bool City::plopAgent(uint32_t id, uint32_t agent, int sx, int sz, int x, int z, int cost) {
   lastFailNoMoney = false;
   for (int dx = 0; dx < sx; dx++)

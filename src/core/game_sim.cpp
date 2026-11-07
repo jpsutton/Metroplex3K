@@ -607,7 +607,10 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
       case DisasterCommand::MarkRadiation: c.markRadiation(cmd.x, cmd.z); break;
       case DisasterCommand::SoundLoop: soundLoop(cmd.a, cmd.b != 0, int(cmd.value)); break;
       // Not drawn: the crop circle mark, and the debris / toxic / tornado commands whose visuals follow the manager state (fx_.syncState).
-      case DisasterCommand::SetFireIntensity: case DisasterCommand::Splash: case DisasterCommand::CropCircle: case DisasterCommand::UfoLeave:
+      case DisasterCommand::CropCircle:   // the UFO places the "Crop Circle" occupant (0x207EDC0E:0x57E:0x13CE, 4 x 4) at the block's corner (spec 21 s6.3)
+        if (simReady_) c.placeOverOccupants(0x13CE, cmd.x, cmd.z);
+        break;
+      case DisasterCommand::SetFireIntensity: case DisasterCommand::Splash: case DisasterCommand::UfoLeave:
       case DisasterCommand::TornadoTouchdown: case DisasterCommand::ToxicPuffs: case DisasterCommand::ToxicRain: case DisasterCommand::SpawnRioters:
       case DisasterCommand::UfoSwarm: case DisasterCommand::LocustSwarm: case DisasterCommand::DebrisSpawn:
       // Dispatch bookkeeping of DispatchTracker, which the game does not use: the dispatch tools stamp the coverage layers directly (CoverageLayer::dispatch).
@@ -670,7 +673,8 @@ void Game::disasterFxFrame(uint32_t dtMs) {
           case FxImpact::LocustFlora: burnFlora(im.x, im.z); break;
           case FxImpact::Debris: disasters_.debrisImpact(dw, im.x, im.z, out); break;
           case FxImpact::Rioter: disasters_.rioterAt(dw, im.x, im.z, out); break;   // any occupant that passes the ignition test (spec 21 s8.4)
-          case FxImpact::RioterWalk: if (street_) street_->pointSpawnPedestrians(im.x, im.z, 3); break;   // the crowd shows as walkers [INFERRED stand-in for the rioter automaton]
+          case FxImpact::RioterWalk: disasters_.rioterEntered(im.x, im.z); if (street_) street_->pointSpawnPedestrians(im.x, im.z, 3); break;   // the crowd shows as walkers [INFERRED stand-in for the rioter automaton]
+          case FxImpact::RioterLost: disasters_.riotRelocate(dw, out); break;   // the crowd is destroyed: the riot relocates (3 tries) or ends
           case FxImpact::TornadoTile: disasters_.tornadoAt(dw, im.id, im.fx, im.fz, out); break;
           case FxImpact::TornadoLeft: disasters_.tornadoLeftMap(im.id); break;
           case FxImpact::VortexAt: disasters_.vortexPosition(dw, im.x, im.z, out); break;

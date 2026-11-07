@@ -406,8 +406,10 @@ void DisasterFx::update(uint32_t dtMs) {
   // every 0.3-0.6 s (the 0x2484A289 / 0x2484A290 range), which ignites the building it lands on.
   for (CrowdView& cv : crowds_) {
     cv.walkMs += dt; cv.throwMs += dt;
+    bool lost = false;
     if (cv.walkMs >= 1050) {
       cv.walkMs = 0;
+      bool moved = false;
       static const int d4[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
       const int tx = int(cv.x), tz = int(cv.z), start = rndi(4);
       for (int k = 0; k < 4; k++) {
@@ -415,8 +417,10 @@ void DisasterFx::update(uint32_t dtMs) {
         if (nx < 0 || nz < 0 || nx >= W_ || nz >= H_ || (road_ && !road_(nx, nz))) continue;
         cv.x = nx + 0.5; cv.z = nz + 0.5;
         report(FxImpact::RioterWalk, nx, nz);
+        moved = true;
         break;
       }
+      if (!moved) { report(FxImpact::RioterLost, tx, tz); lost = true; }
     }
     if (cv.throwMs >= cv.nextThrow) {
       cv.throwMs = 0; cv.nextThrow = rndRange(300, 600);
@@ -424,7 +428,9 @@ void DisasterFx::update(uint32_t dtMs) {
       const int ix = clampi(int(std::floor(cv.x + std::cos(phi) * d)), 0, std::max(0, W_ - 1)), iz = clampi(int(std::floor(cv.z + std::sin(phi) * d)), 0, std::max(0, H_ - 1));
       report(FxImpact::Rioter, ix, iz);
     }
+    if (lost) cv.walkMs = -1000000;   // destroyed: removed below; the riot relocates and a new crowd starts at its new site
   }
+  crowds_.erase(std::remove_if(crowds_.begin(), crowds_.end(), [](const CrowdView& c) { return c.walkMs < -100000; }), crowds_.end());
   // Whirlpool vortex (spec 21 s12.6): speed 0.12 u/ms, accepted only over a 9 x 9 block of water, else the heading turns in steps of 2*pi/14.
   for (VortexView& v : vortices_) {
     v.age += dt;

@@ -873,6 +873,10 @@ void DisasterManager::rioterAt(DisasterWorld& w, int x, int z, DisasterOutput& o
   if (o.valid && ignite(w, o, 0, out)) riots_[0].burned++;
 }
 
+void DisasterManager::rioterEntered(int x, int z) {
+  if (!riots_.empty() && riots_[0].phase == 2) { riots_[0].x = x; riots_[0].z = z; }
+}
+
 bool DisasterManager::riotRelocate(DisasterWorld& w, DisasterOutput& out) {
   if (riots_.empty()) return false;
   RiotInst& r = riots_[0];
@@ -1722,8 +1726,9 @@ std::vector<DisasterRecord> DisasterManager::saveRecords() const {
   std::vector<DisasterRecord> v;
   {  // layer
     Bytes b; put16(b, 0x01F9); put16(b, 2); put32(b, 0xDEADBEEFu);
-    put32(b, layerReserved0); put32(b, emergencyActive_ ? 1 : 0); put32(b, layerFlagA);
-    put32(b, uint32_t(cost_)); put32(b, layerFlagB);
+    // Spec 21 persisted state: cost, false-alarm counter, emergency active, days since declared, declared-during-disaster (EW) flag.
+    put32(b, uint32_t(cost_)); put32(b, uint32_t(falseAlarms_)); put32(b, emergencyActive_ ? 1 : 0);
+    put32(b, uint32_t(emergencyDays_)); put32(b, emergencyEW_ ? 1 : 0);
     DisasterRecord r; r.type = kDisasterLayerType; r.group = kDisasterLayerGroup; r.instance = 0; r.data = b;
     v.push_back(r);
   }
@@ -1783,8 +1788,9 @@ bool DisasterManager::loadRecord(const DisasterRecord& rec) {
       if (d.size() != 28) return false;
       ver = r.u16(); uint16_t fl = r.u16(); uint32_t s = r.u32();
       if (s != 0xDEADBEEFu || fl != 2 || ver > 0x01F9) return false;
-      layerReserved0 = r.u32(); emergencyActive_ = r.u32() != 0; layerFlagA = r.u32();
-      cost_ = r.u32(); layerFlagB = r.u32();
+      cost_ = r.u32(); falseAlarms_ = int(r.u32()); emergencyActive_ = r.u32() != 0;
+      emergencyDays_ = int(r.u32()); emergencyEW_ = r.u32() != 0;   // any elapsed value is valid (one shipped file holds filler)
+      // [INFERRED simplification] restored at once; the original re-declares a saved emergency through the declaration rule once the view is ready.
       return true;
     }
     if (rec.type != kDisasterRecType) return false;
