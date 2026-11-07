@@ -171,13 +171,9 @@ Before 1.0:
 | Area | Gap | Issue |
 |------|-----|-------|
 | Release | No packaged binaries, version number, changelog or user guide; CI builds only for the `build` branch and Windows is built without the app | [#90](https://github.com/jpsutton/Metroplex3K/issues/90) |
-| Scenarios | All 13 load and run, but none has been run to its ending and compared with the original | [#91](https://github.com/jpsutton/Metroplex3K/issues/91) |
-| Disasters | Effects are drawn and drive gameplay; timing and looks are not yet compared with the original | [#92](https://github.com/jpsutton/Metroplex3K/issues/92) |
 | Verification | `probe_verify` needs to become a documented release gate (reference cities, save round trips, screenshots) | [#93](https://github.com/jpsutton/Metroplex3K/issues/93) |
-| Audio | Not yet checked by ear; pan and attenuation are not tied to the view | [#94](https://github.com/jpsutton/Metroplex3K/issues/94) |
-| UI | Small pixel differences from the original in several windows; some layouts unverified | [#95](https://github.com/jpsutton/Metroplex3K/issues/95) |
 
-After 1.0: scenario spec polish ([#97](https://github.com/jpsutton/Metroplex3K/issues/97)), BAT tool UI
+After 1.0: scenario verification ([#91](https://github.com/jpsutton/Metroplex3K/issues/91)), disaster comparison with the original ([#92](https://github.com/jpsutton/Metroplex3K/issues/92)), an audio listening pass ([#94](https://github.com/jpsutton/Metroplex3K/issues/94)), UI pixel differences ([#95](https://github.com/jpsutton/Metroplex3K/issues/95)), scenario spec polish ([#97](https://github.com/jpsutton/Metroplex3K/issues/97)), BAT tool UI
 ([#98](https://github.com/jpsutton/Metroplex3K/issues/98)), guessed details in growth
 ([#99](https://github.com/jpsutton/Metroplex3K/issues/99)), services and pollution
 ([#100](https://github.com/jpsutton/Metroplex3K/issues/100)), economy and population
