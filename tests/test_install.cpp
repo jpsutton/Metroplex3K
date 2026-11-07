@@ -72,8 +72,10 @@ int main() {
   // frozen because nothing drove the per-minute instance update).
   game.startDisaster(DisasterType::Earthquake);
   bool sawQuake = false;
-  for (int i = 0; i < 1200; i++) { frame(1, 500); sawQuake = sawQuake || game.disasterActive(); if (sawQuake && !game.disasterActive()) break; }
+  // The quake's own instance ends; the fires it lit may keep the disaster state active while they burn (burning buildings are now destroyed, so a
+  // fire chain can run for a long time in this unprotected fixture city).
+  for (int i = 0; i < 1200; i++) { frame(1, 500); sawQuake = sawQuake || game.disasterActive(); if (sawQuake && game.disasters().quakes().empty()) break; }
   CHECK(sawQuake);
-  CHECK(!game.disasterActive());
+  CHECK(game.disasters().quakes().empty());
   TEST_MAIN_END();
 }

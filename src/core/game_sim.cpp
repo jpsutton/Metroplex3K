@@ -97,7 +97,9 @@ class CityDisasterWorld : public DisasterWorld {
     o.isLot = kind >= 3 && kind <= 9;
     if (o.isLot && oc.agentType == 9300 && c_.gameData())
       if (const OccAttr* a = c_.gameData()->occupant(oc.occId)) o.crop = (a->buildingFlags & 0x500) == 0x500;
-    o.lotDamage = oc.state == 8 ? kDmgRubble : oc.state == 16 ? kDmgBurnt : oc.state == 2 ? kDmgAbandon : oc.state == 32 ? kDmgCrop : 0;
+    // State 16 here is a building that is burning (the original keeps its lot state normal and sets a burning flag), not one that is already burnt: it must not
+    // satisfy rule 3 of the destroy routine ("already burnt: nothing happens"), or a fire could never destroy its building and the occupant would burn forever.
+    o.lotDamage = oc.state == 8 ? kDmgRubble : oc.state == 2 ? kDmgAbandon : oc.state == 32 ? kDmgCrop : 0;
     return o;
   }
   std::vector<OccInfo> occupantsTouching(const OccInfo& o) const override {

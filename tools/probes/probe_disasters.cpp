@@ -28,16 +28,16 @@ int main(int argc, char** argv) {
     const int rubble0 = count(8);
     s.game.startDisaster(k.type);
     if (!s.game.lastMessage().empty()) { std::printf("   %-12s could not start: %s\n", k.name, s.game.lastMessage().c_str()); continue; }
-    int frames = 0, peakFire = 0;
+    int frames = 0, peakFire = 0; size_t peakRec = 0;
     bool ended = false;
     while (frames < 1500) {
       s.frames(1, 250);
       frames++;
-      peakFire = std::max(peakFire, count(16));
+      peakFire = std::max(peakFire, count(16)); peakRec = std::max(peakRec, s.game.disasters().burning().size());
       if (!s.game.disasterActive()) { ended = true; break; }
     }
-    std::printf("   %-12s %s after %4d frames (%.0f s of play); rubble lots +%d, peak burning %d\n", k.name, ended ? "ended" : "STILL ACTIVE", frames,
-                frames * 0.25, count(8) - rubble0, peakFire);
+    std::printf("   %-12s %s after %4d frames (%.0f s of play); rubble lots +%d, peak burning %d (records %zu)\n", k.name, ended ? "ended" : "STILL ACTIVE", frames,
+                frames * 0.25, count(8) - rubble0, peakFire, peakRec);
   }
   return 0;
 }
