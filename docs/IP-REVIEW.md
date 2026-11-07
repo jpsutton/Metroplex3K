@@ -1,8 +1,8 @@
 # Intellectual-property review
 
 Review date: 2026-11-07. Scope: every tracked file in the repository at the time of the review, plus the git history
-that is published on `origin`. This is an engineering review, not legal advice. A short review by an IP lawyer is
-still recommended before the first public release (see "Open items").
+that is published on `origin`. This is an engineering review, not legal advice. The owner has decided not to commission a
+legal review; the residual risks below are accepted by the owner (see "Open items").
 
 ## 1. What the project is
 
@@ -88,7 +88,8 @@ implementation internals, no copied creative content.
 The analysis team ran and examined the original program. Such analysis for interoperability is permitted in many
 jurisdictions under limits, for example 17 U.S.C. 1201(f) and Article 6 of the EU Software Directive, and those limits
 depend on the end-user license agreement and on the country. This review did not assess the analysis team's own
-activities, the license terms of the game, or the jurisdiction. That is the main question for counsel.
+activities, the license terms of the game, or the jurisdiction. These remain unassessed and are accepted as a risk by the
+owner.
 
 ## 3. Specification review
 
@@ -128,9 +129,8 @@ git ls-files | grep -iE '\.(png|bmp|ixf|dat|xa|wav|tgq|exe|dll|cur)$'   # must b
 
 ## 5. Open items for the owner
 
-1. Confirm with the analysis team that the specification may be distributed under GPL-3.0-or-later. The analysis team's
-   own license position (their copyright in `spec/`) is not in the repository.
+1. Done: the owner decided the specification falls under the project license (it was written for this project).
 2. Decide on the new-city template: embed (current) or derive from shipped files at run time.
 3. Trademark search for the project name.
-4. Short review by an IP lawyer, in particular of the analysis stage and the game's EULA.
+4. Legal review of the analysis stage and the game's EULA: declined by the owner. Risk accepted.
 5. Keep `refs/patchbay/*` and `build-*` directories out of any push.

@@ -176,7 +176,7 @@ Before 1.0:
 | Verification | `probe_verify` needs to become a documented release gate (reference cities, save round trips, screenshots) | [#93](https://github.com/jpsutton/Metroplex3K/issues/93) |
 | Audio | Not yet checked by ear; pan and attenuation are not tied to the view | [#94](https://github.com/jpsutton/Metroplex3K/issues/94) |
 | UI | Small pixel differences from the original in several windows; some layouts unverified | [#95](https://github.com/jpsutton/Metroplex3K/issues/95) |
-| Licensing | GPL-3.0-or-later and IP review done; trademark search and a lawyer's review of the analysis stage remain | [#96](https://github.com/jpsutton/Metroplex3K/issues/96) |
+| Licensing | GPL-3.0-or-later and IP review done ([#96](https://github.com/jpsutton/Metroplex3K/issues/96), closed); project-name check and the new-city template question remain | [#107](https://github.com/jpsutton/Metroplex3K/issues/107) |
 
 After 1.0: scenario spec polish ([#97](https://github.com/jpsutton/Metroplex3K/issues/97)), BAT tool UI
 ([#98](https://github.com/jpsutton/Metroplex3K/issues/98)), guessed details in growth
