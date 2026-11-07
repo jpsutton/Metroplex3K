@@ -15,6 +15,7 @@
 #include "core/city_rasterizer.h"
 #include "core/game.h"
 #include "core/gamedir.h"
+#include "core/version.h"
 #include "frame_log.h"
 #include "gl_compute.h"
 #include "gl_presenter.h"
@@ -69,8 +70,12 @@ int main(int argc, char** argv) {
     else if (a == "--city" && i + 1 < argc) cityArg = argv[++i];
     else if (a == "--frame-log" && i + 1 < argc) frameLogArg = argv[++i];
     else if ((a == "--language" || a == "-l") && i + 1 < argc) langArg = argv[++i];
+    else if (a == "--version" || a == "-V") {
+      std::cout << "Metroplex3K " << M3K_VERSION_STRING << " (" << M3K_GIT_SHA << ")\n";
+      return 0;
+    }
     else if (a == "--help" || a == "-h") {
-      std::cout << "metroplex3k [--game-dir DIR] [--city FILE] [--language NAME] [--frame-log FILE]\n"
+      std::cout << "metroplex3k [--version] [--game-dir DIR] [--city FILE] [--language NAME] [--frame-log FILE]\n"
                    "Language: NAME (English, French, German, ...), $M3K_LANGUAGE, else the OS locale (an installed language).\n"
                    "Game data: DIR (game root, its Apps folder, or a parent), $M3K_GAME_DIR, the saved choice,\n"
                    "or auto-detected GOG install locations. You can also drop the folder or the GOG installer\n"

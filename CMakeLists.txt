@@ -1,5 +1,19 @@
 cmake_minimum_required(VERSION 3.16)
-project(Metroplex3K LANGUAGES CXX)
+project(Metroplex3K VERSION 1.0.0 LANGUAGES CXX)
+
+# Release builds pass -DM3K_VERSION_SUFFIX="" (the release workflow does). Development builds are "<version>-dev".
+set(M3K_VERSION_SUFFIX "-dev" CACHE STRING "Suffix appended to the version string; empty for a release build")
+set(M3K_GIT_SHA "unknown")
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --short=9 HEAD
+                  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE M3K_GIT_SHA_OUT
+                  OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET RESULT_VARIABLE M3K_GIT_RC)
+  if(M3K_GIT_RC EQUAL 0 AND M3K_GIT_SHA_OUT)
+    set(M3K_GIT_SHA "${M3K_GIT_SHA_OUT}")
+  endif()
+endif()
+configure_file(src/core/version.h.in ${CMAKE_BINARY_DIR}/generated/core/version.h @ONLY)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,7 +25,7 @@ endif()
 # Platform-independent engine core: no SDL, no OS APIs beyond the C++ standard library.
 file(GLOB CORE_SRC CONFIGURE_DEPENDS src/core/*.cpp)
 add_library(m3k_core STATIC ${CORE_SRC})
-target_include_directories(m3k_core PUBLIC src)
+target_include_directories(m3k_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
 find_package(Threads REQUIRED)  # audio decode and render worker threads
 target_link_libraries(m3k_core PUBLIC Threads::Threads)
 if(MSVC)
@@ -30,16 +44,19 @@ foreach(t ${TEST_SRC})
   add_test(NAME ${name} COMMAND ${name})
 endforeach()
 
-# Developer tools.
-file(GLOB TOOL_SRC CONFIGURE_DEPENDS tools/*.cpp)
-foreach(t ${TOOL_SRC})
-  get_filename_component(name ${t} NAME_WE)
-  # render_parity needs SDL2 + OpenGL compute; built with the app stack below.
-  if(NOT name STREQUAL "render_parity" AND NOT name STREQUAL "gl_present_check")
-    add_executable(${name} ${t})
-    target_link_libraries(${name} PRIVATE m3k_core)
-  endif()
-endforeach()
+# Developer tools. M3K_BUILD_TOOLS=OFF skips them (the fast staging CI builds the core and tests only).
+option(M3K_BUILD_TOOLS "Build the developer tools in tools/" ON)
+if(M3K_BUILD_TOOLS)
+  file(GLOB TOOL_SRC CONFIGURE_DEPENDS tools/*.cpp)
+  foreach(t ${TOOL_SRC})
+    get_filename_component(name ${t} NAME_WE)
+    # render_parity needs SDL2 + OpenGL compute; built with the app stack below.
+    if(NOT name STREQUAL "render_parity" AND NOT name STREQUAL "gl_present_check")
+      add_executable(${name} ${t})
+      target_link_libraries(${name} PRIVATE m3k_core)
+    endif()
+  endforeach()
+endif()
 
 # Probes: engine-vs-real-install checks (tools/probes/README.md). Not tests: CI has no game install.
 option(M3K_BUILD_PROBES "Build the real-install probes in tools/probes" ON)
@@ -51,6 +68,11 @@ if(M3K_BUILD_PROBES)
     target_include_directories(${name} PRIVATE tools/probes)
     target_link_libraries(${name} PRIVATE m3k_core)
   endforeach()
+endif()
+
+# Statically link the MSVC runtime so the Windows package runs without the Visual C++ redistributable.
+if(MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
 # Game application (SDL2 desktop host). M3K_BUILD_APP=OFF builds core, tests and tools only (no SDL needed).
@@ -111,3 +133,37 @@ if(M3K_BUILD_APP)
 else()
   message(STATUS "M3K_BUILD_APP=OFF: building core, tests and tools only")
 endif()
+
+# ---------------------------------------------------------------- packaging
+# `cmake --build build --target package` (or `cpack`) writes two archives per platform: the game (component `app`)
+# and the developer/verification tools (component `tools`: diag, conformance, probe_verify).
+install(FILES LICENSE README.md CHANGELOG.md DESTINATION . COMPONENT app)
+install(DIRECTORY docs/ DESTINATION docs COMPONENT app FILES_MATCHING PATTERN "*.md")
+if(TARGET metroplex3k)
+  install(TARGETS metroplex3k RUNTIME DESTINATION . COMPONENT app)
+  if(WIN32 AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.21)
+    install(FILES $<TARGET_RUNTIME_DLLS:metroplex3k> DESTINATION . COMPONENT app)
+  endif()
+endif()
+foreach(t diag conformance probe_verify)
+  if(TARGET ${t})
+    install(TARGETS ${t} RUNTIME DESTINATION tools COMPONENT tools)
+  endif()
+endforeach()
+install(FILES tools/probes/README.md DESTINATION tools COMPONENT tools)
+
+set(CPACK_PACKAGE_NAME "metroplex3k")
+set(CPACK_PACKAGE_VENDOR "Metroplex3K contributors")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}${M3K_VERSION_SUFFIX}")
+set(CPACK_PACKAGE_FILE_NAME "metroplex3k-${CPACK_PACKAGE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
+if(WIN32 OR APPLE)
+  set(CPACK_GENERATOR ZIP)
+else()
+  set(CPACK_GENERATOR TGZ)
+endif()
+set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
+set(CPACK_COMPONENTS_ALL app tools)
+set(CPACK_ARCHIVE_APP_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}")
+set(CPACK_ARCHIVE_TOOLS_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}-tools")
+include(CPack)
