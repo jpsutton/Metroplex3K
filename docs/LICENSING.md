@@ -16,8 +16,8 @@ Third-party-derived data:
 - `src/core/tqi.cpp`: the MPEG-1 intra quantiser matrix and the run/level VLC tables are standard MPEG-1 data
   (ISO/IEC 11172-2). They were transcribed with reference to the FFmpeg project's TQI decoder (LGPL-2.1-or-later) and
   the MultimediaWiki format page. The code is distributed under `GPL-3.0-or-later`; LGPL code may be relicensed under the
-  GPL. The credit to the FFmpeg developers is kept in the file. Re-deriving the tables from the ISO text, or replacing
-  the decoder, would remove the LGPL influence entirely; this is optional and not planned for 1.0.
+  GPL. The credit to the FFmpeg developers is kept in the file. Decision (owner): the tables and decoder stay as they
+  are under the project license. This is settled.
 - `src/core/font_builtin.cpp`: the classic public-domain 5x7 ASCII column font.
 - SDL2 (zlib license) is linked by the desktop host only. `innoextract` is run as an external program when the user
   drops a GOG installer; it is not linked or bundled.

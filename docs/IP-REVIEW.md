@@ -83,8 +83,8 @@ implementation internals, no copied creative content.
 
 - Project license: GPL-3.0-or-later (`LICENSE`). Every `.cpp` and `.h` file has an SPDX header.
 - `src/core/tqi.cpp`: MPEG-1 tables and decoder written with reference to FFmpeg's TQI decoder (LGPL-2.1-or-later) and the
-  MultimediaWiki page. LGPL code may be relicensed under the GPL. The credit is kept in the file. Decision: licensed
-  under the project license. Optional later step: re-derive the tables from ISO/IEC 11172-2.
+  MultimediaWiki page. LGPL code may be relicensed under the GPL. The credit is kept in the file. Decision (owner): the
+  tables and decoder stay as they are, licensed under the project license. Settled.
 - Fallback font: public domain. SDL2: zlib license, linked by the desktop host only. `innoextract`: run as an external
   program, not bundled.
 
