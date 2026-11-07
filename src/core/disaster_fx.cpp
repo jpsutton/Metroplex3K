@@ -27,6 +27,7 @@ constexpr uint32_t kPieces[4] = {0x3FB20000u, 0x3FB30000u, 0x3FB40000u, 0x3FB500
 constexpr uint32_t kCraters[4] = {0x3FC80000u, 0x3FC90000u, 0x3FCA0000u, 0x3FC50000u};   // + z, one frame, alpha +5
 constexpr uint32_t kRainLoop = 0x48590005u, kRainTop = 0x4859000Au, kRainBottom = 0x4859000Fu;   // shifted zoom, one frame each
 constexpr uint32_t kSteamOpen = 0x48580000u, kSteamCycle = 0x4858200Au, kSteamClose = 0x48584014u;   // 4 frames, alpha +0x1005
+constexpr uint32_t kDeathSpray = 0x3FB90000u;                            // + z, 10 frames (data), alpha +5
 constexpr uint32_t kVortexOpen = 0x48590000u, kVortexLoop = 0x4859200Au;    // shifted zoom, 11 frames, alpha +0x1005
 
 int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -41,7 +42,7 @@ int explFrames(int set, int size) { return set == 0 ? (size < 2 ? 9 : size == 2 
 
 void DisasterFx::clear() {
   fx_.clear(); incoming_.clear(); tornadoes_.clear(); puffs_.clear(); flames_.clear(); crowds_.clear(); vortices_.clear();
-  impacts_.clear(); launcher_ = Launcher();
+  impacts_.clear(); launcher_ = Launcher(); sprayed_.clear(); dusters_.clear();
 }
 
 int32_t DisasterFx::groundAt(double x, double z) const {
@@ -120,6 +121,15 @@ void DisasterFx::spawnSaucers(const DisasterCommand& c) {
   for (int i = 0; i < c.c; i++) { Task t; t.type = 3; t.x = 2 + rndf() * std::max(1, W_ - 4); t.z = 2 + rndf() * std::max(1, H_ - 4); give(t); }
   (void)first;
   for (Fx& s : sau) spawn(s);
+}
+
+void DisasterFx::dispatchCropDuster(int x, int z) {
+  if (dusters_.size() >= 3) dusters_.erase(dusters_.begin());   // a 4th dispatch reuses the oldest
+  dusters_.push_back({x, z});
+  for (int i = 0; i < 5; i++) {   // up to 5 sprays along the heading [INFERRED: heading east, 1.5 tiles apart, 0.6 s apart]
+    Fx f; f.kind = Kind::Spray; f.life = 1000; f.x = x + 0.5 + 1.5 * i; f.z = z + 0.5; f.delay = 600 * (i + 1); f.size = 0;
+    spawn(f);
+  }
 }
 
 void DisasterFx::spawnPiece() {
@@ -306,6 +316,7 @@ void DisasterFx::updateSaucer(Fx& f, int dt, bool& done) {
 
 void DisasterFx::updateSwarm(Fx& f, int dt, bool& done) {
   const double dts = dt / 1000.0, speed = 0.4 * kTilesPerSecPerWuMs;   // 0.4 world units/ms
+  if (f.fadeMs >= 0) { f.fadeLeft -= dt; if (f.fadeLeft <= 0) done = true; return; }   // sprayed swarm fading out (9 s)
   if (f.eating) {   // arrived on the last update: report "eat" once and move on
     f.eating = false;
     const Task& t = f.q[f.cur];
@@ -320,7 +331,11 @@ void DisasterFx::updateSwarm(Fx& f, int dt, bool& done) {
     f.x += dx / dh * step; f.z += dz / dh * step;
     const double want = dh > 6.0 ? 30.0 : 6.0;                    // cruise at terrain + 30, drop to terrain + 6 at the crop
     f.y += std::max(-step, std::min(step, want - f.y));
-  } else { f.x = t.x; f.z = t.z; f.y = 6.0; f.eating = true; }
+  } else {
+    f.x = t.x; f.z = t.z; f.y = 6.0; f.eating = true;
+    for (const auto& sp : sprayed_)   // arriving within 6 tiles of a spray point kills the swarm; it fades out and reports nothing
+      if (std::abs(int(std::floor(t.x)) - sp.first) <= 6 && std::abs(int(std::floor(t.z)) - sp.second) <= 6) { f.eating = false; f.fadeMs = f.fadeLeft = 9000; f.cur = f.q.size(); break; }
+  }
   // Flora that drops out of the swarm's 5 x 5 neighbourhood is damaged (0x20) whenever the swarm changes tile [STATIC].
   const int cx = int(std::floor(f.x)), cz = int(std::floor(f.z));
   if (f.ox == -1) { f.ox = cx; f.oz = cz; }
@@ -346,6 +361,10 @@ void DisasterFx::update(uint32_t dtMs) {
     switch (f.kind) {
       case Kind::Explosion: case Kind::Splash: case Kind::Crater:
         if (f.age >= f.life) done = true;
+        break;
+      case Kind::Spray:
+        if (f.size == 0) { f.size = 1; sprayed_.emplace_back(int(std::floor(f.x)), int(std::floor(f.z))); }   // the sprayed rectangle is x_s +- 3, z_s +- 3
+        if (f.age >= 8 * 125) done = true;
         break;
       case Kind::Saucer: updateSaucer(f, dt, done); break;
       case Kind::Swarm: updateSwarm(f, dt, done); break;
@@ -373,6 +392,7 @@ void DisasterFx::update(uint32_t dtMs) {
   fx_.erase(std::remove_if(fx_.begin(), fx_.end(), [](const Fx& f) { return f.life < 0; }), fx_.end());
   fx_.insert(fx_.end(), incoming_.begin(), incoming_.end());
   incoming_.clear();
+  { bool swarms = false; for (const Fx& f : fx_) swarms = swarms || f.kind == Kind::Swarm; if (!swarms && !sprayed_.empty()) { bool sp = false; for (const Fx& f : fx_) sp = sp || f.kind == Kind::Spray; if (!sp) { sprayed_.clear(); dusters_.clear(); } } }
 
   // Tornado funnels (spec 21 s12.5): straight line at speed tiles/min / 60, opening -> loop A/B cycles -> closing (the opening backwards).
   for (TornadoView& v : tornadoes_) {
@@ -547,6 +567,7 @@ void DisasterFx::emitFx(const Fx& f, std::vector<SceneSprite>& out) const {
       break;
     }
     case Kind::Crater: push(out, kCraters[f.variant] + uint32_t(z), 5, 1, 0, f.x, f.z, 0); break;
+    case Kind::Spray: push(out, kDeathSpray + uint32_t(z), 5, 0, f.age / 125, f.x, f.z, 0); break;
     case Kind::Plasma: push(out, kPlasmaBall + uint32_t(z), 0x80, 8, f.age / 100, f.x, f.z, f.y); break;
     case Kind::Piece: push(out, kPieces[f.variant] + uint32_t(z * 4 + r), 0x14, 6, f.age / 300, f.x, f.z, f.y); break;
     case Kind::Saucer: {

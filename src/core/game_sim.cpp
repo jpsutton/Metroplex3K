@@ -743,6 +743,7 @@ void Game::dispatchUnit(int kind, int tx, int tz) {
     City& c = city();
     if (kind == 0) c.police.dispatch(tx, tz);
     else if (kind == 1) c.fire.dispatch(tx, tz);
+    else if (kind == 2 && disasters_.active(DisasterType::Locusts)) fx_.dispatchCropDuster(std::min(world_.W - 1, tx + 1), tz);   // the plane goes to the dispatch icon at (x + 1, z)
     if (street_) street_->dispatchEmergency(kind == 0 ? EmergencyType::PoliceCar : kind == 1 ? EmergencyType::FirePumper : EmergencyType::Ambulance, tx, tz);
   }
   centreOn(tx, tz);

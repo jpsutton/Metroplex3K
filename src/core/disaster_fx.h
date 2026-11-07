@@ -66,11 +66,14 @@ class DisasterFx {
   // Riot crowds, for the owner to draw with the vehicle sprite of VATTRIB 0x54 (spec 21 s12.10): tile position, heading in 32 steps, age in ms.
   struct CrowdPose { double x = 0, z = 0; int heading32 = 0, ageMs = 0; };
   std::vector<CrowdPose> crowdPoses() const { std::vector<CrowdPose> v; for (const CrowdView& c : crowds_) v.push_back({c.x, c.z, c.heading32, c.ageMs}); return v; }
+  // Crop-duster dispatch to tile (x, z) (spec 21 s6.4 / 12.9): at most 3 active; the plane sprays up to 5 times along its heading. A swarm that arrives at a
+  // crop within 6 tiles (Chebyshev) of a spray point fades out over 9 s. The plane itself is not drawn (its speed and altitude are [OPEN]).
+  void dispatchCropDuster(int x, int z);
   // Position (tile) of some live effect, for tools that centre the view on the action; false when nothing is alive.
   bool focus(double& x, double& z) const;
 
  private:
-  enum class Kind { Explosion, Splash, Crater, Saucer, Plasma, Swarm, Piece };
+  enum class Kind { Explosion, Splash, Crater, Saucer, Plasma, Swarm, Piece, Spray };
   // Queued task of a saucer or swarm: type 0 fly to, 1 beam (hover, report), 2 crop circle, 3 abduction, 4 eat (swarm), 5 exit.
   struct Task { int type = 0; double x = 0, z = 0; int aux = 0; };
   struct Fx {
@@ -141,6 +144,9 @@ class DisasterFx {
   std::vector<CrowdView> crowds_;
   std::vector<VortexView> vortices_;
   Launcher launcher_;
+  std::vector<std::pair<int, int>> sprayed_;   // spray points of the current locust attack
+  struct Duster { int x = 0, z = 0; };
+  std::vector<Duster> dusters_;
   bool raining_ = false;
   mutable int transientGen_ = 0;
   std::vector<FxImpact> impacts_;

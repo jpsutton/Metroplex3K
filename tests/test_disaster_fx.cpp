@@ -57,6 +57,18 @@ void testLocusts() {
   CHECK(!fx.pendingImpacts() && fx.count() == 0);
 }
 
+void testCropDuster() {
+  DisasterFx fx; fx.seed(9); fx.setMapSize(64, 64);
+  DisasterCommand c; c.kind = DisasterCommand::LocustSwarm; c.a = 2;
+  for (int i = 0; i < 6; i++) c.pts.emplace_back(30 + i % 3, 30 + i / 3);
+  fx.onCommand(c);
+  fx.dispatchCropDuster(30, 30);   // sprays within 6 tiles of every crop before the swarms arrive from the map edge
+  std::vector<FxImpact> got;
+  run(fx, 120000, got);
+  CHECK(count(got, FxImpact::LocustEat) == 0);   // each swarm fades out on arrival
+  CHECK(!fx.pendingImpacts() && fx.count() == 0);
+}
+
 void testDebrisLauncher() {
   struct W : DisasterWorld { int width() const override { return 64; } int height() const override { return 64; } } w;
   DisasterManager m; m.seed(1);
@@ -124,6 +136,7 @@ void testManagerHold() {
 int main() {
   testUfo();
   testLocusts();
+  testCropDuster();
   testDebrisLauncher();
   testTornadoFunnel();
   testOneShots();
