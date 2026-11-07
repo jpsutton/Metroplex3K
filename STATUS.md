@@ -32,5 +32,7 @@ Labels: severity `S1-save-compat`, `S2-sim-fidelity`, `S3-presentation`, `S4-per
 state `needs-real-data` (cannot close without a real install), `spec-open` (spec says [OPEN], we use a default),
 `blocked-on-spec` (waiting for updated spec files), `spec-gap` (specified, not implemented), `approximation`
 (deliberate guess), `bug`, `licensing`, `infra`; plus `area:*` per subsystem.
-Umbrella for spec updates: issue "Use updated spec files to close [OPEN] items". When you resolve something, close
+Release: the 1.0 tracking issue is #106; milestones `1.0` (required before the release) and `post-1.0` (accepted for 1.x);
+label `release-blocker` marks the required items.
+Umbrella for spec updates: issue #105 (spec updates). When you resolve something, close
 its issue with the spec section or commit that answers it. Do not keep gap lists in this file or in code comments only.

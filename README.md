@@ -4,11 +4,12 @@ Metroplex3K is a C++17 engine that is compatible with *SimCity 3000 Unlimited* (
 It loads the original game data from **your own installation**, reads and writes the original city, terrain, scenario
 and BAT file formats, and re-implements the simulation, rendering and UI.
 
-> **Status: experimental.** The engine was first written from the specification in `spec/` with only synthetic
-> fixtures. It has since been run against a real GOG install: parsers, save round trips (47 of 60 shipped saves
-> byte-identical, the rest differ only in compression bytes), and budget, pollution, crime, water and power results are
-> checked against the shipped saves. Many gaps remain. See [STATUS.md](STATUS.md) and the
-> [GitHub issues](https://github.com/jpsutton/Metroplex3K/issues).
+> **Status: pre-1.0, feature complete apart from the gaps listed below.** The engine was first written from the
+> specification in `spec/` with only synthetic fixtures. It has since been run against a real GOG install: parsers,
+> save round trips (47 of 60 shipped saves byte-identical, the rest differ only in compression bytes), and budget,
+> pollution, crime, water and power results are checked against the shipped saves. The work left before 1.0 is
+> verification and packaging, tracked in [issue #106](https://github.com/jpsutton/Metroplex3K/issues/106). See
+> [Remaining gaps](#remaining-gaps) and [STATUS.md](STATUS.md).
 
 ## Clean-room status
 
@@ -158,6 +159,34 @@ Known gaps, guesses and verification tasks are tracked as [GitHub issues](https:
 - Original UI skin art and fonts are used when present, with the built-in toolkit and font as fallback.
 - Some growth layouts and details are `[OPEN]` in the spec; recommended defaults from `spec/29-open-issues.md` are used.
 - Android is not implemented (docs only).
+
+### Remaining gaps
+
+The [1.0 tracking issue (#106)](https://github.com/jpsutton/Metroplex3K/issues/106) lists everything. Milestone
+[`1.0`](https://github.com/jpsutton/Metroplex3K/milestone/1) holds what must be done or waived before the release;
+milestone [`post-1.0`](https://github.com/jpsutton/Metroplex3K/milestone/2) holds gaps accepted for 1.x.
+
+Before 1.0:
+
+| Area | Gap | Issue |
+|------|-----|-------|
+| Release | No packaged binaries, version number, changelog or user guide; CI builds only for the `build` branch and Windows is built without the app | [#90](https://github.com/jpsutton/Metroplex3K/issues/90) |
+| Scenarios | All 13 load and run, but none has been run to its ending and compared with the original | [#91](https://github.com/jpsutton/Metroplex3K/issues/91) |
+| Disasters | Effects are drawn and drive gameplay; timing and looks are not yet compared with the original | [#92](https://github.com/jpsutton/Metroplex3K/issues/92) |
+| Verification | `probe_verify` needs to become a documented release gate (reference cities, save round trips, screenshots) | [#93](https://github.com/jpsutton/Metroplex3K/issues/93) |
+| Audio | Not yet checked by ear; pan and attenuation are not tied to the view | [#94](https://github.com/jpsutton/Metroplex3K/issues/94) |
+| UI | Small pixel differences from the original in several windows; some layouts unverified | [#95](https://github.com/jpsutton/Metroplex3K/issues/95) |
+| Licensing | Confirm the `spec/` folder may be distributed under the GPL | [#96](https://github.com/jpsutton/Metroplex3K/issues/96) |
+
+After 1.0: scenario spec polish ([#97](https://github.com/jpsutton/Metroplex3K/issues/97)), BAT tool UI
+([#98](https://github.com/jpsutton/Metroplex3K/issues/98)), guessed details in growth
+([#99](https://github.com/jpsutton/Metroplex3K/issues/99)), services and pollution
+([#100](https://github.com/jpsutton/Metroplex3K/issues/100)), economy and population
+([#101](https://github.com/jpsutton/Metroplex3K/issues/101)), networks
+([#102](https://github.com/jpsutton/Metroplex3K/issues/102)) and advisors
+([#103](https://github.com/jpsutton/Metroplex3K/issues/103)), the Android port and DPI scaling
+([#104](https://github.com/jpsutton/Metroplex3K/issues/104)), and open spec items
+([#105](https://github.com/jpsutton/Metroplex3K/issues/105)).
 
 ## License
 
