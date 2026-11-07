@@ -1142,7 +1142,11 @@ void DisasterManager::launchUfo(DisasterWorld& w, const DisasterInputs& in, UfoI
   c.pts = bombs; c.pts2 = crops;
   if (in.cheatUfoSwarm || u.kind == 2 || bombs.size() < 3 || crops.size() < 3)
     for (int i = 0; i < n * 2; ++i)
-      c.pts3.emplace_back(int(rng_.rand(uint32_t(W))), int(rng_.rand(uint32_t(H))));
+    {   // the draw order is explicit (z first, then x): argument order is unspecified in C++ and differs between compilers
+      const int pz = int(rng_.rand(uint32_t(H)));
+      const int px = int(rng_.rand(uint32_t(W)));
+      c.pts3.emplace_back(px, pz);
+    }
 }
 
 void DisasterManager::ufoTick(DisasterWorld& w, DisasterOutput& out) {

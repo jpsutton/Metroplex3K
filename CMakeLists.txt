@@ -22,6 +22,11 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
+# Statically link the MSVC runtime in every target (set before any target is created) so the Windows package runs without the Visual C++ redistributable.
+if(MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # Platform-independent engine core: no SDL, no OS APIs beyond the C++ standard library.
 file(GLOB CORE_SRC CONFIGURE_DEPENDS src/core/*.cpp)
 add_library(m3k_core STATIC ${CORE_SRC})
@@ -68,11 +73,6 @@ if(M3K_BUILD_PROBES)
     target_include_directories(${name} PRIVATE tools/probes)
     target_link_libraries(${name} PRIVATE m3k_core)
   endforeach()
-endif()
-
-# Statically link the MSVC runtime so the Windows package runs without the Visual C++ redistributable.
-if(MSVC)
-  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
 # Game application (SDL2 desktop host). M3K_BUILD_APP=OFF builds core, tests and tools only (no SDL needed).

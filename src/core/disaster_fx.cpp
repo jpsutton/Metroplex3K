@@ -224,8 +224,18 @@ void DisasterFx::throwExplosionDebris(const Fx& e) {
   }
   for (int i = 0; i < cls / 2; i++) {
     const double ox = uni(10, 25) * wu * (rndi(2) ? 1 : -1), oz = uni(10, 25) * wu * (rndi(2) ? 1 : -1);
-    if (variant == 8) spawnChunk(e.x + ox, e.z + oz, 3.0, rndi(4), uni(0.4, 1.2), uni(-0.16, 0.16), uni(0.2, 0.4));
-    else spawnChunk(e.x + ox, e.z + oz, 3.0, rndi(8), uni(-0.4, 0.4), uni(-0.4, 0.4), uni(0.4, 0.6));   // 768 world units above
+    // C++ leaves the order of function arguments unspecified, so the random draws are sequenced explicitly (vy, vz, vx, then the
+    // piece variant). That is the order GCC and MSVC evaluate the arguments in; Apple Clang evaluates them the other way round
+    // and used to throw different pieces (the same seed gave different debris on macOS).
+    if (variant == 8) {
+      const double vy = uni(0.2, 0.4), vz = uni(-0.16, 0.16), vx = uni(0.4, 1.2);
+      const int piece = rndi(4);
+      spawnChunk(e.x + ox, e.z + oz, 3.0, piece, vx, vz, vy);
+    } else {
+      const double vy = uni(0.4, 0.6), vz = uni(-0.4, 0.4), vx = uni(-0.4, 0.4);
+      const int piece = rndi(8);
+      spawnChunk(e.x + ox, e.z + oz, 3.0, piece, vx, vz, vy);   // 768 world units above
+    }
   }
 }
 
@@ -392,7 +402,11 @@ void DisasterFx::updateSaucer(Fx& f, int dt, bool& done) {
     if (f.bombMs <= 0) {
       f.bombMs = rndRange(10000, 20000);
       Fx b; b.kind = Kind::Plasma; b.life = 1 << 30; b.x = f.x; b.z = f.z; b.y = f.y;
-      b.tx = f.x + double(rndRange(3, 11)) * (rndi(2) ? 1 : -1); b.tz = f.z + double(rndRange(3, 11)) * (rndi(2) ? 1 : -1);
+      {   // the draws are sequenced explicitly: the operand order of `*` is unspecified in C++
+        const double dx = double(rndRange(3, 11)); const double sx = rndi(2) ? 1 : -1;
+        const double dz = double(rndRange(3, 11)); const double sz = rndi(2) ? 1 : -1;
+        b.tx = f.x + dx * sx; b.tz = f.z + dz * sz;
+      }
       const double flight = 3.0 + rndf() * 3.0;   // about 3-6 s
       b.vx = (b.tx - b.x) / flight; b.vz = (b.tz - b.z) / flight; b.vy = -std::max(1.0, b.y) / flight;
       spawn(b);
