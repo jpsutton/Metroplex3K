@@ -72,6 +72,10 @@ class DisasterFx {
   // True while a flying object still has a report to deliver (the disaster instance stays alive until then).
   bool pendingImpacts() const;
   size_t count() const { return fx_.size(); }
+  // Sounds (spec 06 s10.3, 21 s12): one-shot item IDs produced during update(), and which loops should be running now.
+  std::vector<int> takeSounds() { std::vector<int> r; r.swap(sounds_); return r; }
+  struct Loops { bool ufo = false, locust = false, locustEat = false, toxic = false, rain = false, vortex = false, junk = false; };
+  Loops loops() const;
   // Giant locusts that cross the screen once per attack (spec 21 s12.9): screen-space overlay, drawn by the owner (image 3FB1 + variant, alpha +5).
   void setScreen(int w, int h) { screenW_ = w; screenH_ = h; }
   struct GiantPose { double sx = 0, sy = 0; int variant = 0; };
@@ -173,6 +177,7 @@ class DisasterFx {
   bool raining_ = false;
   mutable int transientGen_ = 0;
   std::vector<FxImpact> impacts_;
+  std::vector<int> sounds_;
   int locustEdge_ = 0;
   int64_t flameClockMs_ = 0;
   mutable int zoom_ = 2, rot_ = 0;

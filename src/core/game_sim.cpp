@@ -702,6 +702,12 @@ void Game::disasterFxFrame(uint32_t dtMs) {
     // Giant locusts: screen-space fly-by, placed in the world so that each appears at its screen point (height 0 projects exactly there).
     fx_.setScreen(W_, H_);
     if (fx_.giantSoundDue()) sound(0xFE);
+    for (int id : fx_.takeSounds()) sound(id);
+    {  // disaster loops (spec 06 s10.3): UFO 74, toxic cloud 175 / rain 231, locusts 233 / eating 235, whirlpool 229 (level 75), space junk 237 (level 75)
+      const DisasterFx::Loops l = fx_.loops();
+      soundLoop(74, l.ufo, 100); soundLoop(175, l.toxic, 100); soundLoop(231, l.rain, 100);
+      soundLoop(233, l.locust, 100); soundLoop(235, l.locustEat, 100); soundLoop(229, l.vortex, 75); soundLoop(237, l.junk, 75);
+    }
     for (const auto& gp : fx_.giantPoses()) {
       float u = 0, v = 0;
       renderer_.screenToView(cam_, int(gp.sx), int(gp.sy), u, v);

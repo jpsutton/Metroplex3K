@@ -46,7 +46,7 @@ int explFrames(int set, int size) { return set == 0 ? (size < 2 ? 9 : size == 2 
 
 void DisasterFx::clear() {
   fx_.clear(); incoming_.clear(); tornadoes_.clear(); puffs_.clear(); flames_.clear(); crowds_.clear(); vortices_.clear();
-  impacts_.clear(); giants_.clear(); launcher_ = Launcher(); sprayed_.clear(); dusters_.clear();
+  impacts_.clear(); sounds_.clear(); giants_.clear(); launcher_ = Launcher(); sprayed_.clear(); dusters_.clear();
 }
 
 int32_t DisasterFx::groundAt(double x, double z) const {
@@ -55,6 +55,20 @@ int32_t DisasterFx::groundAt(double x, double z) const {
 }
 bool DisasterFx::isWaterAt(double x, double z) const {
   return water_ && W_ > 0 && H_ > 0 && water_(clampi(int(std::floor(x)), 0, W_ - 1), clampi(int(std::floor(z)), 0, H_ - 1));
+}
+
+DisasterFx::Loops DisasterFx::loops() const {
+  Loops l;
+  for (const Fx& f : fx_) {
+    if (f.kind == Kind::Saucer) l.ufo = true;
+    if (f.kind == Kind::Swarm) { l.locust = true; l.locustEat = l.locustEat || f.eating; }
+    if (f.kind == Kind::Piece) l.junk = true;
+  }
+  l.junk = l.junk || launcher_.on;
+  l.toxic = !puffs_.empty();
+  for (const PuffView& p : puffs_) l.rain = l.rain || p.rain.active;
+  l.vortex = !vortices_.empty();
+  return l;
 }
 
 bool DisasterFx::pendingImpacts() const {
@@ -318,6 +332,7 @@ void DisasterFx::updateSaucer(Fx& f, int dt, bool& done) {
       const double flight = 3.0 + rndf() * 3.0;   // about 3-6 s
       b.vx = (b.tx - b.x) / flight; b.vz = (b.tz - b.z) / flight; b.vy = -std::max(1.0, b.y) / flight;
       spawn(b);
+      sounds_.push_back(0x50);   // bomb launched
     }
   }
   if (f.hovering) {
@@ -340,9 +355,9 @@ void DisasterFx::updateSaucer(Fx& f, int dt, bool& done) {
     return;
   }
   Task& t = f.q[f.cur];
-  if (t.type == 3) { report(FxImpact::UfoAbduction, int(t.x), int(t.z)); f.cur++; return; }
+  if (t.type == 3) { report(FxImpact::UfoAbduction, int(t.x), int(t.z)); sounds_.push_back(0x4B); f.cur++; return; }
   if (t.type == 5) {
-    if (t.aux) { spawnExplosion(f.x, f.z, 1, 3); done = true; }   // explodes on exit: plasma explosion (variant 5), removed at once
+    if (t.aux) { spawnExplosion(f.x, f.z, 1, 3); sounds_.push_back(0x4F); done = true; }   // explodes on exit: plasma explosion (variant 5), removed at once
     else { f.fadeMs = f.fadeLeft = 3000; f.cur++; }
     return;
   }
@@ -357,7 +372,8 @@ void DisasterFx::updateSaucer(Fx& f, int dt, bool& done) {
   }
   f.x = t.x; f.z = t.z; f.y = ty;
   if (t.type == 0) { f.cur++; return; }
-  f.hovering = true; f.hover = 5001; f.beam = (t.type == 1);   // 5001 ms over the lot centre, with the beam for a destroy target
+  f.hovering = true; f.hover = 5001; f.beam = (t.type == 1);
+  sounds_.push_back(t.type == 1 ? 0x4D : 0x4E);   // arrival at a beam / crop-circle target   // 5001 ms over the lot centre, with the beam for a destroy target
 }
 
 void DisasterFx::updateSwarm(Fx& f, int dt, bool& done) {
@@ -380,7 +396,7 @@ void DisasterFx::updateSwarm(Fx& f, int dt, bool& done) {
   } else {
     f.x = t.x; f.z = t.z; f.y = 6.0; f.eating = true;
     for (const auto& sp : sprayed_)   // arriving within 6 tiles of a spray point kills the swarm; it fades out and reports nothing
-      if (std::abs(int(std::floor(t.x)) - sp.first) <= 6 && std::abs(int(std::floor(t.z)) - sp.second) <= 6) { f.eating = false; f.fadeMs = f.fadeLeft = 9000; f.cur = f.q.size(); break; }
+      if (std::abs(int(std::floor(t.x)) - sp.first) <= 6 && std::abs(int(std::floor(t.z)) - sp.second) <= 6) { f.eating = false; f.fadeMs = f.fadeLeft = 9000; f.cur = f.q.size(); sounds_.push_back(0xF2); break; }
   }
   // Flora that drops out of the swarm's 5 x 5 neighbourhood is damaged (0x20) whenever the swarm changes tile [STATIC].
   const int cx = int(std::floor(f.x)), cz = int(std::floor(f.z));
@@ -428,7 +444,7 @@ void DisasterFx::update(uint32_t dtMs) {
           const int tx = int(std::floor(f.kind == Kind::Plasma ? f.tx : f.x)), tz = int(std::floor(f.kind == Kind::Plasma ? f.tz : f.z));
           const bool water = isWaterAt(tx + 0.5, tz + 0.5), inMap = tx >= 0 && tz >= 0 && tx < W_ && tz < H_;
           if (f.kind == Kind::Plasma) {
-            if (inMap) { if (water) spawnSplash(tx + 0.5, tz + 0.5, 0); else spawnExplosion(tx + 0.5, tz + 0.5, 1, 2); report(FxImpact::UfoBomb, tx, tz); }
+            if (inMap) { if (water) spawnSplash(tx + 0.5, tz + 0.5, 0); else { spawnExplosion(tx + 0.5, tz + 0.5, 1, 2); sounds_.push_back(200); } report(FxImpact::UfoBomb, tx, tz); }
           } else if (inMap) {
             if (water) spawnSplash(tx + 0.5, tz + 0.5, f.variant == 0 ? 2 : 0);   // the falling-UFO piece makes the 10-frame splash
             else spawnExplosion(tx + 0.5, tz + 0.5, 3, 0);                         // set 3 = the space-junk impact explosion (variant 8)
@@ -572,7 +588,7 @@ void DisasterFx::update(uint32_t dtMs) {
       if (boats_.move) boats_.move(c.id, bx, bz);
       if (gone) {
         if (boats_.remove) boats_.remove(c.id);
-        spawnSplash(bx, bz, 0);
+        spawnSplash(bx, bz, 0); sounds_.push_back(251);
         FxImpact im; im.kind = FxImpact::VortexSucked; im.x = int(std::floor(bx)); im.z = int(std::floor(bz)); impacts_.push_back(im);
         v.held.erase(v.held.begin() + long(i));
       } else ++i;
