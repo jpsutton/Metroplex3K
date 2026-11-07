@@ -35,6 +35,7 @@ struct FxImpact {
     TornadoLeft,   // funnel `id` left the map
     VortexAt,      // whirlpool vortex moved to tile (x, z)
     VortexSucked,  // the vortex pulled the boat it had captured into its centre at (x, z)
+    PuffGone,      // a toxic puff finished fading out
     VortexScan,    // bridge scan at (x, z) (the vortex centre), every 4.1 s from 2 s
   } kind = UfoBomb;
   int x = 0, z = 0;

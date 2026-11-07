@@ -573,6 +573,10 @@ void DisasterManager::tornadoAt(DisasterWorld& w, uint32_t uid, float px, float 
   }
 }
 
+void DisasterManager::cloudPuffGone() {
+  for (CloudInst& c : clouds_) if (c.phase == 5 && !c.puffs.empty()) { c.puffs.pop_back(); return; }
+}
+
 void DisasterManager::tornadoLeftMap(uint32_t uid) {
   for (TornadoInst& t : tornadoes_) if (t.uid == uid) t.leftMap = true;
 }
@@ -1003,7 +1007,7 @@ void DisasterManager::cloudTick(DisasterWorld& w, DisasterOutput& out) {
     } else {
       c.counter++;
       // The puffs never drift: the cloud stays where it formed (spec 21 s6.2 / 12.7 [STATIC]).
-      if (!c.raining && c.counter > c.rainStart) {
+      if (c.phase == 4 && !c.raining && c.counter > c.rainStart) {
         c.raining = true;
         int rmax = std::max(tune.toxMaxRain, tune.toxMinRain + 1);
         c.rainLeft = rng_.rangeInt(tune.toxMinRain, rmax);
@@ -1034,10 +1038,14 @@ void DisasterManager::cloudTick(DisasterWorld& w, DisasterOutput& out) {
           c.rainStart = c.counter + tune.toxMinGap + rng_.rangeInt(tune.toxMinRainStart, rmax);
         }
       }
-      if (c.puffs.empty() || c.counter > c.lifetime) {
-        end = true;
-        if (c.raining) out.cmd(DisasterCommand::ToxicRain).a = 0;
+      // At the end of its life the cloud dissipates (phase 5): the puffs fade out and report "gone" one by one; the instance ends when none is left
+      // (spec 21 s6.2 step 5, 12.7). Without the effect layer (headless) it ends at once.
+      if (c.phase == 4 && c.counter > c.lifetime) {
+        c.phase = 5;
+        if (c.raining) { c.raining = false; out.cmd(DisasterCommand::ToxicRain).a = 0; }
       }
+      if (c.phase == 5 && (!tornadoDriven_ || c.puffs.empty())) end = true;
+      else if (c.phase == 4 && c.puffs.empty()) end = true;
     }
     if (end) out.event(DisasterEvent::Ended, DisasterType::ToxicCloud, c.x, c.z);
     else keep.push_back(c);

@@ -358,6 +358,8 @@ class DisasterManager {
   void setTornadoDriven(bool b) { tornadoDriven_ = b; }
   void tornadoAt(DisasterWorld& w, uint32_t uid, float px, float pz, DisasterOutput& out);
   void tornadoLeftMap(uint32_t uid);
+  // A toxic puff finished fading out (spec 21 s12.7 "gone"): the dissipating cloud counts its puffs down and ends with the last one.
+  void cloudPuffGone();
   void debrisImpact(DisasterWorld& w, int x, int z, DisasterOutput& out);
   void rioterAt(DisasterWorld& w, int x, int z, DisasterOutput& out);
   bool riotRelocate(DisasterWorld& w, DisasterOutput& out);

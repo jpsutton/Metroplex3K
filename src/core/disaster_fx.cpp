@@ -335,7 +335,7 @@ void DisasterFx::syncState(const DisasterManager& m) {
   {
     std::vector<std::pair<double, double>> cur;
     raining_ = false;
-    for (const CloudInst& c : m.clouds()) { raining_ = raining_ || c.raining; for (const auto& p : c.puffs) cur.push_back(p); }
+    for (const CloudInst& c : m.clouds()) { raining_ = raining_ || c.raining; if (c.phase == 5) continue; for (const auto& p : c.puffs) cur.push_back(p); }   // a dissipating cloud's puffs fade out
     size_t live = 0;
     for (const PuffView& p : puffs_) if (p.closing < 0) live++;
     size_t seen = 0;
@@ -601,6 +601,7 @@ void DisasterFx::update(uint32_t dtMs) {
       if (r.stopped && r.S >= r.E) r = RainState();
     } else if (r.steam == 3) { r.steamMs += dt; if (r.steamMs >= 800) r.steam = 0; }
   }
+  for (const PuffView& p : puffs_) if (p.closing * 0.00015 >= 1.0) report(FxImpact::PuffGone, int(p.x), int(p.z));
   puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(), [](const PuffView& p) { return p.closing * 0.00015 >= 1.0; }), puffs_.end());
   for (Giant& g : giants_) {
     if (g.delay > 0) { g.delay -= dt; continue; }

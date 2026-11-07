@@ -150,6 +150,25 @@ void testTornadoFunnel() {
   for (auto& i : got) if (i.kind == FxImpact::TornadoTile) CHECK(i.id == uid);
 }
 
+void testToxicDissipation() {
+  struct W : DisasterWorld { int width() const override { return 64; } int height() const override { return 64; } } w;
+  DisasterManager m; m.seed(5); m.setTornadoDriven(true);   // the effect layer reports the puffs
+  m.tune.toxMinClouds = 2; m.tune.toxMaxClouds = 2; m.tune.toxPrem1 = m.tune.toxPrem2 = m.tune.toxPrem3 = 0; m.tune.toxVisible = 0;
+  m.tune.toxMinDuration = 5; m.tune.toxMaxDuration = 6;
+  DisasterInputs in; DisasterOutput out;
+  CHECK(m.startToxicCloud(w, 30, 30, false, out, 0));
+  DisasterFx fx; fx.seed(3); fx.setMapSize(64, 64);
+  std::vector<FxImpact> got;
+  bool endedFast = false;
+  for (int t = 0; t < 40000; t += 50) {
+    out.clear(); m.minuteTick(w, in, out);
+    fx.syncState(m); fx.update(50);
+    for (const FxImpact& i : fx.takeImpacts()) if (i.kind == FxImpact::PuffGone) m.cloudPuffGone();
+    if (!m.active(DisasterType::ToxicCloud)) { endedFast = t < 40000; break; }
+  }
+  CHECK(endedFast && !m.active(DisasterType::ToxicCloud));   // it ended only after the puffs had faded out (6.7 s), not at the end of its life
+}
+
 void testOneShots() {
   DisasterFx fx; fx.setMapSize(32, 32);
   DisasterCommand e; e.kind = DisasterCommand::Explosion; e.x = 3; e.z = 4; e.b = 0; e.c = 3;
@@ -189,6 +208,7 @@ int main() {
   testCropDuster();
   testDebrisLauncher();
   testTornadoFunnel();
+  testToxicDissipation();
   testOneShots();
   testManagerHold();
   TEST_MAIN_END();

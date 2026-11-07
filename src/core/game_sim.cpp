@@ -704,6 +704,7 @@ void Game::disasterFxFrame(uint32_t dtMs) {
           case FxImpact::TornadoTile: disasters_.tornadoAt(dw, im.id, im.fx, im.fz, out); break;
           case FxImpact::TornadoLeft: disasters_.tornadoLeftMap(im.id); break;
           case FxImpact::VortexAt: disasters_.vortexPosition(dw, im.x, im.z, out); break;
+          case FxImpact::PuffGone: disasters_.cloudPuffGone(); break;
           case FxImpact::VortexScan: {   // first water-standing structure within +-1200 world units (4.7 tiles): a bridge collapses (spec 21 s12.6)
             City& c = city();
             auto onWater = [&](int x, int z) { return world_.inTiles(x, z) && world_.altAt(x, z) < world_.waterAt(x, z) && (c.isRoadTile(x, z) || c.isPowerLine(x, z)); };
