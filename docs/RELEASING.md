@@ -14,7 +14,7 @@
 
 1. `tools/ci/static-checks.sh`: SPDX headers, the original game's name only where allowed, no internals of the original
    program, no game assets or binaries tracked, no conflict markers, no large files, a changelog section for the version.
-2. Build the core library and unit tests unoptimised (no SDL, tools or app) and run `ctest`.
+2. Build the core library and unit tests at -O1 (no SDL, tools or app) and run `ctest`.
 
 Run the same thing locally: `tools/ci/static-checks.sh`, then
 `cmake -S . -B build -G Ninja -DM3K_BUILD_APP=OFF -DM3K_BUILD_TOOLS=OFF -DM3K_BUILD_PROBES=OFF && cmake --build build && ctest --test-dir build -j`.

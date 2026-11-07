@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: staging-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -37,11 +37,11 @@ jobs:
           max-size: 500M
           save: ${{ github.event_name != 'pull_request' }}
 
-      # Core library and unit tests only, unoptimised: no SDL, tools, probes or app.
+      # Core library and unit tests only, lightly optimised (-O1: tests run about 4x faster than at -O0): no SDL, tools, probes or app.
       - name: Configure
         run: >
           cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS_DEBUG=-O0
+          -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS_DEBUG=-O1
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DM3K_BUILD_APP=OFF -DM3K_BUILD_TOOLS=OFF -DM3K_BUILD_PROBES=OFF
 
