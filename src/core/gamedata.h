@@ -25,6 +25,13 @@ constexpr uint32_t T_CSATTRIB_ANIM = 0x00006301;
 constexpr uint32_t T_UI_IMAGE = 0x62B9DA24;
 constexpr uint32_t T_STRING = 0x2026960B;
 
+// Frame of a multi-frame strip image (effect and disaster archives, spec 04 section 2.3: frame width = L + R, frames side by side).
+// sprite(cat, id) and spritePlane(cat, id) with a category from fxFrameCat() return the cropped frame of the group-0 image `id`
+// (colour, or its opacity plane, which has the same strip geometry), so the renderer draws single frames without strip support.
+constexpr uint32_t kFxFrameCatTop = 0xFD000000u;
+inline uint32_t fxFrameCat(int frameWidth, int frame) { return kFxFrameCatTop | (uint32_t(frameWidth) & 0xFFFu) << 12 | (uint32_t(frame) & 0xFFFu); }
+inline bool isFxFrameCat(uint32_t cat) { return (cat & 0xFF000000u) == kFxFrameCatTop; }
+
 // Parsed TKB1 occupant attribute record.
 struct OccAttr {
   bool valid = false;

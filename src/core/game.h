@@ -24,6 +24,7 @@
 #include "core/cheats.h"
 #include "core/city.h"
 #include "core/disasters.h"
+#include "core/disaster_fx.h"
 #include "core/flora.h"
 #include "core/cursor.h"
 #include "core/font.h"
@@ -143,6 +144,7 @@ class Game {
   AdvisorManager& advisors() { return advisors_; }
   PetitionerManager& petitioners() { return petitioners_; }
   DisasterManager& disasters() { return disasters_; }
+  const DisasterFx& disasterFx() const { return fx_; }
   bool loadScenarioFile(const fs::path& p);
   bool scenarioActive() const;
   void gotoScreen(Screen s) { scr_ = s; }
@@ -310,6 +312,7 @@ class Game {
   void setupStreetSim();
   void streetSounds(const std::vector<SoundEvent>& events);   // vehicle / train / boat sounds follow their automata (game_street.cpp)
   void streetSimFrame(uint32_t dtMs);
+  void disasterFxFrame(uint32_t dtMs);   // disaster effect sprites: advance, deliver impacts, append to the scene
   void postTicker(uint32_t table, uint32_t id, bool hasLoc = false, int x = 0, int z = 0);
   void centreOn(int x, int z);
   // tool preview / quote
@@ -585,6 +588,7 @@ class Game {
   GameRng rng_{12345};
   GameRng newsRng_{4242};   // the building subsystem's own generator for building-news variants (spec 22 s4.7.1)
   DisasterManager disasters_;
+  DisasterFx fx_;   // disaster visuals (flying objects report their impacts back to disasters_)
   CheatRegistry cheats_;
   std::string cheatBuf_;
   bool managersReady_ = false;

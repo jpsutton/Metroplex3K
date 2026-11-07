@@ -127,6 +127,7 @@ std::vector<std::pair<double, double>> Game::StreetHost::seaRouteFrom(int, int p
 }
 
 void Game::setupStreetSim() {
+  fx_.clear();   // a new city shows no disaster effects of the previous one
   street_.reset();
   streetHost_.reset();
   streetSources_.clear();

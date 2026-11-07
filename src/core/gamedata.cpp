@@ -264,6 +264,20 @@ const SpriteImage* GameData::sprite(uint32_t cat, uint32_t id) {
   auto it = spriteCache_.find(k);
   if (it != spriteCache_.end()) return it->second->ok ? it->second.get() : nullptr;
   auto s = std::make_unique<SpriteImage>();
+  if (isFxFrameCat(cat)) {   // one frame of a strip image
+    const int fw = int((cat >> 12) & 0xFFFu), frame = int(cat & 0xFFFu);
+    const SpriteImage* base = fw > 0 ? sprite(0, id) : nullptr;
+    if (base && frame * fw + fw <= base->img.w) {
+      s->img.w = fw; s->img.h = base->img.h;
+      s->img.px.resize(size_t(fw) * size_t(base->img.h));
+      for (int y = 0; y < base->img.h; y++)
+        std::copy_n(&base->img.px[size_t(y) * base->img.w + size_t(frame) * fw], fw, &s->img.px[size_t(y) * fw]);
+      s->L = base->L; s->T = base->T; s->R = base->R; s->B = base->B; s->hasSpan = base->hasSpan; s->ok = true;
+    }
+    auto* raw = s.get();
+    spriteCache_[k] = std::move(s);
+    return raw->ok ? raw : nullptr;
+  }
   ResourceRef img = db_.find({T_SPRITE_IMAGE, cat, id});
   if (img) {
     try {
@@ -292,6 +306,20 @@ const Plane* GameData::spritePlane(uint32_t cat, uint32_t id) {
   auto it = planeCache_.find(k);
   if (it != planeCache_.end()) return it->second.get();
   std::unique_ptr<Plane> pl;
+  if (isFxFrameCat(cat)) {
+    const int fw = int((cat >> 12) & 0xFFFu), frame = int(cat & 0xFFFu);
+    const Plane* base = fw > 0 ? spritePlane(0, id) : nullptr;
+    if (base && frame * fw + fw <= base->w) {
+      pl = std::make_unique<Plane>();
+      pl->w = fw; pl->h = base->h;
+      pl->v.resize(size_t(fw) * size_t(base->h));
+      for (int y = 0; y < base->h; y++)
+        std::copy_n(&base->v[size_t(y) * base->w + size_t(frame) * fw], fw, &pl->v[size_t(y) * fw]);
+    }
+    auto* raw = pl.get();
+    planeCache_[k] = std::move(pl);
+    return raw;
+  }
   ResourceRef img = db_.find({T_SPRITE_IMAGE, cat, id});
   if (img) {
     try {

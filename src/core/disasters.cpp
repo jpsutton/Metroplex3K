@@ -1080,7 +1080,7 @@ void DisasterManager::ufoTick(DisasterWorld& w, DisasterOutput& out) {
     } else if (u.phase == 3) {
       if (u.counter >= u.T[3]) { u.phase = 4; launchUfo(w, lastIn_, u, out); }
     }
-    if (u.phase == 4 && u.counter >= u.T[4]) {
+    if (u.phase == 4 && u.counter >= u.T[4] && !automataBusy_) {
       u.phase = 5;
       DisasterCommand& c = out.cmd(DisasterCommand::UfoLeave);
       int saucers = 1;
@@ -1186,7 +1186,7 @@ void DisasterManager::locustTick(DisasterWorld& w, DisasterOutput& out) {
       DisasterCommand& c = out.cmd(DisasterCommand::LocustSwarm);
       c.a = swarms; c.pts = crops;
       l.counter = 0;
-    } else if (l.phase == 3 && l.counter >= tune.locDuration) end = true;
+    } else if (l.phase == 3 && l.counter >= tune.locDuration && !automataBusy_) end = true;
     if (end) {
       addHistory(locustHist_, today_, uint32_t(l.eaten), l.eaten, l.cost);
       out.event(DisasterEvent::Ended, DisasterType::Locusts);
@@ -1340,7 +1340,7 @@ void DisasterManager::junkTick(DisasterWorld&, DisasterOutput& out) {
         c.a = j.mag <= 40 ? 2000 : j.mag <= 60 ? 5000 : 10000; c.b = tune.junkDuration;
       }
     }
-    if (j.phase >= 4 && j.counter >= j.T[4] + 10) end = true;
+    if (j.phase >= 4 && j.counter >= j.T[4] + 10 && !automataBusy_) end = true;
     if (end) { addHistory(junkHist_, today_, uint32_t(j.mag), j.hits, 0); out.event(DisasterEvent::Ended, DisasterType::SpaceJunk); }
     else keep.push_back(j);
   }

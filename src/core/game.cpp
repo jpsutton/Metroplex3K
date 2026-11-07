@@ -613,6 +613,7 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
       if (simDayThisFrame_) bumpCityVisual();
       const auto pt1 = PhaseClock::now();
       streetSimFrame(dtMs);
+      disasterFxFrame(dtMs);
       phases_.simMs = phaseMs(pt0, pt1);
       phases_.streetMs = phaseMs(pt1, PhaseClock::now());
       updateAmbience(dtMs);

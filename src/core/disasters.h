@@ -326,6 +326,11 @@ class DisasterManager {
   bool scriptUfo(DisasterWorld& w, const DisasterInputs& in, int a0, DisasterOutput& out);
   bool scriptToxicCloud(DisasterWorld& w, int a0, int a1, int a2, DisasterOutput& out);
   bool scriptWhirlpool(DisasterWorld& w, const DisasterInputs& in, int a0, int a1, DisasterOutput& out);
+  // While flying automata (saucers with bombs, locust swarms with fields, falling debris) still have impacts to report, the UFO,
+  // locust and space-junk instances stay alive instead of ending on their timers [INFERRED: the original's automata keep the event
+  // running until they finish; their reports go to the active instance]. The owner updates this every frame.
+  void setAutomataBusy(bool b) { automataBusy_ = b; }
+  bool automataBusy() const { return automataBusy_; }
   void setDisastersEnabled(bool b) { enabled_ = b; }
   bool disastersEnabled() const { return enabled_; }
 
@@ -394,6 +399,7 @@ class DisasterManager {
   GameRng rng_;
   bool enabled_ = true;
   bool wasActive_ = false;
+  bool automataBusy_ = false;
   // fire
   std::vector<BurnRecord> burning_;
   int fireCounter_ = 0, fireInterval_ = 0;

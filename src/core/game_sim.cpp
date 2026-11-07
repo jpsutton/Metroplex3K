@@ -562,8 +562,12 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
   // The sprite automata that would carry out saucer bombs, crop circles, locust bites and falling debris are not
   // drawn yet; their gameplay effect is applied here at once, as if each had just landed. Results go through the
   // same command path (follow-up output is applied after this batch).
+  // With the game data present the effect layer (disaster_fx) draws them and reports each impact when the flying object lands
+  // (disasterFxFrame); without data (tests, no sprites) the gameplay effect is applied here at once.
+  const bool fxOn = haveData_;
   DisasterOutput follow;
-  {
+  if (fxOn) for (const auto& cmd : out.commands) fx_.onCommand(cmd);
+  if (!fxOn) {
     CityDisasterWorld dw(world_, c);
     for (const auto& cmd : out.commands) {
       switch (cmd.kind) {
@@ -653,7 +657,40 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
     if (ev.kind == DisasterEvent::AllOver) { disasterX_ = disasterZ_ = -1; }
   }
   out.clear();
+  disasters_.setAutomataBusy(fx_.pendingImpacts());
   if (!follow.commands.empty() || !follow.events.empty()) applyDisasterOutput(follow);
+}
+
+// Disaster effect sprites (spec 21 s12, 26 s5.9): advance in real time, apply the impacts of flying objects that landed (bomb, locust bite,
+// debris, crop circle) through the manager, and append the sprites to the scene after the street automata.
+void Game::disasterFxFrame(uint32_t dtMs) {
+  if (!haveData_ || !world_.W) return;
+  fx_.setData(&data_);
+  fx_.setMapSize(world_.W, world_.H);
+  const World* vw = &viewWorld();
+  fx_.setGround([vw](int x, int z) { return int32_t(std::max<int>(vw->altAt(x, z), vw->waterAt(x, z)) * 256); });
+  fx_.setWater([vw](int x, int z) { return vw->altAt(x, z) < vw->waterAt(x, z); });
+  if (simReady_ && managersReady_) fx_.syncState(disasters_);
+  fx_.update(dtMs);
+  std::vector<FxImpact> impacts = fx_.takeImpacts();
+  if (!impacts.empty() && simReady_) {
+    syncSim();
+    DisasterOutput out;
+    {
+      CityDisasterWorld dw(world_, city());
+      for (const FxImpact& im : impacts) {
+        switch (im.kind) {
+          case FxImpact::UfoBomb: disasters_.ufoBombHit(dw, im.x, im.z, out); break;
+          case FxImpact::LocustBite: disasters_.locustEaten(dw, im.x, im.z, out); break;
+          case FxImpact::Debris: disasters_.debrisImpact(dw, im.x, im.z, out); break;
+          case FxImpact::CropCircle: disasters_.ufoCropCircle(dw, im.x, im.z, out); break;
+        }
+      }
+    }
+    applyDisasterOutput(out);
+  }
+  disasters_.setAutomataBusy(fx_.pendingImpacts());
+  if (!(prefsState_.traffic == 3 && prefsState_.sims == 2)) fx_.emit(cam_.zoom, cam_.rot, scene_.sprites);
 }
 
 void Game::startDisaster(DisasterType t) {
