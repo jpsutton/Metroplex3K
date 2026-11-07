@@ -95,6 +95,21 @@ With age *a* in months (1.2): [STATIC]
 
 The plant query window shows age and lifetime in whole years (months ÷ 12, truncated). [STATIC]
 
+**Wind plants** (agent type 12118) do not use *C* directly. Their output is a terrain-site
+factor applied before the age curve [STATIC]:
+
+* *h*₀ = terrain height at the plant tile; *n* = *h*(x+2, z) + *h*(x, z+2) + *h*(x−1, z) +
+  *h*(x, z−1), where a neighbour off the map (x+2 > W−2 side, z+2 > H−2 side, x = 0, z = 0)
+  counts as *h*₀.
+* *f* = clamp((*h*₀ − *n*/4) / 2.5, −1, 1) (single-precision float).
+* *base* = trunc(0.4 × *C*); *pre* = trunc(*base* + (*C* − *base*) × (*f* + 1) / 2).
+* *O* = the age curve above applied to *pre* instead of *C*.
+
+So a wind plant gives 40 %–100 % of *C* (140 of 200 on flat ground) and has no monthly random
+factor. The height is the terrain vertex height at the plant tile's (x, z) corner, raw byte
+[DATA: Berlin's eight turbines, in two separate components with their own ratios (§2.7), give the
+saved wind column 823 exactly with this height]. Solar and all other types use *C*.
+
 ### 2.5 Overwork and explosion
 
 Each month the power layer assigns the plant a load *L* (2.6). When *L* is assigned: if *L* > *O* then
@@ -206,6 +221,27 @@ Given a seed tile: [STATIC]
 Consequences: when demand exceeds supply, the tiles that lose power are those **last in row-major
 order** (largest z, then largest x) of the network; the tile on which the budget runs out is itself
 still powered. Each plant counts only towards the first network that reaches it.
+
+**Production table row** [STATIC]. At the end of each component's distribution every plant of the
+component is given a **load**, and the load is added to the current month's row of the production
+table (`10-save-format.md` §6.14) in the plant type's column:
+
+* *S*₀ = the component's raw Σ *O* (before the 10 % margin); *S* as in step 4.
+* Brown-out: each plant's load = trunc(*O* × *S* / *S*₀), i.e. 110 % of output when the margin
+  applies (counts towards overwork, 2.5).
+* No brown-out: the leftover *L* first refills the sell slots, leaving *L*′. If *L*′ < *D*, the
+  plants are loaded with *S* / *S*₀ and the deals cover the rest; otherwise each plant's load =
+  trunc(*O* × *r*) with *r* = (*S* + *D* − *L*′) / *S*₀ computed as a single-precision float.
+* The load is stored on the plant (overwork counts when load > *O*).
+* Column order: 0 power bought from neighbours (Σ over buy slots of amount − remaining),
+  1 coal, 2 fusion, 3 gas, 4 microwave, 5 nuclear, 6 oil, 7 solar, 8 waste-to-energy, 9 wind.
+  Power sold to neighbours has no column; it is part of the plants' loads.
+
+So the share is proportional to each plant's current output, one ratio per component. [DATA,
+Berlin saved month: coal 59 544 = 12 × trunc(6 000 × 0.827), nuclear 92 624 = 7 × trunc(16 000 ×
+0.827); row Σ 158 254 = consumed.] After all components, each annual total += its row cell and the
+power % graph gets the month's spare-capacity % (2.6 step 8) [DATA: Berlin samples 17–18 with
+produced 191 900, consumed 158 254; London samples 51–54 with produced 250 000, consumed 114 858].
 
 ## 3. Water
 
@@ -563,11 +599,16 @@ byte layouts are in `10-save-format.md` §6.14 [DATA: all 59 shipped saves parse
 The power distribution grids, per-network supply and brown-out state are **not** saved; they are
 recomputed by the next monthly update (§2.6). [STATIC]
 
-[OBSERVED, Berlin re-saved right after load with no sim time] Loading performs one roll of the
-production table: the current-slot index advances (9 → 10), the slot it moves to is overwritten
-with the current month's production (equal to the previous slot here), and each annual total is
-adjusted by the difference. The Charts electricity total (Σ of the 10 annual totals) then reads
-1,906,937 instead of the saved 1,908,843.
+[OBSERVED, cities re-saved right after a load with no sim time] **Every load** performs one roll
+of the production table: the current-slot index advances by one, the slot it moves to is
+overwritten with a freshly computed month (the production-table row of §2.7 for the loaded
+city), and each annual total is adjusted by the difference. The power % graph gets **no** new
+sample. Examples: Berlin 9 → 10, new row Σ 158 254 (equal to the previous slot); the Charts
+electricity total reads 1 906 937 instead of the saved 1 908 843. W5_London_s15 6 → 7, new slot
+117 207 (previous slot 116 988). ZO_london_offers 3 → 4, new slot 120 919. All eight shipped
+cities with observed runs advance by one per load. Which code path performs this roll is not
+found: the only routine that advances the index is the monthly update, which also pushes the
+graph sample. [STATIC: no load-time caller, no date check, no saved scheduler state]
 
 **Water layer `206C6E7C:02BF0033:0`** (version 4). It stores the per-tile water-service bitmap
 (trimmed to the range of non-zero words), the `water %` graph history (fixed scale 100), the month's
@@ -598,3 +639,4 @@ absent, re-derive *Lmax* and *Ld* (§2.3) and start *W* at 0. [STATIC layout][IN
   at the start of every component.
 * Closed: Water Conservation = `0x02BF1DFA`, Water Meters = `0xC2F90EB1` (§3.4 / `19` §9.5).
 * Whether *m* in §3.3 step 5 is the constant `MaxWaterPolluteForUI` or a running maximum.
+* Power: which code path performs the load-time production roll (Persisted state).

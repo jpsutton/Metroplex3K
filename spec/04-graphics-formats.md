@@ -459,15 +459,22 @@ Vehicles (144 images per set, 576 for trains and multi-car sets), boats (144 or 
 animation frames first, and then zoom. For example, boat set 0x2BDA has 16 headings, then
 repeats.
 
-### 4.4 Effects and disasters `[DATA]`
+### 4.4 Effects and disasters `[DATA][STATIC]`
 
-`EffectSprites.dat` and the `disaster_*` archives use IDs whose high word is a set code. The
-code may be a value such as 0xFFFC, 0xFFFE, 0x3FAC–0x3FB2 or 0x4858. The low word encodes
-phase, zoom and frame. The SII comments name the sets, for example tornado, plasma ball, UFO,
-clouds, debris, explosion, water, locust fly/eat and toxic cloud opening/cycle.
+`EffectSprites.dat` and the `disaster_*` archives use IDs whose high word is a set code
+(`0xFFFC`–`0xFFFE`, `0x2D49`, `0x3FAC`–`0x3FCB`, `0x4858`, `0x4859`, `0x4864`). Two layouts occur:
 
-Zoom always runs over 5 levels, either consecutively or as `+1` steps within a phase block.
-Opacity planes follow the conventions in §3.5.
+* **Strip sets**: one image per zoom level holds all animation frames side by side; frame pitch =
+  SpanL + SpanR, image width = frames × pitch. The low word is `zoom` (+ an optional size/variant
+  multiple of 5, or + 4 × zoom + rotation for 4-rotation sets); the alpha cells are a separate set at
+  a fixed offset (+5, +0x14, +0x80, +0x100, +0x200 or a different third byte, per set).
+* **Zoom indexing**: most sets are indexed by the zoom level directly; tornado, toxic cloud, toxic
+  rain and whirlpool sets use a shifted index (zoom + 1, the closest zoom drawing the largest image
+  at 2×).
+
+Per-set IDs, frame counts, frame periods and registration points are tabulated in
+`21-disasters.md` §12. The `0x4858` toxic-steam set of `disaster_TOXICCLOUD.dat` is not used by
+the program.
 
 ### 4.5 Seasonal and holiday variants `[DATA][INFERRED]`
 

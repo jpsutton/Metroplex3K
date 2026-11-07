@@ -479,8 +479,9 @@ active. While it is active:
 * each new road vehicle's model is drawn uniformly from a fixed global vehicle list, believed to be
   the preloaded key-vehicle list, instead of from the cell mix tables.
 
-[STATIC] Which game event triggers this (the timing and the vehicle surge suggest an evacuation or
-gridlock style event, e.g. a disaster or riot) is [OPEN].
+[STATIC] The trigger is the disaster layer's "state of emergency declared" notification
+(`21-disasters.md` §10.1) with its "a disaster is really active" flag set; a false alarm does not arm
+the mode. [STATIC]
 
 ### 5.7 Other sources
 
@@ -492,8 +493,8 @@ gridlock style event, e.g. a disaster or riot) is [OPEN].
   emergency dispatch type: fire pumper, ambulance and police car (shipped VATTRIB instances 43, 41
   and 28). These are spawned when the player dispatches emergency services (`21-disasters.md`) and
   drive to the target. [STATIC]/[INFERRED]
-* **Parade/holiday automata.** These are VATTRIB records 84 and 100–109 (VATTRIB 110 is an
-  aircraft), using script 0x30, plus holiday pedestrians from `PplProd_Holidays.IXF`. They are
+* **Parade/holiday automata.** These are VATTRIB records 100–109 (VATTRIB 110 is an
+  aircraft), using script 0x30 (record 84 also uses it but is the riot crowd, §5.9), plus holiday pedestrians from `PplProd_Holidays.IXF`. They are
   available only with holiday content enabled. [DATA]
 * **Parades** are a city **event** owned by the disaster/event layer, not the street sim, which
   only moves the vehicles. [STATIC]
@@ -644,25 +645,25 @@ gridlock style event, e.g. a disaster or riot) is [OPEN].
 
 ### 5.9 Disaster automata
 
-Some disaster visuals are also automata: moving animated sprites that the street-sim
-infrastructure draws and moves. The disaster layer, not the spawning rules above, creates and
-removes them, so they are outside the traffic limit L and the activation zoom threshold rules
-[INFERRED]. They are: [cross-area fact from the disaster analysis]
+Some disaster visuals are moving objects driven by the automata/sprite-effect machinery. The
+disaster layer, not the spawning rules above, creates and removes them, so they are outside the
+traffic limit L, the pedestrian cap and the activation zoom rules. They are never persisted (§9).
+Full movement, sprite and timing rules are in `21-disasters.md` §12; summary [STATIC]:
 
-| Disaster | Automaton |
-|---|---|
-| UFO attack | UFO swarm (flying craft) |
-| Plague of locusts | locust swarm |
-| Riot | rioter crowd (pedestrian-like walkers) |
-| Tornado | tornado funnel moving over the map |
-| Whirlpool | whirlpool vortex on water |
-| Space junk | falling debris |
+| Disaster | Object | Data records | Movement |
+|---|---|---|---|
+| UFO attack | swarm of saucers (sprite effects) | none (EffectSprites sets) | straight legs at 2.6 units/ms, command queue per saucer (§12.8) |
+| Plague of locusts | locust swarms (sprite effects) | none (disaster_LOCUST sets) | straight legs at 0.4 units/ms, greedy nearest-crop order (§12.9) |
+| Riot | **one road-vehicle automaton per riot** | VATTRIB instance `0x54` (ANSPRATT/CSATTRIB 11406, script 48) | drives road lanes like a vehicle; throws projectiles every 0.3–0.6 s (§12.10) |
+| Tornado | funnel sprite effect | none | straight line, no wobble (§12.5) |
+| Whirlpool | vortex sprite effect | none | wanders over open water at 0.12 units/ms (§12.6) |
+| Space junk | falling pieces from a launcher | none | straight fall, no gravity (§12.11) |
 
-Trigger conditions, paths, durations and damage are specified in `21-disasters.md`. This document
-only covers their representation: they use the same VATTRIB/PATTRIB, ANSPRATT and sprite machinery
-(§3) and are never persisted (§9). The rioter crowd is probably the event mode of §5.6, and the
-fixed global vehicle list there is then not the key-vehicle list [INFERRED, low confidence].
-[OPEN: which VATTRIB/PATTRIB records each disaster uses]
+Script 48 (opcode 200, §3.10) is shared: VATTRIB 84 (`0x54`), which is the **riot crowd**, and the
+parade vehicles 100–109 use it. For the riot crowd, opcode 200 means "route to the road piece of the
+riot-site lot, then keep driving" [STATIC; parade use of opcode 200 not traced]. The "event mode" of
+§5.6 is triggered by the state-of-emergency declaration of `21-disasters.md` §10.1, not by the riot
+[STATIC].
 
 ## 6. Vehicle classes (from the shipped data)
 
@@ -734,7 +735,7 @@ sentinels that every saved record carries. Automata are respawned after a load. 
 ## Open questions
 
 * Opcode 200 (parade) behaviour and opcode 1 for vehicles (§3.10).
-* Event mode trigger and the identity of its fixed vehicle list (§5.6); the centre of the global
+* The identity of the event mode's fixed vehicle list (§5.6); the centre of the global
   pedestrian source (§5.8).
 * VATTRIB ParamB consumer; TRBLKATT Flag and VehLane LaneType; PedConnection Value; the VPATHATT
   Lane field.
@@ -742,6 +743,5 @@ sentinels that every saved record carries. Automata are respawned after a load. 
   0x400 vs 0x401.
 * Aircraft departure and flight path; airport and helicopter source building groups (0x385e, 0x426a,
   0x440c are the occupant groups tested when sources are registered).
-* Which disaster automata use which VATTRIB/PATTRIB records (§5.9).
 * Which settings drive the automata zoom threshold p (§5.6) and the animation detail level m (§7.1).
 * Pedestrian fill branch when eligible tiles ≥ needed count (§5.8).
