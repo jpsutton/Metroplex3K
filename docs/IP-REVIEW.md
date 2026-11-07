@@ -69,8 +69,13 @@ implementation internals, no copied creative content.
 - User-visible text now says "the original game" instead of naming it. The "need data" screen points to the README.
 - The specification still names the game (title, registry keys, mutex and window names, a few UI captions). It is a
   description of the compatibility target. This was left as is. Consider replacing the name in the title line.
-- **Name check:** "Metroplex" is also the name of a character in a toy and media franchise owned by another company. The
-  goods differ, so the risk is low, but a quick trademark search is advisable before promoting the project.
+- **Name check (done 2026-11-07, USPTO trademark search for "metroplex", live marks):** six live records, none in
+  class 9 (software) and none for "Metroplex3K". METROPLEX (logo, serial 90151786, Hasbro, class 28 toy action figures,
+  registered 2023-11-07); MISSION METROPLEX and MISSION ARLINGTON METROPLEX (Mission Metroplex, Inc., class 41
+  education services); METROPLEX HEADSHOTS (class 41 photography); KRIKORIAN'S METROPLEX THEATRES (class 41
+  entertainment services). The goods differ from a game engine, so conflict risk is low. Hasbro's mark is the one to
+  respect: do not use Transformers-style art, robot imagery or the word "Autobot" in the name, logo or marketing, and
+  keep the name as the compound "Metroplex3K". The search was run by the owner; this is not a clearance opinion.
 - Credits in the app still say "Original game by Maxis". This is attribution and not use as a brand.
 - The README carries a non-affiliation notice.
 
@@ -131,6 +136,6 @@ git ls-files | grep -iE '\.(png|bmp|ixf|dat|xa|wav|tgq|exe|dll|cur)$'   # must b
 
 1. Done: the owner decided the specification falls under the project license (it was written for this project).
 2. Decide on the new-city template: embed (current) or derive from shipped files at run time.
-3. Trademark search for the project name.
+3. Done: trademark search for the project name (see section 2.4).
 4. Legal review of the analysis stage and the game's EULA: declined by the owner. Risk accepted.
 5. Keep `refs/patchbay/*` and `build-*` directories out of any push.
