@@ -53,3 +53,23 @@ Versions follow Semantic Versioning. Development builds report `<version>-dev`; 
 
 `CMakeLists.txt` holds the numeric version. `M3K_VERSION_SUFFIX` defaults to `-dev`; the release workflow and the
 release-gate script pass an empty suffix. `metroplex3k --version` prints the version and the git commit.
+
+## Repository settings
+
+GitHub branch protection and rulesets are not available for a private repository on the free plan (the API answers
+"Upgrade to GitHub Pro or make this repository public"), so the flow is enforced by convention and by the workflows
+rather than by branch rules. When that changes, protect the branches as follows:
+
+- `staging`: require a pull request; required status check `fast` (workflow `staging`).
+- `release`: require a pull request from `staging`; required status checks `repository checks`, `build (ubuntu-latest)`,
+  `build (macos-latest)`, `build (windows-latest)` and `unit tests under ASan and UBSan` (workflow `release`); no direct
+  pushes. Anything pushed to `release` publishes a release, so only merge the release pull request.
+
+## Measured times
+
+Fast checks on a private-repo runner: about 35 s with a warm compiler cache (build 7 s, unit tests 9 s, static checks 1 s),
+about 3 minutes cold. The cache is refreshed by every push to `staging`. The release workflow takes about 15 minutes
+(macOS and Windows builds dominate), and runs once per release.
+
+The publish job (tag and GitHub release) only runs for a push to `release`. A manual run of the workflow builds and
+checks everything but skips it, so the publish step is exercised only by the first real release.
