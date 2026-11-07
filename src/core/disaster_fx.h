@@ -63,6 +63,9 @@ class DisasterFx {
   // True while a flying object still has a report to deliver (the disaster instance stays alive until then).
   bool pendingImpacts() const;
   size_t count() const { return fx_.size(); }
+  // Riot crowds, for the owner to draw with the vehicle sprite of VATTRIB 0x54 (spec 21 s12.10): tile position, heading in 32 steps, age in ms.
+  struct CrowdPose { double x = 0, z = 0; int heading32 = 0, ageMs = 0; };
+  std::vector<CrowdPose> crowdPoses() const { std::vector<CrowdPose> v; for (const CrowdView& c : crowds_) v.push_back({c.x, c.z, c.heading32, c.ageMs}); return v; }
   // Position (tile) of some live effect, for tools that centre the view on the action; false when nothing is alive.
   bool focus(double& x, double& z) const;
 
@@ -95,7 +98,7 @@ class DisasterFx {
   };
   struct PuffView { double x = 0, z = 0, h = 0; int age = 0; int closing = -1; };
   struct FlameView { double x = 0, z = 0; int size = 1; int period = 450; int phase = 0; };
-  struct CrowdView { double x = 0, z = 0; int walkMs = 0, throwMs = 0, nextThrow = 450; };
+  struct CrowdView { double x = 0, z = 0; int walkMs = 0, throwMs = 0, nextThrow = 450, heading32 = 0, ageMs = 0; };
   struct VortexView { double x = 0, z = 0, vx = 0.12 * 0.5, vz = 0.12 * 0.125; int age = 0, life = 0; bool closing = false; int closeAge = 0; int tx = -1, tz = -1; };
   struct Launcher { bool on = false; int nextMs = 0; int scale = 2929; };
 

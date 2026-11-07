@@ -673,7 +673,7 @@ void Game::disasterFxFrame(uint32_t dtMs) {
           case FxImpact::LocustFlora: burnFlora(im.x, im.z); break;
           case FxImpact::Debris: disasters_.debrisImpact(dw, im.x, im.z, out); break;
           case FxImpact::Rioter: disasters_.rioterAt(dw, im.x, im.z, out); break;   // any occupant that passes the ignition test (spec 21 s8.4)
-          case FxImpact::RioterWalk: disasters_.rioterEntered(im.x, im.z); if (street_) street_->pointSpawnPedestrians(im.x, im.z, 3); break;   // the crowd shows as walkers [INFERRED stand-in for the rioter automaton]
+          case FxImpact::RioterWalk: disasters_.rioterEntered(im.x, im.z); break;   // the riot site follows the crowd; the mob sprite is drawn below   // the crowd shows as walkers [INFERRED stand-in for the rioter automaton]
           case FxImpact::RioterLost: disasters_.riotRelocate(dw, out); break;   // the crowd is destroyed: the riot relocates (3 tries) or ends
           case FxImpact::TornadoTile: disasters_.tornadoAt(dw, im.id, im.fx, im.fz, out); break;
           case FxImpact::TornadoLeft: disasters_.tornadoLeftMap(im.id); break;
@@ -684,7 +684,36 @@ void Game::disasterFxFrame(uint32_t dtMs) {
     applyDisasterOutput(out);
   }
   disasters_.setAutomataBusy(fx_.pendingImpacts());
-  if (!(prefsState_.traffic == 3 && prefsState_.sims == 2)) fx_.emit(cam_.zoom, cam_.rot, scene_.sprites);
+  if (!(prefsState_.traffic == 3 && prefsState_.sims == 2)) {
+    fx_.emit(cam_.zoom, cam_.rot, scene_.sprites);
+    // The riot crowd is drawn with the vehicle sprite of VATTRIB 0x54 (ANSPRATT 11406: one sequence of frames 0-3, 32 rotations; spec 21 s12.10).
+    const auto crowds = fx_.crowdPoses();
+    auto va = automata_.vattrib.find(0x54);
+    if (!crowds.empty() && va != automata_.vattrib.end()) {
+      auto an = automata_.ansprat.find(va->second.anim.instance);
+      if (an != automata_.ansprat.end()) {
+        auto si = automata_.sprites.find(an->second.sprite);
+        if (si != automata_.sprites.end() && si->second.zoomCount > 0 && si->second.animSetCount > 0) {
+          const SpriteInst& s = si->second;
+          const int zi = cam_.zoom - (5 - s.zoomCount);
+          const AnimSeq* seq = an->second.seqs.empty() ? nullptr : &an->second.seqs[0];
+          for (const auto& cp : crowds) {
+            if (zi < 0 || zi >= s.zoomCount) break;
+            const int o = s.rotCount > 0 ? (((cp.heading32 + cam_.rot * 8 + 16) & 31) * s.rotCount) / 32 : 0;
+            const int fv = seq && !seq->frames.empty() ? seq->frames[size_t(cp.ageMs / 150) % seq->frames.size()] : 0;
+            const long idx = long(fv) * s.animSetCount + long(zi) * s.zoomSetCount + o;
+            if (idx < 0 || idx >= long(s.frames.size())) continue;
+            const SpriteFrame& f = s.frames[size_t(idx)];
+            SceneSprite sp;
+            sp.category = f.category; sp.spriteId = f.spriteId; sp.magnify2x = f.flags == 2; sp.moving = true;
+            sp.x = int32_t(cp.x * 256.0); sp.z = int32_t(cp.z * 256.0);
+            sp.height = int32_t(std::max<int>(vw->altAt(int(cp.x), int(cp.z)), vw->waterAt(int(cp.x), int(cp.z))) * 256);
+            scene_.sprites.push_back(sp);
+          }
+        }
+      }
+    }
+  }
 }
 
 void Game::startDisaster(DisasterType t) {

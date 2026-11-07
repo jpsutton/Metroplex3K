@@ -405,7 +405,7 @@ void DisasterFx::update(uint32_t dtMs) {
   // Riot crowds: drive along the road lanes at about 0.95 tiles/s [INFERRED next-piece choice: a random adjacent road tile] and throw something
   // every 0.3-0.6 s (the 0x2484A289 / 0x2484A290 range), which ignites the building it lands on.
   for (CrowdView& cv : crowds_) {
-    cv.walkMs += dt; cv.throwMs += dt;
+    cv.walkMs += dt; cv.throwMs += dt; cv.ageMs += dt;
     bool lost = false;
     if (cv.walkMs >= 1050) {
       cv.walkMs = 0;
@@ -415,6 +415,10 @@ void DisasterFx::update(uint32_t dtMs) {
       for (int k = 0; k < 4; k++) {
         const int nx = tx + d4[(start + k) & 3][0], nz = tz + d4[(start + k) & 3][1];
         if (nx < 0 || nz < 0 || nx >= W_ || nz >= H_ || (road_ && !road_(nx, nz))) continue;
+        {   // heading in 32 steps, as the automata use (0 = +x, counter-clockwise on screen)
+          double a = std::atan2(double(nz - tz), double(nx - tx)); if (a < 0) a += 2 * kPi;
+          const int hv = int(std::lround(a * 32.0 / (2 * kPi))); cv.heading32 = hv >= 32 ? 0 : hv;
+        }
         cv.x = nx + 0.5; cv.z = nz + 0.5;
         report(FxImpact::RioterWalk, nx, nz);
         moved = true;
