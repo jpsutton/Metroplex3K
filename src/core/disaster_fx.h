@@ -9,6 +9,7 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <tuple>
 #include <utility>
 #include <vector>
 #include "core/disasters.h"
@@ -32,6 +33,7 @@ struct FxImpact {
     TornadoTile,   // funnel `id` is over a new tile; fx, fz = exact position
     TornadoLeft,   // funnel `id` left the map
     VortexAt,      // whirlpool vortex moved to tile (x, z)
+    VortexSucked,  // the vortex pulled the boat it had captured into its centre at (x, z)
   } kind = UfoBomb;
   int x = 0, z = 0;
   uint32_t id = 0;
@@ -47,6 +49,13 @@ class DisasterFx {
   void setWater(std::function<bool(int, int)> w) { water_ = std::move(w); }
   void setRoad(std::function<bool(int, int)> r) { road_ = std::move(r); }   // tiles a rioter crowd can walk on
   void setMapSize(int w, int h) { W_ = w; H_ = h; }
+  // The street-sim boats the whirlpool can capture (spec 21 s12.6): list those in a square (id, x, y in tiles), take one over, place it, remove it.
+  struct BoatPort {
+    std::function<std::vector<std::tuple<int, double, double>>(double, double, double)> inSquare;
+    std::function<void(int)> capture, remove;
+    std::function<void(int, double, double)> move;
+  };
+  void setBoatPort(BoatPort p) { boats_ = std::move(p); }
   void seed(uint32_t s) { rng_ = s ? s : 1u; }
   void clear();
 
@@ -63,6 +72,11 @@ class DisasterFx {
   // True while a flying object still has a report to deliver (the disaster instance stays alive until then).
   bool pendingImpacts() const;
   size_t count() const { return fx_.size(); }
+  // Giant locusts that cross the screen once per attack (spec 21 s12.9): screen-space overlay, drawn by the owner (image 3FB1 + variant, alpha +5).
+  void setScreen(int w, int h) { screenW_ = w; screenH_ = h; }
+  struct GiantPose { double sx = 0, sy = 0; int variant = 0; };
+  std::vector<GiantPose> giantPoses() const { std::vector<GiantPose> v; for (const Giant& g : giants_) if (g.delay <= 0) v.push_back({g.sx, g.sy, g.variant}); return v; }
+  bool giantSoundDue() { const bool b = giantSound_; giantSound_ = false; return b; }   // sound 0xFE when the fly-by starts
   // Riot crowds, for the owner to draw with the vehicle sprite of VATTRIB 0x54 (spec 21 s12.10): tile position, heading in 32 steps, age in ms.
   struct CrowdPose { double x = 0, z = 0; int heading32 = 0, ageMs = 0; };
   std::vector<CrowdPose> crowdPoses() const { std::vector<CrowdPose> v; for (const CrowdView& c : crowds_) v.push_back({c.x, c.z, c.heading32, c.ageMs}); return v; }
@@ -105,7 +119,9 @@ class DisasterFx {
   struct PuffView { double x = 0, z = 0, h = 0; int age = 0; int closing = -1; RainState rain; };
   struct FlameView { double x = 0, z = 0; int size = 1; int period = 450; int phase = 0; };
   struct CrowdView { double x = 0, z = 0; int walkMs = 0, throwMs = 0, nextThrow = 450, heading32 = 0, ageMs = 0; };
-  struct VortexView { double x = 0, z = 0, vx = 0.12 * 0.5, vz = 0.12 * 0.125; int age = 0, life = 0; bool closing = false; int closeAge = 0; int tx = -1, tz = -1; };
+  struct Giant { double sx = 0, sy = 0, vx = 0, vy = 0; int variant = 0, delay = 0; };
+  struct Captured { int id = 0; double ang = 0, dWu = 0; int orbitMs = 0; };
+  struct VortexView { double x = 0, z = 0, vx = 0.12 * 0.5, vz = 0.12 * 0.125; int age = 0, life = 0; bool closing = false; int closeAge = 0; int tx = -1, tz = -1; int captureMs = 0; std::vector<Captured> held; };
   struct Launcher { bool on = false; int nextMs = 0; int scale = 2929; };
 
   uint32_t rnd() { rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5; return rng_; }
@@ -147,6 +163,10 @@ class DisasterFx {
   std::vector<CrowdView> crowds_;
   std::vector<VortexView> vortices_;
   Launcher launcher_;
+  std::vector<Giant> giants_;
+  int screenW_ = 1280, screenH_ = 800;
+  bool giantSound_ = false;
+  BoatPort boats_;
   std::vector<std::pair<int, int>> sprayed_;   // spray points of the current locust attack
   struct Duster { int x = 0, z = 0; };
   std::vector<Duster> dusters_;

@@ -46,7 +46,7 @@ int explFrames(int set, int size) { return set == 0 ? (size < 2 ? 9 : size == 2 
 
 void DisasterFx::clear() {
   fx_.clear(); incoming_.clear(); tornadoes_.clear(); puffs_.clear(); flames_.clear(); crowds_.clear(); vortices_.clear();
-  impacts_.clear(); launcher_ = Launcher(); sprayed_.clear(); dusters_.clear();
+  impacts_.clear(); giants_.clear(); launcher_ = Launcher(); sprayed_.clear(); dusters_.clear();
 }
 
 int32_t DisasterFx::groundAt(double x, double z) const {
@@ -192,6 +192,20 @@ void DisasterFx::onCommand(const DisasterCommand& c) {
     case DisasterCommand::LocustSwarm: {
       const int n = std::max(1, c.a);
       locustEdge_ = rndi(4);   // one map edge for the whole attack
+      {  // Giant-locust fly-by, once per attack before the swarms move: 8 locusts at the top detail class (3 below 4, 10 + Rand(10) above), the first
+         // variant 0, the rest 1 + Rand(3), at 30 / 60 / 20 / -20 / -60 degrees and speed Rand(0.2, 0.4) [px per ms, INFERRED unit].
+        static const double ang[5] = {30, 60, 20, -20, -60};
+        for (int i = 0; i < 8; i++) {
+          Giant g; g.variant = i == 0 ? 0 : 1 + rndi(3);
+          const double a = ang[g.variant] * kPi / 180.0, sp = 0.2 + rndf() * 0.2;
+          const bool rightToLeft = g.variant == 3 || g.variant == 4;   // 16305's art notes: variants 3 and 4 fly right to left
+          g.vx = (rightToLeft ? -1.0 : 1.0) * sp * std::cos(a); g.vy = -sp * std::sin(a) * (rightToLeft ? -1.0 : 1.0);
+          g.sx = rightToLeft ? screenW_ + 100.0 : -100.0; g.sy = screenH_ * (0.3 + 0.5 * rndf());
+          g.delay = i * 250;
+          giants_.push_back(g);
+        }
+        giantSound_ = true;
+      }
       std::vector<Fx> sw;
       for (int i = 0; i < n; i++) {
         Fx s; s.kind = Kind::Swarm; s.life = 1 << 30; s.variant = i; s.back = rndi(2) == 1;
@@ -477,6 +491,11 @@ void DisasterFx::update(uint32_t dtMs) {
     } else if (r.steam == 3) { r.steamMs += dt; if (r.steamMs >= 800) r.steam = 0; }
   }
   puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(), [](const PuffView& p) { return p.closing * 0.00015 >= 1.0; }), puffs_.end());
+  for (Giant& g : giants_) {
+    if (g.delay > 0) { g.delay -= dt; continue; }
+    g.sx += g.vx * dt; g.sy += g.vy * dt;
+  }
+  giants_.erase(std::remove_if(giants_.begin(), giants_.end(), [&](const Giant& g) { return g.delay <= 0 && (g.sx < -300 || g.sx > screenW_ + 300 || g.sy < -300 || g.sy > screenH_ + 300); }), giants_.end());
   // Space-junk launcher.
   if (launcher_.on) {
     launcher_.nextMs -= dt;
@@ -521,6 +540,43 @@ void DisasterFx::update(uint32_t dtMs) {
   // Whirlpool vortex (spec 21 s12.6): speed 0.12 u/ms, accepted only over a 9 x 9 block of water, else the heading turns in steps of 2*pi/14.
   for (VortexView& v : vortices_) {
     v.age += dt;
+    // Capture (every ~4 s, i.e. each 256th update after the first 16): up to 128 boats on water inside the +-2400 world-unit square; captured boats spiral in.
+    if (boats_.inSquare && !v.closing) {
+      v.captureMs += dt;
+      if (v.captureMs >= 4096) {
+        v.captureMs = 0;
+        for (const auto& b : boats_.inSquare(v.x, v.z, 2400.0 / 256.0)) {
+          if (int(v.held.size()) >= 128) break;
+          bool have = false;
+          for (const Captured& c : v.held) have = have || c.id == std::get<0>(b);
+          if (have) continue;
+          Captured c; c.id = std::get<0>(b);
+          const double dx = std::get<1>(b) - v.x, dz = std::get<2>(b) - v.z;
+          c.ang = std::atan2(dz, dx); c.dWu = std::sqrt(dx * dx + dz * dz) * 256.0;
+          if (boats_.capture) boats_.capture(c.id);
+          v.held.push_back(c);
+        }
+      }
+    }
+    for (size_t i = 0; i < v.held.size();) {
+      Captured& c = v.held[i];
+      const double stepWu = std::max(0.12 * dt, 1.0 * dt / 16.0), slowWu = std::max(0.06 * dt, 2.5 * dt / 16.0);
+      bool gone = false;
+      if (c.dWu >= 800.0) c.dWu = std::max(0.0, c.dWu - stepWu);                       // straight in
+      else if (c.dWu >= 80.0) {                                                          // in slowly while orbiting faster the closer it gets
+        const double f = std::max(0.05, std::min(1.0, 1.0 - (c.dWu - 80.0) / 720.0));
+        c.dWu = std::max(0.0, c.dWu - slowWu);
+        c.ang += ((1e-5 - 4e-7) * f + 4e-7) * dt * 1000.0;
+      } else { c.ang += 1e-5 * dt * 1000.0; c.orbitMs += dt; gone = c.orbitMs >= 600; }   // orbit at the centre, then it is sucked in [INFERRED duration]
+      const double bx = v.x + std::cos(c.ang) * c.dWu / 256.0, bz = v.z + std::sin(c.ang) * c.dWu / 256.0;
+      if (boats_.move) boats_.move(c.id, bx, bz);
+      if (gone) {
+        if (boats_.remove) boats_.remove(c.id);
+        spawnSplash(bx, bz, 0);
+        FxImpact im; im.kind = FxImpact::VortexSucked; im.x = int(std::floor(bx)); im.z = int(std::floor(bz)); impacts_.push_back(im);
+        v.held.erase(v.held.begin() + long(i));
+      } else ++i;
+    }
     if (v.closing) { v.closeAge += dt; continue; }
     if (v.age >= v.life) { v.closing = true; v.closeAge = 0; continue; }
     auto allWater = [&](double px, double pz) {
@@ -614,11 +670,11 @@ void DisasterFx::emitFx(const Fx& f, std::vector<SceneSprite>& out) const {
     case Kind::Spray: push(out, kDeathSpray + uint32_t(z), 5, 0, f.age / 125, f.x, f.z, 0); break;
     case Kind::Plasma: push(out, kPlasmaBall + uint32_t(z), 0x80, 8, f.age / 100, f.x, f.z, f.y); break;
     case Kind::Piece:
-      pushTint(out, kFxTintShadowTop, kShadowObject + uint32_t(z), 1, 0, f.x, f.z, 0, 12);
+      pushTint(out, kFxTintShadowTop, kShadowObject + uint32_t(z), 1, 0, f.x, f.z, 0, 24);
       push(out, kPieces[f.variant] + uint32_t(z * 4 + r), 0x14, 6, f.age / 300, f.x, f.z, f.y); break;
     case Kind::Saucer: {
       const int fr = (f.age / 100) % 5;
-      pushTint(out, kFxTintShadowTop, kShadowObject + uint32_t(z), 1, 0, f.x, f.z, 0, 12 * level / 32);
+      pushTint(out, kFxTintShadowTop, kShadowObject + uint32_t(z), 1, 0, f.x, f.z, 0, 24 * level / 32);
       if (f.beam) pushTint(out, kFxTintBeamTop, kBeamPlane + uint32_t(z), 5, f.age / 300, f.x, f.z, std::max(0.0, f.y - 5.0));
       push(out, kUfo + uint32_t(z), 0, 5, f.back ? 4 - fr : fr, f.x, f.z, f.y, level);
       break;
@@ -626,7 +682,7 @@ void DisasterFx::emitFx(const Fx& f, std::vector<SceneSprite>& out) const {
     case Kind::Swarm: {
       const int fr = f.age / 100;
       const uint32_t base = f.eating || (f.cur < f.q.size() && f.y <= 6.5) ? kLocustEat : kLocustFly;
-      pushTint(out, kFxTintShadowTop, kShadowLocust + uint32_t(z), 1, 0, f.x, f.z, 0, 12 * level / 32);
+      pushTint(out, kFxTintShadowTop, kShadowLocust + uint32_t(z), 1, 0, f.x, f.z, 0, 24 * level / 32);
       push(out, base + uint32_t(z), 5, 0, f.back ? -fr : fr, f.x, f.z, f.y, level);
       break;
     }
@@ -696,7 +752,7 @@ void DisasterFx::emit(int zoom, int rot, std::vector<SceneSprite>& out) const {
   }
   for (const PuffView& p : puffs_) {
     const double op = p.closing >= 0 ? 1.0 - p.closing * 0.00015 : std::min(1.0, p.age * 0.00015);
-    pushTint(out, kFxTintShadowTop, kShadowPuff + uint32_t(z), 1, 0, p.x, p.z, 0, int(std::lround(op * 10.0)));
+    pushTint(out, kFxTintShadowTop, kShadowPuff + uint32_t(z), 1, 0, p.x, p.z, 0, int(std::lround(op * 24.0)));
     push(out, kPuff + uint32_t(k), 0x100, 0, 0, p.x, p.z, p.h, int(std::lround(op * 32.0)), mag);
   }
   ++transientGen_;

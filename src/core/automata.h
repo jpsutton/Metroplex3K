@@ -264,6 +264,12 @@ class StreetSim {
   int addStation(int tileX, int tileY, bool subway);   // TRNPROD instance 1 (rail) / 2 (subway)
   void addHelipad(int tileX, int tileY);
   void pointSpawnPedestrians(int tileX, int tileY, int n);  // honoured only on eligible tiles
+  // Whirlpool capture (spec 21 s12.6): boats currently simulated inside a square, then taking one over (it stops moving by itself), placing it, removing it.
+  struct BoatRef { int id = 0; double x = 0, y = 0; };
+  std::vector<BoatRef> boatsInSquare(double centreX, double centreY, double halfSize) const;
+  void captureAutomaton(int id);
+  void moveAutomaton(int id, double x, double y);
+  void removeAutomaton(int id);
   bool dispatchEmergency(EmergencyType t, int tileX, int tileY);
   void notifyEvent();                         // event mode 0 -> 1 (-> 2 after 15,000,000 us)
   int eventMode() const;

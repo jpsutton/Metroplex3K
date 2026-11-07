@@ -57,6 +57,30 @@ void testLocusts() {
   CHECK(!fx.pendingImpacts() && fx.count() == 0);
 }
 
+void testVortexCapture() {
+  DisasterFx fx; fx.seed(4); fx.setMapSize(64, 64);
+  fx.setWater([](int, int) { return true; });
+  int captured = -1, removed = -1, moves = 0;
+  DisasterFx::BoatPort bp;
+  bp.inSquare = [&](double x, double z, double half) {
+    std::vector<std::tuple<int, double, double>> v;
+    if (removed < 0) v.emplace_back(7, x + 4.0, z + 0.5);   // one boat 4 tiles from the vortex
+    (void)half;
+    return v;
+  };
+  bp.capture = [&](int id) { captured = id; };
+  bp.move = [&](int, double, double) { moves++; };
+  bp.remove = [&](int id) { removed = id; };
+  fx.setBoatPort(bp);
+  DisasterCommand c; c.kind = DisasterCommand::VortexSpawn; c.x = 30; c.z = 30; c.a = 60000;
+  fx.onCommand(c);
+  std::vector<FxImpact> got;
+  run(fx, 30000, got);
+  CHECK(captured == 7 && removed == 7 && moves > 10);
+  CHECK(count(got, FxImpact::VortexSucked) == 1);
+  CHECK(count(got, FxImpact::VortexAt) >= 1);
+}
+
 void testCropDuster() {
   DisasterFx fx; fx.seed(9); fx.setMapSize(64, 64);
   DisasterCommand c; c.kind = DisasterCommand::LocustSwarm; c.a = 2;
@@ -136,6 +160,7 @@ void testManagerHold() {
 int main() {
   testUfo();
   testLocusts();
+  testVortexCapture();
   testCropDuster();
   testDebrisLauncher();
   testTornadoFunnel();

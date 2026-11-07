@@ -52,7 +52,10 @@ int main(int argc, char** argv) {
       std::printf("%s colour %4dx%-4d span L%-4d T%-4d R%-4d B%-4d frames %d%s\n", hex, s->img.w, s->img.h, s->L, s->T, s->R, s->B,
                   fw > 0 ? s->img.w / fw : 0, s->hasSpan ? "" : " (no span)");
     } else if (const Plane* p = d.spritePlane(0, k.instance)) {
-      std::printf("%s plane  %4dx%-4d\n", hex, p->w, p->h);
+      int mn = 255, mx = 0, nz = 0;
+      for (uint8_t v : p->v) { mn = std::min<int>(mn, v); mx = std::max<int>(mx, v); nz += v != 0; }
+      const int cx = p->w / 2, cy = p->h / 2;
+      std::printf("%s plane  %4dx%-4d min %d max %d nonzero %d%% corner %d centre %d\n", hex, p->w, p->h, mn, mx, int(100.0 * nz / std::max<size_t>(1, p->v.size())), p->v[0], p->v[size_t(cy) * p->w + cx]);
     } else std::printf("%s undecodable\n", hex);
   }
   return 0;

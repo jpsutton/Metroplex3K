@@ -589,6 +589,7 @@ struct Auto {
   double followOffset = 0, travelled = 0;
   std::deque<TrailPt> trail;
   bool visible = true;
+  bool captured = false;   // taken over by an effect (whirlpool): no movement of its own
   bool alive = true;
   double length = 40;
   int pieces = 0, updates = 0;
@@ -1548,7 +1549,7 @@ struct StreetSim::Impl {
     }
     // iterate by index: spawning inside updateOne can append
     size_t n = autos.size();
-    for (size_t i = 0; i < n; i++) if (autos[i]->alive) updateOne(*autos[i], dt);
+    for (size_t i = 0; i < n; i++) if (autos[i]->alive && !autos[i]->captured) updateOne(*autos[i], dt);
     spacing();
     sweep();
   }
@@ -1729,6 +1730,18 @@ void StreetSim::pointSpawnPedestrians(int x, int y, int n) {
   }
   for (int i = 0; i < n; i++) I.spawnPed(*src, x, y);
 }
+
+std::vector<StreetSim::BoatRef> StreetSim::boatsInSquare(double cx, double cy, double half) const {
+  std::vector<BoatRef> v;
+  for (const auto& u : p_->autos)
+    if (u->alive && u->kind == AutomatonKind::Boat && std::fabs(u->x - cx) <= half && std::fabs(u->y - cy) <= half) v.push_back({u->id, u->x, u->y});
+  return v;
+}
+void StreetSim::captureAutomaton(int id) { if (Auto* a = p_->find(id)) a->captured = true; }
+void StreetSim::moveAutomaton(int id, double x, double y) {
+  if (Auto* a = p_->find(id)) { a->fx = a->x = x; a->fy = a->y = y; a->tx = int(std::floor(x)); a->ty = int(std::floor(y)); a->h = p_->host.groundHeight(a->tx, a->ty); }
+}
+void StreetSim::removeAutomaton(int id) { if (Auto* a = p_->find(id)) p_->kill(a); }
 
 bool StreetSim::dispatchEmergency(EmergencyType t, int x, int y) {
   Impl& I = *p_;

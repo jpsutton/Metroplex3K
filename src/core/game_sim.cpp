@@ -655,6 +655,18 @@ void Game::disasterFxFrame(uint32_t dtMs) {
   fx_.setRoad([this](int x, int z) { return city().hasRoadPiece(x, z); });
   fx_.setWater([vw](int x, int z) { return vw->altAt(x, z) < vw->waterAt(x, z); });
   disasters_.setTornadoDriven(true);   // the funnel effect moves tornadoes and reports their tiles
+  {  // the whirlpool captures the street-sim boats inside its square
+    DisasterFx::BoatPort bp;
+    bp.inSquare = [this](double x, double z, double half) {
+      std::vector<std::tuple<int, double, double>> v;
+      if (street_) for (const auto& b : street_->boatsInSquare(x, z, half)) v.emplace_back(b.id, b.x, b.y);
+      return v;
+    };
+    bp.capture = [this](int id) { if (street_) street_->captureAutomaton(id); };
+    bp.move = [this](int id, double x, double z) { if (street_) street_->moveAutomaton(id, x, z); };
+    bp.remove = [this](int id) { if (street_) street_->removeAutomaton(id); };
+    fx_.setBoatPort(std::move(bp));
+  }
   if (simReady_ && managersReady_) fx_.syncState(disasters_);
   fx_.update(dtMs);
   std::vector<FxImpact> impacts = fx_.takeImpacts();
@@ -678,6 +690,7 @@ void Game::disasterFxFrame(uint32_t dtMs) {
           case FxImpact::TornadoTile: disasters_.tornadoAt(dw, im.id, im.fx, im.fz, out); break;
           case FxImpact::TornadoLeft: disasters_.tornadoLeftMap(im.id); break;
           case FxImpact::VortexAt: disasters_.vortexPosition(dw, im.x, im.z, out); break;
+          case FxImpact::VortexSucked: disasters_.vortexObjectSucked(dw, im.x, im.z, true, out); break;   // a boat: counted, the street sim already removed it
         }
       }
     }
@@ -686,6 +699,20 @@ void Game::disasterFxFrame(uint32_t dtMs) {
   disasters_.setAutomataBusy(fx_.pendingImpacts());
   if (!(prefsState_.traffic == 3 && prefsState_.sims == 2)) {
     fx_.emit(cam_.zoom, cam_.rot, scene_.sprites);
+    // Giant locusts: screen-space fly-by, placed in the world so that each appears at its screen point (height 0 projects exactly there).
+    fx_.setScreen(W_, H_);
+    if (fx_.giantSoundDue()) sound(0xFE);
+    for (const auto& gp : fx_.giantPoses()) {
+      float u = 0, v = 0;
+      renderer_.screenToView(cam_, int(gp.sx), int(gp.sy), u, v);
+      const int32_t a = int32_t(u * 256.0f), b = int32_t(v * 256.0f), mw = world_.W * 256 - 1, mh = world_.H * 256 - 1;
+      int32_t x = 0, z = 0;
+      switch (cam_.rot & 3) { case 0: x = a; z = b; break; case 1: x = b; z = mw - a; break; case 2: x = mw - a; z = mh - b; break; default: x = mh - b; z = a; break; }
+      SceneSprite sp;
+      sp.category = 0; sp.spriteId = 0x3FB10000u + uint32_t(gp.variant); sp.hasAlpha = true; sp.alphaCategory = 0; sp.alphaId = 0x3FB10005u + uint32_t(gp.variant);
+      sp.x = x; sp.z = z; sp.height = 0; sp.moving = true;
+      scene_.sprites.push_back(sp);
+    }
     // The riot crowd is drawn with the vehicle sprite of VATTRIB 0x54 (ANSPRATT 11406: one sequence of frames 0-3, 32 rotations; spec 21 s12.10).
     const auto crowds = fx_.crowdPoses();
     auto va = automata_.vattrib.find(0x54);
