@@ -11,7 +11,7 @@ struct MockWorld : DisasterWorld {
   int W = 64, H = 64;
   std::vector<OccInfo> occ;
   std::vector<uint8_t> water;
-  int flam = 200, fcov = 0, pcov = 0;
+  int flam = 200, fcov = 0, pcov = 0, auraVal = 0;
   std::vector<uint32_t> removed;
   MockWorld() : water(size_t(64 * 64), 0) {}
   int width() const override { return W; }
@@ -19,6 +19,7 @@ struct MockWorld : DisasterWorld {
   int flammability(int, int) const override { return flam; }
   int fireCoverage(int, int) const override { return fcov; }
   int policeCoverage(int, int) const override { return pcov; }
+  int aura(int, int) const override { return auraVal; }
   OccInfo occupantAt(int x, int z) const override {
     for (auto& o : occ) {
       if (std::find(removed.begin(), removed.end(), o.id) != removed.end()) continue;
@@ -305,10 +306,12 @@ static void testRiot() {
   CHECK(countCmd(out, DisasterCommand::SpawnRioters) == 1);
   m.rioterAt(w, 30, 30, out);
   CHECK(m.active(DisasterType::Fire));
-  // police coverage blocks sites
-  MockWorld w2; w2.add(30, 30, 3000); w2.occ[0].flags = kOccCrowdSite; w2.pcov = 60;
+  // a random riot site needs local aura below SiteAuraMax (spec 21 s8.4), not low police coverage
+  MockWorld w2; w2.add(30, 30, 3000); w2.occ[0].flags = kOccCrowdSite; w2.auraVal = 60;
   DisasterManager m2; out.clear();
   CHECK(!m2.startRiot(w2, 30, 30, true, out));
+  w2.pcov = 90; w2.auraVal = 0; out.clear();
+  CHECK(m2.startRiot(w2, 30, 30, true, out));   // high police coverage does not block a site
   // full coverage: duration shorter. brewing with warning
   MockWorld w3; w3.add(30, 30, 3000); w3.occ[0].flags = kOccCrowdSite;
   DisasterManager m3; m3.seed(1); out.clear();
@@ -581,6 +584,54 @@ static void testRecords() {
   CHECK(same2);
 }
 
+// Spec 21 s8.4 / 6.1 / 6.2 corrections: spiral search order, funnel-driven tornado, static puffs with a level-based count.
+static void testSpecCorrections() {
+  {  // The site search is an outward square spiral from the start tile, nearest ring first.
+    MockWorld w;
+    w.add(30, 30, 3000, 1, 1); w.occ[0].flags = kOccCrowdSite;
+    w.add(30, 32, 3000, 1, 1); w.occ[1].flags = kOccCrowdSite;
+    DisasterManager m; m.seed(2); DisasterOutput out;
+    CHECK(m.startRiot(w, 30, 31, true, out));
+    CHECK(m.riots()[0].x == 30 && m.riots()[0].z == 32);   // start (30,31), +x (31,31), +z (31,32), -x (30,32): found before (30,30)
+  }
+  {  // With the funnel effect driving the tornado, the minute tick only counts the lifetime; tornadoAt rolls the damage.
+    MockWorld w;
+    w.add(40, 40, 3000, 1, 1, 500);
+    DisasterManager m; m.seed(3); m.setTornadoDriven(true);
+    m.tune.tornadoDestroyChance[0] = 100;
+    DisasterInputs in; DisasterOutput out;
+    int a[8] = {10, 10, 20, 10, 0, 5, 60, 0};
+    CHECK(m.scriptTornado(w, a, out));
+    m.minuteTick(w, in, out);   // phase 4 -> 5
+    CHECK(m.tornadoes()[0].phase == 5);
+    const float px0 = m.tornadoes()[0].px;
+    for (int i = 0; i < 3; i++) m.minuteTick(w, in, out);
+    CHECK(m.tornadoes()[0].px == px0);   // no movement of its own
+    const uint32_t uid = m.tornadoes()[0].uid;
+    out.clear();
+    m.tornadoAt(w, uid, 40.5f, 40.5f, out);
+    CHECK(countCmd(out, DisasterCommand::DestroyOccupant) == 1);
+    m.tornadoLeftMap(uid);
+    m.minuteTick(w, in, out);
+    CHECK(!m.active(DisasterType::Tornado));
+  }
+  {  // Toxic puffs: count = Min + floor((Max - Min) * (level + 1) / 5), and they never move.
+    MockWorld w;
+    for (int level : {0, 4}) {
+      DisasterManager m; m.seed(7); DisasterInputs in; DisasterOutput out;
+      m.tune.toxMinClouds = 1; m.tune.toxMaxClouds = 4; m.tune.toxPrem1 = m.tune.toxPrem2 = m.tune.toxPrem3 = 0; m.tune.toxVisible = 0;
+      CHECK(m.startToxicCloud(w, 20, 20, false, out, level));
+      for (int i = 0; i < 4; i++) { out.clear(); m.minuteTick(w, in, out); }
+      CHECK(m.clouds().size() == 1);
+      const size_t want = size_t(1 + (4 - 1) * (level + 1) / 5);
+      CHECK(m.clouds()[0].puffs.size() == want);
+      const auto before = m.clouds()[0].puffs;
+      for (int i = 0; i < 10; i++) { out.clear(); m.minuteTick(w, in, out); }
+      if (!m.clouds().empty()) CHECK(m.clouds()[0].puffs == before);
+    }
+  }
+}
+
 int main() {
   testRng();
   testTunables();
@@ -594,5 +645,6 @@ int main() {
   testWhirlpoolJunk();
   testStrikeDispatch();
   testRecords();
+  testSpecCorrections();
   TEST_MAIN_END();
 }

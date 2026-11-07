@@ -264,6 +264,25 @@ const SpriteImage* GameData::sprite(uint32_t cat, uint32_t id) {
   auto it = spriteCache_.find(k);
   if (it != spriteCache_.end()) return it->second->ok ? it->second.get() : nullptr;
   auto s = std::make_unique<SpriteImage>();
+  if (isFxTintBeamCat(cat)) {   // one frame of a plane-only strip, as a flat tint where the plane is set
+    const int fw = int((cat >> 12) & 0xFFFu), frame = int(cat & 0xFFFu);
+    const Plane* base = fw > 0 ? spritePlane(0, id) : nullptr;
+    if (base && frame * fw + fw <= base->w) {
+      s->img.w = fw; s->img.h = base->h;
+      s->img.px.assign(size_t(fw) * size_t(base->h), 0u);
+      for (int y = 0; y < base->h; y++)
+        for (int x = 0; x < fw; x++)
+          if (base->v[size_t(y) * base->w + size_t(frame) * fw + size_t(x)]) s->img.px[size_t(y) * fw + size_t(x)] = 0xFFFFF0E0u;   // R E0, G F0, B FF
+      ResourceRef sp = db_.find({T_SPRITE_SPAN, 0, id});
+      if (sp && sp.available >= 8) {
+        s->L = int16_t(rd16(sp.data)); s->T = int16_t(rd16(sp.data + 2)); s->R = int16_t(rd16(sp.data + 4)); s->B = int16_t(rd16(sp.data + 6)); s->hasSpan = true;
+      } else { s->L = fw / 2; s->T = 0; s->R = fw - s->L; s->B = base->h; }
+      s->ok = true;
+    }
+    auto* raw = s.get();
+    spriteCache_[k] = std::move(s);
+    return raw->ok ? raw : nullptr;
+  }
   if (isFxFrameCat(cat)) {   // one frame of a strip image
     const int fw = int((cat >> 12) & 0xFFFu), frame = int(cat & 0xFFFu);
     const SpriteImage* base = fw > 0 ? sprite(0, id) : nullptr;

@@ -93,7 +93,7 @@ struct DisasterTunables {
   int quakeScarpP[3] = {1, 1, 2}, quakeScarpQ[3] = {0, 0, 0};
   int terrainHeightStep = 1;                              // [OPEN] "h" of the scarp rule
   // Riot
-  int riotUnrestThreshold = 8, riotIntervalMin = 48, riotIntervalMax = 300, riotSiteCoverageMax = 50;
+  int riotUnrestThreshold = 8, riotIntervalMin = 48, riotIntervalMax = 300, riotSiteAuraMax = 50;
   int riotSearchRadius = 40, riotDurMax = 240, riotDurMin = 20, riotCrowdA = 300000, riotCrowdB = 600000;
   int riotWarnDelay = 0, riotBrewTime = 80, riotGrowth = 5;
   // Whirlpool
@@ -138,6 +138,8 @@ class DisasterWorld {
   virtual int flammability(int, int) const { return 0; }
   virtual int fireCoverage(int, int) const { return 0; }
   virtual int policeCoverage(int, int) const { return 0; }
+  virtual int aura(int, int) const { return 0; }                              // local aura value (signed), spec 21 s8.4
+
   virtual OccInfo occupantAt(int, int) const { return OccInfo(); }          // occupant covering tile
   virtual OccInfo occupantAnchoredAt(int x, int z) const {
     OccInfo o = occupantAt(x, z);
@@ -170,7 +172,7 @@ struct DisasterCommand {
     IgniteOccupant,    // id,x,z; a=intensity  (attach fire effect, flag burning)
     SetFireIntensity,  // id; a=intensity
     ClearBurning,      // id (fire went out, building survives)
-    Explosion,         // x,z effect + explosion sound
+    Explosion,         // x,z effect + explosion sound; b=set (0 fire, 1 plasma, 2 dirt), c=size 0..3 (spec 21 s12.3)
     Splash,            // x,z
     Sound,             // a=AUDIO.INI item, x,z
     SoundLoop,         // a=item, b=1 start/update, 0 stop; value = intensity percent
@@ -180,7 +182,7 @@ struct DisasterCommand {
     CreditTreasury,    // value
     MarkAbandoned,     // x,z
     CropCircle,        // x,z 4x4 block
-    UfoSwarm,          // a=saucers, b=passive(1), c=abduction passes; pts=bomb targets; pts2=crop targets; pts3=waypoints (2 per saucer)
+    UfoSwarm,          // a=saucers, b=passive(1), c=abduction passes; pts=beam (destroy) targets; pts2=crop targets; pts3=waypoints (2 per saucer)
     UfoLeave,          // a=saucers, ints=1 per saucer that explodes
     LocustSwarm,       // a=swarms; pts=crop targets
     TornadoTouchdown,  // x,z; a=variant+1; f=dirX, f2=dirZ, f3=speed
@@ -255,6 +257,8 @@ struct TornadoInst {
   int variant = 0, lifetime = 45, elapsed = 0, phase = 0, counter = 0, destroyed = 0; int64_t cost = 0;
   int warn[5] = {0, 60, 60, 60, 60};
   float unknown = 0;
+  uint32_t uid = 0;          // identifies the instance to the funnel effect
+  bool leftMap = false;      // the funnel reported leaving the map
 };
 struct RiotInst {
   int x = 0, z = 0, phase = 0, counter = 0, strength = 0, ticks = 0, burned = 0; bool noWarn = false;
@@ -309,6 +313,8 @@ class DisasterManager {
   bool startEarthquake(DisasterWorld& w, const DisasterInputs& in, float m, bool warn, DisasterOutput& out);
   bool startRiot(DisasterWorld& w, int x, int z, bool warn, DisasterOutput& out);
   bool startUfo(DisasterWorld& w, const DisasterInputs& in, bool warn, DisasterOutput& out);
+  // Random cloud (spec 21 s6.2): severity Rand(5), random heading and speed, origin by the spiral search over the whole map.
+  bool startRandomToxicCloud(DisasterWorld& w, DisasterOutput& out);
   bool startToxicCloud(DisasterWorld& w, int x, int z, bool warn, DisasterOutput& out,
                        int level = 0, float dirX = 0, float dirZ = 0);
   bool startWhirlpool(DisasterWorld& w, const DisasterInputs& in, float m, bool warn, DisasterOutput& out);
@@ -346,6 +352,11 @@ class DisasterManager {
   void vortexPosition(DisasterWorld& w, int x0, int z0, DisasterOutput& out);
   void vortexObjectSucked(DisasterWorld& w, int x, int z, bool bridge, DisasterOutput& out);
   void vortexFinished(const DisasterInputs& in, DisasterOutput& out);
+  // Tornado funnel reports (spec 21 s6.1, 12.5): the funnel effect carries the tornado in real time; each time its tile changes it reports the
+  // position (damage roll), and when it leaves the map it reports that. With the funnel driven externally the minute tick only counts the lifetime.
+  void setTornadoDriven(bool b) { tornadoDriven_ = b; }
+  void tornadoAt(DisasterWorld& w, uint32_t uid, float px, float pz, DisasterOutput& out);
+  void tornadoLeftMap(uint32_t uid);
   void debrisImpact(DisasterWorld& w, int x, int z, DisasterOutput& out);
   void rioterAt(DisasterWorld& w, int x, int z, DisasterOutput& out);
   bool riotRelocate(DisasterWorld& w, DisasterOutput& out);
@@ -400,6 +411,8 @@ class DisasterManager {
   bool enabled_ = true;
   bool wasActive_ = false;
   bool automataBusy_ = false;
+  bool tornadoDriven_ = false;
+  uint32_t nextTornadoUid_ = 1;
   // fire
   std::vector<BurnRecord> burning_;
   int fireCounter_ = 0, fireInterval_ = 0;
@@ -428,6 +441,7 @@ class DisasterManager {
   void addHistory(HistoryList& h, int32_t date, uint32_t d1, int destroyed, int64_t cost);
   void seedHistory(HistoryList& h, int32_t today);
   void tornadoTick(DisasterWorld& w, DisasterOutput& out);
+  void tornadoStep(DisasterWorld& w, TornadoInst& t, int tx, int tz, DisasterOutput& out);
   void riotTick(DisasterWorld& w, const DisasterInputs& in, DisasterOutput& out);
   void cloudTick(DisasterWorld& w, DisasterOutput& out);
   void quakeTick(DisasterWorld& w, DisasterOutput& out);
@@ -438,7 +452,8 @@ class DisasterManager {
   void launchUfo(DisasterWorld& w, const DisasterInputs& in, UfoInst& u, DisasterOutput& out);
   void quakeMainShock(DisasterWorld& w, QuakeInst& q, DisasterOutput& out);
   void quakeDamage(DisasterWorld& w, QuakeInst& q, DisasterOutput& out);
-  bool findRiotSite(DisasterWorld& w, int cx, int cz, int& ox, int& oz);
+  // Random-riot site search (aura + road piece) around (cx, cz); `relocate` = whole-map spiral with the road test only (spec 21 s8.4).
+  bool findRiotSite(DisasterWorld& w, int cx, int cz, int& ox, int& oz, bool relocate = false);
   bool cropTile(DisasterWorld& w, int x, int z, OccInfo* o = nullptr) const;
   DisasterInputs lastIn_;
 };

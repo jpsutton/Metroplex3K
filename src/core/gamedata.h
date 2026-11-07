@@ -31,6 +31,11 @@ constexpr uint32_t T_STRING = 0x2026960B;
 constexpr uint32_t kFxFrameCatTop = 0xFD000000u;
 inline uint32_t fxFrameCat(int frameWidth, int frame) { return kFxFrameCatTop | (uint32_t(frameWidth) & 0xFFFu) << 12 | (uint32_t(frame) & 0xFFFu); }
 inline bool isFxFrameCat(uint32_t cat) { return (cat & 0xFF000000u) == kFxFrameCatTop; }
+// Same for an opacity plane that has no colour image (the UFO beam): sprite(cat, planeId) returns the frame as a flat pale-blue image that is
+// opaque wherever the plane is non-zero, to be drawn together with the plane frame fxFrameCat(fw, frame).
+constexpr uint32_t kFxTintBeamTop = 0xFB000000u;
+inline uint32_t fxTintBeamCat(int frameWidth, int frame) { return kFxTintBeamTop | (uint32_t(frameWidth) & 0xFFFu) << 12 | (uint32_t(frame) & 0xFFFu); }
+inline bool isFxTintBeamCat(uint32_t cat) { return (cat & 0xFF000000u) == kFxTintBeamTop; }
 
 // Parsed TKB1 occupant attribute record.
 struct OccAttr {

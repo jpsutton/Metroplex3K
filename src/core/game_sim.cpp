@@ -97,7 +97,7 @@ class CityDisasterWorld : public DisasterWorld {
     o.isLot = kind >= 3 && kind <= 9;
     if (o.isLot && oc.agentType == 9300 && c_.gameData())
       if (const OccAttr* a = c_.gameData()->occupant(oc.occId)) o.crop = (a->buildingFlags & 0x500) == 0x500;
-    o.lotDamage = oc.state == 8 ? kDmgRubble : oc.state == 16 ? kDmgBurnt : oc.state == 2 ? kDmgAbandon : 0;
+    o.lotDamage = oc.state == 8 ? kDmgRubble : oc.state == 16 ? kDmgBurnt : oc.state == 2 ? kDmgAbandon : oc.state == 32 ? kDmgCrop : 0;
     return o;
   }
   std::vector<OccInfo> occupantsTouching(const OccInfo& o) const override {
@@ -129,6 +129,7 @@ class CityDisasterWorld : public DisasterWorld {
   }
   int fireCoverage(int x, int z) const override { return w_.inTiles(x, z) ? c_.fire.coverageAt(x, z) : 0; }
   int policeCoverage(int x, int z) const override { return w_.inTiles(x, z) ? c_.police.coverageAt(x, z) : 0; }
+  int aura(int x, int z) const override { return w_.inTiles(x, z) && !c_.aura.grid.empty() ? int(c_.aura.aura(x, z)) : 0; }
  private:
   World& w_;
   City& c_;
@@ -557,41 +558,25 @@ void Game::soundLoop(int id, bool on, int pct) {
   } else if (disasterLoops_.erase(id)) audio_->request(id, SoundAction::Stop);
 }
 
+// Flora burnt by a disaster (damage 0x20 of a locust swarm, spec 21 s9): the tile's tree becomes the burnt variant (level 9) of its family.
+void Game::burnFlora(int x, int z) {
+  if (!world_.inTiles(x, z)) return;
+  uint8_t& f = world_.flora[world_.tIdx(x, z)];
+  if (f && (f & 15) < 8) { f = uint8_t((f & 0xF0) | 9); invalidateCityView(); }
+}
+
 void Game::applyDisasterOutput(DisasterOutput& out) {
   City& c = city();
-  // The sprite automata that would carry out saucer bombs, crop circles, locust bites and falling debris are not
-  // drawn yet; their gameplay effect is applied here at once, as if each had just landed. Results go through the
-  // same command path (follow-up output is applied after this batch).
-  // With the game data present the effect layer (disaster_fx) draws them and reports each impact when the flying object lands
-  // (disasterFxFrame); without data (tests, no sprites) the gameplay effect is applied here at once.
-  const bool fxOn = haveData_;
+  // Flying objects (saucers and their bombs, locust swarms, falling debris) and the tornado funnel, toxic puffs, vortex and riot crowd are
+  // drawn and moved by the effect layer (disaster_fx), which reports back when they hit something (disasterFxFrame; spec 21 s12.12).
   DisasterOutput follow;
-  if (fxOn) for (const auto& cmd : out.commands) fx_.onCommand(cmd);
-  if (!fxOn) {
-    CityDisasterWorld dw(world_, c);
-    for (const auto& cmd : out.commands) {
-      switch (cmd.kind) {
-        case DisasterCommand::UfoSwarm:
-          for (const auto& p : cmd.pts) disasters_.ufoBombHit(dw, p.first, p.second, follow);
-          for (const auto& p : cmd.pts2) disasters_.ufoCropCircle(dw, p.first, p.second, follow);
-          break;
-        case DisasterCommand::LocustSwarm:
-          for (const auto& p : cmd.pts) disasters_.locustEaten(dw, p.first, p.second, follow);
-          break;
-        case DisasterCommand::DebrisSpawn: {   // [INFERRED] the class value (2000/5000/10000) is the intensity: a/250 impacts
-          int n = std::max(1, cmd.a / 250);
-          for (int i = 0; i < n && world_.W > 0; i++) disasters_.debrisImpact(dw, int(rng_.rand(uint32_t(world_.W))), int(rng_.rand(uint32_t(world_.H))), follow);
-          break;
-        }
-        default: break;
-      }
-    }
-  }
+  for (const auto& cmd : out.commands) fx_.onCommand(cmd);
   for (const auto& cmd : out.commands) {
     switch (cmd.kind) {
       case DisasterCommand::DestroyOccupant: {
         int i = c.occupantIndexByUid(cmd.id);
-        if (i >= 0 && i < int(world_.occupants.size()) && (cmd.b == 0 || cmd.b == 1)) { notifyBuildingDestroyed(i); c.damageOccupant(i, 8); }
+        // A lot keeps its object and takes the state of the damage: rubble 8, locust-eaten crops 32 (spec 21 s9 rule 6); burnt stays state 8 here.
+        if (i >= 0 && i < int(world_.occupants.size()) && (cmd.b == 0 || cmd.b == 1)) { notifyBuildingDestroyed(i); c.damageOccupant(i, cmd.b == 1 && cmd.a == kDmgCrop ? 32 : 8); }
         break;
       }
       case DisasterCommand::IgniteOccupant: {
@@ -621,21 +606,16 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
         break;
       case DisasterCommand::MarkRadiation: c.markRadiation(cmd.x, cmd.z); break;
       case DisasterCommand::SoundLoop: soundLoop(cmd.a, cmd.b != 0, int(cmd.value)); break;
-      // Drawn by the effect layer (disaster_fx) or not at all: fire intensity sprites, the crop circle mark and the street-sim rioter
-      // automaton are not drawn [#35]; splash, tornado, toxic puffs / rain, saucers, crowds and the rest reach fx_ in the loop above.
+      // Not drawn: the crop circle mark, and the debris / toxic / tornado commands whose visuals follow the manager state (fx_.syncState).
       case DisasterCommand::SetFireIntensity: case DisasterCommand::Splash: case DisasterCommand::CropCircle: case DisasterCommand::UfoLeave:
       case DisasterCommand::TornadoTouchdown: case DisasterCommand::ToxicPuffs: case DisasterCommand::ToxicRain: case DisasterCommand::SpawnRioters:
+      case DisasterCommand::UfoSwarm: case DisasterCommand::LocustSwarm: case DisasterCommand::DebrisSpawn:
       // Dispatch bookkeeping of DispatchTracker, which the game does not use: the dispatch tools stamp the coverage layers directly (CoverageLayer::dispatch).
       case DisasterCommand::StampCoverage: case DisasterCommand::SpawnUnit: case DisasterCommand::RemoveUnit:
         break;
-      case DisasterCommand::VortexSpawn: {   // the vortex object is not drawn; it still scours the coast once and lasts its duration
-        CityDisasterWorld dw(world_, c);
-        DisasterOutput extra;
-        disasters_.vortexPosition(dw, cmd.x, cmd.z, extra);
-        for (auto& e : extra.commands) out.commands.push_back(e);
+      case DisasterCommand::VortexSpawn:   // the vortex effect wanders over the water and reports its tile (FxImpact::VortexAt); this times its life
         vortexMs_ = std::max(1, cmd.a);
         break;
-      }
       case DisasterCommand::Crater:
         if (cmd.pts.size() >= 2) {
           std::set<int> hit;
@@ -661,16 +641,17 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
   if (!follow.commands.empty() || !follow.events.empty()) applyDisasterOutput(follow);
 }
 
-// Disaster effect sprites (spec 21 s12, 26 s5.9): advance in real time, apply the impacts of flying objects that landed (bomb, locust bite,
-// debris, crop circle) through the manager, and append the sprites to the scene after the street automata.
+// Disaster effects (spec 21 s12, 26 s5.9): advance in real time, apply the reports of the flying objects, funnels and crowds through the
+// manager, and append the sprites to the scene after the street automata. Without game data the effects still run (no sprites are drawn).
 void Game::disasterFxFrame(uint32_t dtMs) {
-  if (!haveData_ || !world_.W) return;
-  fx_.setData(&data_);
+  if (!world_.W) return;
+  fx_.setData(haveData_ ? &data_ : nullptr);
   fx_.setMapSize(world_.W, world_.H);
   const World* vw = &viewWorld();
   fx_.setGround([vw](int x, int z) { return int32_t(std::max<int>(vw->altAt(x, z), vw->waterAt(x, z)) * 256); });
   fx_.setRoad([this](int x, int z) { return city().hasRoadPiece(x, z); });
   fx_.setWater([vw](int x, int z) { return vw->altAt(x, z) < vw->waterAt(x, z); });
+  disasters_.setTornadoDriven(true);   // the funnel effect moves tornadoes and reports their tiles
   if (simReady_ && managersReady_) fx_.syncState(disasters_);
   fx_.update(dtMs);
   std::vector<FxImpact> impacts = fx_.takeImpacts();
@@ -682,17 +663,17 @@ void Game::disasterFxFrame(uint32_t dtMs) {
       for (const FxImpact& im : impacts) {
         switch (im.kind) {
           case FxImpact::UfoBomb: disasters_.ufoBombHit(dw, im.x, im.z, out); break;
-          case FxImpact::LocustBite: disasters_.locustEaten(dw, im.x, im.z, out); break;
+          case FxImpact::UfoBeam: disasters_.ufoBeamHit(dw, im.x, im.z, out); break;
+          case FxImpact::UfoCrop: disasters_.ufoCropCircle(dw, im.x, im.z, out); break;
+          case FxImpact::UfoAbduction: disasters_.ufoAbduction(); break;
+          case FxImpact::LocustEat: disasters_.locustEaten(dw, im.x, im.z, out); break;
+          case FxImpact::LocustFlora: burnFlora(im.x, im.z); break;
           case FxImpact::Debris: disasters_.debrisImpact(dw, im.x, im.z, out); break;
-          case FxImpact::CropCircle: disasters_.ufoCropCircle(dw, im.x, im.z, out); break;
-          case FxImpact::Rioter: {   // [INFERRED] the crowd sets fire to a building within 2 tiles of the road tile it stands on
-            std::vector<std::pair<int, int>> lots;
-            for (int dz = -2; dz <= 2; dz++)
-              for (int dx = -2; dx <= 2; dx++) { OccInfo o = dw.occupantAt(im.x + dx, im.z + dz); if (o.valid && o.isLot) lots.emplace_back(im.x + dx, im.z + dz); }
-            if (!lots.empty()) { const auto& t = lots[rng_.rand(uint32_t(lots.size()))]; disasters_.rioterAt(dw, t.first, t.second, out); }
-            break;
-          }
+          case FxImpact::Rioter: disasters_.rioterAt(dw, im.x, im.z, out); break;   // any occupant that passes the ignition test (spec 21 s8.4)
           case FxImpact::RioterWalk: if (street_) street_->pointSpawnPedestrians(im.x, im.z, 3); break;   // the crowd shows as walkers [INFERRED stand-in for the rioter automaton]
+          case FxImpact::TornadoTile: disasters_.tornadoAt(dw, im.id, im.fx, im.fz, out); break;
+          case FxImpact::TornadoLeft: disasters_.tornadoLeftMap(im.id); break;
+          case FxImpact::VortexAt: disasters_.vortexPosition(dw, im.x, im.z, out); break;
         }
       }
     }

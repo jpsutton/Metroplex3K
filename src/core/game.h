@@ -312,7 +312,8 @@ class Game {
   void setupStreetSim();
   void streetSounds(const std::vector<SoundEvent>& events);   // vehicle / train / boat sounds follow their automata (game_street.cpp)
   void streetSimFrame(uint32_t dtMs);
-  void disasterFxFrame(uint32_t dtMs);   // disaster effect sprites: advance, deliver impacts, append to the scene
+  void disasterFxFrame(uint32_t dtMs);
+  void burnFlora(int x, int z);   // disaster effect sprites: advance, deliver impacts, append to the scene
   void postTicker(uint32_t table, uint32_t id, bool hasLoc = false, int x = 0, int z = 0);
   void centreOn(int x, int z);
   // tool preview / quote

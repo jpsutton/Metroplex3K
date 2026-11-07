@@ -89,7 +89,7 @@ std::vector<IdSlot> idSlots(DisasterTunables& t) {
       {0xC4237621, &t.quakeScarpP[0]}, {0x64237626, &t.quakeScarpP[1]}, {0x6423762B, &t.quakeScarpP[2]},
       {0x24295C2C, &t.quakeScarpQ[0]}, {0x44237637, &t.quakeScarpQ[1]}, {0x4423763D, &t.quakeScarpQ[2]},
       {0x6484A25D, &t.riotUnrestThreshold}, {0x2484A264, &t.riotIntervalMin}, {0x6484A26A, &t.riotIntervalMax},
-      {0x4484A270, &t.riotSiteCoverageMax}, {0x4484A278, &t.riotSearchRadius}, {0xE484A27D, &t.riotDurMax},
+      {0x4484A270, &t.riotSiteAuraMax}, {0x4484A278, &t.riotSearchRadius}, {0xE484A27D, &t.riotDurMax},
       {0xA484A283, &t.riotDurMin}, {0x2484A289, &t.riotCrowdA}, {0x2484A290, &t.riotCrowdB},
       {0x2484A29E, &t.riotWarnDelay}, {0x2484A2A5, &t.riotBrewTime}, {0x4484A2AC, &t.riotGrowth},
       {0x24860901, &t.whirlMax}, {0x24860902, &t.whirlMinGapMonths}, {0x24860904, &t.whirlMagMin},
@@ -225,18 +225,29 @@ namespace {
 int clampi(int v, int a, int b) { return v < a ? a : v > b ? b : v; }
 int drawRange(GameRng& r, int a, int b) { return b <= a ? a : r.randInt(a, b); }
 
-// Sweep a rectangle starting at (cx,cz): rows start at cx and wrap, z advances with wrap. fn returns true to stop.
+// Visits every tile of the inclusive rectangle once, nearest rings first, in the outward square spiral of spec 21 s8.4 starting at (cx, cz):
+// the start tile, then legs of length 1, 1, 2, 2, 3, 3, ... (+x, +z, -x, -z, +x, ...); tiles outside the rectangle are skipped.
+// fn returns true to stop. [STATIC]
 template <class F>
-bool sweepRect(int x0, int z0, int x1, int z1, int cx, int cz, F fn) {  // inclusive bounds
-  int nx = x1 - x0 + 1, nz = z1 - z0 + 1;
+bool sweepRect(int x0, int z0, int x1, int z1, int cx, int cz, F fn) {
+  const int nx = x1 - x0 + 1, nz = z1 - z0 + 1;
   if (nx <= 0 || nz <= 0) return false;
   cx = clampi(cx, x0, x1); cz = clampi(cz, z0, z1);
-  for (int j = 0; j < nz; ++j) {
-    int z = z0 + (cz - z0 + j) % nz;
-    for (int i = 0; i < nx; ++i) {
-      int x = x0 + (cx - x0 + i) % nx;
-      if (fn(x, z)) return true;
-    }
+  long left = long(nx) * nz;
+  int x = cx, z = cz;
+  auto visit = [&](int vx, int vz) {
+    if (vx < x0 || vx > x1 || vz < z0 || vz > z1) return false;
+    --left;
+    return fn(vx, vz);
+  };
+  if (visit(x, z)) return true;
+  static const int dx[4] = {1, 0, -1, 0}, dz[4] = {0, 1, 0, -1};
+  for (int len = 1, dir = 0; left > 0; ++len) {
+    for (int rep = 0; rep < 2 && left > 0; ++rep, dir = (dir + 1) & 3)
+      for (int i = 0; i < len && left > 0; ++i) {
+        x += dx[dir]; z += dz[dir];
+        if (visit(x, z)) return true;
+      }
   }
   return false;
 }
@@ -481,7 +492,7 @@ void DisasterManager::burnTick(DisasterWorld& w, DisasterOutput& out) {
     } else {
       if (grow) {
         dead[size_t(i)] = 1; changed = true;
-        DisasterCommand& e = out.cmd(DisasterCommand::Explosion); e.x = r.x; e.z = r.z;
+        DisasterCommand& e = out.cmd(DisasterCommand::Explosion); e.x = r.x; e.z = r.z; e.b = 0; e.c = 3;   // fire destruction: fire set, size 3 (spec 21 s12.3)
         destroyOccupant(w, o, kDmgBurnt, out);
       } else {
         rr.intensity = 1;
@@ -513,6 +524,7 @@ bool DisasterManager::startTornado(DisasterWorld& w, int x, int z, float dirX, f
   t.variant = clampi(variant, 0, 2); t.lifetime = lifetime; t.speed = speed;
   for (int i = 0; i < 5; ++i) t.warn[i] = tune.tornadoWarn[i];
   if (!warn) { t.phase = 4; t.counter = t.warn[4]; }
+  t.uid = nextTornadoUid_++;
   tornadoes_.push_back(t);
   out.event(DisasterEvent::Started, DisasterType::Tornado, x, z);
   wasActive_ = true;
@@ -538,6 +550,33 @@ bool DisasterManager::scriptTornado(DisasterWorld& w, const int a[8], DisasterOu
   return startTornado(w, sx, sz, float(tx - sx), float(tz - sz), variant, life, float(speed), a[7] != 0, out);
 }
 
+// One damage step of a tornado on the tile it just entered (spec 21 s6.1): Rand(100) <= DestroyChance[variant] destroys the occupant (rubble).
+void DisasterManager::tornadoStep(DisasterWorld& w, TornadoInst& t, int tx, int tz, DisasterOutput& out) {
+  if (int(rng_.rand(100)) > tune.tornadoDestroyChance[t.variant]) return;
+  OccInfo o = w.occupantAt(tx, tz);
+  if (!o.valid) return;
+  int64_t before = cost_;
+  if (destroyOccupant(w, o, kDmgRubble, out)) {
+    t.destroyed++; t.cost += cost_ - before;
+    DisasterCommand& e = out.cmd(DisasterCommand::Explosion); e.x = tx; e.z = tz; e.b = 2; e.c = 3;   // dirt explosion, size 3 (spec 21 s12.3)
+    if (o.flags & kOccOverWater) { DisasterCommand& s = out.cmd(DisasterCommand::Splash); s.x = tx; s.z = tz; }
+  }
+}
+
+void DisasterManager::tornadoAt(DisasterWorld& w, uint32_t uid, float px, float pz, DisasterOutput& out) {
+  for (TornadoInst& t : tornadoes_) {
+    if (t.uid != uid || t.phase < 5) continue;
+    t.px = px; t.pz = pz;
+    const int tx = int(std::floor(px)), tz = int(std::floor(pz));
+    if (w.inMap(tx, tz)) tornadoStep(w, t, tx, tz, out);
+    return;
+  }
+}
+
+void DisasterManager::tornadoLeftMap(uint32_t uid) {
+  for (TornadoInst& t : tornadoes_) if (t.uid == uid) t.leftMap = true;
+}
+
 void DisasterManager::tornadoTick(DisasterWorld& w, DisasterOutput& out) {
   std::vector<TornadoInst> keep;
   for (size_t i = 0; i < tornadoes_.size(); ++i) {
@@ -552,6 +591,10 @@ void DisasterManager::tornadoTick(DisasterWorld& w, DisasterOutput& out) {
           c.x = int(t.px); c.z = int(t.pz); c.a = t.variant + 1; c.f = t.dx; c.f2 = t.dz; c.f3 = t.speed;
         }
       } else t.counter++;
+    } else if (tornadoDriven_) {
+      // The funnel effect moves the tornado and reports tile changes (tornadoAt); here only the lifetime counts [STATIC].
+      t.elapsed++;
+      if (t.elapsed >= t.lifetime || t.leftMap) end = true;
     } else {
       float step = float(double(t.speed) * tune.tornadoTilesPerSpeedUnitPerTick);
       t.px += t.dx * step; t.pz += t.dz * step;
@@ -559,17 +602,7 @@ void DisasterManager::tornadoTick(DisasterWorld& w, DisasterOutput& out) {
       int tx = int(std::floor(t.px)), tz = int(std::floor(t.pz));
       if (!w.inMap(tx, tz)) end = true;
       else {
-        if (int(rng_.rand(100)) <= tune.tornadoDestroyChance[t.variant]) {
-          OccInfo o = w.occupantAt(tx, tz);
-          if (o.valid) {
-            int64_t before = cost_;
-            if (destroyOccupant(w, o, kDmgRubble, out)) {
-              t.destroyed++; t.cost += cost_ - before;
-              DisasterCommand& e = out.cmd(DisasterCommand::Explosion); e.x = tx; e.z = tz;
-              if (o.flags & kOccOverWater) { DisasterCommand& s = out.cmd(DisasterCommand::Splash); s.x = tx; s.z = tz; }
-            }
-          }
-        }
+        tornadoStep(w, t, tx, tz, out);
         if (t.elapsed >= t.lifetime) end = true;
       }
     }
@@ -711,7 +744,7 @@ void DisasterManager::quakeDamage(DisasterWorld& w, QuakeInst& q, DisasterOutput
         if (destroyOccupant(w, o, kDmgRubble, out)) {
           q.destroyed++; q.cost += cost_ - before;
           if (rng_.rand(50) == 0) {
-            DisasterCommand& e = out.cmd(DisasterCommand::Explosion); e.x = x; e.z = z;
+            DisasterCommand& e = out.cmd(DisasterCommand::Explosion); e.x = x; e.z = z; e.b = 0; e.c = 1;
             if (o.flags & kOccOverWater) { DisasterCommand& s = out.cmd(DisasterCommand::Splash); s.x = x; s.z = z; }
           }
         }
@@ -763,11 +796,11 @@ void DisasterManager::quakeTick(DisasterWorld& w, DisasterOutput& out) {
 // ---------------------------------------------------------------------------------------------
 // Riot (section 8)
 // ---------------------------------------------------------------------------------------------
-bool DisasterManager::findRiotSite(DisasterWorld& w, int cx, int cz, int& ox, int& oz) {
-  int r = tune.riotSearchRadius;
+bool DisasterManager::findRiotSite(DisasterWorld& w, int cx, int cz, int& ox, int& oz, bool relocate) {
+  const int r = relocate ? std::max(w.width(), w.height()) : tune.riotSearchRadius;
   return sweepRect(std::max(0, cx - r), std::max(0, cz - r), std::min(w.width() - 1, cx + r),
                    std::min(w.height() - 1, cz + r), cx, cz, [&](int x, int z) {
-    if (w.policeCoverage(x, z) >= tune.riotSiteCoverageMax) return false;
+    if (!relocate && w.aura(x, z) >= tune.riotSiteAuraMax) return false;   // local aura, not police coverage [STATIC]
     OccInfo o = w.occupantAt(x, z);
     if (!o.valid || !(o.flags & kOccCrowdSite)) return false;
     ox = x; oz = z;
@@ -805,7 +838,7 @@ void DisasterManager::riotTick(DisasterWorld& w, const DisasterInputs& in, Disas
     } else if (r.phase == 1) {
       if (r.counter >= tune.riotBrewTime) {
         OccInfo o = w.occupantAt(r.x, r.z);
-        bool siteOk = o.valid && (o.flags & kOccCrowdSite) && w.policeCoverage(r.x, r.z) < tune.riotSiteCoverageMax;
+        bool siteOk = o.valid && (o.flags & kOccCrowdSite) && w.aura(r.x, r.z) < tune.riotSiteAuraMax;   // [INFERRED] "site still valid" = the random-site test
         if ((r.noWarn || in.unrest >= tune.riotUnrestThreshold) && siteOk) {
           r.phase = 2; r.counter = 0;
           DisasterCommand& c = out.cmd(DisasterCommand::SpawnRioters);
@@ -846,7 +879,7 @@ bool DisasterManager::riotRelocate(DisasterWorld& w, DisasterOutput& out) {
   for (int attempt = 0; attempt < 3; ++attempt) {
     int cx = rng_.rangeInt(0, w.width() - 1), cz = rng_.rangeInt(0, w.height() - 1);
     int sx, sz;
-    if (findRiotSite(w, cx, cz, sx, sz) && (sx != r.x || sz != r.z)) {
+    if (findRiotSite(w, cx, cz, sx, sz, true) && (sx != r.x || sz != r.z)) {
       r.x = sx; r.z = sz;
       DisasterCommand& c = out.cmd(DisasterCommand::SpawnRioters);
       c.x = sx; c.z = sz; c.a = tune.riotCrowdA; c.b = tune.riotCrowdB;
@@ -862,6 +895,39 @@ bool DisasterManager::riotRelocate(DisasterWorld& w, DisasterOutput& out) {
 // ---------------------------------------------------------------------------------------------
 // Toxic cloud (section 6.2)
 // ---------------------------------------------------------------------------------------------
+// Centre-weighted random in [a, b] (spec 21 s13): m = (b-a)/2, r = min(Rand(m), Rand(m)) with a random sign, result a + m + r.
+static int centreWeighted(GameRng& rng, int a, int b) {
+  int m = (b - a) / 2;
+  if (m <= 0) return a;
+  int r = std::min(int(rng.rand(uint32_t(m))), int(rng.rand(uint32_t(m))));
+  if (rng.rand(2)) r = -r;
+  return a + m + r;
+}
+
+bool DisasterManager::startRandomToxicCloud(DisasterWorld& w, DisasterOutput& out) {
+  if (int(clouds_.size()) >= tune.toxMaxInstances) return false;
+  const int W = w.width(), H = w.height();
+  if (W <= 0 || H <= 0) return false;
+  const int level = int(rng_.rand(5));
+  const double theta = double(rng_.randRange(0.f, 6.2831853f));
+  const int cx = clampi(centreWeighted(rng_, 0, W - 1), 0, W - 1), cz = clampi(centreWeighted(rng_, 0, H - 1), 0, H - 1);
+  // Origin: spiral over the whole map from (cx, cz); a tile whose zone-density value is 9, 10 or 11 scores 2 / 3 / 4 [INFERRED: the per-tile layer value;
+  // the +4 occupant test is [OPEN] and omitted]. At each qualifying tile the scores of the qualifying run through it along the four axis directions are
+  // summed; the first sum > 79 wins, else the best cross seen [STATIC order, [INFERRED] sum].
+  auto score = [&](int x, int z) { if (!w.inMap(x, z)) return 0; const int t = w.zoneType(x, z); return t == 9 ? 2 : t == 10 ? 3 : t == 11 ? 4 : 0; };
+  int bestSum = -1, bx = cx, bz = cz;
+  sweepRect(0, 0, W - 1, H - 1, cx, cz, [&](int x, int z) {
+    if (!score(x, z)) return false;
+    int sum = score(x, z);
+    static const int d4[4][2] = {{-1, 0}, {0, -1}, {1, 0}, {0, 1}};
+    for (auto& d : d4) for (int k = 1; score(x + d[0] * k, z + d[1] * k); ++k) sum += score(x + d[0] * k, z + d[1] * k);
+    if (sum > bestSum) { bestSum = sum; bx = x; bz = z; }
+    return sum > 79;
+  });
+  const float speed = float(centreWeighted(rng_, tune.toxMinSpeed, std::max(tune.toxMinSpeed, tune.toxMaxSpeed)));
+  return startToxicCloud(w, bx, bz, true, out, level, float(std::sin(theta)) * speed, float(std::cos(theta)) * speed);
+}
+
 bool DisasterManager::startToxicCloud(DisasterWorld& w, int x, int z, bool warn, DisasterOutput& out,
                                       int level, float dirX, float dirZ) {
   if (int(clouds_.size()) >= tune.toxMaxInstances) return false;
@@ -904,7 +970,8 @@ void DisasterManager::cloudTick(DisasterWorld& w, DisasterOutput& out) {
         c.rainStart = rng_.rangeInt(tune.toxMinRainStart, rmax);
         int dmin = tune.toxMinDuration == 0 ? 10 : tune.toxMinDuration;
         c.lifetime = rng_.rangeInt(dmin, std::max(tune.toxMaxDuration, dmin + 1));
-        int want = rng_.rangeInt(tune.toxMinClouds, std::max(tune.toxMaxClouds, tune.toxMinClouds + 1));
+        // Puff count = Min + floor((Max - Min) * (level + 1) / 5), not a random range (spec 21 s6.2 [STATIC])
+        int want = tune.toxMinClouds + (std::max(tune.toxMaxClouds, tune.toxMinClouds) - tune.toxMinClouds) * (c.level + 1) / 5;
         if (want < 1) want = 1;
         int gap = rng_.rangeInt(8, 16), scanned = 0;
         int passes = 0;
@@ -931,14 +998,7 @@ void DisasterManager::cloudTick(DisasterWorld& w, DisasterOutput& out) {
       }
     } else {
       c.counter++;
-      float step = float(double(c.speed) * tune.tornadoTilesPerSpeedUnitPerTick);
-      std::vector<std::pair<float, float>> alive;
-      for (auto p : c.puffs) {
-        p.first += c.dx * step; p.second += c.dz * step;
-        if (w.inMap(int(std::floor(p.first)), int(std::floor(p.second)))) alive.push_back(p);
-      }
-      c.puffs.swap(alive);
-      c.cx += c.dx * step; c.cz += c.dz * step;
+      // The puffs never drift: the cloud stays where it formed (spec 21 s6.2 / 12.7 [STATIC]).
       if (!c.raining && c.counter > c.rainStart) {
         c.raining = true;
         int rmax = std::max(tune.toxMaxRain, tune.toxMinRain + 1);
@@ -1043,6 +1103,7 @@ void DisasterManager::launchUfo(DisasterWorld& w, const DisasterInputs& in, UfoI
       int x = idx % W, z = idx / W;
       OccInfo o = w.occupantAnchoredAt(x, z);
       if (!o.valid || !o.isLot) continue;
+      if (o.lotDamage == kDmgAbandon || o.lotDamage == kDmgRubble || o.lotDamage == kDmgBurnt) continue;   // only these lot states are excluded [STATIC]
       int cat = ufoCategory(w, o);
       if (cat < 0 || int(lists[cat].size()) >= caps[cat]) continue;
       lists[cat].emplace_back(o.ax + o.w / 2, o.az + o.h / 2);
@@ -1115,7 +1176,7 @@ void DisasterManager::ufoBombHit(DisasterWorld& w, int x, int z, DisasterOutput&
   if (r1 <= tune.ufoPctFire) {
     if (cat == 0 && u->catLow < tune.ufoMaxLowTech && ignite(w, o, 0, out)) u->catLow++;
   } else if (int(rng_.rand(100)) <= tune.ufoPctDestroyed) {
-    DisasterCommand& e = out.cmd(DisasterCommand::Explosion); e.x = x; e.z = z;
+    DisasterCommand& e = out.cmd(DisasterCommand::Explosion); e.x = x; e.z = z; e.b = 1; e.c = 2;   // UFO bomb: plasma explosion
     if (o.flags & kOccOverWater) { DisasterCommand& s = out.cmd(DisasterCommand::Splash); s.x = x; s.z = z; }
     int64_t before = cost_;
     if (destroyOccupant(w, o, kDmgRubble, out)) {
@@ -1278,7 +1339,7 @@ void DisasterManager::vortexPosition(DisasterWorld& w, int x0, int z0, DisasterO
         whirls_[0].destroyed++; whirls_[0].cost += cost_ - before;
         DisasterCommand& s = out.cmd(DisasterCommand::Sound); s.a = 240; s.x = x; s.z = z;
         DisasterCommand& sp = out.cmd(DisasterCommand::Splash); sp.x = x; sp.z = z;
-        DisasterCommand& e = out.cmd(DisasterCommand::Explosion); e.x = x; e.z = z;
+        DisasterCommand& e = out.cmd(DisasterCommand::Explosion); e.x = x; e.z = z; e.b = 0; e.c = 2;
       }
     }
 }
@@ -1397,10 +1458,7 @@ bool DisasterManager::startRandom(DisasterType t, DisasterWorld& w, const Disast
       ok = startRiot(w, x, z, true, out); break;
     }
     case DisasterType::UFO: ok = startUfo(w, in, true, out); break;
-    case DisasterType::ToxicCloud: {
-      int x = int(rng_.rand(uint32_t(w.width()))), z = int(rng_.rand(uint32_t(w.height())));
-      ok = startToxicCloud(w, x, z, true, out); break;
-    }
+    case DisasterType::ToxicCloud: ok = startRandomToxicCloud(w, out); break;
     case DisasterType::Whirlpool: ok = startWhirlpool(w, in, float(rng_.nextFloat()), true, out); break;
     case DisasterType::Locusts: ok = startLocusts(w, in, true, out); break;
     case DisasterType::SpaceJunk: ok = startSpaceJunk(w, in, float(rng_.nextFloat()), true, out); break;
@@ -1495,10 +1553,7 @@ void DisasterManager::monthlyTick(DisasterWorld& w, const DisasterInputs& in, Di
       (!haveCloud_ || int64_t(in.jdn) - lastCloudJdn_ >= int64_t(tune.toxAvgMonthsBetween) * 30)) {
     const int64_t score = toxicScore(in);
     if (score > tune.toxThreshold) {
-      int per = tune.toxScorePerLevel == 0 ? 10 : tune.toxScorePerLevel;
-      int level = int((score - tune.toxThreshold) / per);
-      int x = int(rng_.rand(uint32_t(w.width()))), z = int(rng_.rand(uint32_t(w.height())));
-      startToxicCloud(w, x, z, true, out, level);
+      startRandomToxicCloud(w, out);
     }
   }
   // Whirlpool
