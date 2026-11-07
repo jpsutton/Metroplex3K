@@ -55,8 +55,8 @@ implementation internals, no copied creative content.
   the original data: record layouts, tuning values, the new-city record template (`spec/30-new-city-template.md` and
   `src/core/newcity_template.cpp`, about 13 KB of record bytes) and the default occupant values
   (`src/core/occ_defaults.cpp`). They are facts needed for byte compatibility, not creative expression, so copyright
-  protection is weak or absent. Recommended mitigation if the owner wants less exposure: build the new-city template from a
-  shipped starter file at run time instead of embedding it.
+  protection is weak or absent. Decision (owner): the
+  template stays embedded. Settled.
 - **Cheat phrases:** `src/core/cheats.cpp` and `spec/27-platform.md` list the original's cheat phrases and their effects.
   They are short strings needed for behaviour compatibility. Kept.
 - No embedded font, sprite or sound data was found in the code. The only embedded font is the public-domain 5x7 font.
@@ -135,7 +135,7 @@ git ls-files | grep -iE '\.(png|bmp|ixf|dat|xa|wav|tgq|exe|dll|cur)$'   # must b
 ## 5. Open items for the owner
 
 1. Done: the owner decided the specification falls under the project license (it was written for this project).
-2. Decide on the new-city template: embed (current) or derive from shipped files at run time.
+2. Done: the new-city template stays embedded (owner decision).
 3. Done: trademark search for the project name (see section 2.4).
 4. Legal review of the analysis stage and the game's EULA: declined by the owner. Risk accepted.
 5. Keep `refs/patchbay/*` and `build-*` directories out of any push.
