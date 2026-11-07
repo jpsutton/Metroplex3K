@@ -31,7 +31,7 @@ int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 }  // namespace
 
 void DisasterFx::clear() {
-  fx_.clear(); incoming_.clear(); tornadoes_.clear(); puffs_.clear(); rain_.clear(); vortices_.clear(); impacts_.clear();
+  fx_.clear(); incoming_.clear(); crowds_.clear(); tornadoes_.clear(); puffs_.clear(); rain_.clear(); vortices_.clear(); impacts_.clear();
 }
 
 int32_t DisasterFx::groundAt(double x, double z) const {
@@ -88,7 +88,7 @@ void DisasterFx::onCommand(const DisasterCommand& c) {
     case DisasterCommand::UfoSwarm: {
       const int n = std::max(1, c.a);
       for (int i = 0; i < n; i++) {
-        Fx s; s.kind = Kind::Saucer; s.speed = 10.0; s.life = 1 << 30;
+        Fx s; s.kind = Kind::Saucer; s.speed = 16.0; s.life = 1 << 30;
         edgePoint(s.x, s.z); s.h = 3.5 * kUnitsPerTile; s.variant = i;
         if (size_t(2 * i + 1) < c.pts3.size()) {
           s.route.push_back({c.pts3[size_t(2 * i)].first, c.pts3[size_t(2 * i)].second, 0});
@@ -117,7 +117,7 @@ void DisasterFx::onCommand(const DisasterCommand& c) {
     case DisasterCommand::LocustSwarm: {
       const int n = std::max(1, c.a);
       for (int i = 0; i < n; i++) {
-        Fx s; s.kind = Kind::Locust; s.speed = 10.0; s.life = 1 << 30; s.variant = i * 7 + 3;
+        Fx s; s.kind = Kind::Locust; s.speed = 14.0; s.life = 1 << 30; s.variant = i * 7 + 3;
         edgePoint(s.x, s.z); s.h = 10.0;
         for (size_t j = size_t(i); j < c.pts.size(); j += size_t(n)) s.route.push_back({c.pts[j].first, c.pts[j].second, 4});
         if (s.route.empty()) s.route.push_back({int(rndf() * std::max(1, W_)), int(rndf() * std::max(1, H_)), 0});
@@ -168,6 +168,15 @@ void DisasterFx::syncState(const DisasterManager& m) {
     } else v.alive = false;
   }
   for (size_t i = ts.size(); i < tornadoes_.size(); i++) if (tornadoes_[i].alive && tornadoes_[i].fade < 0) tornadoes_[i].fade = 0;
+  // Rioter crowds: one per riot that has broken out (phase 2), starting at the riot's site [spec 21 s8.4].
+  {
+    std::vector<std::pair<int, int>> sites;
+    for (const RiotInst& r : m.riots()) if (r.phase == 2) sites.emplace_back(r.x, r.z);
+    while (crowds_.size() > sites.size()) crowds_.pop_back();
+    for (size_t i = 0; i < sites.size(); i++) {
+      if (i >= crowds_.size()) { CrowdView cv; cv.x = sites[i].first + 0.5; cv.z = sites[i].second + 0.5; crowds_.push_back(cv); }
+    }
+  }
   // Toxic clouds: one puff sprite per puff; puffs that disappear play the closing frames.
   std::vector<std::pair<double, double>> cur;
   rain_.clear();
@@ -268,6 +277,28 @@ void DisasterFx::update(uint32_t dtMs) {
   while (!tornadoes_.empty() && !tornadoes_.back().alive) tornadoes_.pop_back();
   for (PuffView& p : puffs_) { p.age += dt; if (p.closing >= 0) p.closing += dt; }
   puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(), [](const PuffView& p) { return p.closing >= 4 * 150; }), puffs_.end());
+  // Rioter crowds walk the roads (random walk, never back onto a non-road tile) and set fire to what stands beside them.
+  // [INFERRED] pace and reporting interval: spec 21 s8.4 only says the crowd reports tiles the riot accepts.
+  for (CrowdView& cv : crowds_) {
+    cv.walkMs += dt; cv.burnMs += dt;
+    if (cv.walkMs >= 500) {
+      cv.walkMs = 0;
+      static const int d4[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+      const int tx = int(cv.x), tz = int(cv.z), start = rndi(4);
+      for (int k = 0; k < 4; k++) {
+        const int nx = tx + d4[(start + k) & 3][0], nz = tz + d4[(start + k) & 3][1];
+        if (nx < 0 || nz < 0 || nx >= W_ || nz >= H_ || (road_ && !road_(nx, nz))) continue;
+        cv.x = nx + 0.5; cv.z = nz + 0.5;
+        FxImpact im; im.kind = FxImpact::RioterWalk; im.x = nx; im.z = nz; impacts_.push_back(im);
+        break;
+      }
+    }
+    if (cv.burnMs >= 1000) {
+      cv.burnMs = 0;
+      FxImpact im; im.kind = FxImpact::Rioter; im.x = std::clamp(int(cv.x) + rndi(3) - 1, 0, std::max(0, W_ - 1)); im.z = std::clamp(int(cv.z) + rndi(3) - 1, 0, std::max(0, H_ - 1));
+      impacts_.push_back(im);
+    }
+  }
   rainAge_ += dt;
   for (VortexView& v : vortices_) v.age += dt;
   vortices_.erase(std::remove_if(vortices_.begin(), vortices_.end(), [](const VortexView& v) { return v.age >= v.life; }), vortices_.end());

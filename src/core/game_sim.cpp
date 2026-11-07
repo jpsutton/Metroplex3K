@@ -621,8 +621,8 @@ void Game::applyDisasterOutput(DisasterOutput& out) {
         break;
       case DisasterCommand::MarkRadiation: c.markRadiation(cmd.x, cmd.z); break;
       case DisasterCommand::SoundLoop: soundLoop(cmd.a, cmd.b != 0, int(cmd.value)); break;
-      // Visual only (no state of the city changes; the destruction they accompany arrives as DestroyOccupant / MarkAbandoned): effect sprites
-      // (splash, fire intensity, crop circle, tornado, toxic cloud and rain), the saucers' exit and the rioter crowd automaton [#35: nothing is drawn].
+      // Drawn by the effect layer (disaster_fx) or not at all: fire intensity sprites, the crop circle mark and the street-sim rioter
+      // automaton are not drawn [#35]; splash, tornado, toxic puffs / rain, saucers, crowds and the rest reach fx_ in the loop above.
       case DisasterCommand::SetFireIntensity: case DisasterCommand::Splash: case DisasterCommand::CropCircle: case DisasterCommand::UfoLeave:
       case DisasterCommand::TornadoTouchdown: case DisasterCommand::ToxicPuffs: case DisasterCommand::ToxicRain: case DisasterCommand::SpawnRioters:
       // Dispatch bookkeeping of DispatchTracker, which the game does not use: the dispatch tools stamp the coverage layers directly (CoverageLayer::dispatch).
@@ -669,6 +669,7 @@ void Game::disasterFxFrame(uint32_t dtMs) {
   fx_.setMapSize(world_.W, world_.H);
   const World* vw = &viewWorld();
   fx_.setGround([vw](int x, int z) { return int32_t(std::max<int>(vw->altAt(x, z), vw->waterAt(x, z)) * 256); });
+  fx_.setRoad([this](int x, int z) { return city().hasRoadPiece(x, z); });
   fx_.setWater([vw](int x, int z) { return vw->altAt(x, z) < vw->waterAt(x, z); });
   if (simReady_ && managersReady_) fx_.syncState(disasters_);
   fx_.update(dtMs);
@@ -684,6 +685,14 @@ void Game::disasterFxFrame(uint32_t dtMs) {
           case FxImpact::LocustBite: disasters_.locustEaten(dw, im.x, im.z, out); break;
           case FxImpact::Debris: disasters_.debrisImpact(dw, im.x, im.z, out); break;
           case FxImpact::CropCircle: disasters_.ufoCropCircle(dw, im.x, im.z, out); break;
+          case FxImpact::Rioter: {   // [INFERRED] the crowd sets fire to a building within 2 tiles of the road tile it stands on
+            std::vector<std::pair<int, int>> lots;
+            for (int dz = -2; dz <= 2; dz++)
+              for (int dx = -2; dx <= 2; dx++) { OccInfo o = dw.occupantAt(im.x + dx, im.z + dz); if (o.valid && o.isLot) lots.emplace_back(im.x + dx, im.z + dz); }
+            if (!lots.empty()) { const auto& t = lots[rng_.rand(uint32_t(lots.size()))]; disasters_.rioterAt(dw, t.first, t.second, out); }
+            break;
+          }
+          case FxImpact::RioterWalk: if (street_) street_->pointSpawnPedestrians(im.x, im.z, 3); break;   // the crowd shows as walkers [INFERRED stand-in for the rioter automaton]
         }
       }
     }

@@ -18,7 +18,7 @@
 namespace m3k {
 
 struct FxImpact {
-  enum Kind { UfoBomb, LocustBite, Debris, CropCircle } kind = UfoBomb;
+  enum Kind { UfoBomb, LocustBite, Debris, CropCircle, RioterWalk, Rioter } kind = UfoBomb;   // RioterWalk: crowd stepped onto a road tile; Rioter: crowd at a tile (ignites the occupant)
   int x = 0, z = 0;
 };
 
@@ -29,6 +29,7 @@ class DisasterFx {
   void setData(GameData* d) { data_ = d; }
   void setGround(GroundFn g) { ground_ = std::move(g); }
   void setWater(std::function<bool(int, int)> w) { water_ = std::move(w); }
+  void setRoad(std::function<bool(int, int)> r) { road_ = std::move(r); }   // tiles a rioter crowd can walk on
   void setMapSize(int w, int h) { W_ = w; H_ = h; }
   void seed(uint32_t s) { rng_ = s ? s : 1u; }
   void clear();
@@ -72,6 +73,7 @@ class DisasterFx {
   struct PuffView { double x = 0, z = 0; int age = 0; int closing = -1; int height = 0; };
   struct RainView { double x = 0, z = 0; };
   int rainAge_ = 0;
+  struct CrowdView { double x = 0, z = 0; int walkMs = 0, burnMs = 0; };
   struct VortexView { double x = 0, z = 0; int age = 0, life = 0; };
 
   uint32_t rnd() { rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5; return rng_; }
@@ -89,7 +91,7 @@ class DisasterFx {
 
   GameData* data_ = nullptr;
   GroundFn ground_;
-  std::function<bool(int, int)> water_;
+  std::function<bool(int, int)> water_, road_;
   int W_ = 0, H_ = 0;
   uint32_t rng_ = 0x9E3779B9u;
   std::vector<Fx> fx_, incoming_;
@@ -98,6 +100,7 @@ class DisasterFx {
   std::vector<PuffView> puffs_;
   std::vector<RainView> rain_;
   std::vector<VortexView> vortices_;
+  std::vector<CrowdView> crowds_;
   std::vector<FxImpact> impacts_;
   mutable int zoom_ = 2, rot_ = 0;
 };

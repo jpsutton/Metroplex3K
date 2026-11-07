@@ -1,5 +1,5 @@
 // Starts each disaster type in a loaded city and reports how it ends and what it damages (issues #35, #37).
-// Disasters run at minute resolution while active, so each type can take up to 750 s of play (1500 half-second
+// Disasters run at minute resolution while active, so each type can take up to 750 s of play (1500 quarter-second
 // frames); "STILL ACTIVE" at the limit usually means fires are still burning.
 //   probe_disasters [GAME_DIR] [city-name-substring]      (default city: Berlin)
 #include "probe_common.h"
@@ -31,13 +31,13 @@ int main(int argc, char** argv) {
     int frames = 0, peakFire = 0;
     bool ended = false;
     while (frames < 1500) {
-      s.frames(1, 500);
+      s.frames(1, 250);
       frames++;
       peakFire = std::max(peakFire, count(16));
       if (!s.game.disasterActive()) { ended = true; break; }
     }
     std::printf("   %-12s %s after %4d frames (%.0f s of play); rubble lots +%d, peak burning %d\n", k.name, ended ? "ended" : "STILL ACTIVE", frames,
-                frames * 0.5, count(8) - rubble0, peakFire);
+                frames * 0.25, count(8) - rubble0, peakFire);
   }
   return 0;
 }
