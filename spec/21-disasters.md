@@ -671,7 +671,7 @@ Whirlpool tunables, confirmed by use [STATIC]:
 | `0x24860907` | Damage radius R in tiles: half-size of the square around the whirlpool centre that is scanned for victims (7). |
 | `0x2486090E`–`0x24860911` | Phase thresholds T0–T3 in minute ticks (0 / 20 / 40 / 60). |
 | `0x24860912` | Loaded, never used (100). |
-| `0x24860913` | Lifetime (µs) of the floating wreck objects the whirlpool creates (30000). |
+| `0x24860913` | Lifetime of the floating wreck objects the whirlpool creates, counted in ≈ ms (30000 ≈ 30.7 s) (§12.6). |
 | `0x24860914` | Vortex travel speed, × 0.001 → world units per ms (120 → 0.12, ≈ 0.47 tiles/s) (§12.6). |
 | `0x24860915`–`0x24860917` | Vortex effect: frame period µs (250000); centre angular speed × 10⁻⁸ rad/µs (1000); capture half-size in world units (2400) (§12.6). |
 
@@ -1465,7 +1465,10 @@ queue in order; a beam or crop-circle command first inserts a "fly there" leg.
   projectile from a random point up to 80 units ahead along its heading, velocity (1.2 cos φ, 0.2,
   1.2 sin φ) with random φ. A projectile that hits a building ignites it (riot ignition, §8.4).
 * Reports to the riot: "entered tile" (the riot site moves there; the road piece there gets its two
-  per-instance **lock bits** cleared while any crowd stands on it, ref-counted per tile), "left tile"
+  per-instance **lock bits** cleared while any crowd stands on it, ref-counted per tile; fire does
+  the same on a burning occupant. One bit allows replacement by development (building placement
+  fails on a locked tile), the other allows clearing by tools (network placement, terraforming and
+  zoning will not remove a locked tile) [STATIC; naming INFERRED]), "left tile"
   (bits set again when no crowd remains), "destroyed" (the
   riot relocates, §8.4), and "hit building" (ignite). Event-driven, no fixed cadence.
 * Lifetime: until the riot ends (its duration rule) or the crowd's script ends; then all affected
