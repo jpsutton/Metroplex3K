@@ -1812,6 +1812,7 @@ bool DisasterManager::loadRecord(const DisasterRecord& rec) {
         for (int i = 0; i < n; ++i) {
           BurnRecord b; b.x = int(r.u32()); b.z = int(r.u32()); b.intensity = clampi(r.s32(), 0, 2);
           b.duration = drawRange(rng_, tune.stageMin, tune.stageMax);
+          if (b.intensity > 0) b.steps = 1;   // the record does not store the step count; a fire past intensity 0 has had a transition (flame size 1..3)
           v.push_back(b);
         }
         burning_ = v; return true;
