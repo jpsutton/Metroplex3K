@@ -1195,9 +1195,12 @@ frame (smallest first), followed by the five alpha cells (sidecar comment conven
   spray, toxic puffs, toxic rain and the whirlpool vortex use **shifted zoom**: image index
   k = z + 1 for z < 4 and k = 4 at z = 4, where the zoom-4 image is drawn magnified 2× (spans doubled);
   the smallest image (k = 0) of these sets is never used.
-* **Detail level.** A per-machine detail class (the same signed value that sizes other caps,
-  `26-automata.md` §7.1) gates optional extras: ground shadows of puffs, saucers and locust swarms
-  appear only above class 3; explosion debris counts scale with it `[INFERRED meaning]`.
+* **Detail level (machine class).** Not a player setting: a machine class 1–7 computed from a CPU
+  probe at every start (not saved): CPU generation < 5 → 1; 5 → 2 (3 if > 189 MHz); 6 → 4 (5 if
+  > 259 MHz); 7–9 → 5 (6 if > 299 MHz); > 9 → 7. The `-p a b c d` command line overrides it with c
+  clamped to 5–10. The same value is the m of `26-automata.md` §7.1. It gates: ground shadows of
+  puffs, saucers, locusts and debris (class ≥ 4); explosion frame 0 (skipped below 4); explosion and
+  tornado debris counts (§12.3, §12.5); the giant-locust count (§12.9). [STATIC]
 * **Draw class.** Effects are inserted into the city renderer with a small integer draw class:
   fire flames 2, explosion 1, splash 2, puff 5 (its shadow 1), toxic rain 1, vortex 1, crater 1,
   saucer/beam/bomb/shadow 1, locust 1. All are depth-sorted with the ordinary sprite list of
@@ -1205,9 +1208,10 @@ frame (smallest first), followed by the five alpha cells (sidecar comment conven
 
 ### 12.2 Fire flames [STATIC][DATA]
 
-* One flame effect per burning building; the fire disaster sets its animation size from the
-  intensity: intensity 0 / 1 / 2 → flame size 1 / 2 / 3 (size 0 exists in the art but disasters do
-  not use it); intensity changes switch the size, extinguishing removes the flames.
+* One flame effect per burning building. **It always starts at flame size 0** (the requested
+  animation is ignored when the flame is attached); each later intensity transition sets size 1 /
+  2 / 3 for intensity 0 / 1 / 2, so a fire shows size 0 until its first transition. Extinguishing
+  removes the flames. [STATIC]
 * Sprites: `EffectSprites` colour `0xFFFE1000 + size × 5 + z`, alpha `0xFFFE1020 + size × 5 + z`.
   15 frames per strip; spans per zoom (L,T,R,B) (4,11,4,1) (8,23,8,1) (16,47,16,1) (32,91,32,1)
   (64,183,64,1) — registration point at the bottom centre.
@@ -1215,7 +1219,9 @@ frame (smallest first), followed by the five alpha cells (sidecar comment conven
 * Placement on the building: the building's screen rectangle (w × h) is sampled up to 32 times at
   sx = w/8 + Rand(3w/4), sy = Rand(h − 4z); the first point that hits an opaque pixel of the building
   sprite is converted back to a world point and the flame drawn there. With no building, the tile
-  centre at ground height.
+  centre at ground height. This is done **once**, when the flame is created, at the zoom and rotation
+  of that moment; size changes, zoom and rotation never move it (after a rotation the flame may no
+  longer sit over the building's pixels). [STATIC]
 
 ### 12.3 Explosion [STATIC][DATA]
 
@@ -1231,18 +1237,24 @@ frame (smallest first), followed by the five alpha cells (sidecar comment conven
   300 000, 600 000, then +300 000 each (900 000 … 3 600 000) µs; the effect is removed after the last
   frame: 9 frames ≈ 1.8 s, 11 ≈ 2.4 s, 12 ≈ 2.7 s, 13 ≈ 3.0 s. Below detail class 4 frame 0 is
   skipped.
-* Side stages: after 100 000 µs a blast push is sent to nearby automata (radius 200 / 300 / 400
-  world units for sizes 1 / 2 / 3); after 200 000 µs debris pieces fly out (variant 5: one centre
-  piece plus detail/2 + 2 pieces in a ring at radial speed 0.8; otherwise detail/2 pieces at random
-  offsets ±10…25, starting 0x300 above) `[STATIC; piece art EffectSprites debris set]`.
+* Blast push: the effect has a blast stage (after 100 000 µs, a push vector to objects within
+  200 / 300 / 400 units for sizes 1 / 2 / 3), but every caller disables it and nothing in the program
+  handles the push — **no effect on automata** [STATIC]. An implementation omits it.
+* Debris (after 200 000 µs, only when zoom > 0 or variant > 3): variant 5 (UFO): one inner UFO
+  part dropped with zero velocity plus class/2 + 2 outer UFO parts in a ring at horizontal speed 0.8,
+  offset Rand[20, 30) in x and z; other variants: class/2 pieces offset Rand[10, 25) in x and z and
+  768 above — variants 0–2: debris kind Rand(8), vx, vz ∈ [−0.4, 0.4), vy ∈ [0.4, 0.6); variant 8:
+  kind Rand(4), vx ∈ [0.4, 1.2), vy ∈ [0.2, 0.4), vz ∈ [−0.16, 0.16). Frame period Rand[32 500,
+  195 000) µs. Piece behaviour: §12.13. [STATIC]
 * Drawn at the given point, no height offset.
 
 ### 12.4 Water splash [STATIC][DATA]
 
 * Default set `EffectSprites` `0xFFFE0000 + z` (alpha `0xFFFE0100 + z`), 8 frames, spans
-  (8,15,8,1) … (64,128,64,1). Callers may pass another set: whirlpool/space-junk use
-  `0x2D490000`/`0x2D490005` (9 frames) or `0x48640000`/`0x48640005` (10 frames) from
-  `disaster_WHIRLPOOL.dat`.
+  (8,15,8,1) … (64,128,64,1). Callers may pass another set from `disaster_WHIRLPOOL.dat`:
+  `0x48640000`/`0x48640005` (10 frames; sucked boats/aircraft, falling-UFO space junk) or
+  `0x2D490000`/`0x2D490005` (9 frames; sucked wrecks); bridge-collapse splashes pick default /
+  `4864` / `2D49` with Rand(3). (`2D4A` is not used.)
 * One-shot, 200 000 µs per frame (8 frames ≈ 1.6 s, 9 ≈ 1.8 s, 10 ≈ 2.0 s), no fade; drawn exactly at
   the given surface point.
 
@@ -1257,7 +1269,12 @@ frame (smallest first), followed by the five alpha cells (sidecar comment conven
 * **Reports**: every 4th update it reports its position (x, z and tile) to the tornado; the
   tornado applies its damage roll (§6.1) **each time the reported tile changes**, not once per
   minute tick. On each new land tile it also rolls Rand(100) < 40 / 70 / 100 (variant 0 / 1 / 2) to
-  throw one flying debris piece — the only visual difference between variants.
+  throw one flying debris piece — the only visual difference between variants. The piece (only when
+  zoom > 0; kind Rand(8), frame period Rand[200 000, 300 000) µs) orbits the moving funnel: radius
+  from 30 growing 3 × 10⁻⁵ units/µs, random start angle, angular rate 1.5 × 10⁻⁵ rad/µs at constant
+  tangential speed 0.45 units/ms, rising ⌊8.94 × 1.3 × 10⁻⁴ × dt_µs⌋ per update. At radius > 160
+  (≈ 4.3 s) it is released at 0.45 units/ms in direction angle + π (as coded: back towards the
+  centre) with vy = 0.143, then behaves as in §12.13. [STATIC]
 * Sprites (`EffectSprites`, shifted zoom, ID = base + k): start/end `0xFFFE5000` (alpha `5100`),
   loop A `0xFFFE5200` (`5300`), loop B `0xFFFE5400` (`5500`), dirt spray `0xFFFE5600` (`5700`),
   water spray `0xFFFE5800` (`5900`). Funnel sets 8 frames, spans (8,46,7,1) … (58,361,59,1); spray
@@ -1291,11 +1308,27 @@ frame (smallest first), followed by the five alpha cells (sidecar comment conven
   spans (12,7,12,7) … (192,109,192,109), centred registration. Sequence: opening forwards →
   loop (repeated) → on stop the opening set backwards → finished.
 * **Capture** (every 256th update after the first 16): up to 128 objects in the ±2400 square that
-  stand on water and are boats (leisure/ship automata) or floating wrecks are captured (a captured
-  wreck's own lifetime is set to 3.6 s). Captured motion by distance d to the centre: d ≥ 800 →
+  stand on a water tile and are water vessels (marina boats, seaport ships), **aircraft** (planes,
+  helicopters — no altitude check, so aircraft over water are caught) or floating wrecks. A
+  captured object's own driving stops; a captured wreck's lifetime is reset to 3 600 000 (counted in
+  ≈ ms, i.e. ≈ 3686 s: it does not expire while orbiting). Captured motion by distance d to the centre: d ≥ 800 →
   straight in at max(0.12 × dt_ms, 1.0); 80 ≤ d < 800 → in by max(0.06 × dt_ms, 2.5) while orbiting
   at ω = (10⁻⁵ − 4 × 10⁻⁷) × f + 4 × 10⁻⁷ rad/µs, f = clamp(1 − (d − 80)/720, 0.05, 1); d < 80 → orbit at
-  10⁻⁵ rad/µs, then the object is removed ("sucked") and a splash is spawned there.
+  10⁻⁵ rad/µs, then the object is removed from the world ("sucked"), a splash is spawned there
+  (boat/aircraft: `4864` set; wreck: `2D49` set) and "object sucked" is reported (the whirlpool only
+  plays sound 0xFB at the vortex centre; no wreck, statistic or money change). A captured object
+  that leaves the map is removed silently.
+* **Floating wrecks** (created by the whirlpool, never by sucking) [STATIC][DATA]: one "debris
+  field" wreck at the tile centre of each seaport/marina tile the whirlpool destroys (with an
+  explosion and sound 0xF0); on a bridge collapse (sound 0xEF): one wreck at the first vehicle
+  position on the bridge, one on a random bridge tile, a third on a random bridge tile if more than 5
+  vehicles were on it, and one more (with a splash) at each further vehicle position up to 10 —
+  kinds Rand(5): car, bus, truck, truck + dude, floater dude. Sprites `disaster_WHIRLPOOL` set +
+  zoom (direct, no alpha), frames as horizontal cells: car `485B`, bus `485C`, truck `485D` (1
+  frame), truck + dude `485E` and floater dude `4862` (4 frames), debris field `4860` (1 frame);
+  `4863` swimming dude, `485F` capsized sailboat, `4861` sinking boat are never used. Frame period
+  250 000 µs. Lifetime `0x24860913` = 30 000 counted in ≈ ms (dt_µs/1024) ≈ 30.7 s, then fade-out at
+  0.00033 per ms (≈ 3 s) and removal. Wrecks do not drift; only a vortex moves them.
 * **Reports to the whirlpool** (update counter c): position (tile) every 4th update once c > 15
   and the vortex moved, and whenever c mod 256 = 128; a bridge/marina scan (first water-standing
   structure within ±1200 world units) when c mod 256 = 128; "object sucked" per captured object;
@@ -1403,8 +1436,22 @@ queue in order; a beam or crop-circle command first inserts a "fly there" leg.
   9 s and is removed (sound/effect 0xF2). When the last swarm is gone the swarm object reports "all
   gone".
 * **Crop duster**: each spray point shows the death-spray effect `0x3FB90000 + z` (alpha +5) at the
-  plane's position, 8 frames × 125 000 µs, one-shot (1 s), static. The plane flies to the dispatch
-  tile and sprays at most 5 times along its heading, then returns home.
+  plane's position, 8 frames × 125 000 µs, one-shot (1 s), static.
+* **Crop-duster plane** [STATIC][DATA]: a street-sim vehicle, VATTRIB `0xC25C2BF7:0x025C2C45:0x6E`
+  (instance 110; only in `VAttrib_Holidays.IXF`: length 100, motion sound 133, ANSPRATT/sprite key
+  `0x3FB0` "Locust Swarm Crop Duster Plane", one frame). Home: a random aircraft spawner whose
+  Manhattan distance to the target is > 12 tiles (else the first such in list order; else a random
+  map tile ≥ 12 away); it starts there on the ground. Speed 0.001 units/µs (≈ 3.9 tiles/s; the record's
+  MaxSpeed is overridden). Height: ground + 2560, at least 512 above building tops, sampled 256 units
+  ahead. It flies straight at the target tile (heading = atan2 of the difference); on arrival it
+  reports a spray point at its position, then steps 512 units (2 tiles) on along its heading and
+  sprays again, at most 5 times or until the next point is off the map. A retarget only appends a
+  waypoint, flown after the current run (with its own 5 sprays). With no waypoints left it flies home
+  in 100-unit steps and is removed within 100 units of home. Whether the plane exists without the
+  holiday data is not traced.
+* **Dispatch icon**: occupant `0x207EDC0E:0x0000057E:0x00003FAF` ("Locust Swarm Dispatch Icon",
+  1 × 1 footprint), placed at (x + 1, z) with sound 246; no timer — removed only when a 4th dispatch
+  evicts it or when the locust attack ends (which also removes the planes).
 
 ### 12.10 Riot crowd [STATIC][DATA]
 
@@ -1417,9 +1464,9 @@ queue in order; a beam or crop-circle command first inserts a "fly there" leg.
 * Every RandRange(`0x2484A289`, `0x2484A290`) µs (shipped 0.3–0.6 s) it throws an object: a short
   projectile from a random point up to 80 units ahead along its heading, velocity (1.2 cos φ, 0.2,
   1.2 sin φ) with random φ. A projectile that hits a building ignites it (riot ignition, §8.4).
-* Reports to the riot: "entered tile" (the riot site moves there; the lot there gets two of its occupant flags cleared
-  while any crowd stands on it `[OPEN: flag meaning]`), "left tile" (flags set again when no crowd
-  remains), "destroyed" (the
+* Reports to the riot: "entered tile" (the riot site moves there; the road piece there gets its two
+  per-instance **lock bits** cleared while any crowd stands on it, ref-counted per tile), "left tile"
+  (bits set again when no crowd remains), "destroyed" (the
   riot relocates, §8.4), and "hit building" (ignite). Event-driven, no fixed cadence.
 * Lifetime: until the riot ends (its duration rule) or the crowd's script ends; then all affected
   lots are restored.
@@ -1449,6 +1496,18 @@ queue in order; a beam or crop-circle command first inserts a "fly there" leg.
   dt_µs/1024 (≈ ms): 300 000 ≈ 307 s; then it fades at 0.00033 per ms, but only the current update's
   dt is applied on each refresh (every 0.25–3 s depending on zoom), so the real fade is much longer
   than 3 s `[STATIC; original defect — an implementation may fade over ≈ 3 s]`.
+
+### 12.13 Debris pieces [STATIC][DATA]
+
+* Sprites: `EffectSprites` `0xFFFD0000 + kind × 5 + z` (kinds 0–7 "explosion debris 0…7"; UFO outer
+  parts `0xFFFD0080 + z`, inner parts `0xFFFD0085 + z`), 8-frame strips, direct zoom, no alpha set.
+  Ground shadow `0xFFFD0100 + kind × 5 + z` (UFO parts `0xFFFD0180`/`0185 + z`) only when the machine
+  class ≥ 4 and fewer than (class − 3) × 20 pieces are alive.
+* Motion: x += vx × dt_ms, z += vz × dt_ms, vy −= 0.0003 × dt_ms, y += vy × 8.94 × dt_ms (gravity).
+  Hitting a building: horizontal speed 0, vy × 0.2, keeps falling. Ground: bounce (vx, vz × 0.25, vy ×
+  −0.4), frame period × 1.5 per bounce; when |vx| + |vy| + |vz| < 0.02 it stops, hides its shadow,
+  freezes and is removed ≈ 20 s later. Water: splash (default set) and removed. Off map: removed.
+  Nothing explodes on landing; no report to the disaster layer.
 
 ### 12.12 Summary of report-backs
 

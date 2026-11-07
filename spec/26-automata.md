@@ -709,8 +709,9 @@ riot-site lot, then keep driving" [STATIC; parade use of opcode 200 not traced].
 layer, and has nothing to do with street automata. [STATIC]
 * It is read once. If the key is missing, the default is 10.
 * The effective cap is MaxAnimations = MaxAnimationsBase + 3 × m, where m is a signed per-machine
-  detail level taken from the global settings object [OPEN: which user setting; presumably the
-  same memory/detail class as the key-vehicle list choice of §5.7].
+  machine class (1–7) computed from a CPU probe at every start, not a user setting
+  (`21-disasters.md` §12.1; overridable by the `-p` command-line option, then 5–10). Hence
+  MaxAnimations = 13…31 with the shipped base. [STATIC]
 * The building layer keeps a list of currently animating buildings. A further building animation is
   admitted only while the list holds no more than MaxAnimations − 2 entries (MaxAnimations = 1 is
   special-cased) [STATIC; the eviction policy when full is OPEN]. See `25-rendering.md` for the
