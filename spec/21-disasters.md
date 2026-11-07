@@ -1173,7 +1173,7 @@ archive (EffectSprites 499/499, locust 55/55, space junk 280/280, toxic cloud 45
 | `Res/Sprites/EffectSprites.dat` | `EffectSprites.sii` (499 records) | groups `FFFC`, `FFFD`, `FFFE`: tornado (50 frames), plasma ball (10), UFO (5), clouds (16 × 3), debris (80), explosion (4 × 20), water splash (10) |
 | `Res/Sprites/disaster_LOCUST.dat` | `disaster_LOCUST.sii` (declares 56, lists 55) | `3FAC` fly, `3FAD` eat, `3FAE` die, `3FB1` giant locust, `3FB9` death spray, `3FCB` shadow |
 | `Res/Sprites/disaster_SPACEJUNK.dat` | `Disaster_SPACEJUNK.sii` (280) | `3FB2`–`3FB6` debris pieces, `3FB7` impact explosion, `3FC5`, `3FC8`–`3FCA` crater decals |
-| `Res/Sprites/disaster_TOXICCLOUD.dat` | `disaster_TOXICCLOUD.sii` (45) | `4858` cloud (opening / cycle / closing, each with alpha cells) — **not used by the program** [STATIC]; `4859` toxic rain loop (+ alpha top/bottom) |
+| `Res/Sprites/disaster_TOXICCLOUD.dat` | `disaster_TOXICCLOUD.sii` (45) | `4858` "toxic steam" on the ground under the rain (opening / cycle / closing, each with alpha cells); `4859` toxic rain loop (+ alpha top/bottom masks) |
 | `Res/Sprites/disaster_WHIRLPOOL.dat` | none shipped | 95 image/alpha pairs: vortex sets `4859xxxx` (see §12.6) and splash sets `2D49`, `4864` |
 
 Each archive stores every image twice, as two resource types (0 and 1) with the same instance —
@@ -1306,19 +1306,39 @@ frame (smallest first), followed by the five alpha cells (sidecar comment conven
 
 * Sprites: `EffectSprites` "toxic cloud" `0xFFFC1400 + k` (alpha `0xFFFC1500 + k`, shifted zoom),
   a **single static image** (the strip has 5 cells but only cell 0 is shown); ground shadow
-  `0xFFFC1600 + z` (direct zoom), only above detail class 3. The `disaster_TOXICCLOUD` `4858` set is
-  not referenced by the program.
+  `0xFFFC1600 + z` (direct zoom), only above detail class 3.
 * **Puffs do not drift.** The cloud's velocity is handed to each puff but never applied; puffs
   stay where they were placed (§6.2 step 2), and the disaster layer never moves them. The cloud
   therefore does not travel `[STATIC: no reader of the stored velocity]`.
 * Opacity fades in from 0 to 1 at 0.00015 per ms (≈ 6.7 s); on dissipation it fades out at the
   same rate, then the puff reports "gone" (the cloud counts its puffs down, §6.2 step 5) and is
   removed.
-* **Rain**: when the cloud rains, each puff gets a rain column from its base (puff y + 0x960)
-  down to (terrain + 4) × 256 (no rain if that is not below the top). Sprites
-  `disaster_TOXICCLOUD` loop `0x48590005 + k`, alpha top `0x4859000A + k`, alpha bottom
-  `0x4859000F + k` (shifted zoom). The column grows at 0.000512 per ms `[INFERRED: length
-  fraction]`. Rain stops with the cloud's rain spell.
+* **Rain column** (one per puff while the cloud rains) [STATIC][DATA]:
+  * Hangs from its top point T = puff y + 0x960 down to B = (terrain + 4) × 256 (no column if B is
+    not below T); world length L = T − B. Registration at the top centre.
+  * Images (`disaster_TOXICCLOUD`, shifted zoom k): loop `0x48590005 + k` (one frame, RGBA with its
+    own alpha), top mask `0x4859000A + k` (alpha only, 5-bit values ramping ≈ 4 → 31 downwards),
+    bottom mask `0x4859000F + k` (31 → 1 downwards). On-screen sizes at zoom 0…4: width 38 / 75 /
+    150 / 300 / 600 px; loop tile pitch 34 / 67 / 133 / 266 / 532 px; top ramp 5 / 9 / 17 / 34 / 68 px;
+    bottom ramp 12 / 24 / 48 / 95 / 190 px.
+  * Assembly, with screen rows counted down from the top point, E = current grown length and S =
+    current retracted top (both in screen px of their world length): top segment [S, S + top ramp)
+    = loop colours under the top mask (mask row = y − S, so the ramp rides the top); bottom segment
+    [E − bottom ramp, E) = loop colours under the bottom mask (its last row at the lower end); middle =
+    the loop image tiled vertically, row = (scroll + y) mod tile height, partial tiles clipped. Drawn
+    bottom, top, middle. If the column is shorter than both ramps there is no middle and the split
+    point is S + (E − S) × top / (top + bottom). Mask and loop alpha combine as 5-bit opacity ×
+    the loop's alpha `[INFERRED]`. World-to-screen length L × 2^z / 256 px `[INFERRED]`.
+  * **Rate 0.000512 world units per µs (512/s)** drives three things: E grows from 0 to L (the lower
+    end runs down to the ground while the top stays), the texture scrolls down at the same rate, and
+    after the rain stops S grows at the same rate until S ≥ E, when the column is removed (drains
+    top-down in E/512 s). No opacity fade.
+  * **Ground steam**: once the column is full a steam effect is created on the ground under it
+    (`4858` sets: opening `0x48580000` (alpha `0x48581005`), cycle `0x4858200A` (`0x4858300F`),
+    close `0x48584014` (`0x48585019`); 4 frames each, ≥ 200 000 µs per frame; opening → cycle loop →
+    close → removed). Stopping the rain sends it to its close animation. Original quirk: a full
+    column creates a second steam object on the update after the stop, which plays until the column
+    is gone.
 
 ### 12.8 UFO swarm [STATIC][DATA]
 

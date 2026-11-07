@@ -473,8 +473,7 @@ repeats.
   at 2×).
 
 Per-set IDs, frame counts, frame periods and registration points are tabulated in
-`21-disasters.md` §12. The `0x4858` toxic-steam set of `disaster_TOXICCLOUD.dat` is not used by
-the program.
+`21-disasters.md` §12.
 
 ### 4.5 Seasonal and holiday variants `[DATA][INFERRED]`
 
