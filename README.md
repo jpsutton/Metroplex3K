@@ -195,4 +195,4 @@ later version** (`GPL-3.0-or-later`). The full text is in [LICENSE](LICENSE). Co
 terms. The license covers this repository's code and documentation only. It grants no rights to *SimCity 3000
 Unlimited* or any of its assets, which you must own and supply yourself. *SimCity* is a trademark of Electronic Arts
 Inc.; this project is not affiliated with or endorsed by EA or Maxis. See [docs/LICENSING.md](docs/LICENSING.md) for
-third-party notes.
+third-party notes and [docs/IP-REVIEW.md](docs/IP-REVIEW.md) for the intellectual-property review.

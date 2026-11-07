@@ -1,6 +1,6 @@
 # Metroplex3K status
 
-Clean-room SimCity 3000 Unlimited compatible engine. C++17, CMake, SDL2 (desktop host only). Spec in `spec/`.
+Clean-room engine compatible with the original game named in README.md. C++17, CMake, SDL2 (desktop host only). Spec in `spec/`.
 Build: `mkdir -p build && cd build && cmake .. && make -j8 && ctest`. Run: `build/metroplex3k [--game-dir DIR]`.
 Game data = the user's own install (GOG). Auto-detect (`gamedir.*`), drag-drop folder or GOG installer (needs
 `innoextract`), typed path on the first screen, `$M3K_GAME_DIR`. See README.md and docs/.
