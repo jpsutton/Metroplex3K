@@ -384,7 +384,7 @@ bool DisasterManager::ignite(DisasterWorld& w, const OccInfo& o, int intensity, 
   if (w.flammability(o.ax, o.az) < tune.minFlam) return false;
   for (auto& b : burning_) if (b.occId == o.id) return false;
   BurnRecord r;
-  r.occId = o.id; r.x = o.ax; r.z = o.az; r.intensity = clampi(intensity, 0, 2);
+  r.occId = o.id; r.x = o.ax; r.z = o.az; r.intensity = clampi(intensity, 0, 2); r.w = std::max(1, o.w); r.h = std::max(1, o.h);
   r.duration = drawRange(rng_, tune.stageMin, tune.stageMax);
   burning_.push_back(r);
   DisasterCommand& c = out.cmd(DisasterCommand::IgniteOccupant);

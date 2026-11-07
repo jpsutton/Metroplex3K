@@ -36,6 +36,10 @@ inline bool isFxFrameCat(uint32_t cat) { return (cat & 0xFF000000u) == kFxFrameC
 constexpr uint32_t kFxTintBeamTop = 0xFB000000u;
 inline uint32_t fxTintBeamCat(int frameWidth, int frame) { return kFxTintBeamTop | (uint32_t(frameWidth) & 0xFFFu) << 12 | (uint32_t(frame) & 0xFFFu); }
 inline bool isFxTintBeamCat(uint32_t cat) { return (cat & 0xFF000000u) == kFxTintBeamTop; }
+// Ground shadows are opacity planes as well: the same, tinted black.
+constexpr uint32_t kFxTintShadowTop = 0xFC000000u;
+inline uint32_t fxTintShadowCat(int frameWidth, int frame) { return kFxTintShadowTop | (uint32_t(frameWidth) & 0xFFFu) << 12 | (uint32_t(frame) & 0xFFFu); }
+inline bool isFxTintShadowCat(uint32_t cat) { return (cat & 0xFF000000u) == kFxTintShadowTop; }
 
 // Generated sprites (the toxic rain column): put a composed colour image and opacity plane under (kFxTransientCat, id); the renderer finds them
 // through sprite() / spritePlane() like any archive image. The caller reuses a small ring of ids, so an entry is overwritten a few frames later.

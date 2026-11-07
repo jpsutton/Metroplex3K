@@ -251,7 +251,7 @@ struct HistoryList {
   int32_t extra = 0;     // locust v2 extra s32
 };
 
-struct BurnRecord { uint32_t occId = 0; int x = 0, z = 0, intensity = 0, timer = 0, steps = 0, duration = 0; };
+struct BurnRecord { uint32_t occId = 0; int x = 0, z = 0, intensity = 0, timer = 0, steps = 0, duration = 0; int w = 1, h = 1; /* footprint, runtime only (flame placement) */ };
 struct TornadoInst {
   float px = 0, pz = 0, dx = 0, dz = 1, speed = 60;   // position tiles, unit direction, tiles/min speed
   int variant = 0, lifetime = 45, elapsed = 0, phase = 0, counter = 0, destroyed = 0; int64_t cost = 0;

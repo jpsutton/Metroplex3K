@@ -73,7 +73,7 @@ class DisasterFx {
   bool focus(double& x, double& z) const;
 
  private:
-  enum class Kind { Explosion, Splash, Crater, Saucer, Plasma, Swarm, Piece, Spray };
+  enum class Kind { Explosion, Splash, Crater, Saucer, Plasma, Swarm, Piece, Spray, Chunk };
   // Queued task of a saucer or swarm: type 0 fly to, 1 beam (hover, report), 2 crop circle, 3 abduction, 4 eat (swarm), 5 exit.
   struct Task { int type = 0; double x = 0, z = 0; int aux = 0; };
   struct Fx {
@@ -93,6 +93,7 @@ class DisasterFx {
     double vx = 0, vz = 0, vy = 0;    // plasma / piece velocity per second
     int ox = -1, oz = -1;             // swarm: tile at the last update
     bool passive = false;
+    bool debrisDone = false;           // explosion: its debris pieces were thrown
   };
   struct TornadoView {
     uint32_t uid = 0; double x = 0, z = 0, dx = 0, dz = 1, speed = 1; int variant = 0;
@@ -119,6 +120,8 @@ class DisasterFx {
   void spawnSplash(double x, double z, int set);
   void spawnSaucers(const DisasterCommand& c);
   void spawnPiece();
+  void spawnChunk(double x, double z, double speedTilesPerSec, double upUnitsPerSec, double startUnits);
+  void throwExplosionDebris(const Fx& e);
   void edgePoint(double& x, double& z, int edge);
   void updateSaucer(Fx& f, int dt, bool& done);
   void updateSwarm(Fx& f, int dt, bool& done);
@@ -129,7 +132,7 @@ class DisasterFx {
             int level = 32, bool mag = false) const;
   // Opacity-plane-only sprite (UFO beam): a flat tint is drawn through the plane.
   void emitRain(const PuffView& p, int slot, std::vector<SceneSprite>& out) const;
-  bool pushTint(std::vector<SceneSprite>& out, uint32_t top, uint32_t planeId, int frames, int frame, double x, double z, double heightUnits) const;
+  bool pushTint(std::vector<SceneSprite>& out, uint32_t top, uint32_t planeId, int frames, int frame, double x, double z, double heightUnits, int level = 20) const;
 
   GameData* data_ = nullptr;
   GroundFn ground_;
