@@ -156,8 +156,8 @@ The slot within a zoom set is
   slot = TBL[gradeClass][(VIEWROT[viewRotation] + heading) & 31]
 
 * heading: the automaton's 32-step heading in the original's convention.
-* VIEWROT = {0, 8, 16, 24}. It is the table at STRTSIM 0x1003265C.
-* TBL is the 5 × 32-byte table at STRTSIM 0x10032660:
+* VIEWROT = {0, 8, 16, 24}.
+* TBL is a 5 × 32-entry table of slots, with these contents:
 
   | gradeClass | Meaning | Slot by heading |
   |---|---|---|
@@ -173,10 +173,9 @@ The slot within a zoom set is
   * a straight segment stores g = Δh / horizontal distance.
 
   So a 1-step slope gives g ≈ ±1 and a 2-step slope g ≈ ±2. Turns and curves force class 2. The
-  class is recomputed after every movement step (STRTSIM 0x10019660; slot lookup 0x10005072).
+  class is recomputed after every movement step.
 * Rounding is [OBSERVED]: a train in Berlin on rail piece 46 (g = ±1.698) showed the steep frame
-  (slot 38). On piece 16008 (g ±1.016) it showed the gentle frame (slot 46). The float constant
-  itself was not read.
+  (slot 38). On piece 16008 (g ±1.016) it showed the gentle frame (slot 46).
 * Which sign is uphill is [INFERRED] from the sprite extents. On heading-diagonal 0 (facing up the
   screen), class-4 frames are tall and class-0 frames are short.
 
@@ -256,36 +255,36 @@ Arguments that are resource keys may be written as unsigned decimal values above
 2183877034 = 0x822B51AA); read them modulo 2³². This layout parses
 24/24 shipped records, and every call target resolves to a record in the same file. [DATA]
 
-**Execution model.** Each automaton runs one script through a small call stack: [STATIC]
+**Execution model.** Each automaton runs one script, which may call other scripts (nesting): [STATIC]
 
-* A stack frame holds the script, the current step index (starting at −1), a repeat limit and a
-  repeat counter (starting at 0).
+* A running script has a current step index (starting at −1), a repeat limit and a repeat counter
+  (starting at 0).
 * The automaton starts in the script named by its attribute record (VATTRIB or PATTRIB Script key),
   with repeat limit 1.
 * To advance, the step index is incremented. If it reaches S, the repeat counter is incremented. If
-  the counter is now at least the repeat limit, the frame is popped and the step returns "done" to
-  the caller frame. Otherwise the index wraps to step 0.
+  the counter is now at least the repeat limit, the script ends and reports "done" to the script
+  that called it. Otherwise the index wraps to step 0.
 * The step's opcode is then executed. Every opcode starts a **behaviour** that runs over several
   updates. While the behaviour runs, the script is suspended. When the behaviour ends, it reports
-  one of three results: *done* (go on to the next step), *fail* (pop this script frame and report
-  *fail* to the caller frame, which pops in turn, so a failure unwinds the whole stack), or
+  one of three results: *done* (go on to the next step), *fail* (end this script and report
+  *fail* to its caller, which ends in turn, so a failure unwinds all nested scripts), or
   *running* (stay suspended).
-* When the outermost script frame finishes or fails, the automaton has nothing left to do and is
-  removed (§5.6). [STATIC]/[INFERRED: removal on empty stack]
+* When the outermost script finishes or fails, the automaton has nothing left to do and is
+  removed (§5.6). [STATIC]/[INFERRED: removal when the outermost script ends]
 
 **Randomised arguments.** Many arguments come as a pair (value, jitter). If jitter is 0 the value
 is used as is. Otherwise the value is drawn uniformly from the integers in
-[value − jitter, value + jitter). The draw uses the street-sim LCG and takes r mod n, with
+[value − jitter, value + jitter). The draw uses a pseudo-random generator and takes r mod n, with
 n = 2·jitter, so the upper bound is exclusive. [STATIC]
 
-**Opcodes.** Pedestrian scripts and vehicle scripts use separate opcode tables. [STATIC]
+**Opcodes.** Pedestrian scripts and vehicle scripts accept different opcodes. [STATIC]
 
 | Op | Args | Pedestrians | Vehicles |
 |---|---|---|---|
 | 0 | 5: Count, CountJitter, Sequence, Speed, SpeedJitter (pedestrians); 3: Count, CountJitter, Sequence (vehicles) | **Walk.** Walk along PPATHATT paths for Count path pieces, using animation sequence Sequence (ANSPRATT SequenceID) and speed Speed (speed units, §3.1). At each piece end, the next piece is chosen from the paths leaving through the current exit edge. If there is none, the step fails. When Count pieces are done, the step is done. | **Drive.** Drive along lanes for Count pieces, using animation sequence Sequence. The speed comes from the vehicle's MaxSpeed and the lane speed (§7). Script 2001 is a single Drive of 10,000 pieces with sequence 20, so an ordinary vehicle drives 10,000 pieces and then its script ends. |
-| 1 | 3: Sequence, Loops, LoopsJitter | **Animate in place.** Play ANSPRATT sequence Sequence Loops times. Timing: an accumulator starts at 0 and adds the update's elapsed time. While it is ≤ 300,000 time units (§7) the current frame is held. After that, the sequence advances one entry per update. When it wraps past its last entry, one loop is counted. If Loops loops are done, the step is done; otherwise the accumulator resets to 0 (another hold) and the sequence plays again. | Present in the opcode table but not used by any shipped vehicle script [OPEN semantics]. |
-| 2 | 5: Type, Group, Instance, Repeat, RepeatJitter | **Call.** Push the script with key Type:Group:Instance with repeat limit rand(Repeat ± RepeatJitter). The callee runs Repeat times and then returns "done". If the key does not resolve, the step fails. | Same as pedestrians. |
-| 3 | 1: Sequence | — (not in the pedestrian table) | **Follow.** Set the animation sequence. If it changed, restart at frame 0. Then follow the vehicle ahead (rail-car trailer behaviour; script 2002). The step does not end on its own: the car follows until its leader is gone. [STATIC]/[INFERRED end condition] |
+| 1 | 3: Sequence, Loops, LoopsJitter | **Animate in place.** Play ANSPRATT sequence Sequence Loops times. Timing: an accumulator starts at 0 and adds the update's elapsed time. While it is ≤ 300,000 time units (§7) the current frame is held. After that, the sequence advances one entry per update. When it wraps past its last entry, one loop is counted. If Loops loops are done, the step is done; otherwise the accumulator resets to 0 (another hold) and the sequence plays again. | Not used by any shipped vehicle script [OPEN semantics]. |
+| 2 | 5: Type, Group, Instance, Repeat, RepeatJitter | **Call.** Run the script with key Type:Group:Instance as a nested script with repeat limit rand(Repeat ± RepeatJitter). The callee runs Repeat times and then returns "done". If the key does not resolve, the step fails. | Same as pedestrians. |
+| 3 | 1: Sequence | — (not used by pedestrians) | **Follow.** Set the animation sequence. If it changed, restart at frame 0. Then follow the vehicle ahead (rail-car trailer behaviour; script 2002). The step does not end on its own: the car follows until its leader is gone. [STATIC]/[INFERRED end condition] |
 | 200 | 0 | — | **Parade.** Used only by script 0x30. Ordinary vehicles understand only opcodes 0–3, so opcode 200 is meaningful only to the parade automaton [INFERRED]. A clone must never run it on an ordinary vehicle. Its exact behaviour is [OPEN]; §5.7 (parade/holiday automata) describes where parade vehicles come from. |
 
 Pedestrian script roles in the shipped data (instances 1–0x15): Walk and Animate steps mixed, with
@@ -332,7 +331,7 @@ two attributes. In `OccupantAttribs*.IXF` they appear as follows: [DATA]
 
 How each source is used [STATIC]:
 * **Pedestrians.** Pedestrians spawn only on **road tiles**, i.e. tiles whose occupant has the
-  road-piece flag 0x8000 of the run-time flag word (`13` §3.1a). Buildings are never spawn tiles.
+  road-piece property (`13` §3.1a). Buildings are never spawn tiles.
   * A building with attribute 0x6B whose anchor lies in the active view rectangle gets its own
     pedestrian manager, using its PPLPROD table and centred on its anchor. That manager spawns
     pedestrians on road tiles within anchor ± the mode's radius (8), as described in §5.8.
@@ -348,7 +347,7 @@ How each source is used [STATIC]:
 
 **Keeping sources in step with the city** [STATIC]: this is event-driven; there is **no periodic
 city scan**.
-* The occupant-added and occupant-removed notifications create and tear down:
+* Adding or removing an occupant creates or removes:
   * train spawners;
   * airport and seaport managers;
   * marina boat sources;
@@ -384,9 +383,9 @@ timer (time units, §7): [STATIC]
    edge), each expiry retries the setup and, if it still fails, re-arms with 360,000,000 (6 min).
 2. Once ready, each expiry makes one spawn attempt and re-arms with a uniform interval in
    [120,000,000, 360,000,000) (2–6 min).
-3. Spawn attempt: build a 2-bit index. Bit 0 is set when either of the city conditions with codes
-   4 and 5 holds [OPEN meaning; probably sea-connection or trade conditions]. Bit 1 is set when at
-   least one object of type 0x2AFA exists [OPEN identity]. The index selects VCLPROD 0x3FC + index.
+3. Spawn attempt: build a 2-bit index. Bit 0 is set when either of two city conditions holds
+   [OPEN meaning; probably sea-connection or trade conditions]. Bit 1 is set when at
+   least one object of a certain kind exists [OPEN identity; believed to be the seaport]. The index selects VCLPROD 0x3FC + index.
    If the port's live ship count is below trunc(Rate of that VCLPROD), one ship is spawned (model
    by weighted draw, §3.3) and follows the port's route; otherwise nothing happens. Here VCLPROD
    Rate is therefore the per-port **maximum number of simultaneous ships**. [STATIC]
@@ -404,11 +403,10 @@ requested network. [STATIC]
 * **Vehicle limit** L = trunc(S × 0.008), capped at 200. In the **event mode** described in §5.6,
   L = trunc(S × 0.2) with no cap instead. [STATIC]
 * **Average density** A = trunc(S / C) as a byte (0 if C = 0).
-* After recomputing, the layer broadcasts message 0x402 with argument trunc(L × 100 / 200), which is
-  the expected traffic level as a percentage. Its listener is probably the ambient traffic sound
-  (`06-audio.md`). [STATIC]/[INFERRED listener]
+* After recomputing, the layer broadcasts the expected traffic level as a percentage,
+  trunc(L × 100 / 200). [STATIC]
 
-  0.008 is a single-precision constant (0.008000000380). Spawning has three parts:
+  The density factor is 0.008. Spawning has three parts:
   1. **Initial fill.** Whenever the layer becomes active (§5.6), and for each newly exposed strip
      after a view change, every tile in the area that holds a drivable network piece gets n vehicles:
      n = trunc(d × 0.008), plus 1 more if a uniform random float in [0,1) is less than the fractional
@@ -533,7 +531,7 @@ the mode. [STATIC]
   * `ParadeCost` is deducted.
   * **Route:** a spiral search from a start point (staying 2 tiles inside the map). It looks for a
     straight road run of at least `RoadTilesRequired` tiles:
-    * every tile has the road flag 0x8000 and aura ≥ `MinAura`;
+    * every tile is a road piece and has aura ≥ `MinAura`;
     * there are at least 3 tiles of zone class 6 [INFERRED: commercial] in its 3 × 3 neighbourhood;
     * the axis and the direction are chosen at random when the piece allows both.
 
@@ -546,9 +544,8 @@ the mode. [STATIC]
   * Spectators are spawned at `SpectatorDensity` per route tile.
   * A parade sound plays while parade vehicles are in view.
 
-  *Not traced:* what opcode 200 does inside the vehicle (speed comes from VATTRIB: 110 000, or
-  200 for record 107), and how the parade ends. `MaxParadeDuration` is read but never used.
-  [OPEN]
+  *[OPEN]:* what opcode 200 does inside the vehicle (speed comes from VATTRIB: 110 000, or
+  200 for record 107), and how the parade ends. `MaxParadeDuration` has no observed effect.
 * **Trains and subway trains.** These are driven by `Res/TRNPROD.IXF` (Type 22CEFD99, Group
   62CEFDDB, a text record). Each spawner is a timer bound to a source object on the map and to one
   TRNPROD record. The source objects are the **rail end caps** (agent type 17002, TRNPROD
@@ -570,7 +567,7 @@ the mode. [STATIC]
     * Rail spawner: the Locomotive; then 1 car from List1 (if non-empty); then 1–3 cars (uniform
       count) chosen with replacement from List3; then 1–4 cars chosen with replacement from List2;
       then 1 car from List4 (if non-empty). [STATIC; the relative order of the List3 and List2
-      blocks is INFERRED from code order]
+      blocks is INFERRED]
     * Subway spawner: the Locomotive followed by 1–3 cars from List3. [STATIC]
     * Cars are linked as a chain, each following the one ahead (script 2002, op 3). If any car
       cannot be placed, the attempt is abandoned. [STATIC]
@@ -580,8 +577,7 @@ the mode. [STATIC]
   CR LF lines). [STATIC]/[DATA]
   * **Format:** line 1 `MaxActive` (integer); line 2 `N`; then N lines, each a VATTRIB instance.
     Shipped: instance 1 = MaxActive 3, models 75, 77, 78, 79 (fixed-wing aircraft); instance 2 =
-    MaxActive 5, model 76 (helicopter). That line 1 is the simultaneous-aircraft cap is [INFERRED]
-    from a count-below-maximum check in the spawner. [DATA]/[INFERRED]
+    MaxActive 5, model 76 (helicopter). That line 1 is the simultaneous-aircraft cap is [INFERRED]. [DATA]/[INFERRED]
   * **Airport traffic.** Every airport building has its own spawner with a timer. The interval is
     drawn uniformly from [20,000,000, 40,000,000) time units (20–40 s, §7) and redrawn after each
     attempt. On each expiry: [STATIC]
@@ -593,14 +589,13 @@ the mode. [STATIC]
        (instance 1). It flies towards the airport [INFERRED].
   * **Helicopters.** A single global spawner (created when the layer starts) uses AIRTRMGR
     instance 2. Every 1,000,000–3,000,000 time units (uniform, redrawn each time), if fewer than
-    MaxActive of its aircraft exist, it spawns one helicopter. [STATIC] Correction: occupant group
-    0x385E is the **marina** group (agent type 14430). Its buildings are registered with the
-    leisure-boat source list (§5.3), not with the helicopter spawner. The helicopter's source and
-    destination buildings are [OPEN].
+    MaxActive of its aircraft exist, it spawns one helicopter. [STATIC] Marina buildings (agent type 14430) are
+    registered with the leisure-boat source list (§5.3), not with the helicopter spawner. The
+    helicopter's source and destination buildings are [OPEN].
   * Aircraft have no behaviour script (VATTRIB Script = none). Their flight path is computed
     procedurally [OPEN: curve and altitude profile].
 * **Ships at seaports.** These are the port/sea traffic described in §5: VCLPROD 0x3FC–0x3FF chosen
-  by a 2-bit index, with bit 1 set when at least one occupant of type/group 0x2AFA (believed to be
+  by a 2-bit index, with bit 1 set when at least one occupant of a certain kind (believed to be
   the seaport) exists. [STATIC]/[INFERRED meaning]
 * **Default tables.** When the layer starts it loads these records: PPLPROD 21FD6EEF:21FD8E4C:1 (the
   default pedestrian table), VCLPROD 625C6CC7:A25C6D40:1 (the default vehicle table, which is the
@@ -625,17 +620,15 @@ the mode. [STATIC]
 * **Cap.** On each mode selection, cap = trunc(Rate) plus 1 more if a uniform float in [0,1) is less
   than the fractional part of Rate.
 * **Area.** The spawn area is the square centre ± Radius tiles (mode Radius, shipped 8), clamped to
-  the map. Eligible tiles are those whose occupant has bit 0x8000 set in its occupant flag word.
-  This is the **same** flag that marks a valid riot site (`21-disasters.md` §8.4): both tests read
-  the same flag word and bit [STATIC]. The bit is the road-piece flag (`13-buildings-occupants.md`
-  §3.1a): pedestrians spawn on road tiles. Correction: previously OPEN, with a guess that it was a lot flag
-  for sidewalks, plazas or public buildings.
+  the map. Eligible tiles are those whose occupant is a road piece (`13-buildings-occupants.md`
+  §3.1a): pedestrians spawn on road tiles. This is the **same** property that marks a valid riot
+  site (`21-disasters.md` §8.4) [STATIC].
 * **Fill.** When an area (or a newly covered strip of it after the centre moves) is filled, and the
   source's live count is below its cap: let C be the number of eligible tiles in the strip and
   n = min(cap − count, 4 × C). If C < n, every eligible tile in scan order (rows, then x) gets
   cap div C pedestrians, and the remainder cap mod C is spread with an accumulator (a tile receives
-  its share only while the running accumulator stays below C). [STATIC] The C ≥ n branch was not
-  traced [OPEN].
+  its share only while the running accumulator stays below C). [STATIC] The C ≥ n branch is
+  [OPEN].
 * **Point spawns.** Other layers can request n pedestrians at a given tile, which is honoured only
   if that tile is eligible.
 * **Model.** For each pedestrian, r = rand(1000) is drawn and the first PATTRIB entry of the mode
@@ -661,7 +654,7 @@ Full movement, sprite and timing rules are in `21-disasters.md` §12; summary [S
 
 Script 48 (opcode 200, §3.10) is shared: VATTRIB 84 (`0x54`), which is the **riot crowd**, and the
 parade vehicles 100–109 use it. For the riot crowd, opcode 200 means "route to the road piece of the
-riot-site lot, then keep driving" [STATIC; parade use of opcode 200 not traced]. The "event mode" of
+riot-site lot, then keep driving" [STATIC; parade use of opcode 200 OPEN]. The "event mode" of
 §5.6 is triggered by the state-of-emergency declaration of `21-disasters.md` §10.1, not by the riot
 [STATIC].
 
@@ -713,8 +706,7 @@ layer, and has nothing to do with street automata. [STATIC]
   (`21-disasters.md` §12.1; overridable by the `-p` command-line option, then 5–10). Hence
   MaxAnimations = 13…31 with the shipped base. [STATIC]
 * The building layer keeps a list of currently animating buildings. A further building animation is
-  admitted only while the list holds no more than MaxAnimations − 2 entries (MaxAnimations = 1 is
-  special-cased) [STATIC; the eviction policy when full is OPEN]. See `25-rendering.md` for the
+  admitted only while the list holds no more than MaxAnimations − 2 entries [STATIC; the eviction policy when full is OPEN]. See `25-rendering.md` for the
   animation playback itself.
 
 The automata caps are separate: 200 road vehicles from density spawning (§5), 400 pedestrians
@@ -730,8 +722,7 @@ style player-controlled vehicle in this game. [INFERRED: no related strings or r
 
 ## 9. Persisted state
 
-None. The street-sim module writes no versioned save records: it has none of the 0xDEADBEEF
-sentinels that every saved record carries. Automata are respawned after a load. [STATIC]
+None. Automata are not saved; they are respawned after a load. [STATIC]
 
 ## Open questions
 
@@ -740,9 +731,8 @@ sentinels that every saved record carries. Automata are respawned after a load. 
   pedestrian source (§5.8).
 * VATTRIB ParamB consumer; TRBLKATT Flag and VehLane LaneType; PedConnection Value; the VPATHATT
   Lane field.
-* City conditions 4/5 and object type 0x2AFA in ship selection; marina condition choosing VCLPROD
+* The two city conditions and the object kind in ship selection; marina condition choosing VCLPROD
   0x400 vs 0x401.
-* Aircraft departure and flight path; airport and helicopter source building groups (0x385e, 0x426a,
-  0x440c are the occupant groups tested when sources are registered).
+* Aircraft departure and flight path; airport and helicopter source buildings.
 * Which settings drive the automata zoom threshold p (§5.6) and the animation detail level m (§7.1).
 * Pedestrian fill branch when eligible tiles ≥ needed count (§5.8).

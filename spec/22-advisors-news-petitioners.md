@@ -10,8 +10,8 @@ The subsystem has four cooperating parts:
 
 | Part | Owner | Role |
 |------|-------|------|
-| Advisor topics | simulation side (advisor component) | Seven advisors evaluate city metrics each advisor cycle and raise/clear numbered *topics*. A topic has a heading, a message body, an optional ticker line, a mood value and a topic picture. |
-| Petitioners | simulation side (petitioner manager) | Occasionally presents a citizen with a request (ordinance, gift, deal). Accept/decline has effects and posts ticker lines. |
+| Advisor topics | simulation side | Seven advisors evaluate city metrics each advisor cycle and raise/clear numbered *topics*. A topic has a heading, a message body, an optional ticker line, a mood value and a topic picture. |
+| Petitioners | simulation side | Occasionally presents a citizen with a request (ordinance, gift, deal). Accept/decline has effects and posts ticker lines. |
 | Reward buildings | City-planner advisor | Unlocks reward buildings (mayor's house, city hall, statue …) and business-deal buildings when conditions are met. |
 | News ticker | application shell | A single scrolling text line at the bottom of the city view. Fed by advisors, petitioners, disasters and other subsystems, plus a pool of random filler messages. |
 
@@ -33,7 +33,7 @@ string ID; see `05-text-and-fonts.md`). The file names below are those shipped u
 | `0xC25B11C3` | `Sc3StringsAdvisorTicker.IXF`, `Sc3MBEStringsAdvisorTicker.IXF` | topic ID | Ticker line for the topic (optional — a topic without an entry here posts no ticker line) |
 | `0x82B85965` | `SC3StringsAdvisorHelpTitles.IXF` | help ID | Advisor briefing and ordinance-page titles; also the page heading (§3.14) |
 | `0xE26EC3B8` | `SC3StringsAdvisorHelp.IXF` | help ID | Advisor briefing and ordinance-page bodies (§3.14) |
-| `0xA26EC340` | `SC3StringsAdvisorHelpHeadings.IXF` | help ID | Help headings. Not referenced by any code [STATIC]; unused |
+| `0xA26EC340` | `SC3StringsAdvisorHelpHeadings.IXF` | help ID | Help headings. Unused [STATIC] |
 | `0x42C1ED2D` | `SC3StringsNewstickerTriggered.IXF`, `SC3HolidaysStringsNewstickerTriggered.IXF` | message ID | Event ("triggered") ticker news |
 | `0x547BA060` | `SC3MBEStringsNewstickerTriggered.IXF` | message ID | Event ticker news added by Unlimited ("MBE" strings) |
 | `0xC2498F0E` | `SC3StringsNewstickerMessages.IXF` | message ID | Random filler ticker news |
@@ -90,7 +90,7 @@ into the heading/body/ticker text when the topic is rendered. [STATIC]
 
 ### 3.1 The seven advisors
 
-Each advisor is a separate component with its own INI file. Names are those used in the
+Each advisor has its own INI file. Names are those used in the
 program's debug cheats (for identification only). [STATIC]
 
 | Advisor | INI file | Advisor ID |
@@ -132,8 +132,8 @@ across all seven files (no key name occurs twice), so one flat key → value map
 There are no sections named `CRIME_RATE_CUTOFFS` or `TRAFFIC_RATE_CUTOFFS`, no `ADVICE_TRIGGERS`
 in the public-safety and transportation files, and no `PETITIONER_GENERATION` in the city-planner
 file. The crime and traffic thresholds are in `ADVICE_GENERATION` and `TRANSPORTATION_CUTOFFS`.
-The SIMADV loader reads each key by (section, key) pair; it parses crime and funding cutoffs with
-`atoi` into a byte, and population minimums into a u32 [STATIC].
+Each key is read by (section, key) pair; crime and funding cutoffs are parsed as integers into a
+byte, and population minimums as unsigned 32-bit values [STATIC].
 
 The ordinance-petition thresholds (`POPULATION_FOR_GAMBLING`, `MAX_GAMBLING_AURA`,
 `PRO_READING_AURA`, `PRO_READING_POP`, `LE_LEVEL_FOR_CLINIC`, `PARKING_FINES_YEAR`,
@@ -147,8 +147,8 @@ Keys that are loaded but never read by any rule or petition (dead data; reproduc
 `POWER_FUNDING_*`, `WATER_FUNDING_*`, `WATER_CONSUMPTION_CRITICAL/HIGH`, `WATER_CONSERVATION_YEAR`,
 `POLICE_STATION_RATIO`, `MIN_POWER_SELL`, `MIN_WATER_SELL`, `MIN_GARBAGE_IMPORT`.
 
-No petition chance is configurable. Every petition probability in sections 3.7–3.13 is a constant
-in code.
+No petition chance is configurable. Every petition probability in sections 3.7–3.13 is fixed
+behaviour.
 
 ### 3.2 Topic attributes
 
@@ -240,48 +240,45 @@ data files (section 4.2). Withdrawing a topic removes its pending ticker item. [
 
 ### 3.6 Advisor evaluation cycle
 
-**Cadence** [STATIC]. Advisors and the petitioner manager are not scheduler agents. Each of the
-seven advisors and the petitioner manager registers two listeners with the simulation calendar
-(`14-sim-clock.md` §2.2): one with period code 4 (**week**) and one with period code 3 (**day**).
+**Cadence** [STATIC]. Each of the seven advisors and the petitioner manager is notified by the simulation calendar
+(`14-sim-clock.md` §2.2) once per **week** and once per **day**.
 
 * The week notification (Mondays) only sets the component's "needs update" flag.
 * Every day notification checks the flag; if it is set, one full evaluation runs and the flag is
   cleared (the flag is cleared on every day notification, set or not).
 
-Because the calendar notifies day listeners before week listeners on the same date, the flag set
+Because the calendar sends day notifications before week notifications on the same date, the flag set
 on Monday is consumed by the **Tuesday** day notification: every advisor and the petitioner
 manager evaluates exactly **once per game week, on Tuesday** [STATIC for the registration;
 INFERRED for the weekday from the listener order in `14-sim-clock.md`]. All "cycle" counts in this
 document (limits L, cool-downs, streaks such as "≥ 7 cycles") are therefore **weeks**.
-Within one Tuesday the components run in calendar-listener registration order, i.e. the order in
-which they were initialised (`14-sim-clock.md` §5) [INFERRED]. The flag is not saved; after
+Within one Tuesday the components run in the order in which they were initialised (`14-sim-clock.md` §5) [INFERRED]. The flag is not saved; after
 loading, the first evaluation happens on the first Tuesday after the next Monday.
 
 Additionally, the advisor panel can trigger an on-demand gather-and-rules pass (metrics and
 rules only, no update step), which is why saved topic instances can carry R = 1 [STATIC].
-Advisors also listen for the ordinance notification `0xA2D1C5B9` (argument = ordinance ID) and
-raise an ordinance-specific announcement topic immediately. **Correction:** the notification is
+Advisors also react to the ordinance-available notification (carrying the ordinance ID) and
+raise an ordinance-specific announcement topic immediately. The notification is
 *not* sent on enact or repeal. It is sent when an ordinance **becomes available** (its
-availability flag is set because the year is reached or its condition is met, SIMMISC
-0x1001A153), and by the per-ordinance and all-ordinances unlock paths (SIMMISC 0x1001AB68,
-0x1001AE60; cheat paths [INFERRED]). A further routine re-broadcasts it for every available
-ordinance (SIMMISC 0x10019E38; caller unknown, possibly load). The payload is
-`{0xA2D1C5B9, ordinanceID, 0, 0}` and carries no enacted/repealed state [STATIC].
+availability flag is set because the year is reached or its condition is met), by the
+per-ordinance and all-ordinances unlock paths (cheat paths [INFERRED]), and by a routine that
+re-announces every available ordinance (trigger unknown, possibly load). It carries no
+enacted/repealed state [STATIC].
 
-The handler compares the ID inline and queues a forced topic with a = b = 0 (SIMADV 0x1001D881).
+For each of the ordinances below, the advisor queues a forced topic with both arguments 0.
 The topic number is the instance used in the heading, message and ticker string tables. The
-comparisons are [STATIC]; the advisor of each handler is [INFERRED] from the category column of
+mapping is [STATIC]; the advisor of each ordinance is [INFERRED] from the category column of
 `19-sim-economy.md` §9.5, which it matches exactly. Every one of the 44 ordinances appears once:
 
-| Advisor | Handler (SIMADV) | Ordinance → topic |
-|---|---|---|
-| Budget | 0x100061C8 | `A0D07129` → `0x1F` |
-| City planner | 0x1000AEBE | `C2BF1DD1` → `0x01`, `20D07175` → `0x02`, `62F6E7CF` → `0x03`, `A2F6E7DA` → `0x04`, `E2F6E7EA` → `0x05`, `02F6E7EF` → `0x06`, `22F6E7F4` → `0x07`, `A2F6E7F9` → `0x08`, `E2F6E7FE` → `0x09`, `C2F6E804` → `0x0A`, `62F6E82B` → `0x1D`, `02F6E7E2` → `0x20` |
-| Environment | 0x1001140C | `A2F917CF` → `0x0B`, `C2BF1E04` → `0x14`, `A2BF1E43` → `0x15`, `22BF1E35` → `0x16`, `42BF1E18` → `0x17`, `62F6E808` → `0x18`, `22F6E80C` → `0x19`, `22F6E814` → `0x1A`, `22F6E81B` → `0x1B`, `C2F6E81F` → `0x1C` |
-| Health/education | 0x1000EF50 | `40D07236` → `0x28`, `815B4CEF` → `0x29`, `E0D0722E` → `0x2A`, `E0D07233` → `0x2B`, `E0D07239` → `0x2C`, `00D0723D` → `0x2D` |
-| Public safety | 0x100149F5 | `C2BF1DEF` → `0x32`, `62BF1DB9` → `0x33`, `62BF1DAA` → `0x34`, `C2BF1DC5` → `0x35` |
-| Transportation | 0x1001796B | `E2BF1E2A` → `0x3C`, `A2BF1DDC` → `0x3D`, `015B4D1E` → `0x3E`, `A2BF1DE5` → `0x3F`, `C2D1B025` → `0x40` |
-| Utilities | 0x1001C507 | `82E42E30` → `0x46`, `02BF1DFA` → `0x47`, `82B9999B` → `0x48`, `C2F90EB1` → `0x49` |
+| Advisor | Ordinance → topic |
+|---|---|
+| Budget | `A0D07129` → `0x1F` |
+| City planner | `C2BF1DD1` → `0x01`, `20D07175` → `0x02`, `62F6E7CF` → `0x03`, `A2F6E7DA` → `0x04`, `E2F6E7EA` → `0x05`, `02F6E7EF` → `0x06`, `22F6E7F4` → `0x07`, `A2F6E7F9` → `0x08`, `E2F6E7FE` → `0x09`, `C2F6E804` → `0x0A`, `62F6E82B` → `0x1D`, `02F6E7E2` → `0x20` |
+| Environment | `A2F917CF` → `0x0B`, `C2BF1E04` → `0x14`, `A2BF1E43` → `0x15`, `22BF1E35` → `0x16`, `42BF1E18` → `0x17`, `62F6E808` → `0x18`, `22F6E80C` → `0x19`, `22F6E814` → `0x1A`, `22F6E81B` → `0x1B`, `C2F6E81F` → `0x1C` |
+| Health/education | `40D07236` → `0x28`, `815B4CEF` → `0x29`, `E0D0722E` → `0x2A`, `E0D07233` → `0x2B`, `E0D07239` → `0x2C`, `00D0723D` → `0x2D` |
+| Public safety | `C2BF1DEF` → `0x32`, `62BF1DB9` → `0x33`, `62BF1DAA` → `0x34`, `C2BF1DC5` → `0x35` |
+| Transportation | `E2BF1E2A` → `0x3C`, `A2BF1DDC` → `0x3D`, `015B4D1E` → `0x3E`, `A2BF1DE5` → `0x3F`, `C2D1B025` → `0x40` |
+| Utilities | `82E42E30` → `0x46`, `02BF1DFA` → `0x47`, `82B9999B` → `0x48`, `C2F90EB1` → `0x49` |
 
 One evaluation:
 
@@ -395,12 +392,10 @@ From these:
 * demand *GD* = *G0* + *G1* (64-bit; imports are thus counted twice, since *G0* already
   includes them; reproduce);
 * capacity *GC* = ⌊*R* / 12⌋ + 30·(*Bi* + *Bw*) + *G3*. The advisor also has a term for landfill
-  decay, but it asks the landfill developer for an interface that nothing implements, so the
-  factor is always 0 and the term vanishes (original defect; reproduce);
+  decay, but its factor is always 0, so the term vanishes (original defect; reproduce);
 * "not accumulating, surplus within limit" (topic `0x78`) = not *A* and *GD* ≤ *GC*;
 * "not accumulating but near capacity" = not *A* and *GD* > *GC*: topic `0x77` if the
-  waste-to-energy plant (12853) is unlocked (section "Building availability"), else `0xF8`.
-  Correction: the earlier reading tied this to a trash-import deal;
+  waste-to-energy plant (12853) is unlocked (section "Building availability"), else `0xF8`;
 * "accumulating" = *A*. The accumulation counter rises by 1 each cycle with *A* and falls by 1
   (not below 0) without it;
 * the "problem solved" event `0xF3` (L = 60) fires when the counter is > 6 and *A* is clear.
@@ -420,7 +415,7 @@ funding bytes), crime index K, population N, station counts, police coverage per
 Strike-warning counters: each is that layer's **strike chance per tick** (`17-sim-services.md`
 §3.4, 0–10 000; 10 000 while striking), divided by 100 with integer division. It is read at each
 advisor cycle. So "counter ≥ 16" means a strike chance ≥ 1 600. This is the same scheme as W_s in
-3.12. CORRECTION: it is not a count of months of under-funding [STATIC for police; INFERRED for
+3.12. It is not a count of months of under-funding [STATIC for police; INFERRED for
 fire, whose layer mirrors police].
 
 | Rule (key group) | Condition, first match wins | Topic |
@@ -431,7 +426,7 @@ fire, whose layer mirrors police].
 | | pf > PH and K > CM | `0x132` |
 | | pf > PH and K ≤ CM | `0xFB` |
 | | PM < pf ≤ PH | `0xA2` |
-| | pf ≤ PM | `0xA0` (same topic as the strike-warning case) [STATIC, SIMADV] |
+| | pf ≤ PM | `0xA0` (same topic as the strike-warning case) [STATIC] |
 | Fire (`0x22A498D1`) | firefighters on strike | `0xA7` |
 | | no fire station: N > `FIRE_STATION_MIN_POP` → `0xFC`, else `0x120` | |
 | | strike-warning counter ≥ 16 | `0xA8` |
@@ -439,18 +434,17 @@ fire, whose layer mirrors police].
 | | FM < ff ≤ FH | `0xAA` |
 | | ff ≤ FM | `0xA9` |
 | Crime (no key) | K > CH → `0xBC`; else K > CM → `0xC5` | |
-| Jails (`0xC358210E`) | no jail (agent type 13881 count = 0): only if N > 1000; then K > CM → `0xBA`. Jail present: police-layer value J3 ≠ 0 → `0xB9`; else 10·J2 > 8·J1 → `0xBB` (J2 more than 80 % of J1); else nothing. J1, J2, J3 = police layer getters +0x70, +0x74, +0x78 [STATIC; INFERRED: J1 jail capacity, J2 inmates, J3 "jail full" flag]. CORRECTION: the earlier "over capacity by more than 8× a capacity term" reading was wrong | |
+| Jails (`0xC358210E`) | no jail (agent type 13881 count = 0): only if N > 1000; then K > CM → `0xBA`. Jail present: police-layer value J3 ≠ 0 → `0xB9`; else 10·J2 > 8·J1 → `0xBB` (J2 more than 80 % of J1); else nothing. J1, J2, J3 = three police-layer jail values [STATIC; INFERRED: J1 jail capacity, J2 inmates, J3 "jail full" flag] | |
 | Police coverage (`0xC3582DBE`, only N > 1000) | Q < 50 → `0x9B`; Q < 75 → `0x9C`; Q < 99 → `0x9D`; else (Q ≥ 99): K > CM and pf < 100 → `0x9E`; else K < CM → `0xC2` | |
 | Fire coverage (`0x235981F6`, only N > 1000) | Qf < 50 → `0xA3`; Qf < 75 → `0xA4`; Qf < 99 → `0xA5`; else ff ≥ 100 → `0xC4` | |
 | `0xD9FDDF6D` | float Ra > 0.8 → `0x193` | |
 | `0x1A4A387F` | float Rb > 0.8 → `0x199` | |
 
-Metric sources [STATIC, SIMADV safety metric gather]: Q = police layer getter +0x6C, Qf = fire layer
-getter +0x6C (both percent); station counts by agent type: police 13130, fire 13002, jail 13881;
-Ra = interface `0x22963800`/`0xE475EAD4` method +0x10, Rb = interface `0x13873256`/`0x24889F6F`
-method +0x18. Both are **flags** that return exactly 1.0 or 0.0, so "> 0.8" means "set"
-[STATIC, SIMDSTR]:
-* **Ra** (toxic cloud disaster object, 0x10014FC8) = 1.0 when all three hold:
+Metric sources [STATIC]: Q = police coverage percent, Qf = fire coverage percent; station counts
+by agent type: police 13130, fire 13002, jail 13881; Ra = the toxic-cloud-imminent value, Rb = the
+space-debris-active value. Both are **flags** that return exactly 1.0 or 0.0, so "> 0.8" means "set"
+[STATIC]:
+* **Ra** (toxic cloud disaster) = 1.0 when all three hold:
   1. no toxic cloud is active (active-cloud count < 1);
   2. the occurrence countdown has reached at least 80 % of its interval (counter ≥
      trunc(0.8 × interval));
@@ -467,18 +461,18 @@ method +0x18. Both are **flags** that return exactly 1.0 or 0.0, so "> 0.8" mean
   The `SC3DisasterLayer.ini [ToxicCloudDisasterTunables]` keys are spec 21's; shipped values
   675, 30, 30, 30, 60, threshold 120, average 48. The same countdown and score trigger the cloud
   itself (spec 21).
-* **Rb** (space-debris disaster object, 0x100107A9) = 1.0 while at least one debris piece is in
+* **Rb** (space-debris disaster) = 1.0 while at least one debris piece is in
   flight or impacting (live piece count > 0), else 0.0. The count goes up when a piece spawns
   (capped by game property 0x44860901, default 1) or is restored from a save, and down, not below
   0, when the piece's state machine ends. The crime topics use key 0.
 
 Public-safety petitions (post-update; probability r(100) < chance per cycle, cool-down L in
 cycles). Every randomised request is skipped while the same petition is pending. No petition at
-all when N < 100. [STATIC, SIMADV; CORRECTION of the earlier table]
+all when N < 100. [STATIC]
 
 1. Strikes (no random, not gated by pending): police **not** striking and warning counter > 15 →
-   `0x9F`; police striking → `0xA0`; argument `0x438293B1`, L = 6. Fire not striking and warning
-   counter > 15 → `0xCC`; fire striking → `0xA2`; argument `0xE38293BE`, L = 6.
+   `0x9F`; police striking → `0xA0`; L = 6. Fire not striking and warning
+   counter > 15 → `0xCC`; fire striking → `0xA2`; L = 6.
 2. K > CH and N > 50000 → `0x22`, 4 %, L = 48.
 3. Crime branch, first match wins:
    * K > CH and N > 10000: curfew (`0xC2BF1DC5`) not enacted → `0x66` 2 %; youth sports
@@ -494,9 +488,9 @@ all when N < 100. [STATIC, SIMADV; CORRECTION of the earlier table]
 
 All comparisons with CH/CM are on bytes (the INI values are stored as u8).
 `POLICE_STATION_RATIO` is loaded but not read by either public-safety rule function.
-`FIRE_COVERAGE_CUTOFF` is used only by the fire-disaster message handler (`0x621CDA33`): when the
+`FIRE_COVERAGE_CUTOFF` is used only by the fire-disaster notification handler: when the
 fire coverage at the fire's cell is below the cutoff the advisor raises topic `0x9A` (key 0, L = 6)
-[STATIC, SIMADV].
+[STATIC].
 
 ### 3.10 Transportation advancement announcements [STATIC]
 
@@ -513,19 +507,19 @@ Each transportation-advisor cycle draws r = uniform 0–99 (shared LCG).
 
 **Technology flags** [STATIC]. The four flags are 1 subway, 2 bus stops, 3 airport, 4 highway.
 They are not saved. They are re-derived when the city is set up, and again when the "city
-opened" notification arrives (message `0x632ABA43`, posted after a city is loaded or started
-[INFERRED name]). At that point each flag ← (its year ≤ the current year), with no announcement.
+opened" notification arrives (posted after a city is loaded or started
+[INFERRED]). At that point each flag ← (its year ≤ the current year), with no announcement.
 During play a flag becomes set only through the announcement above. A technology whose year
 passes during play therefore stays unavailable until the 10 % draw announces it.
 Every time a flag is (re)evaluated, the advisor posts a "tool enabled/disabled" message
-(`0x025F0A92`, tool ID, flag) for each gated tool:
+(tool, flag) for each gated tool:
 
-| Flag | Tool command IDs (`08-ui-framework.md`) |
+| Flag | Gated tools |
 |---|---|
-| subway | `0x10004201` subway, `0x10004202` subway station, `0x10004009` subway–rail station |
-| bus | `0x10004004` bus stop |
-| airport | `0x10003006` airport zone |
-| highway | `0x10004301` highway, `0x10004302` highway on-ramp |
+| subway | subway, subway station, subway–rail station |
+| bus | bus stop |
+| airport | airport zone |
+| highway | highway, highway on-ramp |
 
 An announcement posts "enabled" for its tools. The tools are greyed while their flag is clear. The
 hot keys that say "only if available" follow the same flags. The city-planning advisor reads
@@ -535,8 +529,7 @@ flags 3 and 4 (3.11).
 
 Thresholds (`Advisor-Transportation.ini`): RFH, RFM, RFL = `ROAD_FUNDING_HIGH/MEDIUM/LOW`,
 TFH, TFM = `RAIL_FUNDING_HIGH/MEDIUM` (percent of recommended funding); RD = `ROAD_DAMAGE`
-as a fraction. It is parsed as a real (C `atof`), multiplied by the 32-bit constant 0.01 in
-extended precision, and stored as a 32-bit float. So `ROAD_DAMAGE=15` gives RD ≈ 0.15 (the nearest
+as a fraction. It is parsed as a real number, multiplied by 0.01 and rounded to a 32-bit float. So `ROAD_DAMAGE=15` gives RD ≈ 0.15 (the nearest
 float just below 0.15) [STATIC]. THR, TMR = `HIGH_ROAD_TRAFFIC`,
 `MED_ROAD_TRAFFIC`; TMU, THU = `MED_RAIL_USAGE`, `HIGH_RAIL_USAGE`. Metrics: road funding rf and
 transit funding tf (percent); nRd = road + highway tiles, nTr = rail + subway tiles (two counts
@@ -552,8 +545,7 @@ The rules run in this order:
 2. Roads (key `0xC2A499BA`): if nRd = 0 → `0x123`. Else first match: rf > RFH and damage < 0.01 →
    `0x59`; rf > RFM and damage < 0.01 → `0x5A`; rf > RFL and damage ≤ RD → `0x5B`; else `0x5C`.
    When damage is NaN (highways but no road pieces, `12-networks.md` §10), every damage test
-   above counts as true. With rf > RFH such a city gets `0x59` [STATIC: the comparison
-   branches treat an unordered result as "less"].
+   above counts as true. With rf > RFH such a city gets `0x59` [STATIC].
 3. Transit (key `0xE2A499BE`): if nTr = 0 → `0x124`. Else: transit strike → `0x61`; strike-warning
    counter > 10 → `0x60`; tf < TFM → `0x60`; tf ≤ TFH → `0x5F`; else `0x5E`.
 4. Transit use (key `0xA3372CAE`), only if nTr > 2: Ru > Tr and Ru > TMU → `0x11B`; else 3·Ru < Tr
@@ -571,7 +563,7 @@ The constants 0.01 and 0.2 are hard-coded (32-bit floats).
 
 | Petition | Condition | Chance | L |
 |---|---|---|---|
-| `0xA4` / else `0xA3` | transit on strike / else strike-warning counter > 15 (argument `0xA3829374`) | always | 6 |
+| `0xA4` / else `0xA3` | transit on strike / else strike-warning counter > 15 | always | 6 |
 | `0x72` (carpool) | Tr > `CARPOOL_TRIGGER_LEVEL`, Y ≥ `CARPOOL_TRIGGER_YEAR`, carpool ordinance not enacted, not pending | r(100) = 0 | 120 |
 | `0x74` (crossing guards) | Tr > `CROSSING_GUARD_TRIGGER_LEVEL`, Y > `CROSSING_GUARD_TRIGGER_YEAR`, not enacted, not pending | r(100) = 0 | 120 |
 | `0xD8` (alternate-day driving) | Tr > `ALTERNATE_DAY_DRIVING_LEVEL`, Y > `ALTERNATE_DAY_DRIVING_YEAR`, ordinance `0xE2BF1E2A` available, not pending | r(100) = 0 | 120 |
@@ -589,7 +581,7 @@ Thresholds (`Advisor-CityPlanner.ini`):
 | Symbol | Key | Unit / use |
 |---|---|---|
 | SS, MS | `[ADVICE_TRIGGERS] SMALL_SIZE_CITY`, `MEDIUM_SIZE_CITY` | population; select the rule set by city size |
-| NS | `[ADVICE_TRIGGERS] NON_DEV_SENSITIVITY` | **tile count**; every "many tiles" test below is `count > NS` [INFERRED: key-to-slot mapping by load order] |
+| NS | `[ADVICE_TRIGGERS] NON_DEV_SENSITIVITY` | **tile count**; every "many tiles" test below is `count > NS` [INFERRED] |
 | LLV | `[ADVICE_TRIGGERS] LOW_LAND_VALUE` | city-average land value (same scale as the land-value map, `15-sim-growth.md` §6) |
 | LAF, LWF | `[ADVICE_TRIGGERS] LOW_AIR_POLLUTION_FARMS`, `LOW_WATER_POLLUTION_FARMS` | city air / water pollution index (0–255) |
 | CC, IC | `[GROWTH_CAP_LIMITS] COMMERCIAL_CAP_PROBLEM`, `INDUSTRIAL_CAP_PROBLEM` | compared with the commercial / industrial demand-cap measure (0–255, `15-sim-growth.md` §3) |
@@ -597,7 +589,7 @@ Thresholds (`Advisor-CityPlanner.ini`):
 | RP, CP | `[DEMAND_CUTOFFS] RESIDENTIAL_DEMAND_POSITIVE`, `COMMERCIAL_DEMAND_POSITIVE` | demand (valve) value; growth petitions (3.11.1) |
 | HEQ, HJR | `[ADVICE_TRIGGERS] MIN_HI_TECH_EQ`, `HI_TECH_JOB_RATIO` | EQ points; percent (clean-industry share of industrial buildings) |
 | PR, PA | `[ADVICE_TRIGGERS] PARK_RATIO`, `PARK_AURA_CUTOFF` | ratio (non-park to park); mayor-rating/aura value (signed) |
-| — | `*_DEMAND_NEGATIVE`, `INDUSTRIAL_DEMAND_POSITIVE` | loaded, never referenced (dead keys) [STATIC] |
+| — | `*_DEMAND_NEGATIVE`, `INDUSTRIAL_DEMAND_POSITIVE` | loaded; no effect (dead keys) [STATIC] |
 
 Metrics gathered each cycle:
 
@@ -614,10 +606,9 @@ Metrics gathered each cycle:
   (6300 + 6700).
 * LV = city-average land value; AP, WP = air / water pollution index.
 * capC, capI = `capPct` (0–100) of valves **5000** and **8000**: the family valves, whose cap the
-  cap rule of `15-sim-growth.md` §3.2 sets from 5001 / 8001 [STATIC]. Correction: the previous
-  text said 0–255 [INFERRED].
-* Flags A and B (arguments 3 and 4) are answered by the **transportation advisor**. They are its
-  technology flags of 3.10: index 1 subway, 2 bus stops, 3 airport, 4 highway. So A = "airport
+  cap rule of `15-sim-growth.md` §3.2 sets from 5001 / 8001 [STATIC].
+* Flags A and B (arguments 3 and 4) are the **transportation advisor's** technology flags of
+  3.10: index 1 subway, 2 bus stops, 3 airport, 4 highway. So A = "airport
   available" and B = "highway available" [STATIC].
 * Garbage: Lf = number of registered landfill tiles × 32767; Lr = the landfill store's `Dlast`
   (room left, `16-sim-utilities.md` §4.4) [STATIC].
@@ -682,10 +673,8 @@ Requested as plain petitions with cool-down L (cycles) via the petitioner manage
 
 Pk = park measure = n(14311) + 9·n(14312) + 16·n(14313) + 4·n(14314) + 4·n(14315) + n(14316), where
 n(t) is the number of buildings of agent type t (the multipliers are hard-coded; the agent types
-are the park/plaza family, `13-buildings-occupants.md`). F = farm-building count. B = the occupant manager's total occupant count plus the network
-subsystem's running piece counts for road, highway, rail and power line (`12-networks.md` §10:
-flags 0x8000, 0x10000, 0x20000, 0x400000) [STATIC]. Correction: these are network counts, not
-flora/automata counts. Map
+are the park/plaza family, `13-buildings-occupants.md`). F = farm-building count. B = the total occupant count plus the running piece counts for road, highway, rail and
+power line (`12-networks.md` §10) [STATIC]. Map
 tiles = map width × height. Draws happen only when the earlier conditions hold (short-circuit), so
 the shared-LCG sequence depends on evaluation order: rows are evaluated top to bottom.
 
@@ -809,10 +798,10 @@ when the preceding conditions of the row hold.
 
 | Petition | Condition | Chance | L |
 |---|---|---|---|
-| `0x9C` / else `0x9B` | health workers on strike / else W_health > 15 (argument `0xA38293DE`) | always | 6 |
-| `0x9E` / else `0x9D` | teachers on strike / else W_school > 15 (argument `0xA38293EF`) | always | 6 |
+| `0x9C` / else `0x9B` | health workers on strike / else W_health > 15 | always | 6 |
+| `0x9E` / else `0x9D` | teachers on strike / else W_school > 15 | always | 6 |
 | *(the following four rows only if N > 200)* | | | |
-| `0x05` | nH ≥ 1, F_health = 4, not pending (argument `0xC3829422`). If the draw fails, the remaining rows of this group are skipped | r(100) < 2 | 40 |
+| `0x05` | nH ≥ 1, F_health = 4, not pending. If the draw fails, the remaining rows of this group are skipped | r(100) < 2 | 40 |
 | `0x0C` | nH = 0, N > HR, not pending. If the draw fails, `0x02` is skipped | r(100) < 10 | 12 |
 | `0x02` | nH > 1, C_health < D_health, F_health < 3, not pending | r(100) < 5 | 12 |
 | *(the following three rows only if N > SP)* | | | |
@@ -827,7 +816,7 @@ when the preceding conditions of the row hold.
 | `0x9A` | no building of agent type 14450 (zoo) and N > `ZOO_POPULATION_MINIMUM`, not pending | r(100) < 2 | 60 |
 | `0x99` | no building of agent type 14430 (marina) and N > `MARINA_POPULATION_MINIMUM`, not pending | r(100) < 2 | 60 |
 
-The hard-coded 71 (dreary) is a constant in the program, not an INI value. Of the
+The value 71 (dreary) is fixed, not an INI value. Of the
 `Advisor-Demographics.ini` keys, only `[FUNDING_RATE_CUTOFFS] *` and `COLLEGE_POPULATION_MINIMUM`
 are never used. They are read at load, but no rule or petition tests them [STATIC].
 
@@ -920,7 +909,7 @@ picks the neighbour. Deal types d as in `19-sim-economy.md` §10.1.
 Metrics as in 3.13, plus garbage capacity GC and garbage produced GP (64-bit; GC =
 landfill-related capacity per month [INFERRED]) and treasury T. `MINIMUM_DEAL_POPULATION` (MDP) and `LOW_TREASURY_LEVEL` (LTL, 64-bit) are
 read from `Advisor-Utilities.ini [NEIGHBOR_DEAL_CONSTANTS]`. **`MIN_POWER_SELL`, `MIN_WATER_SELL`
-and `MIN_GARBAGE_IMPORT` are never read**; hard-coded 1000 / 1000 / 500 are used instead [STATIC].
+and `MIN_GARBAGE_IMPORT` have no effect**; fixed 1000 / 1000 / 500 are used instead [STATIC].
 
 Each deal type has a fixed *category key* (used as the petition argument, and to find the
 category's pending petition) and three alternative offer petitions:
@@ -940,7 +929,7 @@ Per category, each cycle, in the order of the table:
    active buy-power deal older than 24 months the informational petition `0xB1` is requested, for
    a buy-water deal older than 24 months `0xAA` (argument = category key); for an active
    garbage-export deal `0xC3` is withdrawn/handled the same way [INFERRED].
-2. Else, if the condition fails or new offers are disabled (deal-manager state 4, e.g. scenario
+2. Else, if the condition fails or new offers are disabled (e.g. scenario
    `cmdDisableNewNeighborDeals` [INFERRED]): any pending offer is cleared.
 3. Else, if an offer petition of this category is already pending: if the deal manager's stored
    offer is still valid it is kept (re-raised); otherwise the offer is cleared and the petition
@@ -948,8 +937,7 @@ Per category, each cycle, in the order of the table:
 4. Else: draw r(3) to choose the petition variant; ask the deal manager to generate an offer of
    type d (neighbour choice and terms: `19-sim-economy.md` §10.2, §10.6); if it produced a valid
    offer, request the petition with argument = category key and L = 1 and record the offer
-   (the deal list is announced as "about to change" before and "changed" after recording it, so
-   that open deal windows refresh).
+   (open deal windows refresh).
    The offer stays pending only while it keeps being re-raised (step 3).
 5. Sell-power only: if T < LTL and the sell-power petition is visible and is not `0xB5`, the
    budget advisor additionally raises topic `0x25` (plain).
@@ -966,26 +954,24 @@ Topics", `0x1BF` "Briefings", `0x76` "Ordinances"; dropdown index = mode): mode 
 ordinance announcements of §3.6 (heading and list text `82B85965`, body `E26EC3B8`; the heading
 of a page is the title string of the same ID).
 
-The briefing list is a fixed list appended by each advisor's builder, in this order (no loop, no
-end marker; display order = insertion order):
+The briefing list is fixed, in this order (display order):
 
-| Advisor | Help IDs (titles) |
+| Advisor | Help IDs (page counts) |
 |---|---|
-| Finance `0x628D0C45` | `BB8` Simoleons, `BB9` Setting Tax Rates, `BBA` Funding City Departments, `BBB` Budget Window, `BBC` Neighbor Deals, `BBD` Business Deals, `BBE` Loans, `BBF` Strategies for Increasing Cash, `BC0` Petitioner Files |
-| City planner `0xC28D0B6E` | `3E9` Types of Zones, `3EA` How To Zone, `3EB` RCI Demand, `3EC` When Zones Fail to Grow, `3ED` Petitioner Files; plus one starter-town entry when the city object reports kind 5 ([INFERRED] started from a starter town): index 1–10 → `2715`, `2719`, `2716`, `2713`, `2718`, `2714`, `2712`, `2717`, `2711`, `271A` ("Starter Town:  name") |
-| Environment `0x828D04EB` | `7D0`–`7D7`: Dealing With Garbage, Landfills, Incinerators, Recycling Centers, Neighbor Deals for Garbage, Air Pollution, Water Pollution, Petitioner Files |
-| Health/education `0xC28D0F40` | `FA0`–`FA5`: Improving Sim Health, How Sims Learn, Raising Education Levels, Keeping Sims Happy - Aura, Petitioner Files - 1, Petitioner Files - 2 |
-| Public safety `0x828D0A2F` | `1388`–`1391`: Police Protection, Jails, Lowering Crime, Dispatching Police, Fire Protection, Flammability, Dispatching Firefighters, Disasters, Early Warning Siren, Petitioner Files |
-| Transportation `0x028D0FC5` | `1770` Building A Transportation System, `1772` Roads, Intersections, and On-Ramps, `1773` Bridges, `1774` Tunnels, `177A` Petitioner Files |
-| Utilities `0x022E288E` | `1B59`–`1B64`: Getting Power To Your Sims, High-Tension Power Lines, Power Plants, Blackouts and Brownouts, Your City Needs Water, Getting Water To Your Sims, Three Types of Pumps, Water Pipes, Water Pollution, Buying Power and Water, Selling Power and Water, Petitioner Files |
+| Finance `0x628D0C45` | `BB8`–`BC0` (9 pages; the last is the petitioner-files page) |
+| City planner `0xC28D0B6E` | `3E9`–`3ED` (5 pages; the last is the petitioner-files page); plus one starter-town entry when the city was started from a starter town [INFERRED]: index 1–10 → `2715`, `2719`, `2716`, `2713`, `2718`, `2714`, `2712`, `2717`, `2711`, `271A` |
+| Environment `0x828D04EB` | `7D0`–`7D7` (8 pages; the last is the petitioner-files page) |
+| Health/education `0xC28D0F40` | `FA0`–`FA5` (6 pages; the last two are petitioner-files pages) |
+| Public safety `0x828D0A2F` | `1388`–`1391` (10 pages; the last is the petitioner-files page) |
+| Transportation `0x028D0FC5` | `1770`, `1772`, `1773`, `1774`, `177A` (5 pages; `177A` is the petitioner-files page) |
+| Utilities `0x022E288E` | `1B59`–`1B64` (12 pages; the last is the petitioner-files page) |
 
 [OBSERVED] Berlin shows exactly these lists for all seven advisors. Page titles come from table
 `029541F4`: briefings `0x2C3`–`0x2C9`, ordinances `0x2BC`–`0x2C2`, each in the order Financial,
 Transportation, City Planning, Environmental, Public Safety, HEA, Utilities.
 
-Reading a topic hides it: the topic text getters set the hidden flag and withdraw its ticker item,
-but only for topics with L ≠ 0, P or E (§3.4) [STATIC; that opening the page calls them is
-INFERRED]. There is no dismiss button on an advisor page.
+Reading a topic hides it and withdraws its ticker item, but only for topics with L ≠ 0, P or E
+(§3.4) [STATIC; that opening the page triggers this is INFERRED]. There is no dismiss button on an advisor page.
 
 ### 3.15 Other advisors
 
@@ -999,7 +985,7 @@ rule facts:
   item chosen at random (table below, section 4.7).
 * **Utilities** owns the neighbour-deal petitioners and `[NEIGHBOR_DEAL_CONSTANTS]`
   (`LOW_TREASURY_LEVEL`, `MINIMUM_DEAL_POPULATION`; `MIN_POWER_SELL`, `MIN_WATER_SELL`,
-  `MIN_GARBAGE_IMPORT` are never read, see 3.13.1), and announces new power/water plants when the year passes the `year`
+  `MIN_GARBAGE_IMPORT` have no effect, see 3.13.1), and announces new power/water plants when the year passes the `year`
   field of `[POWER_BUILDINGS]` / `[WATER_BUILDINGS]` lines (`ID=Name;year;topic` — the third field
   is the announcement topic ID, 0 = none; e.g. gas plant topic `0x1F` = 31).
 * **Environment** `[GARBAGE_BUILDINGS]` has the same `ID=Name;year;topic` form (recycling
@@ -1129,9 +1115,9 @@ Triggered news items are posted directly by the subsystem that detects the event
 | Source | Table / IDs |
 |---|---|
 | Disasters (public-safety advisor, on disaster start; `21-disasters.md` for disaster type IDs) | see table below |
-| Disaster progress (`SIMDSTR`) | `0x42C1ED2D` / `0x547BA060` stage messages chosen inside each disaster's state machine (`21-disasters.md`) [OPEN: per-stage list] |
-| Building completed (`SIMGEOM`) | `0x42C1ED2D`, table 4.7.1 |
-| City start / load (`SIMCITY`) | `0x42C1ED2D`, section 4.7.2 |
+| Disaster progress (disaster logic) | `0x42C1ED2D` / `0x547BA060` stage messages chosen inside each disaster's state machine (`21-disasters.md`) [OPEN: per-stage list] |
+| Building completed (building-completion logic) | `0x42C1ED2D`, table 4.7.1 |
+| City start / load (city start) | `0x42C1ED2D`, section 4.7.2 |
 | Cheat words (application shell) | `0x42C1ED2D` `0x325`–`0x341` |
 | City anniversaries (city age 10, 25, 50, 100, 250, 500, 1000, 2000 years) | `0x42C1ED2D` `0x1F4`–`0x1FB` respectively (`01-architecture.md`) |
 | Advisors | `0xC25B11C3` topic IDs (section 3.5) |
@@ -1191,8 +1177,8 @@ building subsystem's own generator [STATIC]. Decimal agent types are as in `13-b
 
 #### 4.7.2 City start / load news [STATIC; mode meanings INFERRED]
 
-When a city starts (or is loaded), the city subsystem posts and keeps references (so it can
-withdraw them later) to:
+When a city starts (or is loaded), the game posts, and keeps references to (so it can
+withdraw them later):
 
 * in game mode 3: one random item `0x2ED`–`0x2F2` (uniform), then `0x2F9`;
 * in game mode 7: all of `0x64`–`0x68`, then one item per advisor present, `0x69`, `0x6A`, … in
@@ -1200,8 +1186,7 @@ withdraw them later) to:
 * otherwise: `0x2F9`.
 
 `0x2F9` is also posted when the simulation is started for the first time in a session and the
-city's list of start-up items is empty. Game-mode values are those of `01-architecture.md`
-[OPEN: mode 3 / 7 names].
+city's list of start-up items is empty. [OPEN: names of game modes 3 and 7].
 
 ## 5. Petitioners
 
@@ -1256,14 +1241,13 @@ L = 120 cycles. [STATIC] When a petition becomes pending, its ticker line (categ
 `0x026DD322`/`0x649B17DB`) is posted with the petition's map location if any.
 
 **Presentation (petitioner panel)** [STATIC; ordering INFERRED]. There is no "next petition"
-selection: at the end of each petitioner-manager cycle (weekly, section 3.6) the manager broadcasts
-a "petitions changed" notification. The petitioner panel and its petitioner list
-(`09-ui-screens.md`) react by fetching from the manager the complete
+selection: at the end of each petitioner-manager cycle (weekly, section 3.6) the petitioner panel and its
+petitioner list (`09-ui-screens.md`) refresh: they fetch the complete
 list of presentable petitions (pending and not hidden), in pending-list order, and reconciling its
 row of petitioner portraits with it:
 
 1. remember the tokens of the entries currently shown;
-2. rebuild the list from the manager; an entry without a token gets token = C-runtime `rand()` + 1;
+2. rebuild the list from the manager; an entry without a token gets a random token (random number + 1);
 3. an entry whose token was already shown is updated in place; any other entry is added;
 4. previously shown entries not present any more are removed.
 
@@ -1421,10 +1405,10 @@ entry that is not a deal and not owned, with N = population, Y = current year:
 | 13871 university | `0x97` | city EQ > `EQ_NEEDED_FOR_UNIVERSITY` and ordinance `0xE0D07233` (pro-reading) enacted |
 | 13872 medical research | `0x8E` | life expectancy > `LE_NEEDED_FOR_MEDICAL_CENTER` |
 | 13874 science/R&D centre | `0x84` | city EQ > `EQ_NEEDED_FOR_SCIENCE_CENTER` |
-| 14003 national park | `0x88` | park measure PM > `PARKS_NEEDED_FOR_NATIONAL_PARK` (PM defined below; CORRECTION: not a count of agent type 14310); the population test uses a different population measure [OPEN] |
+| 14003 national park | `0x88` | park measure PM > `PARKS_NEEDED_FOR_NATIONAL_PARK` (PM defined below); the population test uses a different population measure [OPEN] |
 | 14325 theme park | `0x8D` | number of airport buildings (12310) > 5 and ordinance `0x62F6E7CF` (tourism promotion) enacted |
 | 14550 lighthouse | `0x8B` | population test uses the same alternative measure as national park [OPEN: likely coastal/seaport related] |
-| 20001 haunted house (Holidays) | `0x12C` | Holidays building set enabled; calendar month m (1 = January) with 6 < m < 10, i.e. July–September [STATIC; CORRECTION of the earlier 0-based reading]; not offered when the player's **country** (`27-platform.md` §1) is 30 Italy, 31 Japan, 32 Korea, 34 Netherlands or 49 Taiwan [STATIC: the values and the country-name table; INFERRED: that the application getter returns the country index] |
+| 20001 haunted house (Holidays) | `0x12C` | Holidays building set enabled; calendar month m (1 = January) with 6 < m < 10, i.e. July–September [STATIC]; not offered when the player's **country** (`27-platform.md` §1) is 30 Italy, 31 Japan, 32 Korea, 34 Netherlands or 49 Taiwan [STATIC: the values and the country-name table; INFERRED: that the application getter returns the country index] |
 | 20002 skating rink (Holidays) | `0x12F` | Holidays building set enabled; calendar month 8 < m < 12, i.e. September–November [STATIC]; park measure PM > 29 |
 
 **Park measure PM** [STATIC]: a weighted sum of park buildings by agent type, counting each type
@@ -1457,7 +1441,7 @@ Placing reward buildings, their effects and costs are in `13-buildings-occupants
 ## 7. Opinion / approval
 
 SimCity 3000 Unlimited has **no opinion poll and no separate mayor-approval rating** in this
-subsystem. [STATIC: no such data, strings or logic in the advisor/petitioner component] Citizen
+subsystem. [STATIC: no such data, strings or logic in this subsystem] Citizen
 mood is expressed through the city *aura* (`17-sim-services.md`), which the advisors and the
 petitioner manager read as an input (e.g. `MAX_GAMBLING_AURA`, `PRO_READING_AURA`,
 `CITY_AURA_LOW/HIGH`, `LOW/HIGH_DREARY_RATING`). Approval-like feedback appears only as advisor
@@ -1485,9 +1469,9 @@ variables or conditionals exist. Value forms:
 | Extra info | `[PetitionerExtraInfo]` | key `0x%08X` petition ID, value `a,b` decimal |
 | Deal list | `[BUSINESS_DEALS2]` | key = name, value `type;year;value;petitionId` (see `19-sim-economy.md` §11) |
 
-Numeric fields are parsed with C-library semantics: leading whitespace skipped, an optional sign,
+Numeric fields are parsed as follows: leading whitespace skipped, an optional sign,
 then digits; parsing stops at the first non-digit (so `60;` reads as 60). Hexadecimal fields
-(`0x…`) are parsed as unsigned 32-bit. A missing key leaves the compiled-in default (0 unless
+(`0x…`) are parsed as unsigned 32-bit. A missing key leaves the default (0 unless
 stated). [STATIC]
 
 ## Persisted state
@@ -1575,20 +1559,20 @@ owned nor available.
 Building type → saved Instance [DATA: every shipped city that has reward entries; each saved
 Instance is an occupant whose agent type (attribute 0x65) is the building type]:
 
-| Type | Instance | Occupant | Type | Instance | Occupant |
+| Type | Instance | Reward building | Type | Instance | Reward building |
 |---|---|---|---|---|---|
-| 1002 | `00001F51` | Stock Exchange | 14003 | `00001F49` | Geyser Park (national park) |
-| 10110 | `000000F3` | Mayor's House | 14150 | `000000DB` | Historic Statue |
-| 10120 | `000000D0` | City Hall | 14170 | `00001F4B` | Performing Arts Center |
-| 11001 | `00001F57` | Defense Contractor | 14325 | `00001F5D` | Theme Park |
-| 11002 | `00001F8B` | Military Base | 14370 | `00001F6E` | Country Club |
-| 12350 | `00001F52` | Space Port | 14550 | `00001F53` | Lighthouse |
-| 13005 | `00001F4D` | County Courthouse | 14600 | `00001F54` | Stadium |
-| 13871 | `00001F98` | University | 19001 | `00001F55` | Toxic Waste Conversion Plant |
-| 13872 | `00001F56` | Medical Research Center | 19002 | `00001F95` | GigaMall |
-| 13874 | `00001F6A` | Science Center | 19003 | `00001F5B` | Casino Row |
-| 19004 | `00001F48` | Maximum Security Prison | 19999 | `00004E20` | Quigley Castle |
-| 20001 | `000061A8` | Haunted House | 20002 | `00002D18` | Winter Wonderland |
+| 1002 | `00001F51` | stock exchange | 14003 | `00001F49` | national park |
+| 10110 | `000000F3` | mayor's house | 14150 | `000000DB` | statue |
+| 10120 | `000000D0` | city hall | 14170 | `00001F4B` | performing arts |
+| 11001 | `00001F57` | defense contractor | 14325 | `00001F5D` | theme park |
+| 11002 | `00001F8B` | military base | 14370 | `00001F6E` | golf course |
+| 12350 | `00001F52` | spaceport | 14550 | `00001F53` | lighthouse |
+| 13005 | `00001F4D` | courthouse | 14600 | `00001F54` | stadium |
+| 13871 | `00001F98` | university | 19001 | `00001F55` | toxic-waste conversion plant |
+| 13872 | `00001F56` | medical research | 19002 | `00001F95` | mega-mall |
+| 13874 | `00001F6A` | science/R&D centre | 19003 | `00001F5B` | casino |
+| 19004 | `00001F48` | prison | 19999 | `00004E20` | castle |
+| 20001 | `000061A8` | haunted house | 20002 | `00002D18` | skating rink |
 
 Rule: the Instance is the **lowest occupant ID** with that agent type. Four types have more than
 one occupant: 11002 (`1F8B`–`1F8E`), 13871 (`1F98`–`1F9B`), 14325 (`1F5D`–`1F60`, `2351`) and
@@ -1603,7 +1587,7 @@ every case. Owned = 1 with available = 0 is common (Madrid has 13 such entries).
 
 ### P.4 Advisor-manager flags — `022E288E:422E28E8:00000000`
 
-This record is owned by the advisor manager (class 0x422E28E8), not by the utilities advisor. The six
+This record belongs to the advisor system as a whole, not to the utilities advisor alone. The six
 booleans are probably one per advisor slot [INFERRED]; all six are 1 in every shipped file.
 
 14 bytes: u16 1, u16 2, u32 0xDEADBEEF, then six u8 booleans (all 1 in every shipped file)
@@ -1615,7 +1599,7 @@ when unknown.
 ## Open questions
 
 * Which UI actions trigger on-demand rule evaluation (cadence itself resolved: weekly, 3.6).
-* Advisor rule wiring is now transcribed for all seven advisors (3.7–3.13). Remaining gaps:
+* Advisor rules are now transcribed for all seven advisors (3.7–3.13). Remaining gaps:
   exact identities of several metrics marked [INFERRED] (demand-cap cause flags A/B, neighbour
   counts K/Kr/Kt, the four extra counts in B (3.11.1), garbage capacity GC, utilities Nb), the
   seed source of the utilities advisor's private generator. (The ordinance → topic table is now
@@ -1629,8 +1613,8 @@ when unknown.
 * Meaning of the six utilities-advisor booleans (P.4) and the topic argument fields `a`/`b`/`value`
   (P.1). (Resolved: reward-state keys map to building types, P.3.)
 * (Resolved: declining petition `0xD7` sets the flag read by `zyxwvu`.) Whether that flag is saved with the city is OPEN.
-* Per-stage triggered-news IDs of the disaster state machines (`SIMDSTR`); network events were not
-  found to post news (no `SIMNTWRK` reference to the news tables).
+* Per-stage triggered-news IDs of the disaster state machines; network events were not observed
+  to post news.
 
 ## Building availability (utilities advisor)
 

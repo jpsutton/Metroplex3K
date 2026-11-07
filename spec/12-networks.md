@@ -11,8 +11,8 @@ supply semantics (how much power/water a plant produces, how much a building con
 
 ## 1. Network types
 
-Six network kinds are tiled by rule tables, plus one auxiliary piece set for diagonals. All
-per-network tables in the program are indexed in this order `[STATIC]`:
+Six network kinds are tiled by rule tables, plus one auxiliary piece set for diagonals. This
+specification numbers them in this order `[STATIC]`:
 
 | Index | Prefix in file names | Network |
 |-------|----------------------|---------|
@@ -28,9 +28,8 @@ Other subsystems use their own numbering for the same networks; do not mix them 
 
 * Neighbour connections and `SC3ValveLayer.ini [ConnectionValveEffects]` use 0 = road, 1 = rail,
   2 = highway, 3 = subway `[DATA]`.
-* The neighbour-connection query, the tiler entry point and the power layer use 1 = road,
-  2 = rail, 3 = power, 4 = highway, 5 = pipe, 6 = subway `[STATIC]` (see also
-  `18-sim-transport.md`).
+* The tables of §6 label the networks with a spec-local number: 1 = road, 2 = rail, 3 = power,
+  4 = highway, 5 = pipe, 6 = subway. This is a label for reading this document only.
 
 ## 2. Piece identifiers
 
@@ -44,14 +43,12 @@ decimal integer `P` that packs both `[STATIC]`:
 Examples: `7424` = 0x1D00 = occupant 29, rotation 0; `2873600` = 0x2BD900 = occupant 11225,
 rotation 0; `11008` = 0x2B00 = occupant 43, rotation 0.
 
-The value `255` in a *direction* field is a wildcard meaning "this tile itself / no direction" and is
-stored internally as 31 (see §4.5).
+The value `255` in a *direction* field is a wildcard meaning "this tile itself / no direction" (see §4.5).
 
 ## 3. TilingRules directory: what is loaded
 
-All files live in `Apps/Res/TilingRules/` (path built as `<Apps>\Res\TilingRules\<name>`; the
-program prefixes the resource directory and `TilingRules\`) `[STATIC]`. Each file is read whole;
-the reader allows at most 131 071 bytes per file `[STATIC]`.
+All files live in `Apps/Res/TilingRules/` (`<Apps>\Res\TilingRules\<name>`) `[STATIC]`. Each
+file is read whole.
 
 Files loaded by the network subsystem at start-up, in this order `[STATIC]`:
 
@@ -139,8 +136,7 @@ length `L` **including the length token itself**, followed by `L−1` occupant I
 (the shipped file contains 19 groups and the lengths sum exactly to the list length). The groups enumerate the occupant IDs that make up one
 multi-piece structure (bridges, highway interchanges, on-ramps, rail and road overpasses) so that
 damaging or bulldozing one piece of the structure removes all pieces of the same group in the
-surrounding structure `[INFERRED]`. The program rejects a group whose length token exceeds 29 and
-examines at most 18 groups when the destroyed piece is occupant 11224 or 15106 `[STATIC]`.
+surrounding structure `[INFERRED]`.
 
 **Bridges** (`ROAD`, `HWAY`, `RAIL`, `POWR`): after the count, a sequence of bridge-design
 records `[DATA]`:
@@ -173,7 +169,7 @@ number of following tokens:
 * Parsing is a token-driven state machine: a tag token selects the record; the following
   token(s) fill it; then a tag is expected again. Tokens whose first character is not a digit are
   skipped. An unknown tag value is ignored.
-* `dir` value 255 is stored as 31 (the tile itself). `piece` is decoded per §2.
+* `dir` value 255 means the tile itself. `piece` is decoded per §2.
 * A rule is complete when the number of tag-5 records equals the `R` of its tag-4 record. The
   rule (key, conditions, results) is appended to the table in file order. The key of a tag-1
   record is retained for following rules until the next tag-1 record.
@@ -222,7 +218,7 @@ the ordered list of path tiles, and the map. Steps `[STATIC]`:
    *valid slope* (see §6.3), gets its slope piece from the hard-coded slope table (§6.3) and is
    removed from the set. Other non-flat tiles are left for the rules.
 Before step 3, the tiler copies the working set S (after clearing and the removal of
-   protected tiles) into a list **C**, which it keeps unchanged [STATIC, SIMNTWRK].
+   protected tiles) into a list **C**, which it keeps unchanged [STATIC].
 4. **Simple pass** (SIMPLERULES, neighbourhood radius 1, mask over directions 0–7, Convert view):
    evaluate every tile in S. A rule's result **targets** (T + result offset), not the evaluated
    tile, are collected during the pass:
@@ -241,15 +237,14 @@ Before step 3, the tiler copies the working set S (after clearing and the remova
    * Result targets are removed from S, never from C.
    * Repeat while the previous iteration applied at least one result other than (ID 0, rot 0),
      at most 5 iterations.
-   CORRECTION: the earlier text evaluated only tiles the simple pass had left.
 6. **Final pass** (final, radius 1, mask over directions 0–3, Convert view): evaluate once every
    tile still in S (never a simple or complex target) plus the queued (ID 0, rot 0) targets.
 
 [DATA] Re-tiling all stored networks of the 14 shipped cities with steps 4–6 as above, together
 with the exit sides of §4.8, gives identical pieces for:
-* highway: 99.1 % (93.9 % with the old reading);
-* subway: 70.3 % (40.7 % with the old reading);
-* power: 86.1 % (82.4 % with the old reading);
+* highway: 99.1 %;
+* subway: 70.3 %;
+* power: 86.1 %;
 * road and rail: unchanged at 99.7 % and 99.97 %.
 
 **Evaluating one tile T against a rule table:**
@@ -315,7 +310,7 @@ all 14 shipped cities]:
 * The piece exposes side k (0 W/−x, 1 N/−z, 2 E/+x, 3 S/+z) at rotation r iff some set bit b
   satisfies ((b mod 4) + r) mod 4 = k. In other words: OR the eight nibbles, then rotate that
   4-bit mask left by r.
-* Correction: an earlier revision used only the low 16 bits. That gives the same result for every
+* Using only the low 16 bits gives the same result for every
   piece whose two halves expose the same sides. It is wrong for the highway on-ramp pieces
   15130–15141. These are in the road set and the road protected list. Their low half exposes the
   ramp's highway side, and their high half the road side. Example: 15141 has matrix 0x20000080.
@@ -350,8 +345,7 @@ all 14 shipped cities]:
   content to `ROAD_GRND_final.txt` `[DATA]`.
 * `PIPE_GRND_Bridges.txt`, `SUBW_GRND_Bridges.txt`: contain only `0`.
 
-Parser coverage: a reference parser implementing §4.1–4.8 parses **68/68** shipped files with no
-errors `[DATA]`. Rule counts: ROAD simple 430 / complex 195 / final 16; HWAY 158 / 673 / 16;
+Parser coverage: all **68** shipped files conform to §4.1–4.8 with no errors `[DATA]`. Rule counts: ROAD simple 430 / complex 195 / final 16; HWAY 158 / 673 / 16;
 RAIL 334 / 0 / 16; SUBW 342 / 97 / 16; PIPE 342 / 0 / 16; POWR 54 / 62 / 16.
 
 ## 5. Per-tile network state
@@ -478,7 +472,7 @@ There are seven network drag tools. Each is named in the tool menu by the menu i
 (as listed in `MenuItem.INI`) [DATA]. Each tool has a per-network parameter set that drives the shared
 routing algorithm below `[STATIC]`:
 
-| Tool | Menu item ID (`MenuItem.INI`) | Net enum (§1, second list) | Cost key (per tile) | Wide | MinRun | Staircase | AnySlope |
+| Tool | Menu item ID (`MenuItem.INI`) | Net label (§1) | Cost key (per tile) | Wide | MinRun | Staircase | AnySlope |
 |------|----------|---------------------------|---------------------|------|--------|-----------|----------|
 | Road | `C2B5DE77` | 1 | 16000 | no | 3 | yes | yes |
 | Highway | `42B5DE86` | 4 | 16001 | yes | 3 | yes | yes |
@@ -568,7 +562,7 @@ from the staircase routing plus the rule tables.
 For the highway each routed tile T is paired with a second tile T + w, where w is the width
 offset perpendicular to the initial direction `[STATIC]`: moving along x uses w = (0, s) and moving
 along z uses w = (s, 0), where s = +1 normally, flipped to −1 when the start lies on the last row or
-column so that the pair stays on the map `[INFERRED]` (sign rule partly decoded). Both tiles of every pair are validated and added to the
+column so that the pair stays on the map `[INFERRED]` (sign rule not fully confirmed). Both tiles of every pair are validated and added to the
 path. If S = E, the hover preview shows the 2×2 block S, S + w and the matching pair.
 
 #### 6.2.5 Preview and price
@@ -593,13 +587,13 @@ before building, and also refuses if the price exceeds funds `[STATIC]`.
 
 `[STATIC]` unless stated:
 
-1. Validate (SIMNTWRK 0x1000938B, also used by the preview) [STATIC]: the path is split into
+1. Validate (also used by the preview) [STATIC]: the path is split into
    straight **runs**, broken at water, at turns (a turn tile belongs to both runs) and at a further
    per-tile test. Every run of ≥ 3 tiles (≥ 2 for the final run) is **strip-graded**
-   (0x10008064 → 0x100077E7; the highway uses its own grader). If grading a run fails, the
+   (the highway uses its own grader). If grading a run fails, the
    buildable prefix stays at the index before that run: that run and all later tiles are invalid
    (for a single straight drag the whole preview is red and nothing is built).
-   * **Strip grade** (SIMDIRT 0x10007DC0) [STATIC; reconstruction checked against observations].
+   * **Strip grade** [STATIC].
      Skipped when every tile of the run is already a valid slope (§6.3). startH = c0 of the first
      tile if it is flat (then s = 1), else trunc(mean of its 4 corners) (s = 0); endH likewise for
      the last tile (last = n − 1, minus 1 if the end tile is flat). The walk runs in increasing
@@ -613,14 +607,14 @@ before building, and also refuses if the price exceeds funds `[STATIC]`.
      tools. Cost = (RaiseTerrain × raised + LowerTerrain × lowered) >> 2 plus the ring costs.
    * **Permission**: for every vertex the grade changes, the up to four tiles sharing it are
      checked in all three layers (surface, pipe, subway) regardless of the network kind. A surface
-     occupant passes if it reports kind 5 or passes the network manager's terrain-change filter and
-     is not in the kind's ID list; pipe/subway occupants must pass the filter and not be in the
-     list (the surface result overwrites rather than ANDs the flag). Any failure fails the run.
+     occupant passes if it reports kind 5 or passes the terrain-change allow-list and
+     is not in the kind's ID list; pipe/subway occupants must pass the allow-list and not be in the
+     list. Any failure fails the run.
    * At commit the grade is applied and **charged** (terrain apply flag 0); the grader itself only
-     builds the vertex list, the apply writes it and then runs ripple passes (SIMDIRT
-     0x100076E0) that add outer vertices clamped into [max − 4, min + 4] of the neighbouring ring
-     heights (these extra corners are charged too). Afterwards, for net types 1/2/3/5/6
-     (SIMNTWRK 0x10008064), a fix-up loop of up to 100 rounds scans the affected box for drag
+     builds the vertex list, the apply writes it and then runs ripple passes that add outer
+     vertices clamped into [max − 4, min + 4] of the neighbouring ring
+     heights (these extra corners are charged too). Afterwards, for networks 1/2/3/5/6
+     (spec-local labels of §1), a fix-up loop of up to 100 rounds scans the affected box for drag
      tiles and same-network tiles; each tile that is neither flat nor a single-axis ramp of ≤ 2
      is re-graded alone (single-tile branch) [STATIC]. With a = (x,z), b = (x+1,z),
      c = (x+1,z+1), d = (x,z+1):
@@ -677,16 +671,14 @@ before building, and also refuses if the price exceeds funds `[STATIC]`.
    * **Permission.** For every corner the operation would change, each of the up to four tiles
      sharing the corner is checked in the layer of the network kind: surface for road, rail,
      power and highway; pipe layer; subway layer. An empty tile passes. An occupant passes only
-     if it is in the network manager's terrain-change filter set (filter 0xA1C085DB, entry 10).
+     if it is in the terrain-change allow-list (entry 10).
      `[INFERRED]` That set holds network pieces and flora. If any tile fails, the whole levelling
      is dropped: no corner changes, no message, and the network is still built on the unchanged
      terrain.
    * **Cost.** The terrain operation computes a cost, but the network manager charges nothing
      for it.
-   * **Not yet decoded.** One more call argument, and the exact flag tested at the start-side
-     occupant removal.
 4. Bridge attempt (road, rail, power, highway only; path length ≥ 4 tiles): §6.4.
-5. Tunnel attempt (road, rail, and highway): §6.4. [STATIC, SIMNTWRK 0x10014A23] The actual
+5. Tunnel attempt (road, rail, and highway): §6.4. [STATIC] The actual
    commit order is: start-endpoint levelling; bridge attempt; validate and strip-grade the path
    (step 1); tunnel attempt, made whenever no bridge was built (not gated on grading); end-point
    levelling only if no tunnel was built.
@@ -804,13 +796,13 @@ following terrain corners are then set (start side shown; the far side mirrors i
 | W0 − a, W0 − a + p | h_w + D |
 | W0, W0 + p | h_w + R |
 
-**Start-bank defect** [STATIC, checked in the disassembly at 0x10001744, 0x100018D1 and
-0x10001A98]. The start-side B is stored in a one-byte variable, and the permission checks use it.
-The first far-bank corner read, h(E0 + 3a), then writes into the same byte. As a result, the
+**Start-bank defect** [STATIC]. The start-side B is overwritten by the first far-bank corner read,
+h(E0 + 3a), and the permission checks use the overwritten value.
+As a result, the
 start-side corners in the B row are **set** to the raw, unaveraged, unclamped height of corner
 E0 + 3a, or 23 if that corner is off the map. The far side's own B is not affected. The highway
-builder has the same defect (0x10002D69, 0x10002FB2, then the start-side sets from 0x10003241).
-The W0 − 4a approach altitude uses the same byte.
+builder has the same defect.
+The W0 − 4a approach altitude uses the same value.
 
 Every corner change is first checked: the 8 start-bank and 8 far-bank corners are checked before
 anything is written; a corner that already has its target height is not checked. A corner may
@@ -820,7 +812,7 @@ the network's terrain-change set and not in the kind's exclusion list). If one o
 fails, nothing is changed, the "construction discontinued" message (instance `0x285`) is shown
 and the drag is cancelled.
 
-**Order and partial failure (road, rail, power)** [STATIC, SIMNTWRK 0x1000122A]: (1) the 16
+**Order and partial failure (road, rail, power)** [STATIC]: (1) the 16
 checks; (2) the start-bank corners are **written immediately**; (3) the start approach is graded
 with the strip grader of §6.2.6 on the vertex list (W0 − 4a, B), (W0 − 3a, follow), (W0 − 2a,
 follow), (W0 − a, h_w + 5), whose permission test covers the whole affected block; (4) the river
@@ -832,7 +824,7 @@ were unchanged, and corners (36,162)/(37,162) were left at 85 (h_w + 5) and (36,
 83 (h_w + 3) with h_w = 80; the approach grade reached the 2 × 2 train station at
 (37..38, 158..159).
 
-**Preview of water tiles** [STATIC, drag path builder SIMNTWRK 0x1000488D]. For road, rail and
+**Preview of water tiles** [STATIC]. For road, rail and
 power a water tile is shown valid only if the path is still valid and the straight run before
 it has at least p8 = 3 tiles; only one water crossing is allowed per drag. After the water a
 countdown of 3 land tiles starts; the water tiles (and the countdown tiles) stay pending until a
@@ -851,8 +843,7 @@ Differences from the road/rail/power builder:
 * h_w = the lowest first corner over both carriageway tiles of every water tile.
 * Each corner row has three corners across the carriageway (+0, +p, +2p) instead of two.
 * Bank height B = ⌊(h(W0 − 3a) + h(W0 − 3a + p) + h(W0 − 3a + 2p)) / 3⌋. It defaults to 20 if a
-  read fails. B is then raised to at least h_w − 2 and lowered to at most h_w + 6. Correction:
-  the previous revision said there is no upper clamp. The far bank uses E0 + 3a, +p, +2p, with
+  read fails. B is then raised to at least h_w − 2 and lowered to at most h_w + 6. The far bank uses E0 + 3a, +p, +2p, with
   the same clamp, and defaults to the clamped start B.
 * Corners set (start side; the far side mirrors with E0 and +a):
 
@@ -890,9 +881,9 @@ Differences from the road/rail/power builder:
 
 * The highway builder never sets the pier map flag, so 16042 and 16043 in the pier list are
   never flagged by highway bridges.
-* Defects [STATIC, checked in the disassembly]:
-  * The far-bank average reads three corners, but the second and third reads write the same byte
-    (0x10002FD8, 0x10002FFB) and the sum uses the start side's third byte. So the far
+* Defects [STATIC]:
+  * The far-bank average reads three corners, but the second and third reads overwrite the same
+    value and the sum uses the start side's third value. So the far
     B = ⌊(h(E0 + 3a) + h(E0 + 3a + 2p) + h(W0 − 3a + 2p)) / 3⌋, clamped as above.
   * The start-bank defect of the road builder (step 5) applies too. The start-side B corners and
     the W0 − 4a approach altitude get the raw h(E0 + 3a).
@@ -922,11 +913,11 @@ the water, one water crossing per drag) `[STATIC]`.
 Tunnels (agent type 16006, cost key 16006) `[STATIC]`:
 
 1. Road and rail tunnel with the builder below. Highways also have a tunnel builder (see the end
-   of this list); an earlier revision said only road and rail can tunnel.
+   of this list).
 2. The direction comes from the **last step** of the drag only: d = last tile − previous tile,
    which must be a unit axis step. Travel direction d: 0 = −x, 1 = −z, 2 = +x, 3 = +z (the span
    direction encoding of `18-sim-transport.md` §5.5 and `10-save-format.md` §6.2.6).
-3. The entrance tile E is the **last dragged tile** [STATIC, SIMNTWRK 0x1001C102]. With its
+3. The entrance tile E is the **last dragged tile** [STATIC]. With its
    corners c0 = (x, z), c1 = (x+1, z), c2 = (x+1, z+1), c3 = (x, z+1) (heights after the strip
    grade, which runs first), its rise along d is (c1 − c0) + (c2 − c3) for +x,
    (c0 − c1) + (c3 − c2) for −x, (c3 − c0) + (c2 − c1) for +z, (c0 − c3) + (c1 − c2) for −z. If the
@@ -942,8 +933,7 @@ Tunnels (agent type 16006, cost key 16006) `[STATIC]`:
    is replaced by X + d, so the network continues one tile past the exit. Portal shaping: E's
    hill-side corners → h + 4 and approach side → h; X's hill-side corners → h + 4 and far side →
    h; the two far corners of X + d → h.
-5. **Price** = (L − 1) × the cost of agent type 16006, charged per tunnel tile. Correction: the
-   previous revision guessed once per tunnel. It must not exceed the city's funds, and the player
+5. **Price** = (L − 1) × the cost of agent type 16006, charged per tunnel tile. It must not exceed the city's funds, and the player
    confirms with a yes/no prompt (string table `029541F4`, instance `0x253`, price substituted).
    If shaping the portal terrain fails after confirmation, message instance `0x284` is shown and
    nothing is placed.
@@ -969,8 +959,7 @@ Tunnels (agent type 16006, cost key 16006) `[STATIC]`:
    failure after confirm still shows `0x284` and places nothing.
    Each end gets **four** pieces: two without a span record and two carrying a span. Both span
    pieces of one end share the travel direction (entrance) or its opposite (exit), with
-   length = walk_count + 1 [STATIC; was INFERRED]. Correction: earlier text listed span IDs
-   18025–18028; the tables are **18027–18030**. Non-span IDs **18088–18091** were already right.
+   length = walk_count + 1 [STATIC]. The span IDs are **18027–18030**; non-span IDs are **18088–18091**.
    Packed as `(occupant_id << 8) | rotation`. By travel direction d (0 = −x, 1 = −z, 2 = +x, 3 = +z):
 
    | d | span A | span B | plain A | plain B |
@@ -1027,15 +1016,14 @@ tile under the cursor (A) matters `[STATIC]`:
    on the highway side hold the expected highway piece (one end: the highway piece; other end: the
    highway piece or the underpass piece), and the tile beyond at least one end of the footprint is
    accepted by the tool's road filter (the ramp must meet a road) `[STATIC]`.
-3. The first fitting candidate is placed as a 3-tile lot through the general lot-placement service
-   (`13-buildings-occupants.md`); its occupant is the on-ramp structure (agent type 17202
+3. The first fitting candidate is placed as a 3-tile lot (`13-buildings-occupants.md`); its occupant is the on-ramp structure (agent type 17202
    "OffRamp") `[INFERRED]`.
 4. If no orthogonal candidate fits, a diagonal ramp is tried in each of the four quadrants around A:
    it requires the diagonal neighbour to hold a highway curve piece (occupant 15111, 15112, 15113 or
    15114) and the two tiles beyond it to hold highway pieces (73 or 15051) `[STATIC]`.
 5. Price: the tool's per-tile cost key is 16001 (highway), charged per valid preview tile
    (§6.2.5) `[STATIC]`; `[OPEN]` whether the 17202 entry of `[BuildingPlacementCosts]` is used
-   instead by the lot-placement service.
+   instead.
 
 On-ramp and road-under-highway pieces are protected (§4.4) `[DATA]`. Rail stations, subway
 stations and subway-to-rail stations are buildings (agent types 12230, 12360, 12361) whose
@@ -1044,8 +1032,8 @@ occupants carry network flags so that they join the rail/subway networks; see
 
 ## 8. Neighbour connections
 
-Connections are stored by the neighbour manager as a set of edge tiles per network kind, with the
-enumeration 1 = road, 2 = rail, 3 = power, 4 = highway, 5 = pipe (water), 6 = subway `[STATIC]`
+Connections are stored as a set of edge tiles per network kind, with the
+enumeration (spec-local labels of §1) 1 = road, 2 = rail, 3 = power, 4 = highway, 5 = pipe (water), 6 = subway `[STATIC]`
 (persistence: `10-save-format.md`, neighbours record). A connection is accepted only on a map-edge
 tile; the edge decides which of the four neighbours it counts for: x = 0 → neighbour 0 (except
 tile (0, H − 1) → 3), z = 0 → 1, x = W − 1 → 2, z = H − 1 → 3 `[STATIC]`.
@@ -1078,7 +1066,7 @@ tile (0, H − 1) → 3), z = 0 → 1, x = W − 1 → 2, z = H − 1 → 3 `[ST
 **Removal** `[STATIC]`. When a network piece on a tile is bulldozed, every connection of every kind
 at that tile is removed (queried and removed for kinds 1, 4, 2, 6, 5, 3 in that order).
 
-**Notification**: adding or removing a connection triggers no separate event `[STATIC]`; deal availability is recomputed from the connection counts
+**Notification**: adding or removing a connection has no other immediate effect `[STATIC]`; deal availability is recomputed from the connection counts
 (`19-sim-economy.md`).
 
 Topological effects:
@@ -1091,7 +1079,7 @@ Topological effects:
 
 ## 9. Power and water propagation
 
-Both utilities use 1-bit-per-tile grids and the same bounded flood fill `[STATIC]`. Capacity
+Both utilities use the same bounded flood fill `[STATIC]`. Capacity
 values, consumption and failure semantics belong to `16-sim-utilities.md`.
 
 **Bounded flood fill.** Given a seed tile and a *conductor* grid, the reached set starts as the
@@ -1114,9 +1102,8 @@ stops when nothing changes or after a fixed maximum number of iterations: **600*
    and zoned tiles. Empty zoned land is therefore powered whenever it belongs to a powered
    component; it has no consumption of its own. DATA: London's 112 empty airport tiles, 78 of
    which are more than 2 tiles from any building or line, are all reported powered (result
-   code 9, `15-sim-growth.md` §4.3), not unpowered (code 14). Correction: the previous text
-   listed only buildings and lines.
-2. **Demand grid.** A per-tile byte grid. Each conducting occupant writes its power consumption
+   code 9, `15-sim-growth.md` §4.3), not unpowered (code 14).
+2. **Demand grid.** A per-tile demand value. Each conducting occupant writes its power consumption
    (one byte, 0–255) into the cell of its **anchor tile only**; the other tiles of its footprint keep
    0 `[STATIC]`. The byte is the occupant's **own building record** (the occupant-attribute record whose key the occupant entry stores, `10-save-format.md` §6.2), u8 attribute **0xC9**; 0 when the record has no 0xC9 `[STATIC]`, taken while the lot is occupied (state 1/513); for other lot states a substitute record supplies it and it is effectively 0, so only occupied lots consume. See `16-sim-utilities.md` §2.6 for the data check. `16-sim-utilities.md` §2.6
    uses this anchor-only grid.
@@ -1128,15 +1115,13 @@ stops when nothing changes or after a fixed maximum number of iterations: **600*
    Tiles with zero demand are marked powered. A tile with demand d is marked powered **first**, then
    d is compared with the remaining supply: if d ≤ remaining, d is subtracted; otherwise remaining
    becomes 0, the tile **stays powered**, and every later tile in scan order is left unpowered
-   `[STATIC]`. This agrees with `16-sim-utilities.md` §2.7. (Tiles are handled in groups of 32 along x;
-   the tiles that follow the boundary tile inside its group of 32 are also left unpowered, which is
-   the same as "every later tile".)
+   `[STATIC]`. This agrees with `16-sim-utilities.md` §2.7.
 
 ### 9.2 Water
 
-1. **Conductor grid** `[STATIC]`: when an occupant carrying the pipe flag 0x800000 (§5.2) is
-   added, every tile of its footprint rectangle is marked as conductor; when it is removed the
-   bits are cleared. There is **no** expansion (unlike power's 2-tile margin) and ordinary
+1. **Conductor grid** `[STATIC]`: every tile of the footprint of an occupant carrying the pipe
+   flag 0x800000 (§5.2) conducts water while that occupant exists. There is **no** expansion
+   (unlike power's 2-tile margin) and ordinary
    buildings do **not** conduct water: only pipe-layer pieces form the water network. A water
    facility joins a network only through the flood seeded at its own anchor tile, so it must be
    reached by a pipe piece (`[INFERRED]` the facility tile itself must touch a pipe tile within one
@@ -1171,12 +1156,11 @@ state). Monthly upkeep of roads/highways is driven by the transport funding keys
   * Numerator: count every occupant on the whole map that is a road piece (§5.2: flags 0x8000 and
     0x800) and whose occupant ID is 15040, 15041, 15042 or 9051. It is recounted each time X is
     asked for.
-  * Denominator: the network's running count of road pieces, meaning occupants carrying flag
-    0x8000. It goes up by one when such an occupant is added and down by one when it is removed.
-    Highway, rail, subway and power-line pieces are kept in their own counters (flags 0x10000,
-    0x20000, 0x40000, 0x400000). Pipes are counted elsewhere. The road count is the first of the
+  * Denominator: the number of road pieces on the map, meaning occupants carrying flag
+    0x8000. Highway, rail, subway and power-line pieces are not counted (flags 0x10000,
+    0x20000, 0x40000, 0x400000). The road count is the first of the
     two road counts the transportation advisor reads.
-  * The division is a real division (extended precision), and the result is returned as a real.
+  * The division is a real division, and the result is returned as a real.
     With no road pieces it is 0 ÷ 0. The original does not guard this, so the result is NaN
     (IEEE not-a-number; the original's floating-point exceptions are masked). See
     `22-advisors-news-petitioners.md` §3.10.1 for how a NaN behaves in the advisor tests.
@@ -1187,7 +1171,7 @@ state). Monthly upkeep of roads/highways is driven by the transport funding keys
      T = trunc(N × v), computed in floating point. If T = D, stop.
   2. **Damage (T > D).** k = T − D, s = max(0, ⌊N ÷ k⌋ − 1). Query all road pieces of the map, in
      the occupant query's order (`map order`). Keep a skip counter c = 0 and a gap
-     g = `Rand(s)` (the network subsystem's generator, `16-sim-utilities.md` §1.1; g = 0 if
+     g = `Rand(s)` (`16-sim-utilities.md` §1.1; g = 0 if
      s < 1). For each piece in order:
      * if c < g: c ← c + 1 (the piece is skipped; every road piece counts here, candidate or not);
      * otherwise, if the piece is a **candidate**, collect it, draw a new g the same way and set
@@ -1218,15 +1202,13 @@ state). Monthly upkeep of roads/highways is driven by the transport funding keys
   candidate but is never converted. Sacramento (the only shipped city with potholes) has 15040, 15042
   and 9051, each with piece-word bit 27 set.
 * Potholed pieces are ordinary network pieces in the save (§Persisted state), damaged flag
-  included, so the condition and the 0x80 flag survive save and load. Correction: the previous
-  revision left the shapes and the restore piece OPEN, stopped the damage walk after k pieces,
-  limited repair to D − T pieces, and used N as the repair divisor.
+  included, so the condition and the 0x80 flag survive save and load.
 
 ## Persisted state
 
 The network subsystem does not store tiles; it stores, per layer, the list of network-piece
-occupants it manages. The pieces themselves (ID, position, rotation, altitude) are stored by the
-occupant manager (`13-buildings-occupants.md`, `10-save-format.md`). All records below are inner
+occupants it manages. The pieces themselves (ID, position, rotation, altitude) are stored in the
+occupant records (`13-buildings-occupants.md`, `10-save-format.md`). All records below are inner
 records of the city database (`10-save-format.md`) with Type `206C6E7C` and Group `2147C2DD`
 `[DATA]` (verified in 59/59 shipped `.sc3`/`.SNR`/`.st3`/`.sct` files that contain the group).
 
@@ -1271,16 +1253,12 @@ recomputed after load `[INFERRED]`.
 ## Open questions
 
 1. Drag routing (§6.2): the meaning of the on-ramp's lot occupant and whether the 17202 price key
-   is used; the network manager's validation rule for the buildable prefix (§6.2.6 step 1). Endpoint
-   levelling (step 3) is decoded except one call argument.
-2. The exact meaning of the map flag set by bridge pier pieces. The highway abutment corner list
-   and the bank-height defects are closed (§6.4 steps 5 and 5a).
+   is used; the validation rule for the buildable prefix (§6.2.6 step 1).
+2. The exact meaning of the map flag set by bridge pier pieces.
 3. The meaning of the piece-word bits 16–27 in the persisted lists (`10-save-format.md` §6.2.6).
 4. Neighbour-exists test used before offering a connection (believed: the neighbour city on that
    edge exists, see `19-sim-economy.md`).
 5. Water: whether a facility must sit on/next to a pipe tile to seed the flood, and the sweep
    tie-breaking of the allocation front.
-6. Closed: the per-occupant power consumption byte is attribute 0xC9 (§9.1 step 2).
+6. Per-occupant power consumption byte: attribute 0xC9 (§9.1 step 2); no open point.
 7. Collapse groups: exact trigger (demolition vs. disaster damage) and neighbourhood searched.
-8. Closed: highway tunnel portal tile offsets within each end (§6.4 item 7) — 2×2 footprint,
-   offsets from the max-x/max-z corner by piece-direction δ, A = right / B = left when facing δ.

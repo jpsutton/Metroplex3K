@@ -31,8 +31,7 @@ Example: the main city record of a `.sc3` file is stored on disk as the 12 bytes
 `A4 62 5F 03 | 01 00 00 00 | A4 62 5F 03`, i.e. Group `035F62A4`, Instance `00000001`,
 Type `035F62A4`; as a key it is `035F62A4:035F62A4:00000001`.
 
-When a key is serialized *inside* a record payload by the generic record-stream "read key / write
-key" operation, the order is **Type, Group, Instance** (three `u32`). [STATIC] Only the index uses
+When a key is serialized *inside* a record payload, the order is **Type, Group, Instance** (three `u32`). [STATIC] Only the index uses
 the G, I, T order. Individual payload formats may define their own key layouts; check the owning
 document.
 
@@ -368,9 +367,9 @@ around `=`. [DATA]
 
 ### 5.2 Which copy is read: PAK first, then the loose file [STATIC]
 
-Every INI consumer names two paths: the loose file (for example `Sys\Default.ini` or
-`\Sys\SC3Tune.INI`, relative to the game's `Apps` directory) and the archive `Sys\SYS.PAK`. The
-source is chosen once, on first access:
+Each INI file is available from two places: as a loose file (for example `Sys\Default.ini` or
+`\Sys\SC3Tune.INI`, relative to the game's `Apps` directory) and in the archive `Sys\SYS.PAK`.
+The source is chosen once, on first access:
 
 1. If the archive exists and opens, take the **file name and extension** of the loose path, with
    the directory dropped, and upper-case it. Look for a directory entry whose upper-cased name is
@@ -378,8 +377,8 @@ source is chosen once, on first access:
 2. Otherwise (no archive, or the name is not in it), read the loose file on disk.
 
 So **the packed copy wins**. A loose `Sys\*.INI` is used only for names that are absent from
-`SYS.PAK`; to override a tunable, the user must edit the archive. A few consumers check
-alternative names first (for example `GoldAdvisorMoods.INI` before `AdvisorMoods.INI`, see
+`SYS.PAK`; to override a tunable, the user must edit the archive. A few INI files have
+alternative names that are tried first (for example `GoldAdvisorMoods.INI` before `AdvisorMoods.INI`, see
 `22-advisors-news-petitioners.md`). For each name they try, the rule above applies.
 
 ### 5.3 INI grammar as the game parses it [STATIC]
@@ -510,10 +509,10 @@ first byte are not anchors.
    | otherwise | 4-byte op | 4 |
 
    The **gain** of a candidate is *L* − cost.
-3. Visit the candidates from the nearest (largest *c*) to the farthest. Keep a current best,
-   which starts as "no match" with length 2 and gain 0. A candidate becomes the new best only if
-   its *L* is greater than the current best's length **and** its gain is strictly greater than
-   the current best's gain. Stop at the first candidate with *L* = 1028.
+3. Order the candidates from the nearest (largest *c*) to the farthest. The chosen match is the
+   result of this running maximum: the best starts as "no match" with length 2 and gain 0, and a
+   candidate replaces it only if its *L* is greater than the best's length **and** its gain is
+   strictly greater than the best's gain.
 4. If no candidate became best, *p* is a literal: it becomes pending, and the next position is
    *p* + 1. Otherwise the best candidate is emitted as a match, and the next position is *p* + *L*.
 
@@ -583,7 +582,7 @@ The application performs these steps in order. All paths are relative to `Apps/`
 * Flora sets in `Res/Sprites/FloraSets/<SET>/` are handled the same way.
 * The set IDs come from the city (`10-save-format.md`) and `Sys/SC3CityScheme.ini`
   (`13-buildings-occupants.md`, `11-world-terrain.md`).
-* `BARender/BAT.DAT` (imported BAT buildings) is mounted by the simulation initialiser
+* `BARender/BAT.DAT` (imported BAT buildings) is mounted at start-up
   (`24-bat-buildings.md`).
 
 ### 7.2 `[DBSegments]` lines [STATIC] [DATA]
@@ -599,7 +598,7 @@ Each line has the form `<segmentId>=<classId>;<path>`.
   | Path begins with | Resolved to |
   |------------------|-------------|
   | `%DataDirectory%` | That text replaced by the data directory (`01-architecture.md` §4 step 2; default `Apps/`) |
-  | `%PluginDirectory%` | That text replaced by the plug-in root followed by `PlugIn\`. The plug-in root is a separate setting of the program whose source was not determined [OPEN]; use the data directory (`Apps/`) as the default. No shipped line uses this prefix |
+  | `%PluginDirectory%` | That text replaced by the plug-in root followed by `PlugIn\`. The plug-in root is a separate setting whose source is unknown [OPEN]; use the data directory (`Apps/`) as the default. No shipped line uses this prefix |
   | anything else | Relative to the data directory (default `Apps/`) |
 
   After that, every `%Language%` is replaced by the current language's folder name (7.3).
@@ -688,7 +687,7 @@ and RefPack (section 6); their records are specified in `10-save-format.md`.
 * **Segment search order across files** (7.4): "most recently mounted wins" is inferred from the
   data (building and flora sets must override `OccupantAttribs.IXF`) and is not confirmed. [OPEN]
 * **Add-on (`PlugIn\`) enumeration**: the plug-in root, the `addon-enabled` / `default-enabled`
-  switches and the order relative to `Res/Sprites` were not traced. No add-on content is shipped.
+  switches and the order relative to `Res/Sprites` are unknown. No add-on content is shipped.
   [OPEN]
 * **Precedence between an `.SII` record and the archive's type-1 span** for the same image is not
   observable with shipped data, because they are identical (4.2). [OPEN]

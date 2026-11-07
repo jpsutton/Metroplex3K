@@ -385,7 +385,7 @@ normally width + 1 (one pixel spacing). There is **no kerning table**. [DATA]
 * Mono/anti-aliased fonts use indices 1–17 only: index 1 = full ink, indices 2–15 = decreasing ink
   coverage, index 16 = background (no ink), index 17 = atlas filler between glyphs (never inside a
   glyph rectangle in practice). [DATA]
-* **Drawing is a palette blit, not a blend** [STATIC, GZServiceD font loader and glyph draw]. The
+* **Drawing is a palette blit, not a blend** [STATIC]. The
   loader creates an 8-bit surface and loads the file's 565 palette into it unchanged. When the
   font's colour-key flag is set, the colour of atlas pixel (0, 0) becomes the source colour key
   (in `TITLE12` that pixel is index 16, the background shade). Each glyph is then drawn with a
@@ -394,9 +394,8 @@ normally width + 1 (one pixel spacing). There is **no kerning table**. [DATA]
   against, even over a textured background. [OBSERVED] The window-title text of `TITLE12` at
   800×600 reproduces the stored palette entries exactly: indices 1–16 as (R5, G6), B5 = 31:
   (27,55) (27,54) (26,53) (25,51) (24,50) (23,49) (23,47) (22,46) (21,45) (20,44) (19,42)
-  (19,41) (18,40) (17,38) (16,37) (15,36). The previous text here ("output = destination ×
-  (1 − c) + textColour × c") was wrong.
-* Palette recolour [STATIC; callers not found]: two routines rebuild a font palette for another
+  (19,41) (18,40) (17,38) (16,37) (15,36).
+* Palette recolour [STATIC]: a font palette can be rebuilt for another
   text colour T and background B: unpack both to 8 bits (r8 = r5·255/31, g8 = g6·255/63, floored),
   set entry i+1 = pack(T + trunc((B − T)·i/16)) for i = 0..14 per channel, entry 16 = B, and pack
   by truncation (`r>>3`, `g>>2`, `b>>3`). Frame (window-bar) titles do **not** use it: they are
@@ -416,8 +415,9 @@ characters. [DATA]
 
 ## 5. Font usage
 
-At start-up the shell registers fonts under numeric **font IDs** used by UI resources
-(`08-ui-framework.md`). Files are loaded from `Res/Text/<LanguageFolder>/`. [STATIC]
+At start-up the shell registers fonts under numeric **font IDs** (labels only; not needed by an
+implementation, which needs only the role of each font). Files are loaded from
+`Res/Text/<LanguageFolder>/`. [STATIC]
 
 | File | Font IDs | Typical use [INFERRED] |
 |------|----------|------------------------|

@@ -32,23 +32,15 @@ small integer *pixel-format code*. These codes appear in files, so they are inte
 
 | Code | Bits/pixel | Layout (MSB→LSB) | R / G / B masks | In shipped data |
 |------|-----------|------------------|-----------------|-----------------|
-| 2 | 4 | palette index | — | no |
 | 3 | 8 | one byte per pixel. In sprites and UI images this is an opacity value (§3.5) | — | yes |
-| 4 | 16 | "whatever 16-bit layout the display uses" (requested by the game when it loads 24-bit BMPs, §8.1) | display | no (request only) |
 | 5 | 16 | `0RRRRRGG GGGBBBBB` (RGB555) | 0x7C00 / 0x03E0 / 0x001F | yes (90 sprites) |
-| 6 | 16 | `RRRRRRGG GGGBBBBB` (RGB655) | 0xFC00 / 0x03E0 / 0x001F | no |
 | 7 | 16 | `RRRRRGGG GGGBBBBB` (RGB565) | 0xF800 / 0x07E0 / 0x001F | yes (nearly everything) |
-| 8 | 16 | `RRRRRGGG GGBBBBBB` (RGB556) | 0xF800 / 0x07C0 / 0x003F | no |
-| 10 | 16 | RGB555 with bit 15 forced to 1 | as code 5 | no |
-| 4–12 | 16 | the whole range is treated as 16 bpp when computing buffer sizes | | |
-| 13–14 | 32 | true colour | | no |
 
-The bits-per-pixel mapping used to size raw buffers is: code 2 → 4 bpp, code 3 → 8 bpp,
-codes 4–12 → 16 bpp, codes 13–14 → 32 bpp, anything else → invalid `[STATIC]`.
+Other code values never occur in shipped data (label only; not needed by an implementation).
+Codes 5 and 7 are 16 bpp and code 3 is 8 bpp `[STATIC]`.
 
 The original game picks its display format from the hardware channel masks:
-0x7C00/0x03E0/0x001F → 5, 0xF800/0x07E0/0x001F → 7, 0xFC00/0x03E0/0x001F → 6,
-0xF800/0x07C0/0x003F → 8 `[STATIC]`. On modern hardware an implementation should assume RGB565 (7):
+0x7C00/0x03E0/0x001F → 5, 0xF800/0x07E0/0x001F → 7 `[STATIC]`. On modern hardware an implementation should assume RGB565 (7):
 almost every asset is authored in it, so it is the pixel-exact choice.
 
 ### 1.2 16-bit to 16-bit conversion
@@ -239,11 +231,9 @@ Shipped combinations (all 63 931 payloads, including `BAT.DAT`) `[DATA]`:
 |-------------|---------|
 | 0x00080000 | the body is RefPack-compressed (decompress from payload offset 0x14) |
 | 0x10000000 | raw bitmap: the decompressed body is exactly `width × height × bpp/8` bytes, row-major, top row first, with no row padding |
-| 0x00008000 | a codec this loader does not support. The payload is rejected. |
 | other low values | the uncompressed encodings in §3.6, used only when `encoding` = 0 and 0x10000000 is clear |
 
-For `encoding` = 1 the loader requires flag 0x00080000 to be set and 0x00008000 to be clear.
-Otherwise the image fails to load.
+For `encoding` = 1 flag 0x00080000 must be set; otherwise the image fails to load.
 
 For `encoding` = 0 with 0x00080000 set and 0x10000000 clear (a §3.6 body that is also
 RefPack-compressed), the behaviour was not determined [OPEN: is the body decompressed first and
@@ -356,7 +346,7 @@ The sprite descriptor that references both images defines which colour image a m
 | `EffectSprites.dat` | `FFFCxxxx` | `FFFCxxxx + 0x100` |
 | `00000010_Smoke` and the archives with Groups `0x1000484E`–`0x10004856` | odd/even alternation: masks on one parity, colour on the other, same size | |
 
-### 3.6 Uncompressed bitmap encodings (supported by the loader, not shipped) `[STATIC]`
+### 3.6 Uncompressed bitmap encodings (not shipped; flag values are label only, not needed by an implementation) `[STATIC]`
 
 These apply when `encoding` = 0 and flag 0x10000000 is clear. The `flags` value selects the
 body layout. Each pixel is u16 in the declared format. The transparent fill colour is the sprite's
@@ -371,7 +361,6 @@ key colour.
 | 0x010 | as 0x008 but column-major |
 | 0x080 | u8 paletteCount, u8 transparentIndex, u16 palette[paletteCount], then u8 indices row-major; `transparentIndex` is followed by a u8 count of transparent pixels |
 | 0x100 | as 0x080 but column-major |
-| 0x8000, 0xC000 | not supported (rejected) |
 
 ### 3.7 Decoder coverage
 
@@ -608,22 +597,22 @@ For example, the main menu button images (Instances 0x2001…0xA006 in `*_MainUI
 
 ## 7. Terrain palettes (`Apps/Res/Dirt/PALETTE/`)
 
-### 7.1 Files and slots `[STATIC][DATA]`
+### 7.1 Files `[STATIC][DATA]`
 
-The terrain renderer loads up to nine palette images into fixed slots. Loose files are read from
+The terrain renderer loads up to nine palette images. Loose files are read from
 `Res\Dirt\Palette\` (case-insensitive file names):
 
-| Slot | Source | Size (w × h) | Notes |
-|------|--------|--------------|-------|
-| 0 | `palBasic.bmp` | 1 × 53 | 51 distinct colours: a list of fixed terrain colours |
-| 1 | `data1Pal.bmp` | 64 × 32 | data-view colour ramp |
-| 2 | `data2Pal.bmp` | 64 × 32 | data-view colour ramp |
-| 3 | `data3Pal.bmp` | 64 × 32 | data-view colour ramp (smooth gradient) |
-| 4 | land palette from IXF: key `62B9DA24:455A72B1:n` | 32 × 512 | `n` = palette number of the active landscape scheme |
-| 5 | `palUnder.bmp` | 32 × 512 | |
-| 6 | `palWater.bmp` | 1 × 256 | water colour ramp |
-| 7 | `palEdgeL.bmp` | 1 × 512 | map-edge (cliff side) ramp, light face |
-| 8 | `palEdgeD.bmp` | 1 × 512 | map-edge (cliff side) ramp, dark face |
+| Source | Size (w × h) | Notes |
+|--------|--------------|-------|
+| `palBasic.bmp` | 1 × 53 | 51 distinct colours: a list of fixed terrain colours |
+| `data1Pal.bmp` | 64 × 32 | data-view colour ramp |
+| `data2Pal.bmp` | 64 × 32 | data-view colour ramp |
+| `data3Pal.bmp` | 64 × 32 | data-view colour ramp (smooth gradient) |
+| land palette from IXF: key `62B9DA24:455A72B1:n` | 32 × 512 | `n` = palette number of the active landscape scheme |
+| `palUnder.bmp` | 32 × 512 | |
+| `palWater.bmp` | 1 × 256 | water colour ramp |
+| `palEdgeL.bmp` | 1 × 512 | map-edge (cliff side) ramp, light face |
+| `palEdgeD.bmp` | 1 × 512 | map-edge (cliff side) ramp, dark face |
 
 All are uncompressed 24-bit BMPs.
 
@@ -767,7 +756,7 @@ Bitmap fonts (`*.fbf`, 56 files) are glyph images in their own container format,
 
 * `*.jpg` (31), `*.png` (67) and `*.ico` (5) are installer leftovers (`tmp/`), per-language
   help-text art (`Res/Text/<LANG>/`) and Scenario Creator icons.
-* The shell uses JPEG only for the city-snapshot feature (`%s--f--%d.jpg` naming) and HTML help
+* The shell uses JPEG only for the city-snapshot feature (file name made of the city name, the text `--f--` and a number, with extension `.jpg`) and HTML help
   (`HTML\missing.jpg`).
 * Besides the formats of §3, §6 and §8.1, the game handles only JPEG and GIF, for the snapshot
   and help features above; no shipped game art uses them. TGA is not decoded by the game (§8.2)

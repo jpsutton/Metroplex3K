@@ -182,8 +182,7 @@ All values are integers read with base 10.
 [STATIC] for the key list (all keys are read from `[Options]`); the units column is [INFERRED]
 from names and usage except the two music keys, which are [STATIC]. Shipped values are in the file.
 
-**Built-in defaults** [STATIC, AUDIO 0x100053E3 reader; defaults from the audio object and music
-player constructors]. A key that is missing keeps the value below. Every numeric key is parsed as
+**Built-in defaults** [STATIC]. A key that is missing keeps the value below. Every numeric key is parsed as
 an unsigned base-10 integer (`CacheSize` as a signed integer) and stored without a clamp.
 
 | Key | Built-in default | Shipped | Store condition |
@@ -196,7 +195,7 @@ an unsigned base-10 integer (`CacheSize` as a signed integer) and stored without
 | `FreshnessSelectionAreaMinMsec` | 10000 | 10000 | if found |
 | `ZoomLoopVol` | 1024 | 1024 | if found |
 | `BuildingRandMultiplier` | 10000 | 10000 | if found |
-| `UseCdForMusic` | — | not in the file | if found; stored into the **same field** as `BuildingRandMultiplier` (original defect, checked in the disassembly: both stores at `[obj+0x38]`, 0x10006058 and 0x100060EF) |
+| `UseCdForMusic` | — | not in the file | if found; stored into the **same value** as `BuildingRandMultiplier` (original defect) |
 | `TrafficDensityMin` | 15 | 1 | if found |
 | `TrafficDensityMultiplier` | 20 | 5 | if found |
 | `VehicleHonkDivisor` | 1 | 3 | if found |
@@ -215,8 +214,8 @@ an unsigned base-10 integer (`CacheSize` as a signed integer) and stored without
 | `ForceAmbienceQuadrant` | 0 | 0 | if found; non-zero forces quadrant value − 1 |
 | `AmbienceStartFadeAtPercent` | 0 | 35 | if found |
 | `AmbienceMinimumFadedVolume` | 1024 | 700 | if found |
-| `MusicStartDelayAfterStop` | none (field never initialised) | 3000 | if found. Use the shipped 3000 when the key is missing. |
-| `UseC2HCache` | off | 0 | the cache is enabled only if the value string matches a fixed literal |
+| `MusicStartDelayAfterStop` | none (no default) | 3000 | if found. Use the shipped 3000 when the key is missing. |
+| `UseC2HCache` | off | 0 | the cache is enabled only if the value string is a specific fixed text (not specified) |
 | `CachePath`, `CacheSize`, `MusicDataDir` | empty / 0 / empty | — | read only with the cache on; ignore |
 
 The music, sound-effect and ambience volumes are not INI keys. They come from the game options,
@@ -293,10 +292,10 @@ for region-specific sirens). See `26-automata.md` for which automata exist. [DAT
 
 **Vehicle voices** [STATIC unless tagged]:
 
-* Each sounding automaton has one vehicle-sound object with one voice. No limit on the number of
-  simultaneous vehicle voices was found.
+* Each sounding automaton plays at most one voice at a time. No limit on the number of
+  simultaneous vehicle voices is observed.
 * **Gate.** A vehicle is audible only when all of these hold:
-  * audio zoom > 3 (hard-coded; no reader of `VehicleMinZoom` was found);
+  * audio zoom > 3 (fixed; `VehicleMinZoom` has no observed effect);
   * the normal (non-overlay) view;
   * the automaton is inside the screen.
 * **Target volume.** master − (5 − zoom) × `VehicleAttenuation`, floored at 0. When the gate fails,
@@ -308,11 +307,11 @@ for region-specific sirens). See `26-automata.md` for which automata exist. [DAT
 * **Position.** The automaton's screen offset from the view centre, rotated by the view rotation
   and divided by 10, relative to the listener. The 3-D rolloff uses minimum distance
   `VehicleMinDistance` and a fixed maximum distance of 10000.
-* No reader was found for `VehicleMaxDistance` and `HonkMinZoom` [OPEN].
-* Which notification tells the audio system that an automaton was removed is [OPEN].
+* `VehicleMaxDistance` and `HonkMinZoom` have no observed effect [OPEN].
+* What happens to the voice when an automaton is removed is [OPEN].
   Recommended: treat removal like leaving the view.
-* `VehicleMax` and `VehicleMin` are not read by the audio system (no such strings in it) [OPEN
-  whether anything uses them]. They are not a voice cap.
+* `VehicleMax` and `VehicleMin` have no observed effect on audio [OPEN whether anything uses
+  them]. They are not a voice cap.
 
 **Honks** [STATIC]:
 
@@ -324,7 +323,7 @@ for region-specific sirens). See `26-automata.md` for which automata exist. [DAT
 
 **Traffic ambience** [STATIC]:
 
-* A dedicated FSC schedule object loaded from `traffic.fsc` in `sfx\zones\Traffic\` (§5.1).
+* A dedicated looping bed driven by `traffic.fsc` in `sfx\zones\Traffic\` (§5.1).
   It is one bed, not one voice per vehicle.
 * Let n = min(`TrafficDensityMultiplier` × traffic, 75). The bed plays only if all of these hold:
   * n ≠ 0;
@@ -369,10 +368,11 @@ triggered (an easter-egg event). [DATA][INFERRED] See §7.
 
 ### 4.10 `[Events]`
 
-A developer reference listing event names and numeric event codes accepted by the sound engine (e.g.
-1000–1008 options, 3000–3002 listener position/orientation/zoom, 10000–10017 screen/city lifecycle,
-50–59 advisor/petitioner/budget windows, 200 explosion, 201 disaster warning, 0–8 generic sound
-play/stop/update/kill/special/load/unload). The engine does not need to read this section. It is
+A developer reference listing event names and numeric event codes accepted by the sound engine,
+grouped by role: options, listener position/orientation/zoom, screen/city lifecycle,
+advisor/petitioner/budget windows, explosion, disaster warning, and generic sound
+play/stop/update/kill/special/load/unload. The codes are label only; not needed by an
+implementation. The engine does not need to read this section. It is
 useful as the list of hooks a reimplementation must provide. [DATA][INFERRED]
 
 ## 5. Ambient sound (zones, zoom levels)
@@ -519,8 +519,8 @@ share of the view drops below `AmbienceStartFadeAtPercent`. [INFERRED][OPEN — 
 ## 6. Building sounds (query and sparse)
 
 * **Query sounds.** When the user queries a building with the query tool, the matching
-  `UiQuery…` one-shot plays (generic per class, e.g. `UiQueryGenericCommercial`,
-  `UiQueryGenericWater`, `UiQueryGenericAbandoned`, `UiQueryTreeGeneric`, `UiQueryGenericLandfill`).
+  `UiQuery…` one-shot plays (generic per building class, water, abandoned, tree, landfill; IDs in
+  §10.4).
   The query sound ID per occupant is an occupant property (see `13-buildings-occupants.md`).
   [DATA][INFERRED]
 * **Sparse sounds.** The set of active sparse items is rebuilt on every 4th pass of the audio
@@ -544,7 +544,7 @@ share of the view drops below `AmbienceStartFadeAtPercent`. [INFERRED][OPEN — 
   view.
 
   **Switching on and off** arms or disarms the item; it does not start or cut audio by itself
-  [INFERRED: the method bodies were not resolved]. A sample that is playing when its item is
+  [INFERRED]. A sample that is playing when its item is
   switched off is allowed to finish [INFERRED].
 
   **Per-item update, every audio tick** [STATIC]:
@@ -612,19 +612,19 @@ end). [STATIC][INFERRED]
   on/off switch; "off" forces the category volume to 0. A stored volume outside 0–1024 is replaced at
   start-up by a repair value: music 1000, sound effects 700, ambience 900. These repair values are not
   the first-run defaults. [STATIC] The options events
-  also define separate wind and vehicle volumes and a global mute (event codes 1004–1007). [DATA]
+  also define separate wind and vehicle volumes and a global mute. [DATA]
 * Voice limits. Ambience is capped per schedule: an FSC schedule never has more than its `max`
   cells playing, and it tries to keep at least `min` playing (§5.2) [STATIC]. The sound layer has
-  no shipped INI key for a global voice limit, and no fixed global voice pool was found
-  [STATIC, negative result]. The streaming service processes at most 10 streaming sounds per
+  no shipped INI key for a global voice limit, and no fixed global voice pool is observed
+  [OPEN]. The streaming service processes at most 10 streaming sounds per
   service pass [STATIC]. [OPEN] Whether one-shot effects ever steal voices. An implementation
   should mix all requested voices (a modern mixer has no hardware limit). If it must cap them,
   it should drop the lowest-priority voice and, on a tie, the oldest. Every item has a priority
   (shipped value 32 for nearly all) [DATA], so this rarely matters. [INFERRED]
 * Panning: positioned sounds (vehicles, spatialised disasters, sparse buildings) are panned by their
   horizontal screen position relative to the view centre and attenuated by distance; the listener
-  position/orientation/zoom are updated by events 3000–3002 whenever the view moves. [INFERRED]
-  The exact pan and distance law was searched for and not found [OPEN].
+  position/orientation/zoom are updated whenever the view moves. [INFERRED]
+  The exact pan and distance law is [OPEN].
   * Recommended pan: clamp((screen x − view-centre x) / (view width / 2), −1, 1), with
     equal-power panning.
   * Recommended volume: full volume on screen, and 300 less (out of 1024, floor 0) off screen. This
@@ -671,44 +671,44 @@ Rules common to every request [STATIC]:
 |-------|--------------|--------|------------|-----|
 | Zoom in / zoom out (buttons and keyboard/scroll zoom) | `[1ShotSfx]` 1 / 2 | one-shot | no | [STATIC] |
 | Rotate view (either direction) | `[1ShotSfx]` 4 | one-shot | no | [STATIC] |
-| Generic button click (control panels, menus, front end, many dialogs) | `[1ShotSfx]` 12 `UiButtonClick` | one-shot | no | [STATIC] |
-| Check box / toggle click in dialogs (budget, ordinances, options, graphs, …) | `[1ShotSfx]` 13 `UiCheckboxClick` | one-shot | no | [STATIC] ids; [INFERRED] which controls |
-| Small button click (scenario dialogs, some panels) | `[1ShotSfx]` 146 `UiButtonClickSmall` | one-shot | no | [STATIC] |
-| Close button of a window, panel or dialog clicked (also the query window's close) | `[1ShotSfx]` 56 `CloseWindow` | one-shot | no | [STATIC] |
+| Generic button click (control panels, menus, front end, many dialogs) | `[1ShotSfx]` 12 | one-shot | no | [STATIC] |
+| Check box / toggle click in dialogs (budget, ordinances, options, graphs, …) | `[1ShotSfx]` 13 | one-shot | no | [STATIC] ids; [INFERRED] which controls |
+| Small button click (scenario dialogs, some panels) | `[1ShotSfx]` 146 | one-shot | no | [STATIC] |
+| Close button of a window, panel or dialog clicked (also the query window's close) | `[1ShotSfx]` 56 | one-shot | no | [STATIC] |
 | Other command buttons and list selections inside those windows | 12 or 146 (fixed per window and button) | one-shot | no | [STATIC] ids; per-button choice [OPEN] — recommended: 12 for main buttons, 146 for list items and small buttons |
 | Some window notifications (e.g. query window opened) | none | — | — | [STATIC] |
 | One UI click request asks for ID 10 (undefined → silent) | `[1ShotSfx]` 10 | one-shot | no | [STATIC] |
-| Run / pause simulation | 23 `UiPlaySim` / 24 `UiPauseSim` | one-shot | no | [STATIC] (`09-ui-screens.md` §4.2) |
+| Run / pause simulation | 23 / 24 | one-shot | no | [STATIC] (`09-ui-screens.md` §4.2) |
 | Speed 1–4 selected | 25–28 | one-shot | no | [STATIC] |
-| Click on a located news-ticker item | 47 `UiClickOnNewsticker` | one-shot | no | [STATIC] |
-| Urgent ticker item | 54 `NewsTickerAlarm` | one-shot | no | [INFERRED] (`09` §4.4) |
+| Click on a located news-ticker item | 47 | one-shot | no | [STATIC] |
+| Urgent ticker item | 54 | one-shot | no | [INFERRED] (`09` §4.4) |
 | Ambience volume slider moved | 67 | one-shot | no | [STATIC] |
-| Tool refused (illegal area/path/plan) — every map tool | 30 `UiError` | one-shot | no | [STATIC] |
-| Tool unaffordable — every map tool | 32 `UiErrorNoMoney` | one-shot | no | [STATIC] |
-| Zone tool: area accepted (all 12 zone types) | 38 `UiZoneResidential` | one-shot | no | [STATIC] |
-| De-zone accepted | 44 `UiDezone` | one-shot | no | [STATIC] |
-| Bulldoze accepted | 5 `UiBulldoze` | one-shot | no | [STATIC] |
-| Road / highway / on-ramp built | 14 `UiLayRoad` | one-shot | no | [STATIC] |
-| Rail built | 51 `LayRail` | one-shot | no | [STATIC] |
-| Subway built | 53 `LaySubway` | one-shot | no | [STATIC] |
-| Power line built | 16 `UiLayPowerLine` | one-shot | no | [STATIC] |
-| Water pipe built | 50 `LayPipe` | one-shot | no | [STATIC] |
+| Tool refused (illegal area/path/plan) — every map tool | 30 | one-shot | no | [STATIC] |
+| Tool unaffordable — every map tool | 32 | one-shot | no | [STATIC] |
+| Zone tool: area accepted (all 12 zone types) | 38 | one-shot | no | [STATIC] |
+| De-zone accepted | 44 | one-shot | no | [STATIC] |
+| Bulldoze accepted | 5 | one-shot | no | [STATIC] |
+| Road / highway / on-ramp built | 14 | one-shot | no | [STATIC] |
+| Rail built | 51 | one-shot | no | [STATIC] |
+| Subway built | 53 | one-shot | no | [STATIC] |
+| Power line built | 16 | one-shot | no | [STATIC] |
+| Water pipe built | 50 | one-shot | no | [STATIC] |
 | Neighbour connection accepted: road/highway, rail/subway, pipe, power | 36, 37, 45, 46 | one-shot | no | [STATIC] (`12-networks.md`) |
-| Level terrain accepted | 15 `UiLevelTerrain` | one-shot | no | [STATIC] |
+| Level terrain accepted | 15 | one-shot | no | [STATIC] |
 | Raise / lower terrain: button pressed and plan accepted | `[Fading]` 18 / 19 | start loop | no | [STATIC] |
 | Raise / lower: each accepted drag tick | `[Fading]` 18 / 19 | set level 1024, set audible 1024 | no | [STATIC] |
 | Raise / lower: refused or unaffordable | 18 / 19 then 30 / 32 | set audible 0, then one-shot | no | [STATIC] |
 | Raise / lower: button released | 18 / 19 | set audible 0 (loop fades) | no | [STATIC] |
-| Create water accepted | `[Fading]` 20 `UiLayWater` | start loop | no | [STATIC] |
-| Plant trees accepted | `[Fading]` 17 `UiLayTrees` | start loop | no | [STATIC] |
+| Create water accepted | `[Fading]` 20 | start loop | no | [STATIC] |
+| Plant trees accepted | `[Fading]` 17 | start loop | no | [STATIC] |
 | Building placed ("plop", all placement tools) | chosen by §10.4 | notification at the tile | yes | [STATIC] |
 | Query click on a tile | chosen by §10.4 | notification at the tile | yes (tile carried) | [STATIC] |
 | Dispatch police / fire to a tile | 34 / 35 (locale variants, §4.3) | one-shot | no | [STATIC] |
-| Dispatch crop duster / water bomber | 246 `UiCropDispatch` | one-shot | no | [STATIC] |
-| Go to disaster | 55 `GoToDisaster` | one-shot | no | [STATIC] |
+| Dispatch crop duster / water bomber | 246 | one-shot | no | [STATIC] |
+| Go to disaster | 55 | one-shot | no | [STATIC] |
 | Petition / neighbour deal answered (voice) | 155–166 (deal accept 155, decline 164) | one-shot | no | [STATIC] ids; type→voice table `22-advisors-news-petitioners.md` |
 | Petition outcome crowd reaction | 70–73 | one-shot | no | [STATIC] (`09` §6.6) |
-| Lightning strike | 170 `Thunder` | one-shot | no | [INFERRED] event |
+| Lightning strike | 170 | one-shot | no | [INFERRED] event |
 
 ### 10.3 Disasters
 
@@ -718,16 +718,16 @@ entry starts its `fadingSfxId` loop itself (§4.6). [STATIC]
 
 | Event | Section / ID | Action | Positional | Tag |
 |-------|--------------|--------|------------|-----|
-| Disaster warning declared (siren) | 48 `UiEarlyWarningSiren` | one-shot | no | [STATIC] |
+| Disaster warning declared (siren) | 48 | one-shot | no | [STATIC] |
 | Premonition phase 1 of a tornado | — | music is stopped | no | [STATIC] |
 | Premonition phase 2 (any disaster), only at audio zoom ≥ 3 | 58 nature, 59 residential, 64 commercial | one-shot; choose 59 when the dominant ambient area (§5.3) is the residential one, 64 when it is a commercial one, else 58 | no | [STATIC] rule; [INFERRED] area naming |
-| Premonition phase 3 of an earthquake | 57 `DisasterPremonitionTremor` | one-shot | no | [STATIC] |
+| Premonition phase 3 of an earthquake | 57 | one-shot | no | [STATIC] |
 | Disaster begins (tornado, earthquake, fire, riot, UFO) | 102 | one-shot; 102 is undefined in shipped data → silent | no | [STATIC] |
 | Fire: first building starts burning / last stops | `[FireDisaster]` sound (62) | start / stop | positioned per §4.6 | [STATIC] |
 | Fire: burning count changes | 62 | set level = min(100, count × 100 / MaxFires) | | [STATIC] |
 | Fire: visible-fire count becomes ≥ 1 / 0 | 62 | set audible on / off | | [STATIC] |
 | Tornado, riot active | ID from `[TornadoDisaster]` (shipped 60) / `[RiotDisaster]` (shipped 63), `SC3DisasterLayer.ini` | start (with the disaster as position source), audible on/off as it enters/leaves the view, stop | per §4.6 | [STATIC] |
-| Parade active | ID loaded with `[ParadeEvent]` (expected 228 `DisasterParade` [INFERRED]) | start, audible on/off, stop | per §4.6 | [STATIC] |
+| Parade active | ID loaded with `[ParadeEvent]` (expected 228 [INFERRED]) | start, audible on/off, stop | per §4.6 | [STATIC] |
 | Earthquake main shock (≤ 2 sounding at once) | 61 | start; stop when damage is applied | no (SpatialScheme 2) | [INFERRED] from `21` §7 |
 | UFO active | 74 | start, audible on/off, stop | | [STATIC] |
 | Toxic cloud / toxic rain active | 175 / 231 | start, audible on/off, stop | | [STATIC] |
@@ -756,10 +756,10 @@ IDs 0x100–0x192, e.g. power plants 0x118–0x120, landmarks mostly 0x110) [DAT
 
 | Tile content | ID |
 |--------------|----|
-| no building and the tile is water | 140 `UiQueryGenericWater` |
+| no building and the tile is water | 140 |
 | no building, dry land | nothing |
-| abandoned building | 143 `UiQueryGenericAbandoned` |
-| tree / flora | 151 `UiQueryTreeGeneric`; in desert terrain 252, in jungle terrain 253 |
+| abandoned building | 143 |
+| tree / flora | 151; in desert terrain 252, in jungle terrain 253 |
 | road or highway | 14 |
 | rail | 51 |
 | power line | 144 |
@@ -769,7 +769,7 @@ IDs 0x100–0x192, e.g. power plants 0x118–0x120, landmarks mostly 0x110) [DAT
 | airport / seaport / landfill | 173 / 174 / 172 |
 | flora class | 151 |
 
-Desert and jungle are decided by a landscape code that the audio system asks the city for: code 1 gives 252, code 2 gives 253, and any other code gives 151 [STATIC]. Where the city takes this code from is [OPEN]. Recommended: the city's flora set (`11-world-terrain.md` §6.3), with Desert `0xC55A6D62` as 1, Jungle `0x79EF435A` as 2, and every other set as 0.
+Desert and jungle are decided by a landscape code taken from the city: code 1 gives 252, code 2 gives 253, and any other code gives 151 [STATIC]. Where the city takes this code from is [OPEN]. Recommended: the city's flora set (`11-world-terrain.md` §6.3), with Desert `0xC55A6D62` as 1, Jungle `0x79EF435A` as 2, and every other set as 0.
 
 In the subway view a subway piece answers 53; in the pipe view a pipe answers 50; nothing else
 sounds in those views. Classification of the tile content is [INFERRED] from the sound names; the
@@ -778,7 +778,7 @@ the occupant's family (`13-buildings-occupants.md` §4) mapped as in the table.
 
 **Building placed at tile (x, z)** — in the surface view, if a building now stands on the tile:
 
-1. If it has a `[Sparse]` ID, that sample plays once and then 22 `UiPlopBuilding` plays.
+1. If it has a `[Sparse]` ID, that sample plays once and then 22 plays.
 2. Otherwise one fallback plays (no 22): tree 17, road/highway 14, rail 51, power line 144,
    tunnel 52, residential 136, commercial 137, industrial 138, construction 139, water facility
    0x169, landmark 0x110, agricultural 0x170, abandoned 143, airport 0x103, seaport 0x123,
@@ -796,7 +796,7 @@ view is the surface view. The audio system then picks one item [STATIC]:
 2. If S is 0x119, 0x11C or 0x11D (fusion, microwave, nuclear plant): play 76
    `DisasterOneShotNuclearExplosion`.
 3. Else if S is 0x118, 0x11A, 0x11B or 0x11E (coal, gas, generic, oil plant): play 135 if
-   Rand(2) = 0, else 134 (`GDEBig2` / `GDEBig1`).
+   Rand(2) = 0, else 134.
 4. Otherwise let V be the building's size measure supplied by the city for that tile (which
    occupant quantity this is: [OPEN]; recommended: lot tile count × height class, see
    `13-buildings-occupants.md`). Row = 0 if V ≤ 513, 1 if 514 ≤ V ≤ 2500, 2 if V ≥ 2501. Draw
@@ -813,7 +813,7 @@ at the tile; its volume is the effects volume, reduced by 300 (of 1024, floor 0)
 is not on screen. At most 4 explosion voices exist; a new explosion reuses the slots round-robin,
 stopping the oldest. [STATIC]
 
-Note: this notification is not `AUDIO.INI` item 200 (`UiNewFEMSCM6`). Where `21-disasters.md`
+Note: this notification is not `AUDIO.INI` item 200. Where `21-disasters.md`
 says "destruction sound 200", it means this explosion notification.
 
 ## 11. Persisted state
@@ -833,7 +833,7 @@ preferences (see `27-platform.md`). [INFERRED]
 
 * Whether the FSC selection position moves at run time; the density divisor D if it is ever not 10; the exact "rotation allowed" condition.
 * Exact ambient area weighting and how city state maps to the FSC selection position.
-* Whether a global voice limit or voice stealing exists for one-shot effects (§8); none found.
+* Whether a global voice limit or voice stealing exists for one-shot effects (§8); none observed.
 * Exact use of `MusicPlayerSongDurationMsec` (assumed: cap on song play time).
 * §10.4: which occupant data yields the building class used for fallback query/placement sounds; which view plays 16 on placement.
 * §10.5: which occupant quantity is the explosion size measure V.

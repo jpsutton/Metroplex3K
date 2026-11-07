@@ -57,12 +57,12 @@ dead data.
 When a new city is created the budget reads four values from the new-city settings supplied by
 the city-creation dialog/scenario [STATIC]:
 
-| Setting key | Meaning | Handling |
+| Setting | Meaning | Handling |
 |---|---|---|
-| 5 | Starting funds | Copied to the treasury (sign-extended to 64 bits). If absent, funds = 0. |
-| `0x1E0` | Residential tax rate | Clamped to `[0, maxRate]` (`maxRate` = 22) |
-| `0x1FB` | Commercial tax rate | Same clamp |
-| `0x216` | Industrial tax rate | Same clamp |
+| starting funds | Starting funds | Copied to the treasury (sign-extended to 64 bits). If absent, funds = 0. |
+| residential tax rate | Residential tax rate | Clamped to `[0, maxRate]` (`maxRate` = 22) |
+| commercial tax rate | Commercial tax rate | Same clamp |
+| industrial tax rate | Industrial tax rate | Same clamp |
 
 The starting-funds amount per difficulty level is supplied by the new-city dialog, not the
 budget [STATIC, from the city-creation dialog]: difficulty 1 (easy) → 50,000; 2 (medium) →
@@ -72,9 +72,9 @@ difficulty [STATIC]. Outside the
 economy, the difficulty choice also does the following in the new-city dialog [STATIC]: (i) it
 sets the terrain generator's type (1/2/3) for the preview/random terrain (`11-world-terrain.md`);
 (ii) choosing *hard* also sets one more boolean in the dialog's new-city parameters (clear for
-easy and medium). **This flag means "start on a bond"** [STATIC, city creation SIMINIT
-0x10008BF8]: when it is set, the treasury is set to 0 and the starting amount is then issued as
-an ordinary bond through the normal bond-issue path (SIMMISC 0x10009150, §5), so funds rise by
+easy and medium). **This flag means "start on a bond"** [STATIC]:
+when it is set, the treasury is set to 0 and the starting amount is then issued as
+an ordinary bond through the normal bond-issue path (§8), so funds rise by
 the bond amount and the bond carries the usual terms. When it is clear, the amount is simply
 written to the treasury. Hard therefore starts with §0 cash plus one §10,000 bond (10,000 is
 already a multiple of the 5,000 bond step). [INFERRED] If the bond limits (`MaxBondAmt`,
@@ -215,7 +215,7 @@ always reads the last latched totals. Consequences:
 * Civic, park, airport, seaport and other non-zone buildings pay no tax, because they carry no
   3000/5000/8000 *supply* items. (Airport/seaport/spaceport items are on 5001/8001.)
 
-**Validation** [DATA]: The analysis team recomputed the formula for every shipped
+**Validation** [DATA]: The formula was recomputed for every shipped
 `.sc3`/`.SNR` city, approximating `N_k` by the saved valve `S_last` of valves 3000/5000/8000 and
 `L` by the saved `avgLV`. In Europolis (R), Madrid (R), Craterville (C) and Frankfurt (C, I) the
 prediction equals one of the twelve saved monthly figures exactly; in all 14 cities every group
@@ -247,8 +247,7 @@ Departments present in shipped saves (all six appear in every save that has them
 The service mapping of the first four IDs is `[OBSERVED]`: each budget slider was set to a distinct
 value in the original's budget window, the city was saved, and the funding byte of each department
 entry was read back. The entries are stored in the order Education, Public Health, Fire, Roads,
-Police, Mass Transit, which is also the order of the rows in the window. This **replaces** an
-earlier inference (police, fire, health, education) that was wrong for all four.
+Police, Mass Transit, which is also the order of the rows in the window.
 
 | Department ID | Provided by | Service |
 |---|---|---|
@@ -279,7 +278,7 @@ the monthly budget lines.
 
 The budget runs on the simulation's month boundary (first day of the new month). It is the budget's
 monthly step (`14-sim-clock.md` §6.1, monthly item 10), which runs the steps below; the year-end is part of the same run when the closing month is December.
-It runs after the demographics, RCI and transit monthly agents (so the transit fares of step 6 are
+It runs after the demographics, RCI and transit monthly updates (so the transit fares of step 6 are
 the month just closed) and before the power and water steps and the city's month handler
 [STATIC]. The full ordering is in `14-sim-clock.md` §6.3 rule 7. Let `(month, year)` be the new date, `month` 1–12. The **slot** of the month
 just finished is `m = month − 2`, except that when `month = 1` the slot is `m = 11` and the
@@ -293,12 +292,11 @@ Steps, in order [STATIC]:
 3. Ordinances (§9): `ordIncomeHist[m] = ordIncome`, `ordIncomeYTD += ordIncome`;
    `ordCostHist[m] = ordCost`, `ordCostYTD += ordCost`.
 4. Neighbour deals (§10.3): `dealIncomeHist[m] = dealIncome`, `dealIncomeYTD += dealIncome`;
-   `dealCostHist[m] = dealCost + penalties`, `dealCostYTD += that`; the deal manager's penalty
-   accumulator is read and cleared [STATIC: the queried object is the neighbour-deal manager and
-   the two sums are over odd and even deal types respectively].
-5. Business deals (§11): `bizHist[m] = bizIncome`, `bizYTD += bizIncome`. `bizIncome` is asked
-   for each month from the **Budget advisor** subsystem, which owns
-   the business deals of §11 and reports the current monthly income of the deals in force [STATIC
+   `dealCostHist[m] = dealCost + penalties`, `dealCostYTD += that`; the pending cancellation
+   penalties are read and cleared.
+5. Business deals (§11): `bizHist[m] = bizIncome`, `bizYTD += bizIncome`. `bizIncome` is the
+   current monthly income of the business deals in force, as reported by the Budget advisor
+   [STATIC
    for the source; INFERRED that the value is the sum over accepted deals: shipped Madison shows a
    constant 300 per month, equal to the `MegaMall` value].
 6. Transit fare income (§5.2; the "other income" line): `v` = last month's fare total,
@@ -385,10 +383,8 @@ Issuing a bond for a requested amount `x` [STATIC]:
 With shipped values a 25,000 bond costs 250 per month for 120 months = 30,000 total. Payments are
 charged monthly into `bondYTD` and settled at year end (§7). There is no interest-rate variation
 and no early repayment [STATIC]. The UI does not offer early repayment either [STATIC]: the
-budget object has no repay entry (slot 0x60 at SIMMISC 0x1000521F only returns the 64-bit total
-principal outstanding; slot 0x64 at 0x100092AA returns the credit limit
-`MaxBondAmt × 1000 × MaxBonds`), and the loans page handler (SIMMISC 0x10025DEE) handles only page
-navigation, "issue a bond for the selected amount" and "open the budget advisor". A bond ends
+loans page offers only page navigation, "issue a bond for the selected amount" and "open the
+budget advisor". A bond ends
 only in the month-end bond loop, when its remaining balance reaches 0 or at its maturity month.
 
 Retirement test note: the stored `month` is the 1-based calendar month at issue, while the month
@@ -481,54 +477,58 @@ Totals: `ordIncome = Σ v (v > 0)`, `ordCost = Σ −v (v < 0)`. These feed §7 
 
 ### 9.5 Ordinance table
 
-Labels below are descriptive paraphrases for identification; the in-game names come from string
-table `0xC29A6083`. "Effect key" names the tuning key (and file) through which the owning
-subsystem applies the effect.
+Each row gives the ordinance ID, the hard-coded money kind of §9.4 and the tuning key or
+document through which the effect is applied. The category, year, name-string ID and cost
+divisor `D` of every ordinance are the shipped values in `Ordinances.ini` `[ListOfOrdinances]`
+(§9.1) and are not repeated here. Example rows from that file, as `id = category;year;nameString;D`:
+`0x015B4D1E = 0x028D0FC5;0;124;1550` (income), `0xC2BF1DC5 = 0x828D0A2F;9999;120;8000`
+(cost plus police stations), `0x62BF1DAA = 0x828D0A2F;1970;138;959` (world-based cost).
+The in-game names come from string table `0xC29A6083`.
 
-| ID | Cat. | Year | Str | D | Money | Effect / owner |
-|---|---|---|---|---|---|---|
-| `0xC2BF1DC5` | `0x828D0A2F` | 9999 | 120 | 8000 | cost + police stations | youth curfew → crime (`17-sim-services.md`) |
-| `0xA0D07129` | `0x628D0C45` | 0 | 121 | 1050 | income | legal gambling → crime up, income (`17-sim-services.md`) |
-| `0xE0D07233` | `0xC28D0F40` | 0 | 122 | 8000 | cost + libraries | reading programme → EQ (`20-sim-population.md`) |
-| `0x815B4CEF` | `0xC28D0F40` | 0 | 123 | 14000 | cost | youth sports → crime/health |
-| `0x015B4D1E` | `0x028D0FC5` | 0 | 124 | 1550 | income | parking fines → traffic (`SC3Aura.ini ParkingFineOrdEffect`) |
-| `0x20D07175` | `0xC28D0B6E` | 9999 | 125 | 7250 | cost | homeless shelters → land value (`SC3LandValue.ini HomelessShelterOrdEffect`) |
-| `0xC2BF1DEF` | `0x828D0A2F` | 0 | 128 | 2007 | cost | school crossing guards → health quantity x_H (`17-sim-services.md` §5.3); the aura does not read it |
-| `0xA2BF1DE5` | `0x028D0FC5` | 9999 | 129 | 1259 | cost | shuttle service → transit use |
-| `0x02BF1DFA` | `0x022E288E` | 1960 | 130 | 4125 | cost | water conservation → water demand (`16-sim-utilities.md`) |
-| `0xC2BF1DD1` | `0xC28D0B6E` | 9999 | 131 | 900 | world-based cost | earthquake retro-fitting → quake damage (`21-disasters.md`) |
-| `0x82E42E30` | `0x022E288E` | 1930 | 132 | 8593 | cost | stairwell lighting → power demand (`SavingDueToStairwellLightingOrdinance`) |
-| `0xA2BF1E43` | `0x828D04EB` | 1950 | 133 | 4587 | cost | clean air → pollution (`CleanAirOrdEffect`) |
-| `0xE2BF1E2A` | `0x028D0FC5` | 1950 | 134 | 10443 | cost | alternate-day driving (`SC3Aura.ini AltDrivingOrdEffect`) |
-| `0x40D07236` | `0xC28D0F40` | 1960 | 135 | 10006 | cost | free clinics → health |
-| `0x22BF1E35` | `0x828D04EB` | 1960 | 136 | 9999 | free | leaf-burning ban (`LeafBurningBanOrdEffect`, fire + pollution) |
-| `0x00D0723D` | `0xC28D0F40` | 1970 | 137 | 33057 | cost | CPR training → health/life expectancy |
-| `0x62BF1DAA` | `0x828D0A2F` | 1970 | 138 | 959 | world-based cost | smoke detectors (`[FlammabilityLayer] SmokeDetectorsOrdEffect`) |
-| `0x62BF1DB9` | `0x828D0A2F` | 1970 | 139 | 18613 | cost | neighbourhood watch → crime |
-| `0xA2BF1DDC` | `0x028D0FC5` | 1980 | 141 | 1531 | cost | carpool incentive → traffic |
-| `0x42BF1E18` | `0x828D04EB` | 1980 | 142 | 13768 | cost + recycling centres | trash presort (`TrashPresortOrdEffect`) |
-| `0xC2BF1E04` | `0x828D04EB` | 1980 | 143 | 12583 | cost | car smogging (`CarSmoggingOrdEffect`) |
-| `0xE0D07239` | `0xC28D0F40` | 1990 | 144 | 1645 | cost | public smoking ban → health |
-| `0xE0D0722E` | `0xC28D0F40` | 1990 | 145 | 39187 | cost | nuclear-free zone (`SC3Aura.ini NukeFreeOrdEffect`; nuclear plants disallowed) |
-| `0xC2D1B025` | `0x028D0FC5` | 9999 | 146 | 1000 | free | subsidised mass transit |
-| `0x82B9999B` | `0x022E288E` | 1970 | 147 | 2364 | world-based cost | power conservation (`SavingDueToPowerConservationOrdinance`) |
-| `0x62F6E7CF` | `0xC28D0B6E` | 9999 | 148 | 3521 | cost | tourist promotion (`TouristPromotionOrdEffect`) |
-| `0xA2F6E7DA` | `0xC28D0B6E` | 1915 | 149 | 3011 | cost | conservation corps (`ConservationCorpsOrdEffect`) |
-| `0x02F6E7E2` | `0xC28D0B6E` | 1950 | 150 | 42659 | income | industrial pollutant fee (`IndPolluteFeeOrdEffect`) |
-| `0x22F6E80C` | `0x828D04EB` | 1990 | 151 | 28703 | cost | landfill gas recovery (`LandfillGasRecoveryOrdEffect`) |
-| `0xA2F917CF` | `0x828D04EB` | 1950 | 152 | 20828 | income | industrial waste disposal (`IndWasteDisposalOrdEffect`) |
-| `0xE2F6E7EA` | `0xC28D0B6E` | 1930 | 153 | 2546 | cost | clean industry association (`CleanIndAssocOrdEffect`) |
-| `0x02F6E7EF` | `0xC28D0B6E` | 1950 | 154 | 3345 | cost | electronics incentive (`ElectronicsIncentiveOrdEffect`) |
-| `0x22F6E7F4` | `0xC28D0B6E` | 9999 | 155 | 3593 | cost | aerospace incentive (`AerospaceIncentiveOrdEffect`) |
-| `0xA2F6E7F9` | `0xC28D0B6E` | 1970 | 156 | 4256 | cost | electronics job fair (`ElectronicsJobFairOrdEffect`) |
-| `0xE2F6E7FE` | `0xC28D0B6E` | 1980 | 157 | 3542 | cost | biotech incentive (`BiotechIncentiveOrdEffect`) |
-| `0xC2F6E804` | `0xC28D0B6E` | 1980 | 158 | 3452 | cost | public access cable (`PublicAccessCableOrdEffect`) |
-| `0x62F6E808` | `0x828D04EB` | 1970 | 159 | 17612 | cost | lawn chemical ban (`LawnChemBanOrdEffect`) |
-| `0x22F6E814` | `0x828D04EB` | 1970 | 160 | 45349 | cost | backyard composting (`BackyardCompostingOrdEffect`) |
-| `0x22F6E81B` | `0x828D04EB` | 1960 | 161 | 53517 | cost | paper reduction (`PaperReductionOrdEffect`) |
-| `0xC2F6E81F` | `0x828D04EB` | 1940 | 162 | 39315 | cost | tire recycling (`TireRecyclingOrdEffect`, §13) |
-| `0x62F6E82B` | `0xC28D0B6E` | 0 | 163 | 9999 | free | farmers' market (`FarmersMarketOrdEffect`) |
-| `0xC2F90EB1` | `0x022E288E` | 1930 | 164 | 16521 | cost | water meters → water demand |
+| ID | Money | Effect key / owner |
+|---|---|---|
+| `0xC2BF1DC5` | cost + police stations | `YouthCurfewOrdEffect` (`SC3Crime.ini`) |
+| `0xA0D07129` | income | `GamblingOrdEffect` (`SC3Crime.ini`) |
+| `0xE0D07233` | cost + libraries | education effect (`20-sim-population.md`) |
+| `0x815B4CEF` | cost | `JrSportsOrdEffect` (`SC3Crime.ini`) |
+| `0x015B4D1E` | income | `SC3Aura.ini ParkingFineOrdEffect` |
+| `0x20D07175` | cost | `SC3LandValue.ini HomelessShelterOrdEffect` |
+| `0xC2BF1DEF` | cost | health quantity (`17-sim-services.md` §5.3); the aura does not read it |
+| `0xA2BF1DE5` | cost | transit use (`ShuttleServiceDistanceToRoadAdd`) |
+| `0x02BF1DFA` | cost | `WaterConservationFactor` (`16-sim-utilities.md`) |
+| `0xC2BF1DD1` | world-based cost | quake damage (`21-disasters.md`) |
+| `0x82E42E30` | cost | `SavingDueToStairwellLightingOrdinance` |
+| `0xA2BF1E43` | cost | `CleanAirOrdEffect` |
+| `0xE2BF1E2A` | cost | `SC3Aura.ini AltDrivingOrdEffect` |
+| `0x40D07236` | cost | health effect |
+| `0x22BF1E35` | free | `LeafBurningBanOrdEffect` |
+| `0x00D0723D` | cost | health / life-expectancy effect |
+| `0x62BF1DAA` | world-based cost | `[FlammabilityLayer] SmokeDetectorsOrdEffect` |
+| `0x62BF1DB9` | cost | `NeighborhoodWatchOrdEffect` (`SC3Crime.ini`) |
+| `0xA2BF1DDC` | cost | traffic retention (`CarpoolingRoadHighwayMonthlyDecrementSubtract`) |
+| `0x42BF1E18` | cost + recycling centres | `TrashPresortOrdEffect` |
+| `0xC2BF1E04` | cost | `CarSmoggingOrdEffect` |
+| `0xE0D07239` | cost | health effect |
+| `0xE0D0722E` | cost | `SC3Aura.ini NukeFreeOrdEffect`; nuclear plants disallowed |
+| `0xC2D1B025` | free | transit use and fares (`SubsidizedMassTransit…` keys) |
+| `0x82B9999B` | world-based cost | `SavingDueToPowerConservationOrdinance` |
+| `0x62F6E7CF` | cost | `TouristPromotionOrdEffect` |
+| `0xA2F6E7DA` | cost | `ConservationCorpsOrdEffect` |
+| `0x02F6E7E2` | income | `IndPolluteFeeOrdEffect` |
+| `0x22F6E80C` | cost | `LandfillGasRecoveryOrdEffect` |
+| `0xA2F917CF` | income | `IndWasteDisposalOrdEffect` |
+| `0xE2F6E7EA` | cost | `CleanIndAssocOrdEffect` |
+| `0x02F6E7EF` | cost | `ElectronicsIncentiveOrdEffect` |
+| `0x22F6E7F4` | cost | `AerospaceIncentiveOrdEffect` |
+| `0xA2F6E7F9` | cost | `ElectronicsJobFairOrdEffect` |
+| `0xE2F6E7FE` | cost | `BiotechIncentiveOrdEffect` |
+| `0xC2F6E804` | cost | `PublicAccessCableOrdEffect` |
+| `0x62F6E808` | cost | `LawnChemBanOrdEffect` |
+| `0x22F6E814` | cost | `BackyardCompostingOrdEffect` |
+| `0x22F6E81B` | cost | `PaperReductionOrdEffect` |
+| `0xC2F6E81F` | cost | `TireRecyclingOrdEffect` (§13) |
+| `0x62F6E82B` | free | `FarmersMarketOrdEffect` |
+| `0xC2F90EB1` | cost | `WaterMeterFactor` (`16-sim-utilities.md`) |
 
 `[OBSERVED]` Monthly costs shown in the Ordinances window for shipped Berlin (population 794,278,
 February 2067), and in a new city with population 0. In the new city every cost ordinance shows
@@ -545,7 +545,7 @@ February 2067), and in a new city with population 0. In the new city every cost 
   [INFERRED]. For Berlin that is 25,598, and it reproduces all three costs exactly: 11, 27 and 29. Every other
   candidate count misses: zoned tiles 24,555, non-filler footprint 18,783, surface pieces 19,220.
 
-Values in the "Year", "Str" and "D" columns are the shipped data [DATA]; the "Money" column is
+The category, year, name-string and `D` values are the shipped data [DATA]; the "Money" column is
 hard-coded per ordinance ID [STATIC]. Effect-key placement: `*OrdEffect` keys live in
 `SC3Tune.ini [IndustrialZoneDeveloper]`/`[FlammabilityLayer]`, `SC3Pollution.ini`,
 `SC3Aura.ini`, `SC3LandValue.ini`, `SC3PowerLayer.ini`/`SC3WaterLayer.ini`. The hard-coded cost
@@ -570,12 +570,12 @@ neighbour; odd types are deals where the **neighbour pays** the player.
 
 All keys are in `NeighborDeals.ini` (sections `[DEAL_RATE_CONSTANTS]`, `[BASE_DEAL_QUANTITIES]`,
 `[MINIMUM_DEAL_COSTS]`, `[DEAL_PENALTIES]`), read as unsigned integers [STATIC].
-`BASE_DEAL_PENALTY` is read but never used [STATIC].
+`BASE_DEAL_PENALTY` is read but has no effect [STATIC].
 
 ### 10.2 Offer generation
 
 When a neighbour connection of the right kind exists (power line, pipe, or road/rail/highway for
-garbage; see `12-networks.md`), the deal manager may generate an offer of type `d` with a chosen
+garbage; see `12-networks.md`), an offer may be generated of type `d` with a chosen
 neighbour [STATIC; the offer schedule is in §10.6]:
 
 1. **Rate** (simoleons per `BASE_*` units per month):
@@ -608,7 +608,7 @@ penalty, its current monthly amount and an age counter in months. At every budge
   amount; the sum is the month's deal income (§7 step 4).
 * **Deal cost** (even types 0, 2, 4): same formula, but if `amount < minimumCost` the amount is
   `minimumCost`; the sum is the month's deal cost.
-* **Penalties**: the deal manager keeps a penalty accumulator. Its value is added to the deal-cost
+* **Penalties**: cancellation penalties accumulate in a pending amount. Its value is added to the deal-cost
   line and the accumulator is cleared when the budget reads it (§7 step 4).
 
 Because the amount is recomputed every month from the stored `units`, a change of `units` changes
@@ -617,15 +617,15 @@ the bill from the next month-end on.
 ### 10.4 Quantity updates and failure to deliver
 
 The utilities side reports the current quantity for each deal type (one active deal per type)
-[STATIC for the rule; OPEN for the exact caller and quantity measure]:
+[STATIC for the rule; OPEN for the exact quantity measure]:
 
 * Buy types (0, 2, 4): the reported quantity is stored in the deal's `reportedQuantity` field
-  (`10-save-format.md` §6.6). Correction: an earlier revision said it overwrites `units`; in
+  (`10-save-format.md` §6.6), not in `units`: in
   480-day runs of the original, Moscow's buy deals kept `units` and the monthly amount unchanged
   while `reportedQuantity` followed the actual draw [OBSERVED]. Bill by `units` (§10.3).
 * Sell types (1, 3, 5): if the deal's `units` is **less than** the reported value, the deal is
-  marked terminated (age set to −1) **without** a penalty. [OPEN: which quantity the caller
-  passes; the advisor text describes this as the contract being dropped when the city cannot
+  marked terminated (age set to −1) **without** a penalty. [OPEN: which quantity is
+  reported; the advisor text describes this as the contract being dropped when the city cannot
   deliver.]
 
 ### 10.5 Contract term and cancellation
@@ -635,20 +635,20 @@ The utilities side reports the current quantity for each deal type (one active d
   months**, it is marked terminated (age −1) and its `penalty` (§10.2 step 5:
   `DEAL_PENALTY_MULTIPLIER × amount`) is added to the penalty accumulator, i.e. charged as deal
   cost at the next month-end. If the age is 60 months or more it is simply removed without
-  penalty. 60 months is therefore the effective contract term. The age is advanced by the deal
-  manager's monthly run (§10.6): every deal whose age is not negative gets `age += 1` each month,
+  penalty. 60 months is therefore the effective contract term. The age is advanced by the neighbours'
+  monthly run (§10.6): every deal whose age is not negative gets `age += 1` each month,
   before the rest of that month's deal processing [STATIC].
 * Terminated deals (age −1) are excluded from the deal list shown to the player. No sweep removes
   them: they are erased only by the remove operation below, or by accepting a new deal of the same
   type. Billing ignores the age on both sides, so a terminated deal keeps billing until it is erased:
   income (odd types) and cost (even types, with the minimum cost) are both summed over every
-  deal in the list without an age test [STATIC, SIMMISC 0x10018F95 income, 0x10019000 cost]. No
-  terminated deal occurs in any shipped city or in the 89 W5 saves (84 deals, all with age ≥ 0)
+  deal in the list without an age test [STATIC]. No
+  terminated deal occurs in any shipped city or in the 89 saves of played runs (84 deals, all with age ≥ 0)
   [DATA].
-* **Deal-made flag** [STATIC, SIMMISC]: one byte per (neighbour, deal type).
-  * Accepting a deal sets it to 1 (0x10017D45). Accepting also erases any existing deal of the
+* **Deal-made flag** [STATIC]: one byte per (neighbour, deal type).
+  * Accepting a deal sets it to 1. Accepting also erases any existing deal of the
     same type, without clearing that deal's flag.
-  * The remove operation (0x10017F16) erases the active deal of type d and sets flag[n][d] = 0
+  * The remove operation erases the active deal of type d and sets flag[n][d] = 0
     for all four neighbours. Only that type's byte is cleared.
   * Player cancellation runs cancel, then remove, so the flag is cleared. Declining an offer also
     runs remove.
@@ -657,7 +657,7 @@ The utilities side reports the current quantity for each deal type (one active d
     neighbour is skipped if either flag of that commodity (both directions) is set.
 * **No automatic expiry**: nothing compares the age with 60 except cancellation. A deal past 60
   months runs until cancelled or until the connection is lost.
-* **Monthly connection check** (0x10018CD5), for every deal with age ≥ 0, after age += 1:
+* **Monthly connection check**, for every deal with age ≥ 0, after age += 1:
   * type 0: no power-line connections to that neighbour;
   * type 1: no connections, or none of them powered;
   * type 2: no pipe connections;
@@ -665,7 +665,7 @@ The utilities side reports the current quantity for each deal type (one active d
   * types 4/5: (not a land neighbour, or no road, rail or highway connections) and no seaport.
   On failure the deal is cancelled: age < 60 → terminated with penalty, flag kept; age ≥ 60 →
   removed, flag cleared.
-* **Pending offers have no timer** [STATIC, SIMADV ~20314–20409]. Each utilities-advisor cycle
+* **Pending offers have no timer** [STATIC]. Each utilities-advisor cycle
   re-tests the offer:
   * the offer is cleared if the city's shortage or surplus condition no longer holds, or no
     neighbour is eligible;
@@ -676,13 +676,12 @@ The utilities side reports the current quantity for each deal type (one active d
 
 ### 10.6 Neighbours and offer eligibility
 
-The deal manager keeps exactly **four neighbours**, one per map edge [STATIC]. At new-city
+The neighbour-deal system keeps exactly **four neighbours**, one per map edge [STATIC]. At new-city
 creation:
 
 * each neighbour's population = `2000 + rand(13000)`, its population cap = 4,000,000, its
   "land neighbour" flag = 1;
-* the land flag is cleared for the neighbour whose edge-midpoint tile fails the map test the
-  manager applies (edge midpoints: `(0, H/2)`, `(W/2, 0)`, `(W−1, H/2)`, `(W/2, H−1)` for
+* the land flag is cleared for the neighbour whose edge-midpoint tile fails the map test (edge midpoints: `(0, H/2)`, `(W/2, 0)`, `(W−1, H/2)`, `(W/2, H−1)` for
   neighbours 0–3). The test is the **sea-water flag** of the pollution cell that contains the tile
   (`17-sim-services.md` §7.2.1 bit 30). A set flag clears the land flag, so a sea edge has no land
   neighbour [STATIC]. The Neighbors-window region image applies the same test at the same tiles
@@ -690,13 +689,11 @@ creation:
 * names are drawn from string table `0xC29A6083`: a distinct random instance `0x29 + rand(36)`
   per neighbour, plus a second distinct random instance `2 + rand(36)`.
 
-**Monthly run of the deal manager** [STATIC]. The neighbours subsystem has its own monthly step, which
+**Monthly run of the neighbour deals** [STATIC]. The neighbours have their own monthly step, which
 runs once a month on day 1, early in the monthly work (`14-sim-clock.md` §6.1, monthly item 2). Each run reads the current date and then:
 1. if the month is January (the run of 1 January), applies the yearly neighbour population
    growth below;
 2. then performs the monthly deal processing, which includes the age increment of §10.5.
-[OPEN: which registration path puts this agent in the schedule, and so its exact position among
-the other tier-4 agents.]
 
 **Neighbour population growth** [STATIC], once a year on 1 January. It uses a fresh local
 generator seeded from the high-resolution timer (`14-sim-clock.md` §8). Population is an
@@ -725,55 +722,55 @@ Connection test [STATIC]:
 | 4, 5 garbage | the city has a seaport (agent type 12330), **or** the neighbour is a land neighbour with ≥ 1 road, rail or highway connection |
 
 **Offer schedule** [STATIC; see `22-advisors-news-petitioners.md` §3.13 for frequency,
-conditions, petition variants and type order]: offers are not generated by the deal manager itself; they are raised
+conditions, petition variants and type order]: offers are not generated by the neighbour deals themselves; they are raised
 by the utilities advisor once per advisor cycle using
 `Advisor-Utilities.ini [NEIGHBOR_DEAL_CONSTANTS]` (`LOW_TREASURY_LEVEL`,
 `MINIMUM_DEAL_POPULATION`; `MIN_POWER_SELL`, `MIN_WATER_SELL`, `MIN_GARBAGE_IMPORT` are present
-in the file but no reader was found). Scenario commands `cmdEnableNewNeighborDeals` /
+in the file but have no observed effect). Scenario commands `cmdEnableNewNeighborDeals` /
 `cmdDisableNewNeighborDeals` gate new offers (`23-scenarios.md`).
 
 Utility effect [STATIC]: the city is always served first; sales come only from what is left
 after the city's own demand, and nothing is reserved in advance. Deal type codes: 0 power buy,
 1 power sell, 2 water buy, 3 water sell, 4 garbage export, 5 garbage import.
 
-* **Power** (SIMUTIL 0x1000406B set-up, 0x10004E57 distribution, 0x10003724 settlement). Per
+* **Power**. Per
   neighbour slot, a buy deal sets an available amount of 1,000,000,000 (effectively unlimited) and
-  a sell deal sets the contract amount; working copies `remBuy`, `remSell` start equal to them.
+  a sell deal sets the contract amount; working copies (remaining buy, remaining sell) start equal to them.
   Per connected network: S = sum of plant outputs; **if no neighbour connection is in the
-  network, S = trunc(S × 1.1)** (a connection removes this 10 % bonus); D = Σ `remBuy` of the
+  network, S = trunc(S × 1.1)** (a connection removes this 10 % bonus); D = Σ remaining buy of the
   connections in it; k = 1 − conservation − stairwell factors; B = trunc((S + D)/k). Tiles are
   served in scan order while consumption ≤ B. If supply runs out, the rest of the network is
-  unpowered, `remBuy` of its slots is set to 0 and the sale gets nothing. Otherwise the leftover
-  L = trunc(B × k) goes first to the sale (`remSell −= min(L, remSell)`); if L < D, `remBuy` is
+  unpowered, the remaining buy of its slots is set to 0 and the sale gets nothing. Otherwise the leftover
+  L = trunc(B × k) goes first to the sale (remaining sell −= min(L, remaining sell)); if L < D, the remaining buy is
   reduced by D − L (the amount actually drawn). Bought power can therefore also feed a sale
-  [INFERRED]. Settlement: a purchase is billed on the amount used (`buy − remBuy`); for a sale,
-  **any undelivered amount (`remSell ≠ 0`, even 1 unit) cancels the deal**.
-* **Water** (SIMUTIL 0x1000E8C4) [STATIC]: with a connected buy deal the supply budget is
+  [INFERRED]. Settlement: a purchase is billed on the amount used (bought − remaining buy); for a sale,
+  **any undelivered amount (remaining sell ≠ 0, even 1 unit) cancels the deal**.
+* **Water** [STATIC]: with a connected buy deal the supply budget is
   unlimited; otherwise it is the sum of facility outputs (no 10 % bonus), divided by k. The deal
-  record passed to the water code carries units (contract, +0x2C) and *amount* (the monthly money
-  figure, +0x30; not a rate). A **sale** (per network) adds `min(units − sold, leftover ×
-  conservation factor)` to *sold* and never reports a quantity to the deal manager; at
+  carries units (the contract quantity) and *amount* (the monthly money
+  figure; not a rate). A **sale** (per network) adds `min(units − sold, leftover ×
+  conservation factor)` to *sold* and never reports a quantity back to the deal; at
   settlement revenue = sold × amount / 1000, and if sold < units (strict) the deal is cancelled
   (only when the deal's edge is connected). A **purchase** adds max(0, used − local pump supply)
   to *bought*; at settlement bought = max(bought, units), cost = amount × bought / 1000, and the
-  manager is told `(2, bought)`, which sets units to it (the contract can only ratchet up). The
-  water code never cancels a purchase.
-* **Garbage** (SIMECO 0x100094A2 disposal) [STATIC]: disposal order is the two facility lists,
+  deal is told the bought quantity, which sets units to it (the contract can only ratchet up). The
+  water side never cancels a purchase.
+* **Garbage** [STATIC]: disposal order is the two facility lists,
   the store, then — with an export deal — **all** remaining garbage goes to the neighbour,
-  uncapped; without one the overflow is "abducted" up to a cap. Monthly the manager is told
-  `(4, total exported this month)`, setting units to it (possibly 0). An import deal adds
+  uncapped; without one the overflow is "abducted" up to a cap. Monthly the export deal is told
+  the total exported this month, setting units to it (possibly 0). An import deal adds
   units/30 per pass to the imported and produced totals, pushed through the same disposal; the
-  leftover is forced into the store; no quantity is reported for imports. The garbage code never
+  leftover is forced into the store; no quantity is reported for imports. Garbage handling never
   cancels a deal.
-* **Connection check** (deal manager monthly, SIMMISC 0x10018CD5) [STATIC]: types 0/2 are
+* **Connection check** (monthly) [STATIC]: types 0/2 are
   cancelled when their edge connection is gone; types 1/3 when no plant/pump remains at that
   edge; types 4/5 when (no edge flag, or the road, rail and highway connection counts are all 0)
   and the city has no seaport (type 0x302A).
-* **Quantity update** (manager slot 0xA0, SIMMISC 0x100182AB) [STATIC]: for the buy types
+* **Quantity update** [STATIC]: for the buy types
   (0, 2, 4) units ← the reported quantity; for the sell types (1, 3, 5), if units < the reported
   quantity the deal's age is set to −1 (terminated, no penalty, no age check); in practice only
   power sales reach this.
-* **Cancellation penalty** (deal manager slot 0x80, SIMMISC 0x10017F89): if the deal's age is
+* **Cancellation penalty**: if the deal's age is
   below 60 (months, [INFERRED]) it is ended and its penalty (`MULT × amount` from the offer) is
   added to a pending amount charged as a month-end expense; at age ≥ 60 it is removed with no
   penalty.
@@ -806,7 +803,7 @@ too late.
    pick one deal uniformly at random; it is offered if `year ≤ currentYear`, the deal is enabled
    (scenario scripts can disable deals), the city does not already have that business, and for
    the casino (19003) the Legalized Gambling ordinance `0xA0D07129` passes the ordinance query
-   (SIMADV, pushed at 0x10005588, 0x100057E2, 0x10005D4D) [STATIC; that the query means
+   [STATIC; that the query means
    "enacted" rather than "available" is INFERRED from its other uses, 22 §3.7]. The offer is raised as advisor message `messageId`. Because the evaluation is weekly,
    an offer can appear in any week of the month.
 3. If accepted, the business building is placed by the player (agent types 19001–19004, family
@@ -817,7 +814,7 @@ too late.
 
 ## 12. Neighbour cities and the outside economy
 
-Neighbour cities are records held by the neighbour-deal manager; each neighbour has a population
+Neighbour cities are records of the neighbour-deal system; each neighbour has a population
 figure that the deal formulas use (§10.2, sell types) [STATIC]. Neighbour population growth is in §10.6. How the outside economy (`SC3WorldLayer.ini` `EconomicPhases`,
 `ExternalJobDemand`, `JobToResFactor`) feeds RCI demand, is owned by `15-sim-growth.md`. Taxes reach demand only through the table of §4.2.
 
@@ -841,75 +838,18 @@ the cost; the remainder of the line is a comment. Cost lookup for an occupant of
 `[TuningParameters] TireRecyclingOrdEffect = pct:type,type,…` — `pct` (must be ≤ 100) applies to
 each listed agent type (shipped list: roads, highway, ramps, bridges and highway pieces).
 
-Shipped `[BuildingPlacementCosts]` (63 entries, file order) [DATA]:
+Shipped `[BuildingPlacementCosts]` has 63 entries in `SC3BudgetLayer.ini` (the full list is read from that file at run time). Example entries [DATA]:
 
 | Agent type | Cost | Comment in the file |
 |---|---|---|
 | 300 | 3 | Flora |
 | 12111 | 5000 | CoalPlant |
-| 12112 | 8500 | OilPlant |
-| 12113 | 4500 | GasPlant |
-| 12114 | 30000 | MicrowavePlant |
 | 12115 | 20000 | NuclearPlant |
-| 12116 | 50000 | FusionPlant |
-| 12117 | 15000 | SolarPlant |
-| 12118 | 250 | WindPlant |
-| 17100 | 5 | Powerlines |
-| 12810 | 300 | WaterPump |
-| 12820 | 15000 | WaterTreatment |
-| 12830 | 1500 | DesalinationPlant |
-| 12840 | 150 | WaterTower |
-| 17300 | 5 | Pipes |
-| 12851 | 5000 | Recycling Center |
-| 12852 | 7500 | Incinerator |
-| 12853 | 25000 | Waste to Energy Incinerator |
 | 16000 | 10 | Road |
-| 16001 | 150 | Highway |
-| 17202 | 75 | Highway Ramp |
-| 17000 | 10 | Rail |
-| 17400 | 150 | Subway |
-| 16002 | 100 | Road Bridge |
-| 16003 | 500 | Rail Bridge |
-| 16004 | 1000 | Highway Bridge |
-| 16006 | 1000 | Tunnels |
-| 12210 | 150 | Bus Station |
-| 12230 | 250 | Rail Station |
-| 12360 | 500 | Subway Station |
-| 12361 | 500 | SubwaytoRail Station |
-| 13130 | 500 | PoliceStation |
-| 13002 | 500 | FireStation |
-| 13881 | 2500 | Jail |
-| 13310 | 500 | Hospitals |
-| 13010 | 500 | School |
-| 13873 | 3000 | College |
-| 14130 | 1000 | Library |
-| 14140 | 1500 | Museum |
-| 14311 | 100 | Small Park |
-| 14316 | 100 | Fountain |
-| 14314 | 500 | PlayGround |
-| 14315 | 500 | Pond |
-| 14312 | 1000 | Large Park |
-| 14313 | 2500 | Ball Park |
-| 14430 | 3000 | Marina |
-| 14450 | 5000 | Zoo |
 | 14600 | 75000 | Stadium |
-| 13872 | 75000 | Medical Research Center |
-| 13874 | 75000 | Science Center |
 | 12350 | 250000 | SpacePort |
-| 14550 | 5000 | Lighthouse |
-| 14003 | 10000 | Geyser Park |
-| 14370 | 25000 | Country Club |
-| 14325 | 125000 | Theme Park |
-| 11001 | 25000 | Defense Contractor |
-| 16017 | 2500 | RoadNeighbor |
-| 17006 | 2500 | RailNeighbor |
-| 12102 | 2000 | PowerNeighbor |
-| 17207 | 5000 | HighwayNeighbor |
-| 17310 | 2000 | PipesNeighbor |
-| 17410 | 4000 | SubwayNeighbor |
-| 20002 | 1500 | Winter Wonderland |
 
-A type with no entry and no listed ancestor costs **0** (no error, no message) [STATIC, SIMMISC 0x10008FBE]. The hierarchy distance must be below 50 000; the search stops early at an exact match (distance 0). Flora is listed only as `300`, so every flora type inherits cost 3 through the hierarchy `[INFERRED]`.
+A type with no entry and no listed ancestor costs **0** (no error, no message) [STATIC]. The hierarchy distance must be below 50 000; the search stops early at an exact match (distance 0). Flora is listed only as `300`, so every flora type inherits cost 3 through the hierarchy `[INFERRED]`.
 
 ## 14. Budget history and graphs
 
@@ -1018,7 +958,6 @@ Byte layout in `10-save-format.md` §6.6 [DATA 59/59]. Semantics
   list and sets the neighbour's flag for that deal type. Each deal records partner name and index,
   type (§10.1), monthly amount, quantity, rate, a penalty, a month counter and a year; see the
   field table for which meanings are still [OPEN].
-* Registration path (and so the exact tier-4 position) of the deal manager's monthly agent (§10.6).
 
 ## Open questions
 

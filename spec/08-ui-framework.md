@@ -11,7 +11,7 @@ Image payload decoding is in `04-graphics-formats.md`; string tables and fonts i
    `Res/UI/Shared/*.ixf`, `Res/UI/Shared/DLG.IXF`, `MAIN.IXF` and `SYS.IXF` has Type `0x62B9DA24`
    (a 2-D image). No resource of any other type exists in these files (checked: 14/14 IXF files in `Res/UI/Shared/`,
    711/711 entries). The Windows executables carry no dialog/RCDATA resources either `[STATIC]`.
-   The values `0x0000057E` and `0x00006400` that appear in the global resource census are
+   The values `0x0000057E` and `0x00006400` seen among the resource keys of other files are
    **Group** IDs (not Type IDs, see `03-resource-types.md` §2) of occupant attribute files and
    sprite/path attribute files (`13-buildings-occupants.md`, `26-automata.md`); they are not UI
    resources.
@@ -119,7 +119,7 @@ length), the last 20 px are the 20×20 thumb `[DATA]`.
 
 ### 2.3a "Gonzo" custom control art (`42DEC7D2_GonzoCtrls.ixf`) `[DATA]`
 
-The game's own controls ("Gonzo" is the application's window-class name) take their art from group
+The game's own custom controls ("Gonzo" is only the name of this art set) take their art from group
 `0x42DEC7D2`. Users `[STATIC]`: the budget pages, the petitioner dialog, the main in-game panel, the
 data-map window, the network tools, and the Building Architect Tool. Every image except the sliders
 is a 4-cell horizontal strip in the standard order (disabled, normal, pressed, highlighted;
@@ -158,9 +158,9 @@ framework controls use when the screen logic does not supply its own. All defaul
 |---|---|---|
 | Framed window (frame pieces) | `0xE2B14588` | WinGen |
 | Title-bar buttons of framed windows | `0x62B19CE9` | SysBtns |
-| Push button (type 2, section 3.2) | `0xE2B66DB8` | GZBtn |
-| Check box (type 6) | `0xC2D6E93A` | GZCheckBox |
-| Radio button (type 7) | `0x0000000A` | GZRadioBtn (keyed) |
+| Push button (stretchable push, section 3.2) | `0xE2B66DB8` | GZBtn |
+| Check box (section 3.2) | `0xC2D6E93A` | GZCheckBox |
+| Radio button (section 3.2) | `0x0000000A` | GZRadioBtn (keyed) |
 | Horizontal slider | `0xC2B99E09` | GZSliderH |
 | Vertical slider | `0x02B99F6F` | GZSliderV |
 | Scroll bar | `0xE2B99E01` | GZScrollbar |
@@ -186,8 +186,8 @@ default (section 3.6).
 
 The program registers these further colours, whose users are `[OPEN]`: (255,255,255),
 (26,32,107), (49,54,124), (160,160,160), (218,221,255), (124,144,255), (168,180,255),
-(125,129,181), (108,113,185), (179,182,224), (125,129,189). Question: which controls draw with
-them? Until this is known, an implementation may use them for panel frames and labels.
+(125,129,181), (108,113,185), (179,182,224), (125,129,189). `[OPEN]` which controls draw with
+them. Until this is known, an implementation may use them for panel frames and labels.
 
 ## 3. Controls (window classes) and generic behaviour
 
@@ -223,8 +223,8 @@ GZSliderH / GZSliderV); a framed window with a title bar and title-bar buttons (
 section 9.3); an image/bitmap window used by the map, data-map and neighbour screens and by the
 Building Architect Tool; a graph/progress area used by the graphs, data-map and preferences screens
 (three colours, section 2.4); and a decoration control used by the budget, system-information and
-scenario dialogs. Question: how does each of these draw itself and which notifications does it
-send? Until answered, an implementation should give the slider the 3.4a scroll-bar semantics with
+scenario dialogs. `[OPEN]` how each of these draws itself and which notifications it
+sends. Until answered, an implementation should give the slider the 3.4a scroll-bar semantics with
 a single thumb, and draw the others as plain image or text panels `[INFERRED]`.
 
 ### 3.2 Buttons `[STATIC]`
@@ -237,20 +237,20 @@ Button types and image slicing:
 
 | Type | Kind | Image cells (horizontal strip) | Drawing |
 |---|---|---|---|
-| 1 | Text-only push button | none | caption only |
-| 2 | Push button, stretchable | 4 | 3-slice: the chosen cell is split into thirds; left third drawn at the left edge, right third at the right edge, middle third stretched (tiled) over the remainder |
-| 3 | Push button, fixed size | 4 | cell blitted 1:1 |
-| 4 | Toggle button, stretchable | 4 | 3-slice as type 2 |
-| 5 | Toggle button, fixed size | 4 | cell blitted 1:1 |
-| 6 | Check box | 8 | cell drawn beside the caption |
-| 7 | Radio button | 8 | cell drawn beside the caption |
+| text-only | Text-only push button | none | caption only |
+| push-stretch | Push button, stretchable | 4 | 3-slice: the chosen cell is split into thirds; left third drawn at the left edge, right third at the right edge, middle third stretched (tiled) over the remainder |
+| push-fixed | Push button, fixed size | 4 | cell blitted 1:1 |
+| toggle-stretch | Toggle button, stretchable | 4 | 3-slice as push-stretch |
+| toggle-fixed | Toggle button, fixed size | 4 | cell blitted 1:1 |
+| check box | Check box | 8 | cell drawn beside the caption |
+| radio button | Radio button | 8 | cell drawn beside the caption |
 
-Cell width = strip width / 4 (types 2–5) or / 8 (types 6–7); cell height = strip height. When no
+Cell width = strip width / 4 (push and toggle types) or / 8 (check box and radio button); cell height = strip height. When no
 source rectangle is supplied the framework assumes a 128×32 strip.
 
-**4-cell selection** (types 2–5), cell index 0-based from the left:
+**4-cell selection** (push and toggle types), cell index 0-based from the left:
 
-| Condition (checked top-down) | Push (2, 3) | Toggle (4, 5) |
+| Condition (checked top-down) | Push (stretch, fixed) | Toggle (stretch, fixed) |
 |---|---|---|
 | disabled | 0 | 0 |
 | pressed | 2 | 2 |
@@ -263,7 +263,7 @@ So a 4-cell strip is ordered **disabled, normal, pressed/on, highlighted**. This
 selects disabled → 0, pressed → 2, checked → 3, otherwise 1; another has only three cells
 (disabled 0, normal 1, pressed 2) and no hover cell. `[STATIC]`
 
-**8-cell selection** (types 6–7): cell = base + (0 if checked else 1), where base is 0 normal,
+**8-cell selection** (check box, radio button): cell = base + (0 if checked else 1), where base is 0 normal,
 2 hover, 4 pressed, 6 disabled (disabled overrides pressed, pressed overrides hover). The image is
 vertically centred in the control; it sits at the left edge (caption to its right) or, with the
 "image right" alignment, at the right edge. `[STATIC]`, consistent with `GZRadioBtn`/`GZCheckBox` art
@@ -272,10 +272,10 @@ vertically centred in the control; it sits at the left edge (caption to its righ
 Caption: drawn centred in the control (both axes) for push/toggle buttons, offset by 1 pixel right
 and down while pressed if the "shift caption when pressed" flag is set. Separate caption colours
 exist for normal, highlighted and disabled; a colour left unset means "use the font's own
-colour". A new button's base colour is grey (192,192,192) `[STATIC]` (whether this is the face or the
-caption colour is `[OPEN]`). Buttons of types 2–7 draw only their image cell, with no separately
-filled face `[INFERRED]`; a text-only button (type 1) draws only its caption. Question: does a
-type-1 button fill its rectangle with the grey base colour?
+colour". The default button colour is grey (192,192,192) `[STATIC]` (whether this is the face or the
+caption colour is `[OPEN]`). Buttons other than text-only draw only their image cell, with no separately
+filled face `[INFERRED]`; a text-only button draws only its caption. `[OPEN]` whether a
+text-only button fills its rectangle with the grey base colour.
 
 **Mouse/keyboard state machine** (default "act on release" mode):
 
@@ -301,25 +301,24 @@ owning screen logic, not by the button. `[INFERRED]`
 
 * A control shows a tooltip only if its tooltip flag is set and its tooltip text is non-empty.
   Tooltip text comes from a string table entry (`05-text-and-fonts.md`).
-* When the pointer enters such a control, the control asks the global tooltip manager to show a
-  tip with: the text, the anchor (either the control's screen rectangle, or a specific point if the
+* When the pointer enters such a control, a tip is requested with: the text, the anchor (either the control's screen rectangle, or a specific point if the
   "anchor at point" option is set), two placement flags, and background colour **RGB (255,255,224)**
   (pale yellow).
 * Pressing the mouse button on the control, the pointer leaving the control or the control being
   destroyed removes the tip.
-* Timing `[STATIC]`: the tooltip manager counts ticks of its own repeating timer from the moment a
+* Timing `[STATIC]`: ticks of a repeating timer are counted from the moment a
   tip is requested. Placement flag 1 = "show immediately"; flag 2 = "manual" (no automatic
   timing). Without flag 2 the tip appears when the count reaches **1** tick and is removed
   automatically when the count reaches **3** ticks (counted from the request, not from the
   appearance). A new request (pointer entering another control) replaces the current tip and
-  restarts the count. Each request stops and restarts the manager's timer, so ticks are counted
+  restarts the count. Each request restarts the timer, so ticks are counted
   from the request. The timer period is **750 ms** `[STATIC]`. Hence a tip appears **750 ms** after
   the pointer enters the control and is removed **2250 ms** after it entered (i.e. it is visible for
   1500 ms) unless flag 2 ("manual") is set, in which case it stays until the pointer leaves, the
   button is pressed or a hide message arrives.
-* The manager broadcasts a "tooltip shown" notification when a tip becomes visible and a
-  "tooltip removed" notification when it is removed, each with the tip's sequence number. It also
-  accepts four further requests whose effect is `[OPEN]` (probably update text and move tip).
+* A "tooltip shown" notification is emitted when a tip becomes visible and a
+  "tooltip removed" notification when it is removed, each with the tip's sequence number. Four
+  further tooltip requests exist whose effect is `[OPEN]` (probably update text and move tip).
 
 #### 3.3a Observed tooltip geometry `[OBSERVED]`
 
@@ -360,7 +359,7 @@ are in client pixels. Box = the whole tip including its 1 px border.
 * **Clamping:** a box that would cross the right edge of the client area is shifted left so that
   its right edge is client width − 2. Examples: Rotate Counterclockwise at 1024 → box ends at
   1022; at 800 → box ends at 798. There is no flip to the other side. Clamping at the left, top
-  and bottom edges was not exercised.
+  and bottom edges is `[OPEN]`.
 
 **Behaviour**
 
@@ -616,41 +615,75 @@ All shipped data follows this grammar: 7/7 files, 14/14 tables, 881/881 lines. `
 6. Lines with vk = 0 (Ctrl, Alt or Shift alone: commands 66, 67, 92) can never match a key event;
    they exist in the data but have no effect through this mechanism `[INFERRED]`.
 
-### 5.4 Default bindings (ENGLISH.IXF, table 1) `[DATA]` + command meaning `[STATIC]`
+### 5.4 Command numbers (ENGLISH.IXF, table 1) `[DATA]` + command meaning `[STATIC]`
 
-"Tool class" means the command starts the same action as the tool-menu item whose `COMM` class ID
-(and parameter) is given in `MenuItem.INI` (section 6); the MenuItem key is listed for reference.
+The key assigned to each command is in the shipped file (`Res/Hotkeys/ENGLISH.IXF`, instance 1) and
+is not reproduced here; an implementation reads it from the file (section 5.2). This section gives
+what each command number does.
+
+"Tool class" means the command starts the same action as the tool-menu item whose `MenuItem.INI`
+key (section 6) is given; parameters of the command object come from that item.
+
+**Tool commands.**
+
+| cmd | Action (MenuItem key) |
+|---|---|
+| 1 | residential low density (`0x10003101`) |
+| 4 | residential medium (`0x10003102`) |
+| 5 | residential high (`0x10003103`) |
+| 6 | commercial low (`0x10003201`) |
+| 7 | commercial medium (`0x10003202`) |
+| 8 | commercial high (`0x10003203`) |
+| 9 | industrial low (`0x10003301`) |
+| 10 | industrial medium (`0x10003302`) |
+| 11 | industrial high (`0x10003303`) |
+| 12 | de-zone (`0x10003007`) |
+| 13 | power lines (`0x10005001`) |
+| 14 | bus stop (`0x10004004`); only if available |
+| 15 | road (`0x10004001`) |
+| 16 | rail (`0x10004101`) |
+| 17 | train station (`0x10004102`) |
+| 18 | demolish (`0x10002006` etc.) |
+| 19 | meet advisors (`0x10001006`) |
+| 20 | budget (`0x10008001`) |
+| 21 | ordinances (`0x10008002`) |
+| 22 | map view (`0x10008004`) |
+| 24 | police station (`0x10006201`) |
+| 25 | fire station (`0x10006003`) |
+| 26 | hospital (`0x10006401`) |
+| 27 | school (`0x10006402`) |
+| 28 | load saved city (`0x10009301`) |
+| 29 | new city (`0x10009004`) |
+| 30 | save (`0x10009002`) |
+| 31 | save as (`0x10009006`) |
+| 51 | power-plant picker (`0x10005002`) |
+| 52 | highway (`0x10004301`); only if available |
+| 53 | subway (`0x10004201`); only if available |
+| 54 | subway station (`0x10004202`); only if available |
+| 55 | jail (`0x10006202`) |
+| 56 | college (`0x10006403`) |
+| 57 | small park (`0x10006601`) |
+| 58 | big park (`0x10006602`) |
+| 59 | rewards picker (`0x10006009`) |
+| 60 | preferences (`0x10009001`) |
+| 64 | load terrain (`0x10009303`) |
+| 68 | water-building picker (`0x10005009`) |
+| 69 | water pipes (`0x10005003`) |
+| 70 | place trees (`0x10002001`) |
+| 71 | place water (`0x10002002`) |
+| 72 | landmark picker (`0x10006008`) |
+| 73 | neighbours (`0x10008005`) |
+| 87 | load starter town (`0x10009302`) |
+| 93 | landfill zone (`0x10003004`) |
+| 95 | garbage-building picker (`0x1000500A`) |
+
+Aliases (a second key for the same action): 61 = 60; 62 = 28; 65 = 30; 86 = 29; 88 = 87; 89 = 64;
+90 = 31.
+
+**Engine commands.**
 
 | cmd | Key | Action |
 |---|---|---|
-| 1 | Q | Tool class `0x42E88586` (residential low density, item `0x10003101`) |
-| 4 | W | `0x02E88915` residential medium (`0x10003102`) |
-| 5 | E | `0xA2E8893B` residential high (`0x10003103`) |
-| 6 | A | `0x02E88949` commercial low (`0x10003201`) |
-| 7 | S | `0xA2E8895A` commercial medium (`0x10003202`) |
-| 8 | D | `0x02E88968` commercial high (`0x10003203`) |
-| 9 | Z | `0xC2E8898F` industrial low (`0x10003301`) |
-| 10 | X | `0xA2E8899D` industrial medium (`0x10003302`) |
-| 11 | C | `0x02E889AA` industrial high (`0x10003303`) |
-| 12 | V | `0x82E88C9C` de-zone (`0x10003007`) |
-| 13 | L | `0x42C2F8BF` power lines (`0x10005001`) |
-| 14 | Alt+R | `0x02FF04FE` bus stop (`0x10004004`); only if the transit sub-system reports it available |
-| 15 | R | `0xC2B5DE77` road (`0x10004001`) |
-| 16 | T | `0x42B5DE98` rail (`0x10004101`) |
-| 17 | Alt+T | `0x22FF058F` train station (`0x10004102`) |
-| 18 | B | `0xE3166801` demolish (`0x10002006` etc.) |
-| 19 | Ctrl+A | Post message `0x724A82D0` (meet advisors; item `0x10001006`) |
-| 20 | Ctrl+B | `0x025DDC4A` budget (`0x10008001`) |
-| 21 | Ctrl+O | Post message `0x724A82D7` (ordinances; `0x10008002`) |
-| 22 | Ctrl+M | `0x411164F1` map view (`0x10008004`) |
-| 24 | P | `0x42FF052F` police station (`0x10006201`) |
-| 25 | F | `0x22FF054C` fire station (`0x10006003`) |
-| 26 | H | `0xE2FF0555` hospital (`0x10006401`) |
-| 27 | K | `0xC2FF0563` school (`0x10006402`) |
-| 28 | Ctrl+L | `0x610438A4` param `0x83172AD7` load saved city (`0x10009301`) |
-| 29 | Ctrl+N | `0xE3270FE9` new city (`0x10009004`) |
-| 30 | Ctrl+S | `0x410438DD` save (`0x10009002`) |
-| 31 | Ctrl+Alt+S | `0x410438DD` param `0xC3172AEA` save as (`0x10009006`) |
 | 33 | F10 | Application exit request (same as 91, 102) |
 | 35 | `/` | Toggle pause (paused → resume, running → pause) |
 | 36 | `,` | Simulation speed one step slower (speeds 2→1, 3→2, 4→3; no change at 1) |
@@ -663,43 +696,16 @@ All shipped data follows this grammar: 7/7 files, 14/14 tables, 881/881 lines. `
 | 45–48 | Left, Up, Right, Down | Scroll the view in that direction `[INFERRED]` |
 | 49 | F12 | Toggle the game UI panels (the "hide/show toolbars" toggle of `09-ui-screens.md` §4). Hidden: the whole tool-menu column with any open fly-out, the whole bottom bar (news ticker, city name, population, funds, date, pause/speed controls, query button, RCI indicator, messages button), and the navigator (minimap, zoom/rotate buttons, layers button). Visible: only a small round "show UI" button in the window's bottom-right corner (about 20 × 20 px). The map does **not** move or resize: it already fills the client area under the panels, so hiding just uncovers it. A second F12 restores everything. `[STATIC]` toggle / `[OBSERVED]` panels |
 | 50 | Space | Centre the view on the tile under the mouse pointer `[INFERRED]` |
-| 51 | Ctrl+E | `0xE2ED3560` param `0x62E925A2` power-plant picker (`0x10005002`) |
-| 52 | Shift+R | `0x42B5DE86` highway (`0x10004301`); only if available |
-| 53 | Shift+T | `0xC2B5DEA6` subway (`0x10004201`); only if available |
-| 54 | Alt+Shift+T | `0x62FF059B` subway station (`0x10004202`); only if available |
-| 55 | Shift+P | `0x22FF053F` jail (`0x10006202`) |
-| 56 | Shift+K | `0xC2FF0571` college (`0x10006403`) |
-| 57 | J | `0x02FF05AA` small park (`0x10006601`) |
-| 58 | Shift+J | `0x82FF05B7` big park (`0x10006602`) |
-| 59 | Ctrl+R | `0xE2ED3560` param `0x62E92553` rewards picker (`0x10006009`) |
-| 60 | Ctrl+P | `0xC3001401` preferences (`0x10009001`) |
-| 61 | F4 | same as 60 |
-| 62 | F3 | same as 28 |
-| 63 | G | Toggle a view display option (bit 0 of the view option mask; grid `[INFERRED]`) |
-| 64 | Ctrl+T | `0x610438A4` param `0x23172AF2` load terrain (`0x10009303`) |
-| 65 | F2 | same as 30 |
+| 63 | G | Toggle a view display option (grid `[INFERRED]`) |
 | 66 / 67 / 92 | Ctrl / Alt / Shift alone (vk 0) | no effect (see 5.3 step 6) |
-| 68 | Ctrl+I | `0xE2ED3560` param `0xE2E92527` water-building picker (`0x10005009`) |
-| 69 | I | `0x22C2F8C5` water pipes (`0x10005003`) |
-| 70 | U | `0x4253EC3F` place trees (`0x10002001`) |
-| 71 | Shift+U | `0x02E763C1` place water (`0x10002002`) |
-| 72 | Ctrl+D | `0xE2ED3560` param `0x22E92581` landmark picker (`0x10006008`) |
-| 73 | Ctrl+W | `0x630288E9` neighbours (`0x10008005`) |
 | 75, 76 | keypad 1, 1 | Set zoom level index 0 |
 | 77, 78 | keypad 2, 2 | Set zoom level index 1 |
 | 79, 80 | keypad 3, 3 | Set zoom level index 2 |
 | 81, 82 | keypad 4, 4 | Set zoom level index 3 |
 | 83, 84 | keypad 5, 5 | Set zoom level index 4. Keypad 1 = zoom 0 = **farthest**; keypad 5 = zoom 4 = **nearest** `[OBSERVED]` |
 | 85 | Esc | Cancel the current tool (select no tool) |
-| 86 | F5 | same as 29 |
-| 87 | Ctrl+F | `0x610438A4` param `0x63172B74` load starter town (`0x10009302`) |
-| 88 | F6 | same as 87 |
-| 89 | F7 | same as 64 |
-| 90 | F1 | same as 31 |
 | 91 | Ctrl+Q | Application exit request |
-| 93 | Y | `0xC2E889B6` landfill zone (`0x10003004`) |
 | 94 | Ctrl+G | Same as the navigator's **layers** button (the stacked-layers icon above the minimap): opens the **View City Layers** dialog (above-ground / underground layer check boxes, City Layer Views radio list, Apply, Default View, OK). It is not a `MenuItem.INI` command. `[STATIC]` + `[OBSERVED]` |
-| 95 | Ctrl+Y | `0xE2ED3560` param `0xC2F291A9` garbage-building picker (`0x1000500A`) |
 | 96–100 | Ctrl+Shift+F5, F1, F2, F3, F4 | No effect in this build `[STATIC]` (see note below) |
 | 102 | Alt+F4 | Application exit request |
 | 108 | Ctrl+Shift+P | No effect in this build `[STATIC]` |
@@ -711,7 +717,7 @@ All shipped data follows this grammar: 7/7 files, 14/14 tables, 881/881 lines. `
 Table 2 (restricted mode) contains only commands 18, 41–48, 50, 67, 70, 71, 75–85 and 96–100 with
 the same keys as table 1. `[DATA]`
 
-**Unhandled commands** `[STATIC]`. Only the in-game city view acts on hotkey commands. Commands
+**Unhandled commands** `[STATIC]`. Commands
 **74, 96, 97, 98, 99, 100, 104, 108 and 112** have no effect in this build, so those bindings
 (including English-UK F9 / Shift+F9 for 74 / 104, Ctrl+Shift+F1–F5 and Ctrl+C) do nothing. They look like leftovers of debug or cut features. A compatible engine must accept
 them in the file and ignore them.
@@ -725,7 +731,7 @@ Commands carrying a tool class are executed exactly as if the corresponding tool
 clicked (section 6.1).
 
 **Rotation direction** `[OPEN]`. Commands 43 and 44 rotate the view in opposite directions.
-Question: does PageDown (43) rotate clockwise or counter-clockwise? Test against the original by
+`[OPEN]` whether PageDown (43) rotates clockwise or counter-clockwise; test against the original by
 pressing PageDown once from the default view and noting which compass edge comes to the top.
 Command 41 zooms in and 42 zooms out `[INFERRED]` from the keys.
 
@@ -749,21 +755,21 @@ token `END`. Shipped record lines carry trailing text after `END` (a `;` followe
 | enabled | 1 = item available (all shipped items are 1) `[INFERRED]` |
 | nameTable, nameID | String (table `0x225872FE` "GUI" or `0x041F2625` "SE-UI", instance) used as the button's tooltip/name `[STATIC]` |
 | altTable, altID | Second string reference; usually identical to the first; differs for Map View and Lay Subway Rail. Used as the tool's short name (e.g. in status/help text) `[INFERRED]` |
-| kind | `COMM` = run a command object; `PMSG` = post a message. (The executor also supports a third, synchronous "send message" kind; no shipped item uses it.) `[STATIC]` |
+| kind | `COMM` = run a command; `PMSG` = post a message. (No other kind is used by a shipped item.) `[STATIC]` |
 | target | For `COMM`: command class ID. For `PMSG`: message ID. `0x00000000` = the item does nothing itself (used by "Take Snapshot", whose sub-menu items do the work) |
 | arg1, arg2, arg3 | `COMM`: three integer arguments handed to the command object in order (e.g. building-picker category ID in arg1; `1` in arg2 for Map View and Neighbors). `PMSG`: arg1 and arg2 become the message's first two parameters (third is 0) |
 
 Execution `[STATIC]`:
 
-* `COMM`: create the command object registered under `target`, give it the three integer
-  arguments (arg1, arg2, arg3 in that order), then execute it. Examples from the shipped file:
+* `COMM`: run the command identified by `target` with the three integer
+  arguments (arg1, arg2, arg3 in that order). Examples from the shipped file:
   `0xE2ED3560` = building picker; arg1 selects the category:
   `0x62E925A2` power plants, `0xE2E92527` water buildings, `0xC2F291A9` garbage, `0x22E92581`
   landmarks, `0x62E92553` rewards). `0x610438A4` = load dialog (arg1 `0x83172AD7` city,
   `0x63172B74` starter town, `0x23172AF2` terrain, `0xA42C7725` scenario); `0x410438DD` = save
   (arg1 `0xC3172AEA` = save-as). The behaviour of each command belongs to `09-ui-screens.md` and the
   simulation documents.
-* `PMSG`: post asynchronously the message `{target, arg1, arg2, 0}` to the global message queue.
+* `PMSG`: post asynchronously the message `{target, arg1, arg2, 0}`.
   Shipped messages: `0x724A82D0` meet advisors, `0x724A82D7` ordinances, `0xC30177CA` go-to
   (emergency), `0x2435FF70` snapshot (arg1 = 0 view snapshots / 1 small / 2 medium / 3 large).
 
@@ -869,7 +875,7 @@ itself.
 * **Opening.** A plain click on a second-level button that owns a fly-out immediately selects the
   fly-out's currently checked entry and activates its tool. Moving onto an entry and releasing
   the mouse there selects it.
-* CORRECTION `[OBSERVED 640 × 480, Residential, 50 fps capture]`: there is **no hold delay**. The
+* `[OBSERVED 640 × 480, Residential, 50 fps capture]`: there is **no hold delay**. The
   fly-out appears on mouse-**down**, within one 20 ms frame, and stays only while the button is
   held. A quick click shows it for the duration of the press only (80 ms press → 4 frames).
   Release:
@@ -880,8 +886,8 @@ itself.
 
   The sub-menu column stays open in all three cases, and also after a later map click and Escape.
   The checked entry is **not** saved in `SC3.cfg`: the file was rewritten byte-identical on exit
-  after Dense was checked, and after a restart Light Residential was checked again. Whether a city
-  save carries it was not tested.
+  after Dense was checked, and after a restart Light Residential was checked again. `[OPEN]` whether a city
+  save carries it.
 * **Placement.** The fly-out opens to the **left** of the button, because the column sits at the
   right edge of the window. Its right side touches the column, and its first entry sits about
   7 px above the button's centre.
@@ -897,7 +903,7 @@ itself.
 * Its width fits the longest label: Residential 112, Commercial 115, Health & Education 66.
 * The background is the sub-menu's strip colour: zones (148,174,90), civic (74,101,148). Text is
   white; the current entry has a check mark.
-* Clamping at the screen top and bottom was not tested.
+* `[OPEN]` clamping at the screen top and bottom.
 
 **Column background pieces** `[STATIC]` (image sizes `[DATA]`). The tool-menu column is 96 px wide
 and is assembled from these instances, chosen by screen height:
@@ -917,9 +923,7 @@ filler tiled below that down to the bottom bar. At 600 lines `0xFFFF` is at y = 
 top cap. The column is placed against the **right edge** of the game window: its right side touches the
 window's right edge and its top is at y = 0 `[OBSERVED at 2048×1152]`. At that size the first root
 button starts about 105 px from the top, which matches the 97-px top cap above. The column's
-background runs down to the navigator panel at the bottom-right. While the column is shown it listens for the
-tooltip-shown and tooltip-removed notifications (section 3.3) `[STATIC]`; `[OPEN]` what it does
-with them (probably it suppresses its own highlight while a tip is up).
+background runs down to the navigator panel at the bottom-right.
 
 Other in-game art in `0x02F78C6D` identified by inspection `[DATA]`: `0x0000FFFE` (96×25) bottom
 cap of the menu column at 600 lines `[INFERRED]` role; `0x52FB06EA` (160×39) 4-cell help ("?") button; `0x82790742` (16×64) end cap of
@@ -959,32 +963,23 @@ an implementation can key them by file name.)
 | DEMOLISH CLEAR CURSOR.cur | demolish / clear |
 | WAND OF DESTRUCTION CURSOR.cur | demolish variant `[INFERRED]` |
 | snapshot cursor.cur | snapshot mode |
-| PAN UP / UP LEFT / LEFT / DOWN LEFT / DOWN / DOWN RIGHT / RIGHT / UP RIGHT ARROW.cur | drag-scroll direction (8.3) |
+| PAN `<direction>` ARROW.cur (8 directions: up, up left, left, down left, down, down right, right, up right) | drag-scroll direction (8.3) |
 | EARLY MOVER CURSOR.cur | drag-scroll inside the dead zone |
-| LEVEL TERRAIN, LOWER TERRAIN, MANY TREES, PAINT WATER, PLANT TREE, RAISE LOWER TERRAIN, RAISE TERRAIN, RIVER | landscaping / terrain-editor tools |
+| one file per landscaping / terrain-editor tool (level, lower, raise, raise-lower terrain; trees; paint water; river) | landscaping / terrain-editor tools |
 | de-zone cursor.cur | de-zone |
-| ZONE AIR PORTS, ZONE SEA PORTS, ZONE LANDFILL | special zones |
-| ZONE RES LOW / MED / HIGH | residential zoning |
-| ZONE COM LOW / MED / HIGH | commercial zoning |
-| ZONE IND LOW / MED / HIGH | industrial zoning |
-| POWER LINES, WATER PIPES | utility networks |
-| ROAD, AVENUE, ROAD TUNNEL, RAIL ROAD, SUBWAY TUBE, ONRAMP | transport networks |
-| DISPATCH FIREFIGHTERS, DISPATCH POLICE, DISPATCH PLANE, EMERGENCY | emergency tools |
+| `ZONE RES|COM|IND LOW|MED|HIGH` (9 files), plus air-port, sea-port and landfill zone files | zoning tools |
+| one file per network tool (power lines, water pipes, road, avenue, road tunnel, rail, subway tube, on-ramp) | utility / transport networks |
+| DISPATCH `<service>` files and EMERGENCY | emergency tools |
 | SIGNPOST CURSOR.cur | loaded but never shown: the game has no sign tool (`09-ui-screens.md` §6.17) |
-| BIG PARK, SMALL PARK, STADIUM, ZOO, MARINA, BALLPARK, POND, PLAYGROUND | recreation |
-| FIRE, POLICE, JAIL, HOSPITAL, SCHOOL, COLLEGE, LIBRARY, MUSEUM | civic buildings |
-| LANDMARKS, REWARDS | landmark / reward placement |
-| BUS STOP, SUBWAY RAIL CONNECT, SUBWAY STATION, TRAIN STATION | transit buildings |
-| POWER PLANT, DESALINIZATION, INCINERATOR, RECYCLING CENTER, WASTE TO ENERGY, WATER PUMPING STATION, WATER TOWER PUMP, WATER TREATMENT | utility buildings |
+| one file per placeable building tool, named after the tool (recreation, civic, landmark / reward, transit, utility buildings) | building placement |
 
 File names are given in upper case where the program spells them so; the shipped files differ in
 case only. The zone tools' cursor choice is `[STATIC]`; the other tool→cursor pairings follow the
-file names `[INFERRED]`. Several shipped files (`SMITE` is named in the program
-but not shipped; `big pointer`, `left right`, `up down`, `diagonal 1/2`, `four way 1/2`,
-`subway rail connect cursor`, `dispatch cropduster`, `reg pointer`) are not in this registry and
+file names `[INFERRED]`. Several shipped files (`big pointer`, `left right`, `up down`,
+`diagonal 1/2`, `four way 1/2`, `dispatch cropduster`, `reg pointer`) are not in this registry and
 are presumably used by other screens `[OPEN]`. Coverage: the registry names 80 files; 79 of them
-are shipped (matched case-insensitively). `SMITE CURSOR.cur` is named but not shipped and is never
-loaded. The other 17 shipped `.cur` files are outside this
+are shipped (matched case-insensitively). The one remaining name, `SMITE CURSOR.cur`, has no shipped
+file and is never loaded. The other 17 shipped `.cur` files are outside this
 registry. `[DATA]`
 
 ### 8.3 Drag-scroll cursor and speed `[STATIC]`
@@ -1095,12 +1090,12 @@ Framed windows use the `WinGen` 256×256 frame-piece sheet (`SYS.IXF` `0xE2B1458
 
 ## Open questions
 
-* Tooltip placement rules relative to the anchor rectangle (delay is now known: 750 ms tick, section 3.3).
+* Tooltip placement rules relative to the anchor rectangle (delay: 750 ms tick, section 3.3).
 * Drawing rules and notifications of the slider, framed window, image window, graph/progress
   area and decoration controls (section 3.1); spinner and scroll-bar step logic.
 * Exact meaning of the two 56×32 overlays `0x100N0001` / `0x100N0005`; the screen anchor of the
   tool-menu column (inferred top-left) and the stacking of its background pieces; geometry of
-  third-level fly-outs. (Second-level button positions are now tabulated in section 7.)
+  third-level fly-outs. (Second-level button positions are tabulated in section 7.)
 * Selection between root-menu layouts uses screen *height* (480 / 600 / >600) while the bottom bar
   uses screen *width* (640 / 800 / >800); behaviour for non-4:3 modes (e.g. 1280×1024) follows these
   rules but is untested.
@@ -1109,7 +1104,7 @@ Framed windows use the `WinGen` 256×256 frame-piece sheet (`SYS.IXF` `0xE2B1458
   96–100, 104, 108, 112 and 115 are resolved as no-ops, §5.4.)
 * Rotation direction of hotkey commands 43 (PageDown) and 44 (PageUp), §5.4.
 * Users of the colours registered at start-up whose role is unknown (§2.4); whether a text-only
-  button fills its face (§3.2); effect of the tooltip manager's four further requests (§3.3).
+  button fills its face (§3.2); effect of four further tooltip requests (§3.3).
 * Edge-scroll border rectangle sizes and drag-scroll update rate (§8.3); tool→cursor mapping for
   non-zone tools (inferred from names).
 * Message-box frame margins, icon selection and Esc mapping.

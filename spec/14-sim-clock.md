@@ -65,7 +65,7 @@ The value of `F` for each speed is given in §4.
 
 ### 2.2 Advancing time
 
-The clock is driven by a periodic timer callback [STATIC]. On each callback:
+The clock advances in periodic updates [STATIC]. On each update:
 
 1. If the clock is paused (pause count > 0), do nothing.
 2. Otherwise add `now − last` to an accumulator `acc`, and set `last = now` (milliseconds from the
@@ -87,7 +87,7 @@ values, and the first simulated day in minute mode can be shorter than 1440 minu
 the Locusts (swarm) and in Criminalville (a large fire) the date advanced about one game day per
 10 minutes of wall time, with the process at 97 % CPU, the news ticker still scrolling and the
 city's automata frozen. This is minute mode with each minute tick costing far more than the 50 ms
-period; `acc` is never clamped, so the simulation thread spends all its time catching up. A modal
+period; `acc` is never clamped, so the simulation spends all its time catching up. A modal
 advisor pop-up (e.g. the locust warning) holds the clock completely until it is dismissed. A
 clone should run minute mode faithfully (1440 ticks per day) but need not reproduce the slowness.
 
@@ -104,10 +104,10 @@ Listeners within one list are notified in registration order. The six periods ar
 day, week, month and year. A date alarm is accepted only if its date is strictly later than the
 current date [STATIC].
 
-The timer callback runs every **1000 ms** (one second) of real time [STATIC]. A single callback may
+The clock update runs every **1000 ms** (one second) of real time [STATIC]. A single update may
 therefore process several minute or day ticks when the simulated period is shorter than 1 s (high
 speeds, or catch-up after a stall). The 50 ms floor of §2.1 still applies when computing the
-periods; it does not change the callback interval.
+periods; it does not change the update interval.
 
 ### 2.3 Pause
 
@@ -118,21 +118,20 @@ Pausing is **counted** (nestable) [STATIC]:
 * *Resume*: if the count is > 0, decrement it. On the transition 1 → 0, set `last = now`, so that
   the paused interval is discarded.
 
-The city keeps **two** nestable runtime counts on top of the clock's pause count [STATIC]:
+Two independent nestable holds apply on top of the clock's pause count [STATIC]:
 
-1. **City pause count.** Raised by Pause and cleared by Resume. On the transition 0 → 1 the city
-   announces "simulation paused" to the user interface and pauses the clock. This is the ordinary
+1. **City pause count.** Raised by Pause and cleared by Resume. On the transition 0 → 1 the user
+   interface is told "simulation paused" and the clock is paused. This is the ordinary
    player/UI pause.
-2. **Pending / modal count.** A separate nestable count raised when a subsystem or UI begins a
-   blocking operation (modal dialogs, save/load and similar) and cleared when that operation ends.
-   Raising it also pauses the clock for the duration.
+2. **Pending / modal count.** A separate nestable count raised when a
+   blocking operation begins (modal dialogs, save/load and similar) and cleared when that operation
+   ends. While raised it also pauses the clock.
 
 Both are pure runtime state: they are not written to the city save and have no INI field [STATIC].
 
 **Which count** [STATIC]:
 
-* **City pause count** is the ordinary player pause: the bottom-bar Pause control (and its hotkey),
-  and the matching city pause/resume messages. Resume and selecting a non-zero speed clear it
+* **City pause count** is the ordinary player pause: the bottom-bar Pause control (and its hotkey). Resume and selecting a non-zero speed clear it
   (`09-ui-screens.md` §4.2).
 * **Pending / modal count** is raised by blocking operations: modal windows (budget, ordinances,
   query, …), save/load, the scenario UI, the terrain editor, and other subsystem/UI paths that
@@ -238,8 +237,8 @@ the simulation slows down during disasters [STATIC]. A faithful clone should kee
 
 ## 5. City subsystems and their order
 
-A city consists of the subsystems below. The city creates, initialises, loads and saves them in this
-fixed order, and releases them in reverse order [STATIC]. The order also decides the order of work
+A city consists of the subsystems below. They are saved and loaded in this
+fixed order [STATIC]. The order also decides the order of work
 within one cascade (§6). The save records each subsystem owns are listed so that the order can be
 checked against `10-save-format.md` §5.2, whose payload order is the same [STATIC][DATA].
 
@@ -277,8 +276,7 @@ checked against `10-save-format.md` §5.2, whose payload order is the same [STAT
 | 30–36 | Advisor manager and the six advisors | `022E288E:422E28E8:0`, the `013DEE82:*:B` topic lists, `206C6E7C:C28D0B6E:0` |
 | 37 | Petitioner manager | `206C6E7C:02619041:0` |
 
-The record group IDs are data (they appear in every save). Some equal the identifiers the original
-uses for the subsystem internally and some do not; an implementation needs only the record keys.
+The record group IDs are data (they appear in every save); an implementation needs only the record keys.
 Where other documents write "subsystem #n", they mean the row number in this table.
 
 ## 6. Subsystem schedule
@@ -302,26 +300,20 @@ subsystem processes only part of its map on each run (§6.4).
 10. Crime (#12): daily slice.
 11. Flammability (#25): daily slice.
 
-Items 8–11 [STATIC]: each of these four layers is a daily scheduler agent and runs one slice (or
+Items 8–11 [STATIC]: each of these four layers runs one slice (or
 aura sweep step) per simulated day. Aura, pollution and crime also have a monthly step (monthly
 items 14–16). Flammability is daily-only.
 
-**Daily run order on the daily schedule tier** [STATIC]:
+**Daily run order** [STATIC]:
 
-1. **Items 1–5** in listed order — the daily agents contributed into the shared daily driver by
-   subsystem creation order: disaster emergency-elapsed (#6), police (#13), fire (#14), land value
-   (#18), scenario (#29).
-2. **Item 7** (active disaster instance day ticks), when instances are present — a separate
-   daily-tier entry registered at the disaster subsystem's post-init, after the shared daily driver
-   but **before** the self-scheduled layer agents below.
-3. **Self-scheduled daily-tier agents**, in registration order after that:
-   * item 8 aura, then item 11 flammability (each registers at its own post-init);
-   * then, once the city is loaded (or equivalently set up), item 6 zone manager, item 9 pollution,
-     and item 10 crime (each registers from its load/setup path, in subsystem creation order:
-     zone #5, pollution #11, crime #12).
+1. **Items 1–5** in listed order: disaster emergency-elapsed (#6), police (#13), fire (#14), land
+   value (#18), scenario (#29).
+2. **Item 7** (active disaster instance day ticks), when instances are present.
+3. **Items 8 and 11**: aura, then flammability.
+4. **Items 6, 9 and 10**: zone manager, pollution, crime, in that order.
 
-So item 7 is **not** after aura/pollution/crime/flammability. The older claim that items 1–6 and
-8–11 form one shared pass entirely before item 7 was wrong. Item 7 still only runs when disaster
+So item 7 runs after items 1–5 and **before** items 8–11 and item 6; it is not after
+aura/pollution/crime/flammability. Item 7 still only runs when disaster
 instances are present (`21-disasters.md`).
 
 **Weekly** (Mondays, after the daily work of the same day):
@@ -353,16 +345,9 @@ paused for the whole monthly work, §6.3 rule 4):
 15. Pollution (#11): monthly step.
 16. Crime (#12): monthly step.
 
-Items 1–3 always run before items 4–16 [STATIC]. They are dedicated monthly-tier schedule
-entries, registered in subsystem creation order — disaster manager (#1), then neighbours (#2),
-then world layer (#3) — and are processed in the monthly cascade before the shared monthly pass
-that drives items 4–16 [STATIC]. Items 4–13 run in exactly this order, and items 14–16 come after
-them [STATIC].
-
-**Items 14–16 run in that order** [STATIC]: they are the n==4 handlers of the same daily-tier
-self-scheduled agents as daily items 8, 9 and 10. On the monthly cascade the daily tier is walked
-with n=4, so registration order gives aura chart → pollution monthly → crime monthly (zone and
-flammability ignore n≠2). This matches Q-BJ's post-init/load registration order.
+Items 1–3 always run before items 4–16 [STATIC]. Items 4–13 run in exactly this order, and
+items 14–16 come after them, in the order aura chart, pollution monthly step, crime monthly
+step [STATIC].
 
 **Weather (#27), monthly.** The weather subsystem has no save records of its own; its state is
 derived from the city's geographic location and the simulation calendar [STATIC]. On each monthly
@@ -389,7 +374,7 @@ run it:
 | 3 | 10–12 | 13 | −15 | 10 | 17 | −6 | 8 | 21 | −6 | 15 |
 
 **Post-table adjustment of A** [STATIC], using the weather subsystem's float generator
-(`RandRange`, §8):
+(`RandRange`, a spec-local name defined in §8):
 
 * if `A < −40`, replace `A` with `RandRange(−2, 2) − 40`;
 * if `A < 57`, replace `A` with `RandRange(−2, 2) + 55`.
@@ -427,33 +412,29 @@ network manager, flora layer, spacing grid, placement query (#28), the advisors 
 manager. They act on user commands and on requests from other subsystems [STATIC]. Advisors and
 petitioners have their own timing (`22-advisors-news-petitioners.md`).
 
-**Placement query (#28).** On-demand only; no save records [STATIC]. Other subsystems (placement
-tools, power/water and network code) call it to:
+**Placement query (#28).** On-demand only; no save records [STATIC]. Placement tools and other
+subsystems use it to:
 
 * test whether a rectangle of tiles is clear for placement (§ below), optionally accumulating a
   placement cost;
 * collect the footprint cells of occupants matching a filter;
-* find the nearest matching occupant to a point and return its tile bounding box (and a map-region
-  highlight notification that utilities also raise for their own regions).
+* find the nearest matching occupant to a point and return its tile bounding box.
 
-It holds live references to the city layers it queries; it does not own persistent state of its own
-[STATIC].
+**Clearance modes** [STATIC]. Clearance always walks the terrain cells of the rectangle and
+checks the occupants found there at up to three granularities (fine, medium, coarse). A mode
+`m` ∈ {0,1,2,3}, chosen by the caller, selects which granularities are checked:
 
-**Clearance modes** [STATIC]. The city keeps three occupancy scanners that index occupants at
-strides 1, 2 and 4 tiles (created with the city; not saved as their own records). Clearance always
-walks the terrain cells of the rectangle. Mode `m` ∈ {0,1,2,3} then selects which scanners
-participate:
-
-| Mode | 1-tile scanner | 2-tile scanner | 4-tile scanner |
+| Mode | Fine | Medium | Coarse |
 |---|---|---|---|
 | 0 | yes | yes | yes |
 | 1 | yes | — | — |
 | 2 | yes | — | yes |
 | 3 | yes | yes | — |
 
-On the 1-tile scanner, a hit fails the cell unless the occupant both exposes capability flag
-`0x400` and passes the caller-supplied occupancy filter; a passing hit may add to the optional
-cost. On the 2-tile and 4-tile scanners, any hit fails the cell (no filter).
+At the fine granularity, a hit fails the cell unless the occupant is marked ignorable (the
+"ignorable" property of `12-networks.md` §5.2) and passes the caller-supplied occupancy filter; a
+passing hit may add to the optional cost. At the medium and coarse granularities, any hit fails
+the cell (no filter).
 
 **Occupancy filter** [STATIC]. Callers do not supply an arbitrary predicate. They pass an integer
 mode `f`:
@@ -472,15 +453,13 @@ placement paths pass `f = 1`. A full per-tool table of who passes `0` vs `1` is 
 implementing the two modes plus the filler/protected override is enough for hold/clearance.
 
 **Per-building work (weekly).** Besides the layer-wide steps above, every building that has a
-lot is itself enrolled in the schedule when it is added to the city, and withdrawn when it is
-removed. It is enrolled at the period of the most frequent per-type work defined for its building
-type. In the shipped game the only per-type work is the traffic trip generator
+lot runs its per-type work at the period of the most frequent per-type work defined for its
+building type. In the shipped game the only per-type work is the traffic trip generator
 (`18-sim-transport.md` §4.1), which is weekly [STATIC].
 
-On each weekly step, the enrolled buildings run **before** the weekly layer-wide steps. They run in
-the order in which they were added to the city; buildings added during the step wait until it ends.
-Building types with no per-type work are not enrolled. Per-building work does not take the city
-lock [STATIC].
+On each weekly step, the buildings with per-type work run **before** the weekly layer-wide steps.
+They run in the order in which they were added to the city; buildings added during the step wait
+until it ends. Building types with no per-type work do nothing [STATIC].
 
 ### 6.2 Summary by area
 
@@ -526,11 +505,11 @@ lock [STATIC].
    hourly work, so the hour period does nothing [STATIC].
 6. **Long cascades and holds.** Before each step of a cascade the simulation checks two kinds of
    condition [STATIC]:
-   * **Backlog pause.** If the simulator's own pending-work queue has **more than 3** entries, or
-     the shared application message queue has **more than 500** entries, the city takes the same
+   * **Backlog pause.** If more than **3** simulator work items, or more than **500** application
+     messages, are pending, the city takes the same
      busy / clock-pause path as the monthly begin (rule 4) for the rest of that cascade, so the
      time is not credited. Both thresholds are **pending-item counts**, not milliseconds of wall
-     time. (An earlier reading of the constant 500 as "500 ms" was wrong.) The busy mark used here
+     time. The busy mark used here
      is **not** part of the hold below.
    * **Hold wait.** The city reports a **hold** when either of the two city counts in §2.3 (pause
      count or pending/modal count) is non-zero. Hold is **not** the monthly busy mark, not a
@@ -567,7 +546,7 @@ lock [STATIC].
    year is a multiple of 10, also one decade sample. Each is pushed from that subsystem's own
    monthly step (aura = monthly item 14; pollution = 15; crime = 16; traffic =
    inside transport monthly item 9 / `18-sim-transport.md` §10–§11). Sample values: crime =
-   `avgCrime`; pollution = the UI combined air/water percent (`17-sim-services.md`); aura =
+   `avgCrime` (spec-local name for the city's average crime value); pollution = the UI combined air/water percent (`17-sim-services.md`); aura =
    city aura + 127; traffic = average road traffic.
    and anniversaries.
 8. **RNG and cheats.** Generator state is **not** saved; every generator is reseeded from the clock
@@ -618,9 +597,8 @@ Two generators are in use [STATIC]:
   `R = floor(v / 2^16) mod 2^32`.
 * `Rand(n)`: if `n = 0`, return 0. If `n < 0xFFFFFF`, draw one output and return `R mod n`, a value
   in `[0, n−1]`. Otherwise (n ≥ 0xFFFFFF), draw outputs until `R ≤ n` and return that `R`, a value in
-  `[0, n]` (the upper bound is **inclusive** in this branch only) [STATIC]. In this branch the
-  original masks `R` with all bits up to the highest set bit of `R` itself, which leaves `R`
-  unchanged. So the result is plain rejection sampling, with the same distribution as
+  `[0, n]` (the upper bound is **inclusive** in this branch only) [STATIC]. `R` is not altered in this branch.
+  So the result is plain rejection sampling, with the same distribution as
   `16-sim-utilities.md` §1.1.
 * `RandInt(a, b) = a + Rand(b − a)`, a value in `[a, b−1]` for `b − a < 0xFFFFFF`.
 * **Float generator** (separate state `t`): if `t = 0`, set `t = 0x12345678`. Then

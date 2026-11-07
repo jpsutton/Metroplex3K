@@ -231,20 +231,20 @@ Save flow: if the target exists ask `015E410C:C` (overwrite?); read-only targets
 invalid names `27`, too long `2A`, bad path `2D`, failure `2E`.
 
 Leaving the current city: [STATIC]
-* **There is no "modified" or dirty flag.** Neither the Exit path nor the New/Load path tests
+* **There is no "modified" tracking.** Neither the Exit path nor the New/Load path tests
   whether the city changed. Letting the simulation run, editing the city, and saving or loading do
-  not set or clear anything that controls the prompt.
+  not affect whether the prompt appears.
 * **New / Load** (when a city is open): the command carries an "ask to save" argument, which
-  defaults to true. If it is true, the game asks `029541F4:250` ("Would you like to save this
-  city?") or `015E410C:12` ("Do you want to save your city?"), with a `015E410C:6` "Save" caption.
+  defaults to true. If it is true, the game asks `029541F4:250` (prompt asking whether to save this
+  city) or `015E410C:12` (a second prompt with the same purpose), with a `015E410C:6` "Save" caption.
   Answering Yes opens the save flow, No continues without saving, and Cancel aborts.
 * **Exit** takes two arguments: *confirm* and *ask to save*. If *confirm* is set, the game first
-  shows `209E6378:A3` "Now leaving Sim City 3000." (title `225872FE:55` "Exit") with OK/Cancel.
-  Cancel aborts. If *ask to save* is set and a city is open, it then asks `209E6378:127` "Do you
-  want to save the game?" with Yes/No/Cancel (`209E6378:C0`, `C2`, `B6`). Yes saves, No exits, and
+  shows `209E6378:A3` (notice that the game is being left; title `225872FE:55` "Exit") with OK/Cancel.
+  Cancel aborts. If *ask to save* is set and a city is open, it then asks `209E6378:127` (prompt
+  asking whether to save the game) with Yes/No/Cancel (`209E6378:C0`, `C2`, `B6`). Yes saves, No exits, and
   Cancel aborts.
-* Which UI entry points pass *ask to save* = false was not traced. [OBSERVED] Closing the window
-  shows "Now leaving", and after OK the save prompt follows when a city is open. Implement *ask to
+* [OPEN] which UI entry points pass *ask to save* = false. [OBSERVED] Closing the window
+  shows the leaving notice, and after OK the save prompt follows when a city is open. Implement *ask to
   save* = true for window close, quit hotkeys, menu Exit, New and Load.
 
 Scenario end screens (`23-scenarios.md`): status `041F2625:4`/`5`, greeting `3`, completion `7`,
@@ -331,8 +331,8 @@ Background image Instance `82790741` in the resolution group (`00640480`, `00800
 | Element | Strings / images | Behaviour |
 |---------|------------------|-----------|
 | City name | `225872FE:13` | city name from the save header (`10-save-format.md`) |
-| Date | `225872FE:10` | current sim date, month name + year (`14-sim-clock.md`); refreshed on the day/month-changed broadcast |
-| Funds | `225872FE:11` | current treasury; refreshed on the funds-changed broadcast |
+| Date | `225872FE:10` | current sim date, month name + year (`14-sim-clock.md`); refreshed when the day/month changes |
+| Funds | `225872FE:11` | current treasury; refreshed when the treasury changes |
 | Population | `225872FE:40` (`12`) | city population (`20-sim-population.md`) |
 | Query button | `225872FE:3C` | arms the query tool (§6.12) |
 | News ticker | `225872FE:14`, frame from `SYS.IXF` | see §4.4 |
@@ -351,7 +351,7 @@ six events:
 | Funds changed (whenever the treasury changes) | — | redraw the funds (C) |
 | Date changed (from the simulation clock) | new date | store the date, redraw the date (D) |
 | Date set (from the simulation clock) | new date | store the date, then redraw all four fields |
-| Refresh request | — | read the current date from the clock (fallback values 3000 and 1 if no clock exists), then redraw all four fields |
+| Refresh request | — | read the current date from the clock, then redraw all four fields |
 
 `[OPEN]` Which clock events produce "date changed" and which "date set"? Probably day/month ticks
 and loading or starting a city respectively (`14-sim-clock.md`). Redrawing all fields on both is a
@@ -368,7 +368,7 @@ of `14-sim-clock.md`. [STATIC]
 
 Images `02F78C6D:52FB06E4`–`52FB06E9` (pause/run and four speed buttons; 48×23 and 10×11 parts).
 
-**Speed indicator drawing** [STATIC, SIMUI 0x1002643A draw, 0x10026144 messages; OBSERVED 800 × 600]:
+**Speed indicator drawing** [STATIC; OBSERVED 800 × 600]:
 
 * Images:
   * `E4`, `E5`, `E6`, `E7` (48 × 23) are the complete indicator while running at speed 1, 2, 3, 4.
@@ -376,26 +376,23 @@ Images `02F78C6D:52FB06E4`–`52FB06E9` (pause/run and four speed buttons; 48×2
   * `E8` (10 × 11) is the hover cell.
   * `E9` (10 × 11) is the dark-green paused cell.
 * Cells: four, at panel offsets (4 + 10·i, 5), each the size of `E8` (10 × 11), for i = 0…3.
-  The four cells span x 4…43 of the 48-px panel. Correction: the bar table in
-  `08-ui-framework.md` gave 12-px cells.
-* Speed index s = 0…3, set by the speed-changed message `0xC2684066` (argument 1…4).
+  The four cells span x 4…43 of the 48-px panel.
+* Speed index s = 0…3, set when the speed changes (the speed-changed notification, argument 1…4).
 * Paused flag:
-  * set by message `0xC2A35D7F` (the simulation has paused);
-  * cleared by `0xC2A35D81` (the simulation is running).
+  * set when the simulation announces that it has paused;
+  * cleared when it announces that it is running.
 * Draw:
-  * If the paused flag is set, or the bar is in either of its disabled states (messages
-    `0xE31E2463`, and `0x54E23EE9` with argument 0), `E9` is drawn into cells 0…s. That is,
+  * If the paused flag is set, or the bar is in either of its disabled states (the bar-disabled
+    notification, and the bar-state notification with argument 0), `E9` is drawn into cells 0…s. That is,
     s + 1 dark-green cells from the left, over the grey bar background, with no glow.
   * Otherwise the whole image `E4 + s` is drawn at the panel origin.
   * Then, if the pointer is over cell h (not tracked while disabled), `E8` is drawn into cells
     0…h.
 * Observed while paused at 800 × 600:
-  * the cell at x = 4 has the colour sequence (0,44,0), (0,117,0), (0,138,0), (0,105,0),
-    (0,85,0), (0,105,0), (0,154,0), (0,178,0), (0,195,0), (0,97,0) along row 7;
+  * each cell is drawn in dark-green frame colours;
   * the cells repeat every 10 px;
   * speed 1 shows one dark cell, speed 4 four.
-Tooltips: pause `225872FE:64`, run `65`, speeds 1–4 `66`–`69` (turtle, llama, cheetah, African
-swallow). Sounds: run 23 `UiPlaySim`, pause 24 `UiPauseSim`, speed 1–4
+Tooltips: pause `225872FE:64`, run `65`, speeds 1–4 `66`–`69`. Sounds: run 23 `UiPlaySim`, pause 24 `UiPauseSim`, speed 1–4
 → 25–28 `UiSimSpeed1`–`4`. Speed semantics (ticks per real second) are in `14-sim-clock.md`.
 `[OBSERVED]` Behaviour:
 * Pause stops the clock. Clicking Pause again while paused does nothing; it does not toggle.
@@ -436,11 +433,9 @@ one-shot pointer: the next click on the map scrolls that point to the screen cen
   * pressed: a dark inset frame;
   * highlighted: a lighter frame.
 * Glyph: a globe and a monitor joined by a yellow cable, on a light-blue rounded tile.
-* Frame, normal cell, column 16:
-  * top rows FFF6FF, DEDEFF, BDBEFF;
-  * bottom rows 5A6DBD, 7385EE;
-  * right edge columns 29–32 at row 15: 293052, 414883, 5A6DBD, 626DC5;
-  * the outside background is 7B91FF.
+* Frame, normal cell:
+  * a light-blue rounded frame, lighter along the top and darker along the bottom and right edges;
+  * the outside background is blue.
 * Position:
   * x = client width − 194;
   * y = bottom-bar top − 24, so its bottom 6 px overlap nothing; it sits just above the bar,
@@ -448,10 +443,10 @@ one-shot pointer: the next click on the map scrolls that point to the screen cen
   * At 800 × 600 that is (606, 520), at 1024 × 768 (830, 680).
 * Tooltip: `041F2625:190` "Visit SimCity Exchange", placed above.
 * Click: opens a modal message box titled "Visit SimCity Exchange" with text `041F2625:1F9`
-  ("SimCity will now open your web browser…") and OK / Cancel. OK starts the web browser on the
+  (notice that the web browser is about to open) and OK / Cancel. OK starts the web browser on the
   exchange site.
 * Failure messages: `1FA` no Internet connection, `1FB` no web browser installed (both offer to try
-  anyway), `1FC` the browser could not be launched ("Please try browsing to %s manually").
+  anyway), `1FC` the browser could not be launched (suggests browsing to the `%s` address manually).
   `1FD` is "SimCity Exchange". The failure paths are [DATA] by text, not observed.
 * The **normal cell is also baked into the RCI background** `02F78C6D:42FB77F6` (41 × 88) at
   (7, 0)–(40, 30). That image is drawn at (client width − 201, bottom-bar top − 24). A clone that
@@ -472,12 +467,12 @@ item scrolls the view to the location and plays sound 47 `UiClickOnNewsticker`. 
 Background image `02F78C6D:42FB77F6` (41×88 px). Three vertical bars labelled R/C/I
 (`225872FE:41`/`42`/`43`), drawn in RGB (0,192,0), (0,0,192) and (192,192,0) respectively. Bar
 horizontal extents inside the image: R x=5…10, C x=14…19, I x=23…28. The zero line is at y=51;
-positive demand grows upward and negative demand downward. Constants stored on the widget: scale
+positive demand grows upward and negative demand downward. Drawing constants: scale
 **16.0** px per demand unit, zero-line y **51**, clip bound **62** [STATIC].
 
-**Demand-unit mapping** [STATIC]. The indicator listens for the valve publish of
-`15-sim-growth.md` §3.2 step 6 and keeps one float per family valve (3000 → R, 5000 → C,
-8000 → I). On each publish of valve *id* with integer reading *N*:
+**Demand-unit mapping** [STATIC]. The indicator shows the family valves published in
+`15-sim-growth.md` §3.2 step 6 (3000 → R, 5000 → C,
+8000 → I), one value each. Whenever valve *id* is published with integer reading *N*:
 
 * demand unit *u* = *N* × 0.001 (i.e. *u* = *N* / 1000);
 * bar length in pixels = trunc(*u* × 16.0), growing up from y=51 when *u* > 0 and down when
@@ -504,8 +499,8 @@ browser after a confirmation; failure messages are `041F2625:1F9`–`1FC`.
 
 ### 5.1 Common tool model [STATIC]
 
-Every map tool (menu items with action `COMM` whose class is a tool) is a *game command* object
-that, while active, receives the map-view mouse events. The tools share one interaction model:
+Every map tool (menu items with action `COMM` whose class is a tool), while active, reacts to the
+map-view mouse events. The tools share one interaction model:
 
 **Picking.** A screen point is converted to a world position by intersecting the view ray with the
 terrain (`25-rendering.md`). World X/Z are fixed-point with 8 fractional bits (256 units per tile);
@@ -522,8 +517,8 @@ editable map rectangle (0 ≤ x < width, 0 ≤ z < height), is ignored.
 | Right button / Escape | deactivate the tool (default pointer returns) [INFERRED] | cancel: discard the preview, nothing is built [INFERRED] |
 | Cursor leaves the map view | hide the preview and cost read-out | keep the last end tile |
 
-**Cost read-out.** While a preview exists, the tool asks the owning simulation subsystem for a
-*quote*: a pair (valid, cost) for the previewed area. The UI shows the cost next to the cursor
+**Cost read-out.** While a preview exists, the previewed area is quoted by the owning simulation rules:
+a *quote* is a pair (valid, cost) for the previewed area. The UI shows the cost next to the cursor
 together with an "insufficient funds" state. The insufficient-funds flag is:
 
   insufficient = (cost ≠ 0) and (cost > current funds)
@@ -577,8 +572,8 @@ zone layer (`15-sim-growth.md`). "Cursor" is the cursor file shown while the too
 | De-zone | `82E88C9C` | 0 | de-zone cursor | 44 `UiDezone` |
 
 All zone tools use the rectangle model of §5.1: the preview is the axis-aligned tile rectangle
-spanned by anchor and end (inclusive). The quote and the per-tile legality are owned by the zone
-manager (`15-sim-growth.md`).
+spanned by anchor and end (inclusive). The quote and the per-tile legality follow the zoning rules
+(`15-sim-growth.md`).
 
 **Networks (line drag)** [STATIC]
 
@@ -593,7 +588,7 @@ manager (`15-sim-growth.md`).
 | Water pipe | `22C2F8C5` | 50 `LayPipe` |
 
 Network tools quote a *path* rather than a rectangle: the path from anchor to end is the
-network router's preferred route (straight / one bend / diagonal rules are in `12-networks.md`).
+preferred route (straight / one bend / diagonal rules are in `12-networks.md`).
 The quote returns validity, cost and the list of path cells used for the preview. Connecting to a
 map edge produces the neighbour-connection sounds 36/37/45/46 (`12-networks.md`).
 
@@ -668,13 +663,13 @@ building-picker window (§6.11); choosing a building there arms a plop tool for 
   evacuation/warning behaviour of `21-disasters.md`.
 * Go to disaster (message `C30177CA`): immediate; the camera centres on the active disaster;
   sound 55 `GoToDisaster`.
-* Start disaster ▸ *X*: an **immediate** command (no map click). It sends a "start disaster"
-  request with payload (disaster type ID, x = 0, z = 0); the zero location tells the disaster
-  manager to choose the location itself (`21-disasters.md`). Disaster type IDs: fire `621CDA33`,
+* Start disaster ▸ *X*: an **immediate** command (no map click). It starts a disaster of the
+  given type with location (x = 0, z = 0); the zero location means the location is chosen by the
+  disaster rules (`21-disasters.md`). Disaster type IDs: fire `621CDA33`,
   tornado `02963821`, earthquake `42963812`, riot `4296380E`, UFO `E2963828`, toxic cloud
   `22963800`, whirlpool `13873254`, locusts `13873255`, space debris `13873256` (type IDs as in
-  `SC3DisasterLayer.ini`). Non-menu commands send the same request for the parade (`C4C90997`)
-  and for one further type that has no entry in `SC3DisasterLayer.ini` [OPEN: which event]. Start-disaster items
+  `SC3DisasterLayer.ini`). Non-menu commands start the parade (`C4C90997`)
+  and one further type that has no entry in `SC3DisasterLayer.ini` [OPEN: which event]. Start-disaster items
   are disabled when disasters are switched off for the city (New City `21D`). [STATIC]
 
 **Query** — see §6.12.
@@ -697,7 +692,7 @@ bottom-right line. The position does not depend on other open windows.
 | View Data (graphs / charts / data maps, §7.1) | 424 × 440 | fixed | (40, 34) | (40, 34) |
 | View City Layers | 296 × 336 | fixed | (32, 32) | (32, 32) |
 
-1280 × 800 was not measured; recommended: the same rules.
+[OPEN] 1280 × 800 (not measured); recommended: the same rules.
 
 ### 6.1 Budget window [STATIC]
 
@@ -725,8 +720,7 @@ bottom-right line. The position does not depend on other open windows.
   current funding level. The rule is [OPEN].
 * These six slider rows are the six funded departments of `19-sim-economy.md` §6.1.
 
-Opened by Review ▸ Budget (command `025DDC4A`). It is a modal, paged window owned by the
-economy subsystem; all values are read from and written to the budget model of
+Opened by Review ▸ Budget (command `025DDC4A`). It is a modal, paged window; all values are read from and written to the budget model of
 `19-sim-economy.md`. Strings are in table `029541F4`.
 
 **Main page** (title `89`): two columns, Expenditures (`86`) and Income (`87`); each row shows
@@ -754,15 +748,14 @@ and Business deals (`A2`) windows. Tax pages additionally show an **approval** c
 **not** computed from R/C/I tax rates, demand, or budget INI keys. It is the city-aura history
 chart from the aura layer (`17-sim-services.md` §8.5; save group `C259C02D`), shown under the
 window-string label `029541F4:1D2`. The widget is the same chart type used elsewhere for aura
-(creation id `0x104`): 12 monthly + 10 yearly + 10 per-decade samples. Each monthly sample is
+(a 32-sample history): 12 monthly + 10 yearly + 10 per-decade samples. Each monthly sample is
 **cityAura + 127** (unsigned; cityAura is the signed city aura −127…127). A fresh chart is all
 127s (neutral). There is no separate mayor-approval metric in the advisor subsystem
 (`22-advisors-news-petitioners.md` §7) — the tax page reuses aura under that label. Tax-slider
 drags do **not** recompute it; the series advances when the aura layer pushes a month-end sample
 (§8.5), and opening the budget binds/loads the chart from the aura record. Aura itself is driven
 by `SC3Aura.ini` (`[AgentIDModifiers]`, `[TuningParameters]` `UpdatePeriod`, etc.);
-`SC3BudgetLayer.ini` has no approval key. Correction: earlier text only said “approval rating
-(`1D2`)” without identifying it as the aura chart.
+`SC3BudgetLayer.ini` has no approval key.
 
 Adjustment ranges [STATIC]: the tax rate is an integer percent, step 1, range 0–22 (the budget
 model clamps any value above 22; `19-sim-economy.md` §4). Funding is an integer percent stored in
@@ -840,22 +833,8 @@ appear: `HOMELESS_SHELTER_PERCENT`, `EARTHQUAKE_PREP_BUILDINGS`, `TOURIST_PROMOT
     name, and the cost right-aligned. The cost is in grey while the ordinance is not enacted.
   * Group order: Utilities Advisor; Health, Education and Aura Advisor; Public Safety Advisor;
     Environment Advisor; City Planner; Transportation Advisor; Financial Advisor.
-  * The rows observed, in order:
-    * Water Conservation, Power Conservation, Stairwell Lighting, Mandatory Water Meters.
-    * Community CPR Training, Free Clinics, Junior Sports, Nuclear Free Zone, Pro-Reading, Public
-      Smoking Ban.
-    * Mandatory Smoke Detectors, Neighborhood Watch, Crossing Guards.
-    * Leaf Burning Ban, Landfill Gas Recovery, Backyard Composting, Paper Reduction Act, Trash
-      Presort, Lawn Chemicals Ban, Clean Air, Industrial Waste Disposal, Mandatory Car Smogging,
-      Tire Recycling.
-    * Industrial Pollutant Impact Fee, Electronics Tax Incentive, Farmer's Market, Conservation
-      Corps, Electronics Job Fair, Public Access Cable, Clean Industry Association, Biotech Tax
-      Incentives.
-    * Parking Fines, Carpool Incentive, Alternate Day Driving.
-    * Legalized Gambling.
-  * Costs at population 0: −§1 for most rows, and §0 for Leaf Burning Ban, Industrial Waste
-    Disposal, Industrial Pollutant Impact Fee, Farmer's Market, Parking Fines and Legalized
-    Gambling.
+  * The rows observed: 35 ordinances in total (4, 6, 3, 10, 8, 3 and 1 per group, in the group
+    order above). Costs at population 0: −§1 for most rows, and §0 for six rows.
 * **Footer.** Below the list box: "Monthly Total" in bold followed by the total. Below that, at the
   bottom right, an OK (check-mark) button of about 44 × 34 px that closes the window.
 
@@ -884,9 +863,9 @@ building (`13-buildings-occupants.md`).
   font glyph, followed by the petition title in the small bold font (dark navy) from x ≈ 34.
 * Order: ascending petition ID. The ID is the instance of the petition's heading string in group
   `C26DD29B`. In Berlin: 0x34 Lower Commercial Taxes, 0x3B Holiday To Honor Mayor, 0x5B Lower
-  Industrial Taxes, 0x5F Sims Demand Tax Relief. The petition manager hands the rows over in
-  insertion order, which is the save-record order; the list control re-orders them by ID
-  [STATIC for the IDs and insertion order; the control's sort is INFERRED, matching 4 of 4].
+  Industrial Taxes, 0x5F Sims Demand Tax Relief. The rows are first in
+  save-record order and are then sorted by ID
+  [STATIC for the IDs and record order; the sort is INFERRED, matching 4 of 4].
   Petitions that are already answered are not listed.
 * A single click selects the row: a (0, 0, 255) bar 13 px tall from x ≈ 28 to the right edge, with
   white text.
@@ -934,8 +913,7 @@ the window:
     outside the L on every side. The caption's ink is at (21, 271).
   * Two big round buttons (the same round art as "Dismiss Petitioner"), ink boxes (20, 290)
     and (20, 318), each 24 × 24. Labels are the petition's *Button1* / *Button2* strings at
-    x = 58 (e.g. Accept/Reject, Accept/Decline, Accept Deal/Reject Deal, Cancel Deal/Keep
-    Deal, Repeal Ordinance/Ignore Complaint). Neither is pre-selected.
+    x = 58 (an accept/reject style pair; the wording depends on the petition kind). Neither is pre-selected.
   * "Impact Analysis:" (`79`) plate (273, 294)–(377, 347), ringed the same way. Two-line caption
     ink (278, 310)–(329, 334); round "?" button ink (344, 317)–(369, 340).
   * There is no "Dismiss Petitioner" button on offer pages.
@@ -1029,17 +1007,14 @@ the per-type unlock flag of the utilities advisor (`22-advisors-news-petitioners
 ordinance (0xE0D0722E) is in force. The cheats `power to the masses` and `water in the desert`
 bypass the unlock flag (`27-platform.md`). Garbage facilities use the same unlock flags of the
 environment advisor (`[GARBAGE_BUILDINGS]`; cheat `garbage in, garbage out` bypasses them).
-**Landmarks have no availability condition** [STATIC]. The city-planner advisor keeps a landmark
-list holding one entry per building exemplar in the loaded catalogue whose agent type is 18000 or
-a descendant (`13-buildings-occupants.md`). It is rebuilt from the catalogue when the city's
-catalogue is set up, and keeps the flags of entries that already exist. Each entry has an
-"available" flag, set to 1 when the entry is created and never cleared for landmarks, and a "placed"
-flag. "Placed" is set to 1 when a building with that exemplar key is added to the city and back to
-0 when one is removed. Every entry is listed. Placed ones are shown greyed and marked `70`, as
-below. They are not otherwise filtered: no population, year, money, scenario or advisor condition
-applies [STATIC]. List order is the landmark list's order, sorted by exemplar key [INFERRED].
-Whether "placed" is saved is [INFERRED: no; it is re-derived from the building-added notifications
-as the city's buildings are re-created on load]. Rewards follow the reward manager's earned state. Each entry shows each with picture, name, size (`041F2625:133` "WxH") and cost; landmarks
+**Landmarks have no availability condition** [STATIC]. Every building exemplar in the loaded catalogue
+whose agent type is 18000 or a descendant (`13-buildings-occupants.md`) is a landmark entry. Every
+entry is always available. An entry counts as "placed" from the moment a building with that
+exemplar key is added to the city until it is removed. Every entry is listed. Placed ones are
+shown greyed and marked `70`, as below. They are not otherwise filtered: no population, year,
+money, scenario or advisor condition applies [STATIC]. List order is sorted by exemplar key
+[INFERRED]. Whether "placed" is saved is [INFERRED: no; it follows from the buildings present
+when the city is loaded]. Rewards are listed according to their earned state. Each entry shows a picture, name, size (`041F2625:133` "WxH") and cost; landmarks
 and rewards already placed are greyed and marked `70`. Empty-list messages: landmarks `77`, rewards
 `6E`, power `7A`, waste `79`, water `7B`, other `FFFFFFFF`. Choosing a building arms the plop tool
 (§5.2) for that occupant; the picker closes.
@@ -1071,7 +1046,7 @@ adds them after its functional lines.
 
 | Line | Label | Value | Rule |
 |------|-------|-------|------|
-| Elevation | `2` | `3` (metres, number) | [STATIC, SIMDIRT 0x100114BC] Uses the tile's anchor corner (min x, min z) only. Land: N = trunc(4.0f × (3.266f × (alt − seaLevel))), where seaLevel is the terrain record's global sea-level byte; no clamp, so it can be negative. Water tile (any corner with water ≥ ground, `11-world-terrain.md`): label `17F` (Depth), N = trunc(4.0f × max(0, 3.266f × (water − alt))) at the anchor corner, so a wet tile with a dry anchor shows 0. The constants 3.266 and 4.0 are hard-coded (13.064 m per altitude unit). [OBSERVED] Roadless Paradise (sea level 80): altitude 82 → "26 Meters"; a salt-water tile → "143 Meters" (Δ = 11). |
+| Elevation | `2` | `3` (metres, number) | [STATIC] Uses the tile's anchor corner (min x, min z) only. Land: N = trunc(4.0f × (3.266f × (alt − seaLevel))), where seaLevel is the terrain record's global sea-level byte; no clamp, so it can be negative. Water tile (any corner with water ≥ ground, `11-world-terrain.md`): label `17F` (Depth), N = trunc(4.0f × max(0, 3.266f × (water − alt))) at the anchor corner, so a wet tile with a dry anchor shows 0. The constants 3.266 and 4.0 are fixed (13.064 m per altitude unit). [OBSERVED] Roadless Paradise (sea level 80): altitude 82 → "26 Meters"; a salt-water tile → "143 Meters" (Δ = 11). |
 | Surface type (no occupant) | — | `C1` dirt / `C2` fresh water / `C3` salt water | |
 | Zone type | `E` | `F`–`17` (light/medium/dense R/C/I), `18` seaport, `19` airport, `1A` landfill, `195` unzoned | zone code of the tile (§5.2) |
 | Land value | `8` | `1C0`, `9`, `A`, `B`, `C`, `D` | land-value byte *v* (0–255): v<35 → `1C0`; v<75 → `9`; v<130 → `A`; v<175 → `B`; v<225 → `C`; else `D` |
@@ -1123,7 +1098,7 @@ capacity `10C`/`10D` and usage `10E`/`10F` (percent full). [STATIC]
 Band thresholds for traffic lines follow the same 72/129/187 split points as flammability on a
 0–255 scale [STATIC]. The utility **Usage** lines (`58` power, `6B` water) show a **number**
 ("0 MW-h/Month", "0 m³/Month"), not a band word. The band strings `59`–`5D` and `6C`–`70` are
-never referenced by code. [STATIC][OBSERVED] The numbers themselves are owned by the
+not used. [STATIC][OBSERVED] The numbers themselves are owned by the
 simulation documents (`16`, `17`, `18`).
 
 Query on a building in a scenario or holiday building set uses the same lines. Holiday-specific
@@ -1133,7 +1108,7 @@ flavour strings are in `SC3StringsBuildings_Holidays.IXF` (`13-buildings-occupan
 
 Coordinates are pixels relative to the panel's top-left corner. y values are the **top of the FBF
 line box** (`05-text-and-fonts.md` §4; ink starts 3 px lower in `main9`/`main10`). Measured at
-800 × 600 on the original. [OBSERVED] The sizes are code constants, so they do not change with
+800 × 600 on the original. [OBSERVED] The sizes are fixed, so they do not change with
 resolution. [STATIC]
 
 **Layout types.** There are three fixed sizes; the panel never computes its size from the row
@@ -1151,15 +1126,13 @@ The ratio test uses the rendered picture's size. [STATIC]
 area, wherever the click was. [STATIC][OBSERVED] The panel can be dragged by its title band. Later
 panels open where the last one was left, and a drag does not snap back or recentre. [OBSERVED]
 The original reads a saved position before falling back to (40, 40). After a game restart the
-default was used again; whether the position survives a clean exit was not verified.
+default was used again; [OPEN] whether the position survives a clean exit.
 [STATIC][OBSERVED]
 
 **Chrome** (the same window chrome as the game's other modal dialogs) [OBSERVED]:
-* Top edge, from y = 0 down: 1 px white, then 3 px #EFEBFF, then 1 px #ADB6FF. The title band
-  (#7B92FF) runs from y 5 to y 33 (29 px). Below it come 1 px #ADB6FF and a few px of light blend
-  into the body.
-* Left edge, from x = 0 across: 1 px white, then 3 px #CED3FF, then 1 px #ADB6FF, then a 6 px
-  #7B92FF bar at x 5–10 running from the title band to the bottom, then 1 px #ADB6FF.
+* Top and left edges: 1 px white, then a light-blue band, then a 1 px darker blue line. The
+  title band (#7B92FF) runs from y 5 to y 33 (29 px). A 6 px bar in the same blue at x 5–10 runs
+  from the title band to the bottom.
 * Right and bottom edges: 1 px black (x = w−1, y = h−1). There is no light border inside the
   black.
 * Body: the standard light-blue cloud texture of the game's dialogs.
@@ -1201,9 +1174,9 @@ default was used again; whether the position survives a clean exit was not verif
 * **Groups:** each contributing subsystem's lines form a group, and groups are separated by one
   blank row (14 px). See the per-target table below.
 * **Wrapping:** a label wraps to the next row at a word boundary when it does not fit before the
-  value column. Examples: "Reason for / Abandonment:", "Maximum Power / Capacity:", "Students in /
-  Attendance:", "Number of Eggs / Thrown:". The value is drawn on the label's **last** line. Values
-  wrap the same way within the value column ("Lack of chocolate / sprinkles"). Each wrapped line
+  value column. Long labels (for example the abandonment-reason and maximum-power-capacity rows) take two
+  lines. The value is drawn on the label's **last** line. Values
+  wrap the same way within the value column. Each wrapped line
   takes one 14 px row. No truncation or ellipsis was seen.
 * **Colours:** values are red (#FF0000) for "No" in Powered/Watered and for "Hazardous" in
   Pollution Generated. Everything else uses the default navy text colour.
@@ -1253,9 +1226,9 @@ default was used again; whether the position survives a clean exit was not verif
 | Zoned building (2 or 3) | building name (+ status) | Elevation, Land Value, Zone Type, [Reason for Abandonment — abandoned only], Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution (single group) |
 | Flora (2 or 3) | flora name | Elevation, Land Value, Zone Type, Powered, Watered, Flammability, Air Pollution, Water Pollution |
 | Landmark "The Wall" (2) | name | Elevation, Land Value, Zone Type, Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution |
-| Fire station (2) | name | Elevation, Powered, Watered \| Number of Fires, Number of Calls, Performance Rating, (flavour e.g. Spots on Dalmatian) \| Funding Cost |
+| Fire station (2) | name | Elevation, Powered, Watered \| Number of Fires, Number of Calls, Performance Rating, (flavour line `A5`) \| Funding Cost |
 | College (2) | name | Elevation, Powered, Watered \| Capacity, Students in Attendance, Number of Professors, Grade … |
-| Reward (Mayor's House) (2) | editable name | (flavour, e.g. Number of Eggs Thrown) \| Date Built |
+| Reward (Mayor's House) (2) | editable name | (flavour line `F8`) \| Date Built |
 | Marina (2) | editable name | Depth \| Boats Berthed |
 | Coal power plant (2) | name | Age (Max), Elevation, Pollution Generated \| Maximum Power Capacity, Current Power Capacity, Usage |
 | Bare ground (1) | "Dirt" (`C1`) | Elevation, Land Value, Zone Type, Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution |
@@ -1296,7 +1269,7 @@ surface tile's query. [OBSERVED]
 **Hover:** while the panel is open the map gets no hover highlight. [OBSERVED]
 
 **Red values:** each subsystem can flag a value as an alert, and flagged values are drawn in
-#FF0000. [STATIC] Observed or traced alerts:
+#FF0000. [STATIC] Known alerts:
 * Powered "No" and Watered "No";
 * Pollution Generated "Hazardous";
 * Flammability "Extreme";
@@ -1315,13 +1288,13 @@ There is no cursor change over the panel and no open/close animation. [OBSERVED]
 
 | Target (layout) | Name | Rows | Controls |
 |---|---|---|---|
-| Empty zoned tile, e.g. Seaport zone (1) | "Dirt" | Elevation, Land Value, Zone Type, **Reason for Lack of Development** (flavour value, e.g. "Planets not aligned"), Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution | — |
+| Empty zoned tile, e.g. Seaport zone (1) | "Dirt" | Elevation, Land Value, Zone Type, **Reason for Lack of Development** (flavour value, `2D1`), Powered, Watered, Crime, Flammability, Air Pollution, Water Pollution | — |
 | Water tower (2) | name | Age (Max), Elevation, Powered \| Maximum Water Capacity, Current Water Capacity (red when 0), Usage, Effect of Water Pollution | **no Replace** |
-| Recycling center (2) | name | Age (Max), Elevation, Powered \| Citywide Recycling Capacity (band, red "Inadequate"), flavour (Milk Containers Processed) | Replace |
+| Recycling center (2) | name | Age (Max), Elevation, Powered \| Citywide Recycling Capacity (band, red "Inadequate"), flavour line `1B1` | Replace |
 | Solar power plant (2) | name | Age (Max), Elevation, Pollution Generated \| Maximum Power Capacity, Current Power Capacity, Usage | Replace |
 | Landfill tile holding garbage (2) | "Landfill" | Elevation \| Capacity Citywide, Usage | — (it has a picture: the garbage sprite) |
 
-Correction to the §6.12.1 controls table: utility buildings such as water towers have **no**
+Utility buildings such as water towers have **no**
 Replace button. Power plants, recycling centres and civic/service buildings do.
 
 **Picture scale:** the thumbnail renderer's zoom choice is [OPEN]. Zoom is **not** fixed:
@@ -1334,12 +1307,12 @@ Recommended [INFERRED]: use the largest zoom whose image fits in about 128 px of
 135 px of height.
 
 **Make Historical flag** [STATIC][OBSERVED]:
-* The box shows, and OK writes, bit **0x200** of the occupant state word: the "protected" flag of
+* The box shows, and OK writes, the occupant's "protected" flag of
   `13-buildings-occupants.md` §3. It is not one of the two per-occupant save booleans.
 * Effects of the flag:
   * the zone developer never picks the lot for redevelopment or replacement (`13` §3);
-  * when growth changes the building's state (occupied ↔ abandoned and so on), the bit is carried
-    over into the new state word;
+  * when growth changes the building's state (occupied ↔ abandoned and so on), the flag is carried
+    over to the new state;
   * an abandoned protected building is skipped by the developer's abandoned-lot handling;
   * the **bulldozer refuses it**: the hover tint is red instead of cyan, and a click does nothing
     and charges nothing.
@@ -1352,24 +1325,24 @@ query time. Code → (label, value):
 
 | Code | Label | Value |
 |---|---|---|
-| 1 | 2C1 | 2CB Radiation levels are too high |
-| 2 | 2C1 | 2C3 Land value is too low |
-| 3 | 2C1 | 2C7 Lack of demand for this zone |
-| 4 | 2C1 | 2C8 No power |
-| 5 | 2C1 | 2C9 No water |
-| 6 | 2C1 | 2CA Poor transportation to other zones |
-| 7 | 2C1 | 2C4 Pollution levels are too high |
-| 8 | 2C1 | 2C5 Lack of chocolate sprinkles |
-| 9 | 2C2 | 2CC Zone is too small |
-| 10 | 2C2 | 2CB Radiation levels are too high |
-| 11 | 2C2 | 2CD No demand for low land value |
-| 12 | 2C2 | 2CE No demand for high land value |
-| 13 | 2C2 | 2C7 Lack of demand for this zone |
-| 14 | 2C2 | 2C8 No power |
-| 15 | 2C2 | 2C9 No water |
-| 16 | 2C2 | 2CA Poor transportation to other zones |
-| 17 | 2C2 | 2CF Zone is not on a coast line |
-| 18 | 2C2 | 2D1 Planets not aligned |
+| 1 | 2C1 | 2CB (radiation too high) |
+| 2 | 2C1 | 2C3 (land value too low) |
+| 3 | 2C1 | 2C7 (no demand for this zone type) |
+| 4 | 2C1 | 2C8 (no power) |
+| 5 | 2C1 | 2C9 (no water) |
+| 6 | 2C1 | 2CA (poor transport links) |
+| 7 | 2C1 | 2C4 (pollution too high) |
+| 8 | 2C1 | 2C5 (flavour reason; the default for abandonment) |
+| 9 | 2C2 | 2CC (zone too small) |
+| 10 | 2C2 | 2CB (radiation too high) |
+| 11 | 2C2 | 2CD (no demand at low land value) |
+| 12 | 2C2 | 2CE (no demand at high land value) |
+| 13 | 2C2 | 2C7 (no demand for this zone type) |
+| 14 | 2C2 | 2C8 (no power) |
+| 15 | 2C2 | 2C9 (no water) |
+| 16 | 2C2 | 2CA (poor transport links) |
+| 17 | 2C2 | 2CF (zone not on a coast line) |
+| 18 | 2C2 | 2D1 (flavour reason; the default for empty tiles) |
 
 When the row is shown:
 * only on zoned tiles;
@@ -1377,8 +1350,8 @@ When the row is shown:
 * on a tile with a building: only if the building is **abandoned**, and code 0 shows 2C1 + 2C5;
 * occupied (functional) buildings get no reason row.
 
-The row is placed directly after Zone Type. Which growth step writes each code is not traced; it
-belongs to `15-sim-growth.md` [OPEN]. Recommended: the developer stores the reason for its last
+The row is placed directly after Zone Type. [OPEN] which growth step writes each code; it
+belongs to `15-sim-growth.md`. Recommended: the developer stores the reason for its last
 refusal on the tile (codes 9–18) and the abandonment cause when it abandons (codes 1–8).
 
 **Neighbour connection** [STATIC]:
@@ -1418,7 +1391,7 @@ The flavour numbers are deterministic formulas, not random. "red" marks the aler
 | | Students `B5` | school-age population (ages **6–18**); **red** when desks < students |
 | | Teachers `B7` | Σ funded teachers |
 | | Grade `B9` | school rating 0–4 (`20` §4.4): 4 → A, 3 → B, 2 → C, 1 → D, 0 → F; D and F are red |
-| | Apples for the Teacher `BF` | v = max(0, t)/10 (integer), +3 if the reading ordinance `0xE0D07233` is on, +2 if junior sports `0x815B4CEF` is on |
+| | Flavour `BF` | v = max(0, t)/10 (integer), +3 if the reading ordinance `0xE0D07233` is on, +2 if junior sports `0x815B4CEF` is on |
 | College | Capacity `C8` | Σ college capacity |
 | | Students in Attendance `CA` | college-age population (ages 19–24); **red** when capacity < students |
 | | Professors `CC` | Σ funded professors |
@@ -1427,9 +1400,9 @@ The flavour numbers are deterministic formulas, not random. "red" marks the aler
 | | Books in Circulation `D6` | min(population, EQ × B / 303 + (first date value mod 17)) |
 | | Grade `D8` | cov = 100 if population = 0, else min(100, P_lib × 100 / population); s = funding × cov / `[Library] MonthlyUpkeep`; s ≥ 88 → A, ≥ 72 → B, ≥ 64 → C, ≥ 47 → D (red), else F (red) |
 | Museum | Attendance (last year) `DE` | `[Museum] PopServed` × population / (P_mus + 1) if population < P_mus, else `[Museum] PopServed`; P_mus = Σ museum capacity |
-| | Dinosaur Bones `E0` | (a city counter) mod 53 − (third date value mod 3). It is shown only when that city object exists [INFERRED: the counter is not identified] |
+| | Flavour `E0` | (a city counter) mod 53 − (third date value mod 3). It is shown only when that city object exists [OPEN: which counter] |
 | | Grade `E4` | s = funding × min(100, P_mus × 100 / population) / `[Museum] MonthlyUpkeep`; s ≥ 84 → A, ≥ 66 → B, ≥ 52 → C, ≥ 40 → D (red), else F (red) |
-| | Mummies `E2` | never shown (the string is unused) |
+| | Flavour `E2` | never shown (the string is unused) |
 | All funded | Funding Cost `86` | the building's monthly upkeep property, as money "§x/Month" |
 
 **Safety** (per station):
@@ -1439,11 +1412,11 @@ The flavour numbers are deterministic formulas, not random. "red" marks the aler
 | Police | Crimes per Month `88` | S = Σ crime byte over the diamond \|dx\| + \|dy\| ≤ `[PoliceStation] OptimalCoverageRadius` around the lot centre (clipped to the map), n = tiles; value = S×10/n + S mod 13 (0 if n = 0) |
 | | Performance Rating `8C` | R = avgCoverage × 100 / ((Max − Min)/3 + Min), where avgCoverage is the police-coverage layer averaged over tiles within the station's radius, and Min/Max are the coverage tunables (shipped 20/80, so ÷40). R < 50 → Poor (red); R < 80 → Fair; R > `OppressionThreshold` (210) and crimes ≠ 0 → Oppressive (red); else Good |
 | | Arrests per Month `8A` | R × crimes / `OppressionThreshold` |
-| | Donuts flavour `91` | d = max(\|dx\|,\|dy\|) + min(\|dx\|,\|dy\|)/2 from the station tile to a city reference point (unidentified city object); crimes ≤ 0 → d×10; crimes < 100 → d×(11 − 0.1×crimes); else d×100/crimes |
+| | Flavour `91` | d = max(\|dx\|,\|dy\|) + min(\|dx\|,\|dy\|)/2 from the station tile to a city reference point (a city reference point; [OPEN] which); crimes ≤ 0 → d×10; crimes < 100 → d×(11 − 0.1×crimes); else d×100/crimes |
 | Fire | Fires per Month `9C` | Σ flammability byte over the diamond of radius `[FireStation]` radius (25) / (2 × tiles) |
 | | Calls per Month `9E` | fires × (1.5 − 0.3 × (t + 127)/255) |
 | | Performance Rating `A0` | f = funding / `[FireStation] OptimalMonthlyUpkeep` (30); f < 0.4 → Poor (red); < 0.7 → Fair; < 1.0 → Good; else Excellent |
-| | Spots on Dalmatian `A5` | LV × 2/3 at the station tile [INFERRED: the layer is land value] |
+| | Flavour `A5` | LV × 2/3 at the station tile [INFERRED: the layer is land value] |
 
 **Parks and recreation** (citywide unless noted):
 
@@ -1452,10 +1425,10 @@ The flavour numbers are deterministic formulas, not random. "red" marks the aler
 | Any park | Acres Systemwide `EA` | 1·N(14311 small park) + 9·N(14312 big park) + 16·N(14313 baseball) + 4·N(14314 playground) + 4·N(14315 pond) + 1·N(14316 fountain). The section is omitted when this is 0 |
 | | Benches in Use `EC` | let S = round(R-valve supply × working-age share) and J = jobs-valve value; S = 0 → 0; J < S → min(5, (S − J)/acres) × the building's footprint w × h; else 1. Halved when the homeless-shelter ordinance `0x20D07175` is on [INFERRED for J's meaning] |
 | Zoo | Attendance `EE` | population × (t + a + 255)/512 × 0.1 / N(14450) |
-| | Manure Donated `F0` | (t + 128)/4 × (1 + 0.5 if ordinance `0xA2F917CF` is on) × (1 + 0.25·N(12851 recycling)) |
-| Baseball | Little Leaguers `F2` | population × (share of ages 6–10) × (t + 128)/255 × 0.25 / N(14313), capped at 210 |
+| | Flavour `F0` | (t + 128)/4 × (1 + 0.5 if ordinance `0xA2F917CF` is on) × (1 + 0.25·N(12851 recycling)) |
+| Baseball | Flavour `F2` | population × (share of ages 6–10) × (t + 128)/255 × 0.25 / N(14313), capped at 210 |
 | | Record `110` | wins = (LV + 128 + a)/20; shown "wins − (25 − wins)" |
-| | Season Tickets `112` | wins × 2000 |
+| | Flavour `112` | wins × 2000 |
 | | Team name `1AD` | a per-building stored string, shown in an editable field |
 | Marina | Boats Berthed `F4` | population × (t + 128)/255 × (1 + 0.5·N(13871 university)) × (1 + 0.25·N(13873 local college)) × 0.01 / N(14430), capped at 400 |
 
@@ -1466,20 +1439,20 @@ The flavour numbers are deterministic formulas, not random. "red" marks the aler
 | Airport | Air Traffic `FE` | r = C-valve supply / (N(12310) × 4000); r < 0.8 Light, < 1.1 Medium, < 1.5 Heavy, else Congested (red) |
 | | On-Time `103` | min(98, (a + 128)/255 × (1/r) × 100); r = 0 also gives 98 |
 | Seaport | Port Traffic `105` | r = I-valve supply / (N(12330) × 4000); same bands as the airport |
-| | Barnacles Removed `10A` | (1 − (a + 128)/255) × r × 1 000 000 |
+| | Flavour `10A` | (1 − (a + 128)/255) × r × 1 000 000 |
 | Bus stop, rail or subway station | Passengers per Day `37` | 4.3 × the traffic simulator's station value at the queried tile (`18-sim-transport.md`); 0 while the transit strike state is active |
 
 **Landmarks and rewards**:
 * Date Built `F6`: the occupant's build date (day/month/year), formatted by the locale.
-* Monthly Income `118`: business-deal buildings only, the business-deal manager's income for that
+* Monthly Income `118`: business-deal buildings only, the business-deal income for that
   building's type (`19-sim-economy.md`); otherwise 0.
 * Flavour numbers:
-  * Number of Eggs Thrown `F8` = (255 − a)/20;
-  * Number of Pigeons `FC` = N(13000);
-  * Miles of Red Tape `FA` = a count from the ordinance manager [INFERRED: number of active
+  * flavour line `F8` = (255 − a)/20;
+  * flavour line `FC` = N(13000);
+  * flavour line `FA` = a count [INFERRED: number of active
     ordinances].
 
-Not traced: the transit service-quality lines `181`–`185`.
+[OPEN] the transit service-quality lines `181`–`185`.
 
 ### 6.13 Snapshots (Unlimited edition) [STATIC]
 
@@ -1668,8 +1641,8 @@ at a fixed position (§6.0).
   | Pollution | Clean `246` | Polluted `247` |
   | Traffic | Light `248` | Heavy `249` |
 
-  (* The ids of the Low/High pairs `23E`–`245` were not mapped per map; they are listed in that
-  order in `SC3StringsWindow`.)
+  (* The IDs of the Low/High pairs `23E`–`245` are listed in that order in `SC3StringsWindow`; the
+  per-map assignment is [OPEN].)
 * Two-state maps: two 32 × 33 colour swatches stacked at (292, 363)–(323, 429), the upper one with
   the diagonal cut. The labels sit at the top (y ≈ 361) and the bottom (y ≈ 419):
   * Power: Powered `12A`, yellow (214, 186, 49); Unpowered `23F`, dark navy (33, 32, 66).
@@ -1749,7 +1722,7 @@ at a fixed position (§6.0).
   * The chart box background on the pie pages is plain (222, 223, 255) with no stripes.
   * The pie is on the right, centred at about (318, 117), roughly 175 × 110 px, with a dark rim
     below it. Percentages are drawn in black on the slices.
-  * **Pie renderer** [STATIC, SIMUI pie control 0x100749E5]. The control sits at (0xC1, 0x32) in
+  * **Pie renderer** [STATIC]. The pie control sits at (193, 50) in
     the chart box, 185 × 135. Two images from group `C2BF3646` (type `62B9DA24`): mask `62D32734`
     (172 × 86 solid ellipse on a magenta key) and shading `02D32710` (172 × 108, 8-bit grey).
     1. Ellipse box = the mask's non-key extent (0..171 × 0..85): centre (ox + 86, oy + 43), radii
@@ -1772,7 +1745,7 @@ at a fixed position (§6.0).
     5. Label anchor: the edge point P at the mid angle; anchor = C + trunc((P − C)·k), k = 0.6 if
        the fraction is > 0.1, else 0.8. Text `"%.0f%%"` of the fraction × 100, centred on the
        anchor, drawn after shading. Text (and legend label) colour: white if R + G + B < 385 of
-       the slice colour, else black [INFERRED for the font, id 0xF].
+       the slice colour, else black [INFERRED for the font].
   * **Electricity data** [STATIC]: each slice is the annual total (rolling 12-month sum) of one
     column of the power record over the sum of all 10 columns. Legend order, string, column and
     colour: coal `1E8` col 1 (80,40,40)hex; oil `1E9` col 6 (FF,7E,7E); gas `1EA` col 3
@@ -1783,10 +1756,8 @@ at a fixed position (§6.0).
     visible legend bars are re-stacked at 16-px pitch. The caption total is the sum of all 10
     columns (deals included).
   * Electricity colours: Coal Power (132, 65, 66), Wind Power (255, 130, 0), Solar Power
-    (0, 255, 0), Nuclear Power (255, 255, 0). Caption: "Total Electricity Usage Annually = 1,906,937
-    MW-h" (`289`).
-  * Garbage colours: Landfill (247, 56, 231), Recycling (57, 69, 247). Caption: "Total Garbage
-    Produced Annually = 937,319 Tons" (`1F8`).
+    (0, 255, 0), Nuclear Power (255, 255, 0). Caption `289`: total annual electricity usage in MW-h (1,906,937 in Berlin).
+  * Garbage colours: Landfill (247, 56, 231), Recycling (57, 69, 247). Caption `1F8`: total annual garbage produced in tons (937,319 in Berlin).
 * Stripe tiles: the 32 × 153 tiles `000005E5:31`/`33`/`35` hold only the **Workforce band**. Each
   is two pinks, (238, 214, 222) and (230, 198, 197), in horizontal bands. The tile is repeated
   horizontally over x = 197–314 with its row 0 at y = 51, the plot top.
@@ -1806,10 +1777,9 @@ at a fixed position (§6.0).
 * Lines are 2 px wide. Each line ends at x = 300 and is joined by a short slanted connector to its
   label. Labels are stacked at a 10 px pitch, sorted by the y of the line end and pushed apart so
   that they do not overlap. They use the small regular font in the series colour.
-* Label text uses the templates `1D3` "Ind %s", `1D4` "Res %s", `1D5` "Unemployment %s", `1D6` "City
-  Size %s", `1D7` "Traffic", `1D8` "Crime %s", `1D9` "Pollution %s", `1DA` "Com %s", `1DB` "Value
-  %s", `1DC` "Power %s%%", `28C` "Nat'l Population %s", `28D` "Approval Rating %s%%", `28E`
-  "Health %s", `28F` "Education %s", and `283` "Funds".
+* Label text uses the templates `1D3`–`1DC`, `28C`–`28F` and `283` (15 in all): a short series
+  name, in most cases followed by a `%s` value (`%s%%` for the percentage series; the traffic and
+  funds labels have no value slot).
   * Observed on Berlin, 1-year range: values were shown for Health, Res, City Size, Education, Com,
     Ind, Crime, Pollution and Unemployment.
   * Nat'l Population, Approval Rating, Water %, Power %, Land Value, Funds and Traffic were shown
@@ -1908,7 +1878,7 @@ health `16D`, education `16E`, land value `16F`. Time-range buttons: 1 year `170
 
 Every series keeps three ring histories: the last **12 monthly** samples (1-year view), the
 last **10 yearly** samples (10-year view) and the last **10 per-decade** samples (100-year view).
-[STATIC: the snapshot/export routine writes each series as one line of 12 values followed by
+[STATIC: the series export writes each series as one line of 12 values followed by
 lines of 10 values for years and decades.] Each series is drawn as a polyline auto-scaled
 between its own minimum and maximum in the shown range; labels `187`/`188` mark the high/low
 values. [INFERRED scaling] The history arrays are part of the saved city (`10-save-format.md`).
@@ -1929,11 +1899,11 @@ garbage `1DF` (plus workforce `1E5`). Pages:
   `1F0`, neighbour deals `1F1`; caption `28A`, total `289` (MW-h per year).
 * Garbage — share of garbage by destination (`1F3`): landfill `1F4`, neighbour deals `1F1`,
   incinerators `1F5`, recycling `1F6`, collecting in streets `1F7`; total `1F8` (tons per year).
-  [STATIC] Slice sources (city statistics record): landfill = 12-month sum at `+0xD0`; neighbour
-  deals = 12-month sum at `+0xC0` (garbage exported); incinerators = 12-month sums at `+0xCC` plus
-  `+0xC8` (incinerator and waste-to-energy); recycling = 12-month sum at `+0xC4`. "Collecting in
+  [STATIC] Slice sources (city statistics): landfill = 12-month sum of garbage sent to landfill;
+  neighbour deals = 12-month sum of garbage exported; incinerators = 12-month sums of incinerated
+  garbage plus waste-to-energy garbage; recycling = 12-month sum of recycled garbage. "Collecting in
   streets" is NOT a 12-month sum: it is the current stock of uncollected garbage standing on
-  non-landfill tiles (`+0x74`, not reset by the yearly roll), so it can dominate the pie in a city
+  non-landfill tiles (not reset by the yearly roll), so it can dominate the pie in a city
   whose garbage has gone uncollected for a long time.
 
 The underlying statistics are owned by `20-sim-population.md` and `16-sim-utilities.md`.
@@ -1944,27 +1914,27 @@ Everything in this section is `[OBSERVED]` by running the original at 1024 × 76
 
 ### 7a.1 Tool-column menus and tooltips
 
-| Root button | Second-level items (tooltip text, top to bottom) |
+| Root button | Second-level items (top to bottom; names as in §2.4) |
 |---|---|
 | Landscape | (not explored) |
-| Zoning | Residential, Commercial, Industrial, Landfill, Seaport, Airport, De-zone, Demolish. A plain click activates the item's current density directly; there is no visible fly-out on a click |
-| Transportation | Road, Highway, Bus Stop, Rail, Subway, Subway to Rail Connection, Demolish |
-| Utilities | power lines, power plants (opens the power-plant picker), water pipes, water buildings (picker), garbage (picker), demolish |
-| Civic | Police, Fire Station, Health & Education (fly-out: Hospital, School, College, Library, Museum), Parks & Rec, Landmarks, Rewards & Opportunities, Demolish |
+| Zoning | 8 items. A plain click activates the item's current density directly; there is no visible fly-out on a click |
+| Transportation | 7 items |
+| Utilities | 6 items; the power-plant, water-building and garbage items open a picker |
+| Civic | 7 items; Health & Education opens a 5-entry fly-out |
 | Meet advisors | (not explored) |
-| View / city info | View Snapshots, Take Snapshots, Budget, Neighbors, Ordinances, Scenario Status, View Data |
-| Options | Save City, Save As, Load, New City, Exit |
+| View / city info | 7 items |
+| Options | 5 items (save, save as, load, new city, exit) |
 
 Other behaviour:
 * Items whose button carries a small grid badge open a picker dialog or a fly-out (`08` §7).
 * A second-level column stays open after a dialog launched from it has closed. Clicking its root
   button again closes it.
 * Tooltips: geometry, look and timing are in `08-ui-framework.md` §3.3a.
-* Root-button tooltip strings (`225872FE`): Landscape `1`, Zone `2`, Build Transportation `3`,
-  Build Utilities `4`, Place Civic/Special Bldgs `5`, Emergency `56`, Meet `6`, Adjust & Review
-  `7`, Change Settings & Exit `8`. Query "?" is `3C`.
+* Root-button tooltip strings (`225872FE`): Landscape `1`, Zone `2`, Transportation `3`,
+  Utilities `4`, Civic/Special `5`, Emergency `56`, Meet `6`, Review `7`, Options `8`.
+  Query "?" is `3C`.
   Transportation sub-items: Road `22`, Highway `9A`, Bus Stop `25`, Rail `26`, Subway `28`,
-  Subway to Rail Connection `2A`, Demolish `1B` [OBSERVED].
+  Subway-to-Rail `2A`, Demolish `1B` [OBSERVED].
 
 **Tool mode and the control buttons** [OBSERVED, Craterville, 1024 × 768]. The tool was detected
 by a map click: a Query panel means Query is armed, a recentre means no tool, and no effect
@@ -2038,9 +2008,9 @@ occupant record (`10-save-format.md` §6.2.4) [INFERRED].
 
 ### 7a.5 Prompts and file dialogs
 
-* **Prompts.** Loading while in a city asks "Would you like to save this city?" (Yes/No). Choosing
-  New City from the Options menu asks "Do you want to save your city?". Both are message boxes with
-  a warning icon.
+* **Prompts.** Loading while in a city asks whether to save the city (`029541F4:250`, Yes/No).
+  Choosing New City from the Options menu asks the same question in other words (`015E410C:12`).
+  Both are message boxes with a warning icon.
 * **Save As / Load Saved City.** Both have:
   * a minimap preview of the selected file;
   * Population, Funds, Date, Mayor Name and City Name;
@@ -2090,7 +2060,7 @@ data (`27-platform.md`).
 
 * Meaning of `SC3MenuDescs` field 4 (`0x000018FF`) and of the non-image fields of the
   `SC3CityScheme.ini` scheme sections.
-* Exact geometry of each window (fixed in code; see `08-ui-framework.md`).
+* Exact geometry of each window (fixed by the program; see `08-ui-framework.md`).
 * Colour/placement of the cursor cost read-out; layer-value → palette-row quantisation of the
   data maps (the ramps themselves are the renderer's `data1–3Pal` palettes, §7.2).
 * Split point between "very high" and "extreme" flammability; usage-band ratios for utility

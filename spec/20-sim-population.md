@@ -51,7 +51,7 @@ Ordinance IDs referenced by the cohort model [STATIC]: youth curfew `0xC2BF1DC5`
 ## 2. Population counting
 
 * City population = sum over all residential buildings of their current resident count [STATIC:
-  the residential layer sums each residential building's occupancy over its building lists every
+  the population is the sum of each residential building's occupancy, recomputed every
   month]. [OPEN] Whether a building's occupancy equals its residential valve supply (footprint
   tiles × the valve-3000 supply per tile of `SC3ValveLayer.ini`), which would make the city
   population equal to `N_R` of `19-sim-economy.md` §5.1. [DATA] The newest population-chart
@@ -77,8 +77,8 @@ single-precision values, all persisted (`10-save-format.md` §6.11):
 It also keeps a birth-trend state *T* ∈ {rising = 0, falling = 1, steady = 2}. Each month it
 recomputes *A\**, the oldest age with a positive share.
 
-The residential layer draws its random numbers from its own generator instance, using the
-algorithms of `16-sim-utilities.md` §1. This covers births, the birth trend and strikes. Like every simulation generator it is
+Births, the birth trend and strikes draw random numbers using the
+algorithms of `16-sim-utilities.md` §1. Like every simulation generator the stream is
 seeded from the millisecond timer when the layer is created, and its state is not saved
 (`14-sim-clock.md` §8) [STATIC].
 
@@ -98,11 +98,10 @@ seeded from the millisecond timer when the layer is created, and its state is no
 
 ### 3.2 Monthly update: order of steps
 
-At each month boundary the residential layer performs these steps in order. Let *N* be the city
+At each month boundary these population steps run in order. Let *N* be the city
 population (§2) at the start of the month. [STATIC]
 
-1. Set the cap of valve 3000 from valve 3001 (`15-sim-growth.md` §3.2 "Cap rule"; earlier
-   drafts called this the employment percentage, see §6).
+1. Set the cap of valve 3000 from valve 3001 (`15-sim-growth.md` §3.2 "Cap rule").
 2. Re-apply the education and health department funding to every facility and total their upkeep
    (`19-sim-economy.md`).
 3. Distribute education (§4.2). This step uses the shares as they were before this month's changes.
@@ -177,8 +176,8 @@ INFERRED: the saved desk sums are exact multiples of `OptimalDeskCount` in every
 ### 4.2 Distribution (step 3 of §3.2)
 
 Facilities are grouped by kind, one group each for schools (0), colleges (1), libraries (2) and
-museums (3) [STATIC]. (The education funding pass is different: libraries and museums share one
-list there — `17-sim-services.md` §6.2.) Each group *g* has two per-age arrays, `gain_g[a]` and
+museums (3) [STATIC]. (The education funding pass is different: libraries and museums are funded
+together — `17-sim-services.md` §6.2.) Each group *g* has two per-age arrays, `gain_g[a]` and
 `seats_g[a]`, which are cleared every month. For each facility *f* in the group: [STATIC]
 
 1. Let *lo*, *hi* be its served ages and `Σp = p[lo] + … + p[hi]`. If *lo* > *hi* or Σp ≤ 0, the
@@ -211,7 +210,7 @@ people = `N × p[a]` (after steps 2–3 of §3.3). Then: [STATIC]
 3. `EQ[a] += Δ_ord + Δ_fac`.
 4. Statistics. These age windows are hard-coded and independent of the INI ages.
    * If 6 ≤ *a* ≤ 18 (13 ages, matching the 1/13 of §4.4): `G_school += Δ_fac` and
-     `schoolAgePop += round(people)`. CORRECTION: the earlier text said 7 ≤ *a*. [DATA: the saved
+     `schoolAgePop += round(people)`. [DATA: the saved
      schoolAgePop of Berlin (two saves), Madrid and Madison equals the 6–18 sum within the same
      0.1 % month drift as collegeAgePop. The 7–18 sum is about 8 % lower.]
    * If 19 ≤ *a* ≤ 24: `G_college += Δ_fac` and `collegeAgePop += round(people)`.
@@ -239,8 +238,7 @@ DATA: in all 25 played shipped cities the newest EQ-chart sample equals Q(0, 89)
 
 * City EQ (the chart value and the aura input in `17-sim-services.md` §8.4) is Q(0, 89).
 * The health & education advisor reads Q(20, 65) instead, and likewise the LE mean over ages
-  20–65 (`22-advisors-news-petitioners.md` §3.12) [STATIC]. Correction: an earlier revision said
-  the advisors use Q(0, 89).
+  20–65 (`22-advisors-news-petitioners.md` §3.12) [STATIC].
 * The parental term uses Q(20, 40).
 * The industrial developer's clean/dirty choice (`15-sim-growth.md` §4.5) uses Q(20, 65), the
   working-age EQ [STATIC].
@@ -251,8 +249,7 @@ DATA: in all 25 played shipped cities the newest EQ-chart sample equals Q(0, 89)
 
 `patients = trunc((P̄ × PollutionFactor + HospitalizationRate) × N)`, where P̄ = ⌊(*P₁* + *P₂*) / 2⌋
 *P₁* = the pollution layer's **avgAir** and *P₂* = its **avgWater**: the averages of the last
-completed pollution sweep, the saved fields of `17-sim-services.md` §7.4 [STATIC]. Correction:
-these were previously only inferred.
+completed pollution sweep, the saved fields of `17-sim-services.md` §7.4 [STATIC].
 `PollutionFactor` is held in double precision.
 
 ### 5.2 Health gain *x* and health rating
@@ -371,10 +368,9 @@ The factor 2 halves the raw jobless share. Test vector (Berlin): `K` = 513 952, 
 ⌊8 839 100 / 1 027 904⌋ = 8 (saved chart sample 8). Craterville: `K` = 140 724, `J` = 126 521 →
 5 (saved 5). The value feeds the unemployment chart and the advisors.
 
-**Correction to earlier drafts.** The monthly residential-layer computation previously described
-here as the "employment percentage" (`D = 0` → 0 %; `S < D` → 100 %; else `⌊100 × D / S⌋`) reads
+**Not an employment figure.** The monthly computation (`D = 0` → 0 %; `S < D` → 100 %; else `⌊100 × D / S⌋`) reads
 the **amenity valve 3001**, not the jobs valve, and its result is the `capPct` of valve 3000
-(`15-sim-growth.md` §3.2 "Cap rule"). It is not an employment figure; unemployment is the
+(`15-sim-growth.md` §3.2 "Cap rule"). Unemployment is the
 world-layer value above.
 
 **Commuting / outside world** [STATIC, detailed in `15-sim-growth.md` §3.4–3.5]:
@@ -390,8 +386,8 @@ used only by neighbour deals.
 ## 7. Wealth classes
 
 Residential buildings belong to three wealth classes (low/medium/high land-value bands,
-agent types 3100–4700 in `CitySim.ini`). The residential layer keeps separate building lists per
-class and sums their populations [STATIC]. Wealth class has no separate effect on demand. It enters growth
+agent types 3100–4700 in `CitySim.ini`). The population is summed per
+class [STATIC]. Wealth class has no separate effect on demand. It enters growth
 only through the residential categories 3100–4700 that the developers choose between
 (`15-sim-growth.md`); there are no per-wealth tax rates (`19-sim-economy.md` §4.1).
 
@@ -432,4 +428,4 @@ statistics and the three charts (population, EQ, LE). The byte layout is in
 
 * How facilities are grouped (one group per kind is inferred) and how the groups are ordered.
 * The CPR-training flag read is inferred from the key and ID pattern.
-* The meaning of the unknown byte at offset 0x1BE of the residential state.
+* The meaning of the unknown byte at offset 0x1BE of the on-disk residential-layer record (`10-save-format.md` §6.11).

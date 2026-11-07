@@ -78,7 +78,7 @@ parsed value is truncated to 8 bits. [STATIC] unless noted.
 | `TripChanceDensityMultiplier` | % | 50 | Stored as value × 0.01. Multiplies the origin's density value in the count chance (§4.5) |
 | `TrafficUseMassTransitChance` | u8 % | 50 | Chance that a commuter trip may use mass transit (§4.6) |
 | `MaxEfficiencyRoads` / `MaxEfficiencyTransit` | % | 120 | Stored ×0.01, clamped to ≥ 1.0. Funding-efficiency cap (§8) [STATIC, use OPEN] |
-| `MysticalERoads` / `MysticalETransit` | float | 30 | Funding-efficiency curve constant *K* (§8) [STATIC: road setter SIMSERV 0x10008D4B, transit 0x10008DBD; over-funding test f > 1.0; constants 4.999999 and 1.2 hard-coded] |
+| `MysticalERoads` / `MysticalETransit` | float | 30 | Funding-efficiency curve constant *K* (§8) [STATIC: over-funding test f > 1.0; constants 4.999999 and 1.2 hard-coded] |
 | `DamageEfficiencyMultiplier` | ‰ | 100 | Stored ×0.001. Road damage rate when roads are underfunded (§8.4) [STATIC] |
 | `RepairEfficiencyMultiplier` | ‰ | 50 | Stored ×0.001. Road repair rate when roads are overfunded (§8.4) [STATIC] |
 | `DamagedCostAddToStep` | int | 32 | Extra step cost on a damaged road/highway tile. Only the low 8 bits are used |
@@ -100,8 +100,8 @@ parsed value is truncated to 8 bits. [STATIC] unless noted.
 | `MinFundingForNoStrike` | u8 % | 100 | Transit funding below this percentage can cause a strike (§8.2) |
 | `StrikeChanceAtZeroFunding` | % | 75 | Stored ×0.01. Strike-chance slope (§8.2) |
 | `MaxLengthofStrikeInMonths` | int | 24 | Upper bound on strike length (§8.2) |
-| `TrafficSimLobotomy` | — | — | **Not read.** The "lobotomy" switch is forced off (a related module global is set to 0 and never taken from the INI) [STATIC] |
-| `TrafficSimLobotomyDensity` | u8 | 128 | Loaded from the INI into a module global that no code ever reads. Implementations may ignore the key (shipped value 128). [STATIC] |
+| `TrafficSimLobotomy` | — | — | **No effect.** The key is not read; the "lobotomy" switch is always off [STATIC] |
+| `TrafficSimLobotomyDensity` | u8 | 128 | Loaded from the INI but has no effect. Implementations may ignore the key (shipped value 128). [STATIC] |
 
 The "Default" column is the built-in value that applies when the key is missing. The shipped INI
 overrides most of these. The engine must read the INI.
@@ -147,7 +147,7 @@ The map is W × H tiles. The traffic subsystem keeps the following grids [STATIC
 | 0x0008 | subway occupant, subway station, subway–rail station | Subway |
 | 0x0010 | transit station building | Station / stop tile |
 | 0x0020 | subway–rail station | Rail↔subway transfer |
-| 0x0040 | highway on-ramp piece: network piece IDs 15130–15141 ("Highway Onramp", agent type 17202) [STATIC]. The other agent-type-17202 pieces (15107–15110, 15115–15128: mainline fork lanes) do **not** carry it [DATA: giving them 0x40 drops London highway density from 60.1 to 55.0 and Berlin's from 19.6 to 10.4 against the original's 58.3 / 28.5; a briefly published revision of this row said otherwise and is withdrawn] | Road/highway junction tile |
+| 0x0040 | highway on-ramp piece: network piece IDs 15130–15141 ("Highway Onramp", agent type 17202) [STATIC]. The other agent-type-17202 pieces (15107–15110, 15115–15128: mainline fork lanes) do **not** carry it [DATA: giving them 0x40 drops London highway density from 60.1 to 55.0 and Berlin's from 19.6 to 10.4 against the original's 58.3 / 28.5] | Road/highway junction tile |
 | 0x0080 | road/highway piece reports itself damaged: its damaged flag (piece word bit 27, `10-save-format.md` §6.2.6) is set [STATIC] | Damaged (adds `DamagedCostAddToStep`) |
 | 0x0100 | road/highway/rail piece whose record has bit 0 of attribute 0x12D set [STATIC] | Step cost × 0.7. The pieces with the bit are the diagonal ones (highway 11223, 11224, 15052, 15106; road 35, 11207, 11209, 18004; rail 50, 51) [DATA; "diagonal" INFERRED from the 0.7 ≈ 1/√2] |
 | 0x0200 | subway piece with the same bit (subway 11621, 11622, 18015, 18018) | Subway step cost × 0.7 |
@@ -167,10 +167,8 @@ Station occupants are recognised by occupant **type ID** [STATIC]:
 | 0x3049 (12361) | Subway–rail connector station | 0x003C |
 
 When an occupant is added, its flags are OR-ed into the grid. When it is removed, they are cleared
-and the grid is rebuilt for the affected area (§11). The neighbour-connection bits come from the
-network subsystem's "is this tile a neighbour connection of network type N" query, with N = 1
-road, 2 rail, 4 highway, 6 subway, in the network-ID numbering of `12-networks.md` (1 road,
-2 rail, 3 power, 4 highway, 5 pipe, 6 subway) [STATIC].
+and the grid is rebuilt for the affected area (§11). The neighbour-connection bits are set on
+tiles that are neighbour connections of the road, rail, highway and subway networks respectively [STATIC].
 
 ## 4. Trip generation
 
@@ -189,7 +187,7 @@ matches [STATIC]:
 (The names are those of `CitySim.ini` agent types [DATA]. Bus stops, stations, parking, schools
 and the like belong to none of these groups, so they neither make trips nor act as destinations.)
 Every occupant of a matching type is its own trip maker with its own lot: the weekly firing visits
-each building occupant record once (each is a scheduler agent registered when it is added)
+each building occupant record once
 [STATIC]. This includes filler pieces placed with a building (parking lots, gardens and similar
 fillers carry R/C/I agent types), and the 1 × 1
 field pieces of farms (9300 → 8000, category 2, industrial radius) and each airport part
@@ -204,9 +202,8 @@ match none of these IDs make no trips.
 
 There are 16 trip generators: one per (category × week-slot 0–3). Generators are assigned **per
 building type**, not per building. When the city is set up, the building types of `CitySim.ini`
-are visited in the order of the agent-type registry, which is **ascending agent-type ID compared
-as unsigned 32-bit numbers** (the registry is an ordered map keyed by type ID, filled from
-`CitySim.ini [AgentTypes]`) [STATIC]. Each type that belongs to one of the four
+are visited in **ascending agent-type ID order, compared
+as unsigned 32-bit numbers** (the order of `CitySim.ini [AgentTypes]` by type ID) [STATIC]. Each type that belongs to one of the four
 categories gets the generator of its category with the next slot from a single global counter
 that runs 0, 1, 2, 3, 0, … [STATIC]. Every building of that type therefore shares that type's
 slot. A generator only fires during its week:
@@ -253,8 +250,7 @@ EconomicPhases` at the current city population (`15-sim-growth.md` §3.5): the s
 industrial weights that split the workforce. They are held by the jobs valve (7000) of the world
 layer and saved with it [STATIC]. No scaling is applied. Example: at 800 000 inhabitants
 (between `766:30:10` and `900:32:10`) the weights are about (30, 10), so about 75 % of the
-weighted draws go to commercial destinations. Correction: an earlier revision inferred job
-totals.
+weighted draws go to commercial destinations.
 
 ### 4.3 Walking radius and destination bits
 
@@ -286,7 +282,7 @@ counting test needs state bit 0. A lot with no trip result routes a trip on **ev
 (step 2 if r > threshold, step 3 otherwise). An established lot routes only with probability
 threshold/100. New buildings, and lots whose bits were cleared when the previous building was
 removed (§11), start without a result. So a city with many recent constructions makes many
-more trip attempts. DATA (W5 runs, day of save s08, R/C/I lots without the trip-tried bit):
+more trip attempts. DATA (played runs, day of the 8th save, R/C/I lots without the trip-tried bit):
 Madrid 1 597 (780 of them under construction), Berlin 316, Moscow 332. Expected attempts per
 monthly cycle ≈ threshold share × tried lots + untried lots: Madrid ≈ 0.21 × 20 074 + 1 597 ≈ 5 800
 against the saved 6 546. Without the untried term it is ≈ 4 200.
@@ -296,14 +292,13 @@ against the saved 6 546. Without the untried term it is ≈ 4 200.
 A trip starts as **not counted**. Only a functional building (as in §4.3: the occupant reports
 functional and bit 0 of the lot state is set) draws the test below; a non-functional building's
 trip (under construction 4/0x204, abandoned 2/0x202) is never counted and adds no density or
-income [STATIC, SimTransit 0x100097B9]. CORRECTION: the earlier wording let readers count
-non-functional buildings unconditionally. [DATA: implementing this rule lowers a reimplementation's
+income [STATIC]. [DATA: implementing this rule lowers a reimplementation's
 London month-1 road density from 54.8 to 50.0, against the original's 47.8.]
 
 Let d be the value (0–255)
 at the lot's first tile of the **valve-effect map** of the RCI development layer (`10-save-format.md`
 §6.7 `effectMap`, the map of the last completed cycle; owned by the growth valve layer,
-`15-sim-growth.md` §3.3). The traffic layer looks it up by the layer ID 0x80F1E6D3 [STATIC]. Each tile
+`15-sim-growth.md` §3.3). The traffic layer reads it from the saved record `206C6E7C:80F1E6D3:0` [STATIC]. Each tile
 holds the clamped sum of the 3000/5000/8000 supplies and the 7000 (jobs) demand of
 `SC3ValveLayer.ini [AgentValveEffects]` over the occupied buildings covering it. It is saved, so
 a loaded city has it at once. Draw q = rand(100). The trip is counted iff
@@ -344,29 +339,28 @@ flag.
 
 Travel modes [STATIC]:
 
-| Code | Mode |
+| Mode name | Meaning |
 |---|---|
-| 0x80 | At origin (start) |
-| 1 | Car on road |
-| 2 | Car on highway |
-| 3 | Car on a road tile that has highway access (0x40) |
-| 4 | Rail |
-| 8 | Subway |
-| 0x14 | At a rail station |
-| 0x18 | At a subway station |
-| 0x30 | At a subway–rail station |
-| 0x41 | Bus on road |
-| 0x42 | Bus on highway |
-| 0x43 | Bus on a road tile with highway access |
-| 0x50 | At a bus stop |
+| origin | At origin (start) |
+| car-road | Car on road |
+| car-highway | Car on highway |
+| car-junction | Car on a road tile that has highway access (flag 0x40) |
+| rail | Rail |
+| subway | Subway |
+| rail-station | At a rail station |
+| subway-station | At a subway station |
+| transfer-station | At a subway–rail station |
+| bus-road | Bus on road |
+| bus-highway | Bus on highway |
+| bus-junction | Bus on a road tile with highway access |
+| bus-stop | At a bus stop |
 
-The visit mask records, per tile, which modes have already examined the tile in this trip. It is
-one **byte** per tile, and the **raw mode codes** of the table above are OR-ed into it; there is
-no separate bit per mode [STATIC]. A tile is skipped by a node of mode *m* when
-(byte AND *m*) = *m*. Because the codes share bits, marks overlap: for example a tile marked
-with 0x41 (bus) or 0x50 (bus stop) is also skipped by mode 1 (car), and 0x14 also covers 4 and
-0x10. Reproduce the overlaps. At the start of a trip the mask is cleared and the origin
-rectangle is marked with 0x80.
+The visit mask records, per tile, which modes have already examined the tile in this trip. A tile
+is skipped by a node of a given mode when the tile's visit record already covers that mode.
+The records of related modes overlap: for example a tile visited in a bus mode or at a bus stop
+is also skipped by car-road, and a rail-station visit also covers rail. [OPEN: the full overlap
+matrix is a detail of the original's mode numbering that is not reproduced here; test against the original.]
+At the start of a trip the mask is cleared and the origin rectangle is marked as visited by the origin mode.
 
 ### 5.2 First step (from the origin)
 
@@ -378,11 +372,11 @@ not been visited:
 
 | Tile flags | Candidate mode |
 |---|---|
-| no 0x10, has road | 1 (car on road) |
-| has 0x10, bus allowed and road | 0x50 (bus stop) |
-| has 0x10 and 0x20, rail or subway allowed | 0x30 |
-| has 0x10, rail allowed and rail | 0x14 |
-| has 0x10, subway allowed (any flag) | 0x18 |
+| no 0x10, has road | car-road |
+| has 0x10, bus allowed and road | bus-stop |
+| has 0x10 and 0x20, rail or subway allowed | transfer-station |
+| has 0x10, rail allowed and rail | rail-station |
+| has 0x10, subway allowed (any flag) | subway-station |
 | anything else | not a candidate (the tile is marked visited) |
 
 The rows are tested top to bottom. A trip can never start directly on a highway or on track.
@@ -412,45 +406,44 @@ until the annoyance level is reached, and then spills onto quieter tiles.
 
 ### 5.4 Neighbourhood and mode transitions per mode
 
-For modes 1, 4, 8, 0x14, 0x18, 0x30, 0x41 and 0x50, the candidates are the 8-neighbour ring
+For modes car-road, rail, subway, rail-station, subway-station, transfer-station, bus-road and bus-stop, the candidates are the 8-neighbour ring
 around the node rectangle (the rectangle grown by 1, clipped, without its four corners). The
 scan skips only those four corners: the tiles of the node rectangle itself are also candidates,
-so a 1×1 node can pick its own tile again [STATIC, SimTransit; earlier implementations skipped
-it]. The transition table is [STATIC]:
+so a 1×1 node can pick its own tile again [STATIC]. The transition table is [STATIC]:
 
 | From mode | Candidate tile | New mode |
 |---|---|---|
-| 1 road | road, not station | 1, or 3 if the tile has 0x40 |
-| 1 road | station, bus allowed, road | 0x50 |
-| 1 road | station, (rail or subway allowed), 0x20 | 0x30 |
-| 1 road | station, rail allowed, rail | 0x14 |
-| 1 road | station, subway allowed | 0x18 |
-| 0x41 bus | road, not station | 0x41, or 0x43 if 0x40 |
-| 0x41 bus | station: same as road except that no bus-stop transition exists | 0x30 / 0x14 / 0x18 |
-| 4 rail | rail, not station | 4 |
-| 4 rail | station with 0x20 | 0x30 |
-| 4 rail | station with rail | 0x14 |
-| 8 subway | subway, not station | 8 |
-| 8 subway | station with 0x20 | 0x30 |
-| 8 subway | station with subway and without road/rail | 0x18 |
-| 8 subway | station with subway **and** with road or rail (flags & 5), e.g. a bus stop or rail station above the line | 8 (stays on the subway layer) [STATIC, SimTransit asm 0x10007ba5–0x10007c28; 0x20 is tested before 0x08] |
-| 0x14 rail stn | rail, not station, and previous mode ≠ 4 | 4 (board) |
-| 0x18 subway stn | subway, not station, and previous mode ≠ 8 | 8 (board) |
-| 0x30 | (rail allowed) rail, not station, previous ≠ 4 | 4 |
-| 0x30 | (subway allowed) subway, not station, previous ≠ 8 | 8 |
-| 0x14, 0x18, 0x30 (otherwise) | station with road, bus allowed, previous ≠ 0x50 | 0x50 |
-| 0x50 bus stop | road, not station, previous ≠ 0x41 | 0x41 (board bus) |
+| car-road | road, not station | car-road, or car-junction if the tile has 0x40 |
+| car-road | station, bus allowed, road | bus-stop |
+| car-road | station, (rail or subway allowed), 0x20 | transfer-station |
+| car-road | station, rail allowed, rail | rail-station |
+| car-road | station, subway allowed | subway-station |
+| bus-road | road, not station | bus-road, or bus-junction if 0x40 |
+| bus-road | station: same as road except that no bus-stop transition exists | transfer-station / rail-station / subway-station |
+| rail | rail, not station | rail |
+| rail | station with 0x20 | transfer-station |
+| rail | station with rail | rail-station |
+| subway | subway, not station | subway |
+| subway | station with 0x20 | transfer-station |
+| subway | station with subway and without road/rail | subway-station |
+| subway | station with subway **and** with road or rail (flags & 5), e.g. a bus stop or rail station above the line | subway (stays on the subway layer) [STATIC; the transfer-station case is tested before the subway-station case] |
+| rail-station | rail, not station, and previous mode ≠ rail | rail (board) |
+| subway-station | subway, not station, and previous mode ≠ subway | subway (board) |
+| transfer-station | (rail allowed) rail, not station, previous ≠ rail | rail |
+| transfer-station | (subway allowed) subway, not station, previous ≠ subway | subway |
+| rail-station, subway-station, transfer-station (otherwise) | station with road, bus allowed, previous ≠ bus-stop | bus-stop |
+| bus-stop | road, not station, previous ≠ bus-road | bus-road (board bus) |
 
 A trip that arrives at a subway station *by subway* and does not end there is turned back into
-mode 8. It stays on the subway, so subway riders leave the subway only by ending their trip at a
+subway mode. It stays on the subway, so subway riders leave the subway only by ending their trip at a
 station [STATIC]. Rail riders can leave a rail station only to an adjacent bus stop (or by ending
 the trip there).
 
-**Highway-like modes (2, 3, 0x42, 0x43).** These do not scan a ring. Instead the network piece
+**Highway-like modes (car-highway, car-junction, bus-highway, bus-junction).** These do not scan a ring. Instead the network piece
 under the node reports which of its four orthogonal neighbours may be entered, given the direction
 of the last move [STATIC]:
 * *M* = the piece record's u32 attribute **0x136** (the road/highway connection matrix; 0x137 and
-  0x138 are the rail and subway matrices, used by other callers). A city-wide boolean *B* held by the
+  0x138 are the rail and subway matrices, used elsewhere). A city-wide boolean *B* held by the
   traffic layer, read from the application at start-up, selects the half: *B* true → bits 0–15,
   *B* false → bits 16–31 [STATIC; what *B* means, possibly the driving side, is INFERRED]. Use *B* = **true** for the shipped game [DATA: an implementation check on Berlin gives a highway-snapshot mean absolute difference of 0.70 at day 40 and 10.7 at day 356 against the original's saves with *B* true, against 3.10 and 28.0 with *B* false; the day-356 mean highway density is 18.0 against the original's 19.2].
 * With *d* = the node's last move direction (0–3) and *r* = the piece's rotation (0–3, from the
@@ -469,15 +462,15 @@ in the order north/−y, west/−x, south/+y, east/+x) is evaluated as follows [
 
 | From | Neighbour (not a station) | New mode | Density layer |
 |---|---|---|---|
-| 2 | highway | 2, or 3 if 0x40 | highway |
-| 3 | road | 1, or 3 if 0x40 | surface |
-| 3 | highway (no road) | 2 / 3 | highway |
-| 0x42 | highway | 0x42, or 0x43 if 0x40 | highway |
-| 0x43 | road | 0x41, or 0x43 if 0x40 | surface |
-| 0x43 | highway (no road) | 0x42 / 0x43 | highway |
+| car-highway | highway | car-highway, or car-junction if 0x40 | highway |
+| car-junction | road | car-road, or car-junction if 0x40 | surface |
+| car-junction | highway (no road) | car-highway / car-junction | highway |
+| bus-highway | highway | bus-highway, or bus-junction if 0x40 | highway |
+| bus-junction | road | bus-road, or bus-junction if 0x40 | surface |
+| bus-junction | highway (no road) | bus-highway / bus-junction | highway |
 
-**New node rectangle** [STATIC, SimTransit dc ~5476–5499 and the first step]: after the choice, the new
-node is the **chosen tile's occupant rectangle** (occupant vf 0xCC, anchor to anchor + size − 1,
+**New node rectangle** [STATIC]: after the choice, the new
+node is the **chosen tile's occupant rectangle** (anchor to anchor + size − 1,
 inclusive), not the single tile. Every tile of that rectangle receives the parent's visit code. For
 1×1 network pieces this is the tile itself. For a 2×2 rail station (agent type 12230) the node covers
 all four tiles, so the next ring scan surrounds the whole station and track touching any of its sides
@@ -488,8 +481,8 @@ against the original's 936 / 1018 / 1030, up from 906 / 817 / 803.]
 Selection among the permitted neighbours: the first is taken. A later one replaces it only if its
 density is below `TrafficAnnoyanceLevel`; in that case the node is flagged "alternatives exist".
 
-So cars reach highways only through tiles flagged 0x40, and buses ride highways in modes
-0x42/0x43.
+So cars reach highways only through tiles flagged 0x40, and buses ride highways in the
+bus-highway and bus-junction modes.
 
 ### 5.5 Step cost
 
@@ -499,18 +492,18 @@ Let f = 0.7 if the tile has flag 0x100 (0x200 for subway), else 1. Then [STATIC]
 
 | New mode | Step cost (cost units) |
 |---|---|
-| 1 road | ceil( (q(Road) + D + `TripCellCostBaseRoad`) × f ) |
-| 2 highway | ceil( (q(Highway) + D + `TripCellCostBaseHighway`) × f ) |
-| 3 | q(Road) + `TripCellCostBaseRoad` |
-| 4 rail | ceil( (q(Rail) + `TripCellCostBaseRail`) × f ) |
-| 8 subway | ceil( (q(Subway) + `TripCellCostBaseSubway`) × f ) |
-| 0x14 | if previous mode = 4: ceil(q(Rail) + `TripCellCostBaseRail`); else q(RailStation) + `TripCellCostBaseRailStation` |
-| 0x18 | if previous = 8: ceil(q(Subway) + `TripCellCostBaseSubway`); else q(SubwayStation) + `TripCellCostBaseSubwayStation` |
-| 0x30 | if previous is 4 or 8: q(Subway) + `TripCellCostBaseSubway` (subway constants even when arriving by rail); else q(SubwayRailStation) + `TripCellCostBaseSubwayRailStation` |
-| 0x41 | ceil( (q(RoadBus) + D + `TripCellCostBaseRoadBus`) × f ) |
-| 0x42 | ceil( (q(HighwayBus) + D + `TripCellCostBaseHighwayBus`) × f ) |
-| 0x43 | q(RoadBus) + `TripCellCostBaseRoadBus` |
-| 0x50 | if previous = 0x41: q(Highway) + `TripCellCostBaseHighway` (highway constants: an original quirk); else q(BusStop) + `TripCellCostBaseBusStop` |
+| car-road | ceil( (q(Road) + D + `TripCellCostBaseRoad`) × f ) |
+| car-highway | ceil( (q(Highway) + D + `TripCellCostBaseHighway`) × f ) |
+| car-junction | q(Road) + `TripCellCostBaseRoad` |
+| rail | ceil( (q(Rail) + `TripCellCostBaseRail`) × f ) |
+| subway | ceil( (q(Subway) + `TripCellCostBaseSubway`) × f ) |
+| rail-station | if previous mode = rail: ceil(q(Rail) + `TripCellCostBaseRail`); else q(RailStation) + `TripCellCostBaseRailStation` |
+| subway-station | if previous = subway: ceil(q(Subway) + `TripCellCostBaseSubway`); else q(SubwayStation) + `TripCellCostBaseSubwayStation` |
+| transfer-station | if previous is rail or subway: q(Subway) + `TripCellCostBaseSubway` (subway constants even when arriving by rail); else q(SubwayRailStation) + `TripCellCostBaseSubwayRailStation` |
+| bus-road | ceil( (q(RoadBus) + D + `TripCellCostBaseRoadBus`) × f ) |
+| bus-highway | ceil( (q(HighwayBus) + D + `TripCellCostBaseHighwayBus`) × f ) |
+| bus-junction | q(RoadBus) + `TripCellCostBaseRoadBus` |
+| bus-stop | if previous = bus-road: q(Highway) + `TripCellCostBaseHighway` (highway constants: an original quirk); else q(BusStop) + `TripCellCostBaseBusStop` |
 
 The multiplication by f is done in single-precision floating point. The new node's cost = parent
 cost + step cost.
@@ -546,19 +539,19 @@ The search is a depth-first walk [STATIC]:
 4. If there is none, backtrack: pop nodes until one is found whose "alternatives exist" flag is
    set *and* that now yields a new step (the visit mask prevents repeats). If the stack empties,
    the trip **fails**. A retried node runs the normal step again (§5.2–§5.5): the ring is
-   rescanned from the start, tiles whose visit-mask entry already holds all bits of the node's mode
+   rescanned from the start, tiles whose visit-mask entry already covers the node's mode
    are skipped, and the choice rule of §5.3 starts afresh over the remaining candidates. Nothing
    resumes from the old scan position [STATIC].
 
-The visit mask is updated as each node is chosen: the new node's tiles get the **parent's** mode
-code OR-ed in, not the new node's own mode. A ring tile examined without a valid transition is
-marked at once with the scanning node's code (1, 4, 8, 0x10, 0x41 or 0x50 by branch, §5.4)
+The visit mask is updated as each node is chosen: the new node's tiles are marked as visited by the
+**parent's** mode, not the new node's own mode. A ring tile examined without a valid transition is
+marked at once as visited by the scanning node's mode (car-road, rail, subway, station-visited, bus-road or bus-stop by branch, §5.4)
 [STATIC]. Candidates that were valid but lost the §5.3 choice are not marked, so a retry
-(§5.7 step 4) can still take them. Station-mode scans (0x14, 0x18, 0x30) mark their rejects with
-0x10 only, so they never block a later rail (4) or subway (8) scan of the tile. Highway-like modes
-(2, 3, 0x42, 0x43) use the same skip test; a permitted neighbour that is a station or has no valid
-transition is marked with the scanning code itself (OR-ed), valid ones are not. Codes that only
-partly overlap do not block each other (a tile marked 1 is still open to mode 3), so a path may
+(§5.7 step 4) can still take them. Station-mode scans (rail-station, subway-station, transfer-station) mark their rejects as station-visited
+only, so they never block a later rail or subway scan of the tile. Highway-like modes
+(car-highway, car-junction, bus-highway, bus-junction) use the same skip test; a permitted neighbour that is a station or has no valid
+transition is marked as visited by the scanning mode itself, valid ones are not. Modes whose marks only
+partly overlap do not block each other (a tile marked car-road is still open to car-junction), so a path may
 cross its own earlier tiles in another mode. For a span step the marks go on the tile entered
 **before** the jump; the landing rectangle is not marked.
 
@@ -566,22 +559,21 @@ cross its own earlier tiles in another mode. For a span step the marks go on the
 
 | Current mode | Arrives when |
 |---|---|
-| 1, 0x41 | The node's first tile has 0x400 (road neighbour connection); otherwise the destination test below |
-| 2, 0x42 | Only when the tile has 0x800 (highway neighbour connection) |
-| 4 | Only when the tile has 0x1000 (rail neighbour connection) |
-| 8 | Only when the tile has 0x2000 |
+| car-road, bus-road | The node's first tile has 0x400 (road neighbour connection); otherwise the destination test below |
+| car-highway, bus-highway | Only when the tile has 0x800 (highway neighbour connection) |
+| rail | Only when the tile has 0x1000 (rail neighbour connection) |
+| subway | Only when the tile has 0x2000 |
 | all other modes | Destination test |
 
 Destination test: some tile of the node rectangle has the destination bit of the trip's destination
-category set. For destination "any" (category 3 trips choose Res/Com/Ind, so "any" only arises from
-internal callers), any of the three bits counts [STATIC].
+category set. For destination "any" (category 3 trips choose Res/Com/Ind, so "any" only arises from facility and tile-origin trips), any of the three bits counts [STATIC].
 
 So **every neighbour connection counts as a valid destination for every trip** that reaches it,
-whatever the trip's origin category or destination [STATIC]. A trip in mode 1 or 0x41 (road,
-bus on road) arrives at a road connection (0x400) or by the destination test. Modes 2/0x42
-(highway), 4 (rail) and 8 (subway) arrive **only** at a connection of their own network; there is
+whatever the trip's origin category or destination [STATIC]. A trip in car-road or bus-road mode
+arrives at a road connection (0x400) or by the destination test. The car-highway and bus-highway modes
+(highway), rail and subway arrive **only** at a connection of their own network; there is
 no destination test while on a highway, rail or subway tile. Rail riders must leave through a
-station (0x14/0x30) to reach a destination inside the city. Industrial freight (rail allowed) can
+station (rail-station or transfer-station) to reach a destination inside the city. Industrial freight (rail allowed) can
 therefore end at any rail connection on the map edge.
 This is how neighbour connections absorb commuters (§9.3).
 
@@ -602,37 +594,34 @@ A is added to the live density of every tile of every node on the path. The laye
 
 | Node mode | Surface (live) | Highway (live) | Subway (live) | Fare credited |
 |---|---|---|---|---|
-| 1 road | + A | | | |
-| 2 highway | | + A | | |
-| 3, 0x43 | — | — | — | — |
-| 4 rail, 0x14 rail station | + A | | | Rail fare |
-| 8 subway | | | + A | Subway fare |
-| 0x18 subway station | + A | | + A | Subway fare |
-| 0x30 subway–rail station | + A | | + A | Rail fare + subway fare |
-| 0x41, 0x42 bus | — | — | — | Bus fare |
-| 0x50 bus stop | + A | | | Bus fare |
-| 0x80 origin | — | — | — | — |
+| car-road | + A | | | |
+| car-highway | | + A | | |
+| car-junction, bus-junction | — | — | — | — |
+| rail, rail-station | + A | | | Rail fare |
+| subway | | | + A | Subway fare |
+| subway-station | + A | | + A | Subway fare |
+| transfer-station | + A | | + A | Rail fare + subway fare |
+| bus-road, bus-highway | — | — | — | Bus fare |
+| bus-stop | + A | | | Bus fare |
+| origin | — | — | — | — |
 
 Each update is new = clamp(old + A, 0, `TrafficMaxDensity`), computed in 16-bit signed arithmetic [STATIC].
 Fares are credited per **node**, not per tile. A fare is the effective per-trip fare of §8.1,
 added to a monthly fare accumulator.
 
 **Transport-occupant gate** [STATIC]. For each path node of a successful counted trip, before any
-density or fare is applied, the node's occupant pointer is tested: it must be non-null and its
-run-time occupant flag word (`13-buildings-occupants.md` §3.1a) must have bit **0x4000** set.
-That bit is the transport/network-occupant flag (present on network pieces other than pipes and
-plain power lines, and on transit stations `0x4104`). It is **not** the network-grid span flag
-0x4000 of §3.1. If the test fails, the node is skipped entirely (no density, no fare). Ordinary
-road/rail/highway/subway pieces and stations pass; the origin lot (a building, mode 0x80) fails
-and also has no fare/density row in the table above. Correction: an earlier sentence said "network
-piece" for this gate; stations are buildings with bit 0x4000 and must pass too.
+density or fare is applied, the node must belong to a transport occupant: a network piece (road,
+rail, highway or subway; pipes and plain power lines do not qualify) or a transit station. If the
+test fails, the node is skipped entirely (no density, no fare). Ordinary
+road/rail/highway/subway pieces and stations pass; the origin lot (a building, origin mode) fails
+and also has no fare/density row in the table above.
 
-Buses therefore put no density on roads; bus riders load only the stops. Mode-3/0x43 road tiles
+Buses therefore put no density on roads; bus riders load only the stops. Junction-mode (car-junction, bus-junction) road tiles
 (the junction tiles) also receive no density from passing trips.
 Further details [STATIC]: density and fares are added only on a **successful** counted trip; a
 failed trip adds nothing. They are added per tile of each node rectangle, after the gate above.
 Every node after the origin is a single tile, so in practice "per node" = "per tile". The origin
-node (the lot rectangle, mode 0x80) and a destination building tile receive nothing. A span step
+node (the lot rectangle, origin mode) and a destination building tile receive nothing. A span step
 moves the 1-tile rectangle by *L* tiles; it does not widen it.
 
 ### 6.2 Monthly decay
@@ -715,31 +704,20 @@ exists, and is used by the map views.
 
 At each month-end the fare accumulator is reported to the budget (§8.3) and reset.
 
-### 7.3a London fare trajectory after load [DATA]
+### 7.3a Fare total in the first month after load [DATA]
 
-On the W5 London run (shipped city, N = 256), traffic-record `faresLast` / `faresCur` /
-`avgTransit` / funding / strike / enacted ordinances:
-
-| save | day | faresLast | faresCur | avgT | avgR | failRatio | strike | roads% | transit% |
-|---|---|---|---|---|---|---|---|---|---|
-| s01 | 1 | 908.03 | 199.03 | 122 | 34 | 0.027 | idle (2) | 103 | 102 |
-| s02 | 36 | 771.26 | 914.94 | 120 | 34 | 0.023 | idle | 103 | 102 |
-| s03 | 68 | 936.18 | 995.98 | 125 | 35 | 0.021 | idle | 103 | 102 |
-| s05 | 139 | 1018.13 | 0.00 | 127 | 36 | 0.019 | idle | 103 | 102 |
-| s10 | 311 | 930.67 | 913.51 | 124 | 36 | 0.019 | idle | 103 | 102 |
-
-Enacted ordinances are unchanged across these saves (Parking Fines `0x015B4D1E` and five others;
-**not** Subsidized Mass Transit `0xC2D1B025`, **not** Shuttle Service) [DATA]. So the s01→s02
-drop of `faresLast` (908 → 771) is **not** a fare-rate, ordinance, strike or funding change:
-`faresLast` at s01 is the shipped city's previous month; 771 is the first completed month of the
-run; by s03 it has already recovered to 936 and stays near 930–1018. Parking Fines only changes
-the road density retention (§6.2) at month-end, after that month's fares are sealed. No
-London-specific boarding or path-shortening rule was found [STATIC]. The month-1 fare total is
-therefore the mode mix / path composition under the loaded live densities (and the wall-clock
-RNG of §4.7). An implementation that posts ~928 in that same first month while the original posts
-771 is over-crediting transit nodes or over-using transit modes relative to the original; the
-transport-occupant gate of §6.1 alone does not explain a gap of that size on ordinary network
-nodes (they all pass the gate) [INFERRED medium].
+In a played run of the shipped London city (N = 256), the saved `faresLast` value fell from about
+908 at load to about 771 for the first completed month, then recovered to about 936 by the third
+save and stayed near 930–1018. Enacted ordinances were unchanged across these saves, and neither
+Subsidized Mass Transit nor Shuttle Service was enacted. So the drop is **not** a fare-rate,
+ordinance, strike or funding change: `faresLast` at load is the shipped city's previous month.
+Parking Fines only changes the road density retention (§6.2) at month-end, after that month's
+fares are sealed. No London-specific boarding or path-shortening rule exists [STATIC]. The
+month-1 fare total is therefore the mode mix / path composition under the loaded live densities
+(and the wall-clock RNG of §4.7). An implementation that posts ~928 in that same first month while
+the original posts 771 is over-crediting transit nodes or over-using transit modes relative to
+the original; the transport-occupant gate of §6.1 alone does not explain a gap of that size on
+ordinary network nodes (they all pass the gate) [INFERRED medium].
 
 ## 8. Mass transit: ridership, funding and strikes
 
@@ -864,8 +842,8 @@ state 1. The bits are cleared for the lot when the building is removed (§11).
 |---|---|
 | Zone developer (`15-sim-growth.md`) | Result 1 is the developer's `unfit` input (`15-sim-growth.md` §4.2): for a built R/C/I building it causes an abandonment roll with the zone type's `NoServicePercentage` (`SC3Tune.INI`, `[ResidentialZoneDeveloper]` / `[CommercialZoneDeveloper]` / `[IndustrialZoneDeveloper]`), result code 6, and no redevelopment or upgrade on that visit; an abandoned lot with result 1 is not re-occupied. Results 0 and 2 do not block anything [STATIC for the effect; rule details owned by 15] |
 | Garbage facilities (`16-sim-utilities.md` §4.3) | If a garbage facility's lot has result 1, the facility immediately routes a fresh **uncounted** trip with destination "any", trip-length factor 255 (budget = 255 × `TripCellCostBaseRoad`), and only rail permitted besides cars. If that trip fails, the facility's disposal capacity is 0 for the month [STATIC]. Power plants and water facilities do not use the trip result [STATIC for the water and power rules of 16] |
-| Landfill developer (`15-sim-growth.md` §7) | On every visit of a landfill-zoned tile it routes a **tile-origin** trip from that tile: no occupant, origin rectangle = the 1 × 1 tile, walking radius = the default radius (6, §2.1), destination "any", uncounted, trip-length factor = map size, cars and rail allowed. Failure gives result code 16. The trip writes the tile's result bits like any other trip [STATIC]. Landfill pieces (agent type 12850, group 12005 Garbage) are also category-3 trip makers through the generators (§4.1). **Open:** in Berlin the original records success for 14 landfill tiles (row z = 99, x 4–17) that have no road piece inside the radius-6 search area and no destination bits, and it never reports code 16 on zone 17. Interim until traced: treat trips whose origin is a landfill tile, or a landfill piece, as successful [INFERRED from DATA] |
-| Query tool (`09-ui-screens.md`) | Result 1 adds a "can't reach destinations" line to the building query [STATIC] |
+| Landfill developer (`15-sim-growth.md` §7) | On every visit of a landfill-zoned tile it routes a **tile-origin** trip from that tile: no occupant, origin rectangle = the 1 × 1 tile, walking radius = the default radius (6, §2.1), destination "any", uncounted, trip-length factor = map size, cars and rail allowed. Failure gives result code 16. The trip writes the tile's result bits like any other trip [STATIC]. Landfill pieces (agent type 12850, group 12005 Garbage) are also category-3 trip makers through the generators (§4.1). **Open:** in Berlin the original records success for 14 landfill tiles (row z = 99, x 4–17) that have no road piece inside the radius-6 search area and no destination bits, and it never reports code 16 on zone 17. Interim: treat trips whose origin is a landfill tile, or a landfill piece, as successful [INFERRED from DATA] |
+| Query tool (`09-ui-screens.md`) | Result 1 adds a line to the building query saying the building cannot reach destinations [STATIC] |
 
 `MaxDistFromTransport` (in the same `SC3Tune.INI` sections) is **not** part of the traffic model.
 It is a separate "network within N tiles" proximity test in the network subsystem (+1 with Shuttle
@@ -903,13 +881,10 @@ Computed at each monthly decay [STATIC]:
   "any", trip-length factor 255, all modes allowed, uncounted). Those four are the GigaMall, Casino
   Row, the Toxic Waste Conversion Plant and the Maximum Security Prison. Their trip is part of a
   "functional" test (powered, watered, lot state 1, and the trip succeeds). That test runs only
-  when the building's query window is built, so it adds nothing in normal play [STATIC; the deal
-  manager also binds this test but no periodic call to it was found]. These are **all** the
-  route calls in the program [STATIC]. Every trip goes through the traffic layer's two trip entry
-  points (occupant trip and tile-origin trip). Their only callers are the per-building
+  when the building's query window is built, so it adds nothing in normal play [STATIC]. These are **all** the
+  route calls in the simulation [STATIC]. Trips are routed only for the per-building
   generators, the garbage and recycling facilities, the landfill developer and the four
-  business-deal buildings. Correction: the previous text spoke of "several civic facility
-  classes". No police, fire, health, school or park building routes trips. `tripsFailed` is incremented when the
+  business-deal buildings. No police, fire, health, school or park building routes trips. `tripsFailed` is incremented when the
   search stack empties. Both are cleared in the monthly decay (§11 step 2.1), which runs on
   day 1 **after** that day's weekly work. So when day 1 is a Monday, that Monday's generator trips
   are counted and then immediately cleared; they are missing from the saved month total.
@@ -974,8 +949,8 @@ The traffic simulator owns one record in the city database (the inner record dir
 main city record; see `10-save-format.md`) [DATA]:
 
 * Key: **Type 0x206C6E7C, Group 0x029CA804, Instance 0x00000000**.
-* Present in every shipped city, scenario, starter town and terrain. The parser
-  The analysis team's parser reads **59/59** shipped files, all of them version 9, flags 2.
+* Present in every shipped city, scenario, starter town and terrain. All **59** shipped files
+  parse, all of them version 9, flags 2.
   Map sizes 128, 192 and 256 occur.
 
 Grid serialisation: an 8-bit grid is written as W rows, from the **highest** first coordinate
@@ -1091,8 +1066,8 @@ occupants (any other argument disables it). It has no simulation effect [STATIC]
 5. (Resolved: piece attribute 0x136 matrix, §5.4.) Still open: the meaning of the city-wide
    boolean *B*. (Resolved: span flags 0x4000 are restored from the saved piece word.)
 7. Airport/seaport puzzle development rules (§12): `15-sim-growth.md`.
-8. (Resolved: `TrafficSimLobotomyDensity` is loaded and never read, §2.1; same as the unread `TrafficSimLobotomy` switch.)
+8. (Resolved: `TrafficSimLobotomyDensity` has no effect, §2.1; same as the `TrafficSimLobotomy` switch.)
 9. Strike side effects outside the trip model (news, advisor, automata).
 10. The direction of the history arrays in the save record (index 0 = most recent is inferred).
-11. (Q-AL, narrowed): London road-density overshoot / long car paths remain parked; first-month
+11. London road-density overshoot / long car paths remain parked; first-month
     fare dip is explained as mode-mix under load, not a missing fare multiplier (§7.3a).

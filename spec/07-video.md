@@ -33,11 +33,10 @@ implementation may omit this fallback. `<DataDirectory>` is the data directory o
 
 ## 2. Ending and skipping
 
-* The movie runs as a modal "intro" screen state with three states: *not started* → *playing* →
-  *finished*. While playing, each application frame asks the player to present the next movie frame.
-  [STATIC]
+* The movie plays full-screen and modal: it starts, plays, then finishes. While playing, the next
+  movie frame is presented on every application frame. [STATIC]
 * When the stream ends, or when playback cannot start, the intro ends exactly as if the player
-  had pressed **Escape**: playback stops, the state becomes *finished*, the normal cursor/display
+  had pressed **Escape**: playback stops, the normal cursor/display
   state is restored and the shell proceeds to the main menu. [STATIC]
 * Pressing **Escape** skips the movie at any time, with the same effect. [STATIC] Whether other keys or a mouse click also
   skip is [OPEN]; a reimplementation should at least accept Escape and is encouraged to accept any

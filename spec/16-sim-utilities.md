@@ -25,11 +25,9 @@ Integer stream, `Rand(n)` for an unsigned bound *n*:
    state is *S* ← *V* mod 2³². The raw output *R* is bits 16–47 of *V*, i.e. ⌊*V* / 2¹⁶⌋ mod 2³². This
    is the same generator as `14-sim-clock.md` §8.
 3. If *n* < 0x00FFFFFF, the result is *R* mod *n*.
-4. Otherwise let *m* = 2^(⌊log₂ *R*⌋+1) − 1 (all bits up to the highest set bit of *R*, i.e. the mask
-   is built from *R*, not from *n*); take *R* AND *m*; if that exceeds *n*, go back to step 2; else
-   return it. Because *R* AND *m* = *R*, the mask has no effect: the result is the first raw output
-   *R* with *R* ≤ *n*, so this branch returns values in [0, *n*] **inclusive**, unlike step 3,
-   which returns [0, *n* − 1]. [STATIC; original behaviour, reproduce as described]
+4. Otherwise redraw (go back to step 2) until the raw output *R* satisfies *R* ≤ *n*, and return it.
+   This branch returns values in [0, *n*] **inclusive**, unlike step 3, which returns
+   [0, *n* − 1]. [STATIC; original behaviour, reproduce as described]
 
 `RandInt(a, b)` = *a* + `Rand(b − a)`, i.e. uniform on [*a*, *b* − 1] (and *a* when *a* = *b*). [STATIC]
 
@@ -129,10 +127,10 @@ is in `22-advisors-news-petitioners.md`/`09-ui-screens.md`]
 
 ### 2.6 Monthly power update
 
-The power layer holds a per-tile **powered bit** (1 bit per tile, row-major, 32 tiles per word) and a
-per-tile **consumption byte** (power units/month; each conducting occupant writes its whole
-consumption into the cell of its anchor tile only, all other cells stay 0, `12-networks.md` §9.1).
-[STATIC] The consumption value is the occupant's **own building record** (the occupant-attribute record whose key the occupant entry stores, `10-save-format.md` §6.2), u8 attribute **0xC9**; 0 when the record has no 0xC9 [STATIC]. It is looked up per building record, **not** per agent type: many records share one agent type (e.g. 3100) with different 0xC9 values, so a per-type table is wrong. It is written when the occupant is added, for every occupant whose agent type descends from 100 (buildings) or 17100 (power lines), except damaged ones (15400). No density, lot-size or funding factor is applied. **Lot state** [STATIC]: the record is the building's own only while its lot state is 1 or 513 (occupied). For any other state (abandoned, under construction, …) the occupant manager supplies a substitute record (the state's stand-in appearance), and the byte comes from that. In practice it is about 0: only occupied lots consume [DATA, below]. Correction: the previous revision said every lot state consumes the building's own value. DATA: Σ 0xC9 over occupied (state 1/513) lots vs the month's consumed power (the current row of the production table, `10-save-format.md` §6.14): Madison 38 328 vs 38 303; Berlin 158 275 vs 158 254; Craterville 49 344 vs 49 192; Madrid 190 896 vs 190 892; London 127 580 × 0.9 (Power Conservation) = 114 822 vs 114 858. Counting all lot states is 2–12 % too high; keying by agent type instead of record is 1.6–3.4× too high (Moscow 503 335). In Madrid (no power ordinance, plants' capacity 204 000 in the main network) the demand summed in scan order reaches 204 116 at the end of row z = 235, matching the observed pump cut at z ≥ 236 (§3.3) [DATA; INFERRED that the budget there is close to capacity].
+The power layer tracks a per-tile **powered** state and a
+per-tile **consumption value** (power units/month; each conducting occupant writes its whole
+consumption into its anchor tile only, all other tiles stay 0, `12-networks.md` §9.1).
+[STATIC] The consumption value is the occupant's **own building record** (the occupant-attribute record whose key the occupant entry stores, `10-save-format.md` §6.2), u8 attribute **0xC9**; 0 when the record has no 0xC9 [STATIC]. It is looked up per building record, **not** per agent type: many records share one agent type (e.g. 3100) with different 0xC9 values, so a per-type table is wrong. It is set when the occupant is added, for every occupant whose agent type descends from 100 (buildings) or 17100 (power lines), except damaged ones (15400). No density, lot-size or funding factor is applied. **Lot state** [STATIC]: the building's own value counts only while its lot state is 1 or 513 (occupied). For any other state (abandoned, under construction, …) the value is about 0: only occupied lots consume [DATA, below]. DATA: Σ 0xC9 over occupied (state 1/513) lots vs the month's consumed power (the current row of the production table, `10-save-format.md` §6.14): Madison 38 328 vs 38 303; Berlin 158 275 vs 158 254; Craterville 49 344 vs 49 192; Madrid 190 896 vs 190 892; London 127 580 × 0.9 (Power Conservation) = 114 822 vs 114 858. Counting all lot states is 2–12 % too high; keying by agent type instead of record is 1.6–3.4× too high (Moscow 503 335). In Madrid (no power ordinance, plants' capacity 204 000 in the main network) the demand summed in scan order reaches 204 116 at the end of row z = 235, matching the observed pump cut at z ≥ 236 (§3.3) [DATA; INFERRED that the budget there is close to capacity].
 Connectivity of power lines, conductive buildings and zones is defined in `12-networks.md`; the
 power layer computes a connected component by repeated row-wise flood expansion, capped at 600
 expansion passes. [STATIC]
@@ -171,11 +169,10 @@ Each month, in this order: [STATIC]
    Plants already reached by an earlier plant's distribution are therefore **not counted** (original
    defect). In effect, only the first plant in list order of each connected power network is tested,
    plus any plant whose tile no earlier distribution powered. Both counts are reported to the
-   utilities advisor (`22-advisors-news-petitioners.md` §3.13). Correction: the previous revision
-   counted all functional plants, as a separate step before distribution. DATA: Moscow's eight
+   utilities advisor (`22-advisors-news-petitioners.md` §3.13). DATA: Moscow's eight
    nuclear plants include one built in 2013 (*Ld* 536, age ≈ 629 months at 2065/250, *Lmax* 670). The
    shipped topic list holds the "ageing nuclear plant" topic. After the first evaluation in the
-   original's run it is gone and stays gone (W5_Moscow_s02 to s15), though that plant stays old
+   original's run it is gone and stays gone (observed over 14 later saves), though that plant stays old
    and unretired. Counting all plants would keep the topic. After all plants, for each neighbour
    connection whose slot has a non-zero deal amount and that was not reached, run distribution
    seeded at the connection tile.
@@ -205,7 +202,7 @@ Given a seed tile: [STATIC]
      (**brown-out**) *B* ← 0, the active deal slots are zeroed, **all remaining tiles of *K* in scan
      order stay unpowered**, consumed += *S* + *D*, and distribution ends.
 9. If the scan completes, leftover *L* = trunc(*B* × *k*); consumed += *S* + *D* − *L*.
-   **Reported draw** [STATIC]: after distribution the layer reports to the deal manager, for
+   **Reported draw** [STATIC]: after distribution the layer reports, for
    kind 0, Σ over buy slots of (slot amount − amount left in the slot), i.e. the power actually
    drawn from neighbours (`19-sim-economy.md` §10.4). [OBSERVED] In a 480-day run of Moscow the
    saved buy deals kept `units` 12 600 (power) and 5 100 (water) and the same monthly amount in
@@ -256,7 +253,7 @@ produced 191 900, consumed 158 254; London samples 51–54 with produced 250 000
 | `WaterConservationFactor` | percent | Demand reduction under the water-conservation ordinance. [STATIC] |
 | `WaterMeterFactor` | percent | Demand reduction under the water-meter ordinance. [STATIC] |
 | `DefaultConsumption` | water units per tile | Consumption for occupants not listed in `[AgentIDModifiers]`. [STATIC] |
-| `DefaultLeak` | — | Loaded from the INI into a module global that no code ever reads. Implementations may ignore the key (shipped value 0). [STATIC] |
+| `DefaultLeak` | — | Loaded from the INI but has no effect. Implementations may ignore the key (shipped value 0). [STATIC] |
 
 `[AgentIDModifiers]`: *agentType*`=`*n* (text after the number is a comment). At most 127
 entries are kept; they are sorted by ID and looked up by binary search. A building's monthly
@@ -270,8 +267,7 @@ consumption is *n* × (lot width × lot depth in tiles); buildings without an en
 unpowered, or its tile has no water service. At age ≥ `MaxLifespan` (greater **or equal**), in its monthly step, the plant's capacity is set to 0 and it is **replaced** like a power plant: a new occupant of the same agent type at the same position, lot state 8, carrying over its dates and lifespans, with the expired flag set. An expired plant is skipped by later monthly steps [STATIC]. No
 funding factor is applied. The pollution layer sums these capacities at the start of **every
 pollution run** (one per simulated day with the shipped `UpdatePeriod`), so the cap is
-**per run**, not per month (`17-sim-services.md` §7.2.4 step 4). Correction: earlier text said
-"per month at full funding". DATA: Berlin, 4 plants × 60 000, saved treated total 1 235 657
+**per run**, not per month (`17-sim-services.md` §7.2.4 step 4). DATA: Berlin, 4 plants × 60 000, saved treated total 1 235 657
 per sweep.
 
 ### 3.2 Facility kinds
@@ -345,7 +341,7 @@ Towers need neither water adjacency nor anything but power. [STATIC]
 3. **Components.** Repeat: take the first facility in list order (the order in which facilities
    were added, i.e. occupant load order, then placement order) whose output is non-zero and which
    has not been reached this month; stop when there is none. Flood-fill the **pipe mask** from
-   that facility's tile. The pipe mask has a bit for every tile holding a pipe piece and for every
+   that facility's tile. The pipe mask is the set of tiles holding a pipe piece plus every
    tile of a water facility's lot [STATIC]. The flood starts with the seed tile only; each pass
    first grows the filled set by one tile left and right inside the pipe mask, then by one tile up
    and down; it stops when a pass adds nothing or after **500 passes**, whichever comes first
@@ -411,8 +407,8 @@ agent type times its lot width × depth (3.1), and 0 for types not listed. Marke
 `c` = 0 are cleared without cost. In practice the buildings charged are those in lot states 1
 and 4 [DATA: the per-type demand of states 1 + 4 reproduces the saved `used` within 1 % in
 Madison and Berlin].
-**Wet tiles.** The front marks new tiles wet a 32-tile row word at a time, then charges the
-marked buildings among them. When the budget runs out partway, the rest of that word stays
+**Wet tiles.** The front marks new tiles wet 32 tiles of a row at a time, then charges the
+marked buildings among them. When the budget runs out partway, the rest of those 32 tiles stays
 wet but uncharged [STATIC]. The saved service bitmap is the union of all components' wet tiles.
 **Counts** [STATIC; DATA]: after distribution the number of marks still set is the number of
 buildings without water. It is saved as `unwatered` (`10-save-format.md` §6.14). Berlin day 40:
@@ -441,7 +437,7 @@ lose water first. [INFERRED]
 |---|---|---|
 | `SC3Pollution.ini [AgentIDModifiers]` | 5th field | Garbage produced per building (per 2 × 2 cell share, see 4.2). [STATIC] |
 | `SC3Pollution.ini [TuningParameters]` | `GarbageAbductionAmount` | Garbage that may silently vanish per **month** (the counter resets at every month-end, 4.3). |
-| | `GarbageScalingFactor` | Stored as value × 0.001 (shipped 100 → 0.1). **Not** used by production or disposal — the per-tile reduction that earlier drafts attributed to it is the recycling ratio (4.3). Its only consumer is the pollution query UI, which multiplies a pollution-layer garbage total by the stored factor and rounds it to the nearest integer (correction: not truncated) for one query line (`17-sim-services.md` §7.2.2). [STATIC] |
+| | `GarbageScalingFactor` | Stored as value × 0.001 (shipped 100 → 0.1). **Not** used by production or disposal; the per-tile reduction is the recycling ratio (4.3). Its only consumer is the pollution query UI, which multiplies a pollution-layer garbage total by the stored factor and rounds it to the nearest integer (not truncated) for one query line (`17-sim-services.md` §7.2.2). [STATIC] |
 | | `GarbagePollutedThreshold`, `MaxGarbagePolluteForUI` | Threshold for "garbage-polluted" tile tests and the scale maximum of the garbage map. |
 | | `TrashPresortOrdEffect`, `TireRecyclingOrdEffect`, `BackyardCompostingOrdEffect`, `PaperReductionOrdEffect`, `IndWasteDisposalOrdEffect` | Percent reductions of garbage (4.2). |
 | `SC3Tune.ini [Incinerator]` | `OptimalGarbageCap` | Garbage one incinerator burns **per pollution run** (per simulated day with the shipped `UpdatePeriod` 30) at 100 % funding; the monthly capacity is 30 × the value. Held internally as ×30 and divided by 30 per run. [STATIC; DATA: Liverpool, 3 incinerators: current-month counter 135 000 = 3 × 1 500 × 30, 12-month total 1 620 000] |
@@ -493,7 +489,7 @@ when there is no centre. A centre's monthly values [STATIC]:
 * otherwise `OptimalPctReduction` and `OptimalPopServed` (`SC3Tune.ini [RecyclingCenter]`), both
   reduced linearly after `DeclineAge`: value − ⌊(age − `DeclineAge`) × value /
   (`MaxLifespan` − `DeclineAge`)⌋.
-There is **no** funding scaling (correction: an earlier revision inferred one). The per-centre
+There is **no** funding scaling. The per-centre
 properties saved with the occupant (`10-save-format.md` §6.2.5) are the unaged INI values.
 `r` is saved as the f32 "ratio" of the pollution record (`17-sim-services.md` §7.4).
 Test vectors: `P` = 100 000, two new centres (45 %, 50 000): served 100 000, w = 45 000 →
@@ -604,11 +600,11 @@ of the production table: the current-slot index advances by one, the slot it mov
 overwritten with a freshly computed month (the production-table row of §2.7 for the loaded
 city), and each annual total is adjusted by the difference. The power % graph gets **no** new
 sample. Examples: Berlin 9 → 10, new row Σ 158 254 (equal to the previous slot); the Charts
-electricity total reads 1 906 937 instead of the saved 1 908 843. W5_London_s15 6 → 7, new slot
-117 207 (previous slot 116 988). ZO_london_offers 3 → 4, new slot 120 919. All eight shipped
-cities with observed runs advance by one per load. Which code path performs this roll is not
-found: the only routine that advances the index is the monthly update, which also pushes the
-graph sample. [STATIC: no load-time caller, no date check, no saved scheduler state]
+electricity total reads 1 906 937 instead of the saved 1 908 843. In a 15th save of a London run: 6 → 7, new slot
+117 207 (previous slot 116 988). In another London save, 3 → 4, new slot 120 919. All eight shipped
+cities with observed runs advance by one per load. The load-time code path that performs this roll
+is not known: the monthly update is the only other thing that advances the index, and it also
+pushes the graph sample. [OPEN: no load-time trigger, no date check, no saved scheduler state found]
 
 **Water layer `206C6E7C:02BF0033:0`** (version 4). It stores the per-tile water-service bitmap
 (trimmed to the range of non-zero words), the `water %` graph history (fixed scale 100), the month's
@@ -630,7 +626,7 @@ absent, re-derive *Lmax* and *Ld* (§2.3) and start *W* at 0. [STATIC layout][IN
 * Closed: expired-plant replacement is same agent type at lot state 8, flagged expired, output 0
   (§2.6 step 4).
 * Water: exact row-sweep order of the spreading front; water treatment plant behaviour
-  (`OptimalPollutionCap`). Closed: `DefaultLeak` is loaded and never read (§3.1).
+  (`OptimalPollutionCap`). Closed: `DefaultLeak` has no effect (§3.1).
 * Garbage: closed — `GarbageScalingFactor` is query-UI only (§4.1 / `17` §7.2.2); recycling ratio
   (4.3), abduction resets monthly (4.3), store (4.4), counter labels (4.5).
 * Pumps: whether the ring test uses the land-value water-tile test (§3.3 step 3, INFERRED).
@@ -639,4 +635,4 @@ absent, re-derive *Lmax* and *Ld* (§2.3) and start *W* at 0. [STATIC layout][IN
   at the start of every component.
 * Closed: Water Conservation = `0x02BF1DFA`, Water Meters = `0xC2F90EB1` (§3.4 / `19` §9.5).
 * Whether *m* in §3.3 step 5 is the constant `MaxWaterPolluteForUI` or a running maximum.
-* Power: which code path performs the load-time production roll (Persisted state).
+* Power: what triggers the load-time production roll (Persisted state).

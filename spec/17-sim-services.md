@@ -19,8 +19,8 @@ How often the runs happen [STATIC unless tagged]:
 
 | Layer | Runs |
 |---|---|
-| Police (§3.3), fire (§4) | once per simulated day, on the daily command, as daily area work (`14-sim-clock.md` §6.2, police before fire) |
-| Crime (§7.1), pollution and garbage disposal (§7.2, `16-sim-utilities.md` §4.3), aura (§8), flammability (§4) | once per simulated day, on the daily cascade, as daily scheduler agents (`14-sim-clock.md` §6.1 items 8–11). Aura also samples its mayor-rating chart on the monthly cascade [STATIC] |
+| Police (§3.3), fire (§4) | once per simulated day, as daily area work (`14-sim-clock.md` §6.2, police before fire) |
+| Crime (§7.1), pollution and garbage disposal (§7.2, `16-sim-utilities.md` §4.3), aura (§8), flammability (§4) | once per simulated day (`14-sim-clock.md` §6.1 items 8–11). Aura also samples its mayor-rating chart once per month [STATIC] |
 | Health, education (§5, §6) | once per month, in the population layer's month-day work (`14-sim-clock.md` §6.3 rule 7) |
 
 With one run per day the shipped values give full sweeps of 30 days (police, fire, pollution),
@@ -41,7 +41,7 @@ With one run per day the shipped values give full sweeps of 30 days (police, fir
 | `SC3Crime.ini` | `[TuningParameters]` | `UpdatePeriod`, `PoliceFactor`, `YouthCurfewOrdEffect`, `GamblingOrdEffect`, `JrSportsOrdEffect`, `NeighborhoodWatchOrdEffect`, `ConservationCorpsOrdEffect` |
 | `SC3Crime.ini` | `[AgentIDModifiers]` | *agentType*`=`*a*`,`*b* (two signed integers; trailing text is comment) |
 | `SC3Pollution.ini` | `[TuningParameters]` | `UpdatePeriod`, `MaxAirPolluteForUI`, `MaxWaterPolluteForUI`, `MaxGarbagePolluteForUI`, `AirPollutedThreshold`, `WaterPollutedThreshold`, `GarbagePollutedThreshold`, twelve `*OrdEffect` keys, `TrafficAirFactor`, `GarbageAbductionAmount`, `GarbageScalingFactor` |
-| `SC3Pollution.ini` | `[AgentIDModifiers]` | *agentType*`=`*airAmt*`:`*airRadius*`,`*waterAmt*`:`*waterRadius*`,`*garbage* (parsed as five integers `%d:%d,%d:%d,%d`) |
+| `SC3Pollution.ini` | `[AgentIDModifiers]` | *agentType*`=`*airAmt*`:`*airRadius*`,`*waterAmt*`:`*waterRadius*`,`*garbage* (parsed as five integers: air amount, air radius, water amount, water radius, garbage, in the key format `a:b,c:d,e`) |
 | `SC3Aura.ini` | `[TuningParameters]` | `UpdatePeriod`, police coverage effects, `CrimeFactor`, `FireCoverageFactor`, `NoiseFactor`, pollution factors, `StandingGarbageFactor`, `RadiationFactor`, three ordinance effects, EQ/LE factors and thresholds |
 | `SC3Aura.ini` | `[AgentIDModifiers]` | *agentType*`=`*a*`,`*b* |
 | `SC3ResLayer.ini` | `[TuningParameters]` | health/education strike keys and EQ/HQ keys (see §5, §6) |
@@ -54,7 +54,7 @@ The fire-coverage and police-coverage layers are **coarse grids of 4 × 4-tile c
 tile coordinates (tile (x, z) belongs to cell (⌊x/4⌋, ⌊z/4⌋)). Each cell holds a signed integer
 accumulator *A* and a displayed byte *D* = clamp(trunc(*A* / 16), 0, 255). Because the kernel below is
 evaluated per *tile* and summed into the tile's cell, *A*/16 is the average over the cell's 16 tiles.
-[STATIC, including the 4 × 4 cell size: both grids address cells as (x >> 2, z >> 2)]
+[STATIC, including the 4 × 4 cell size: both grids use cell (⌊x/4⌋, ⌊z/4⌋)]
 **What the crime rule reads** [STATIC]: for each of its cell's 4 tiles the crime update (§7.1.3)
 reads *D* of the police cell containing that tile, divides it by `PoliceFactor` (shipped 1) and
 subtracts it, so a crime cell inside one police cell subtracts 4·*D*; the ordinance terms are
@@ -91,15 +91,14 @@ When the funding level *p* (percent, 0–255) of a station is set:
    where *A* = 4.999999 × (*E* + 1.2 / (1 − *M*)). The constants 4.999999 (single precision,
    4.999999046…) and 1.2 are hard-coded. *x'* = 1 at *x* = 1 and tends to *M* as *x* grows; with the
    shipped values (*M* = 1.2, *E* = 30), *x'* = 1.2 − 1/(125·*x* − 120). Otherwise *x* is used
-   unchanged (linear). **The over-funding test differs per setter** [STATIC]: fire (SIMSERV
-   0x1000176C) tests *U* > *U₀* (the rounded upkeep), while police (0x10004B1E), the SIMRCI
-   school/college/hospital setters (0x100054F0, 0x10006C12, 0x1000A73F) and the road and transit
-   setters (0x10008D4B, 0x10008DBD) test *x* > 1.0. The two differ when *U₀* is small: for fire
+   unchanged (linear). **The over-funding test differs per facility type** [STATIC]: fire tests
+   *U* > *U₀* (the rounded upkeep), while police, school, college, hospital, road and transit
+   test *x* > 1.0. The two differ when *U₀* is small: for fire
    with *U₀* = 20 at *p* = 101, *U* = 20, so fire stays linear (*x* = 1.01) where police would
-   saturate. *R*, *Max* and *Min* are then truncated (`_ftol`). [STATIC] Defect: *M* is floored at 1.0, so **any** `MaxEfficiency` ≤ 100
-   (including 0 or a missing key) gives 1 − *M* = 0 and a division by zero. Correction: the
-   previous text said only 100. Guard it, but preserve results for all other values. A key is
-   stored only when present (fire 0x10001020, police 0x10004426).
+   saturate. *R*, *Max* and *Min* are then truncated toward zero. [STATIC] Defect: *M* is floored at 1.0, so **any** `MaxEfficiency` ≤ 100
+   (including 0 or a missing key) gives 1 − *M* = 0 and a division by zero.
+   Guard it, but preserve results for all other values. A key is
+   stored only when present.
    `PoliceFactor` (u16, crime cell update) and `FireCoverageFactor` (signed byte, aura) are
    divisors with no zero guard either; 0 faults in the original [STATIC].
 4. Effective parameters (truncated, stored as bytes): *R* = trunc(*R₀*·*x*), *Max* = trunc(*Max₀*·*x*),
@@ -249,9 +248,9 @@ when `cursorZ` reaches H the cursor wraps to `(0, 0)` and the layer finalises it
 average (`⌊sweepSum / sweepCount⌋`, or 0 if none) before the next tile. Only tiles whose new
 value is non-zero add to `sweepSum` and `sweepCount`; zero tiles are excluded from both. The
 average is stored as a byte and is the value the fire strike compares with
-`MaxAcceptableFlam` [STATIC, SIMSERV 0x1000C523, strike chance 0x1000AF08]. Record trailer after
+`MaxAcceptableFlam` [STATIC]. Record trailer after
 the byte grid: u32 cursorX, u32 cursorZ, u32 sweepSum, u32 sweepCount, u8 average
-[STATIC for the fields, INFERRED order]. [DATA] The four u32 values agree with this reading. For example, W5_Berlin_s02 has cursor (104, 192), so 49 256 tiles visited, and count 23 511, which is 48 % (the map's non-zero share). The final byte is 0 in every W5 save, so the average is recomputed rather than read from the file. Tiles per run (⌊W·H/30⌋) are recomputed at load, not
+[STATIC for the fields, INFERRED order]. [DATA] The four u32 values agree with this reading. For example, a Berlin save has cursor (104, 192), so 49 256 tiles visited, and count 23 511, which is 48 % (the map's non-zero share). The final byte is 0 in every shipped save, so the average is recomputed rather than read from the file. Tiles per run (⌊W·H/30⌋) are recomputed at load, not
 saved. The same cursor and
 running sum/count persist across daily runs, so a full map pass takes 30 simulated days on a
 square map.
@@ -347,9 +346,8 @@ Staff counts are only summed for the record.
 
 Libraries and museums are funded from the education department too: they are included in the
 department's funding pass and upkeep total. Their effect and capacity do not depend on funding.
-The funding pass keeps three facility lists by kind (0 = school, 1 = college, anything else =
-third): libraries (kind 2) and museums (kind 3) share that third list. College funding also has
-its own dedicated list; EQ distribution still uses four separate kind groups
+The funding pass handles schools, colleges, and a third group of libraries (kind 2) and museums
+(kind 3). EQ distribution still uses four separate kind groups
 (`20-sim-population.md` §4.2). [STATIC]
 
 ### 6.3 Coverage of the population
@@ -464,10 +462,9 @@ visited. [STATIC]
   `UpdatePeriod` ticks. *N* is computed when the layer is initialised. [STATIC]
 * The cells are visited in a **random permutation**. The order list holds one u16 per cell, with the
   cell's x in the high byte and z in the low byte. It is built in row order (x outer, z inner, both
-  ascending) and then shuffled with a forward Fisher–Yates pass: for *i* = 1 … *n*−1, *j* = `rand()`
-  mod (*i*+1), swap entries *i* and *j*. Here `rand()` is the Microsoft C runtime generator
-  (*s* ← *s*·214013 + 2531011, result (*s* >> 16) & 0x7FFF). Its seed is process-global and is not
-  saved. [STATIC for the shuffle; INFERRED, high, that `rand()` is this generator]
+  ascending) and then shuffled with a uniform shuffle (a forward Fisher–Yates pass: for *i* = 1 … *n*−1,
+  pick *j* uniformly in [0, *i*], swap entries *i* and *j*). Any uniform shuffle is acceptable; the
+  shuffle seed is not saved. [STATIC]
 * A cursor (index into the list) advances once per processed cell. The cursor ("next cell", in tile
   coordinates = 2 × cell) is kept between ticks. For each step: compute the cell at the cursor; if the
   list is exhausted, finalise the statistics (average = ⌊sum / count⌋, or 0 if count = 0; reset sum
@@ -486,7 +483,7 @@ which is stored per **tile**. [STATIC]
 
 | Grid | Resolution | Element | Meaning |
 |---|---|---|---|
-| state | cell | u32 | Bits 0–14: **water pollution** (0–32767). Bits 15–29: **air pollution** (0–32767). Bit 30: **sea-water (salt) flag** of the cell. It is set by the terrain when a sea-water surface is written at a vertex of any tile in the cell, and cleared only by a whole-terrain reset (`11-world-terrain.md` §5) [STATIC]. The pollution update never changes it. It is read by the water renderer, by the new-city neighbour test (`19-sim-economy.md` §10.6) and by the Neighbors-window region image (`11-world-terrain.md` §9). It is set in 19 shipped files [DATA]. **Bit 31** is a second cell flag with a getter/setter pair parallel to bit 30. Terrain water tools set only bit 30 (sea water); they never write bit 31. The only writer found is a pollution-layer sync/load path that sets bit 31 when a source tile property (key 2) equals 5. The bit is **clear in every shipped city** [DATA]. A map-overlay query path can tint a tile when the bit is set, and a change posts a redraw message, but nothing in normal play sets it. Implementations may leave it clear and ignore it on load. [STATIC] |
+| state | cell | u32 | Bits 0–14: **water pollution** (0–32767). Bits 15–29: **air pollution** (0–32767). Bit 30: **sea-water (salt) flag** of the cell. It is set by the terrain when a sea-water surface is written at a vertex of any tile in the cell, and cleared only by a whole-terrain reset (`11-world-terrain.md` §5) [STATIC]. The pollution update never changes it. It is read by the water renderer, by the new-city neighbour test (`19-sim-economy.md` §10.6) and by the Neighbors-window region image (`11-world-terrain.md` §9). It is set in 19 shipped files [DATA]. **Bit 31** is a second cell flag. Terrain water tools set only bit 30 (sea water); they never write bit 31. The only writer sets bit 31 on load/sync when a source tile property (key 2) equals 5. The bit is **clear in every shipped city** [DATA]. A map-overlay query can tint a tile when the bit is set, but nothing in normal play sets it. Implementations may leave it clear and ignore it on load. [STATIC] |
 | air source | cell | s32 | Sum of occupant air stamps (7.2.3) |
 | water source | cell | s32 | Sum of occupant water stamps |
 | garbage source | cell | s16 | Sum of occupant garbage stamps, never negative |
@@ -571,8 +568,7 @@ is then processed: [STATIC]
      produced" statistic. If the city **recycling ratio** *r* > 0 and *q* > 0, *k* = min(*q*,
      round(*q*·*r*)) is removed from *q* and counted as recycled (for the 2nd and 4th tiles, 0.5 is
      subtracted before rounding when *q*·*r* > 0.5). *r* is computed monthly from the recycling
-     centres (`16-sim-utilities.md` §4.3); it is **not** `GarbageScalingFactor` (correction to
-     earlier drafts). Then *q* += *G_t*, the tile's standing garbage is cleared, and *q* goes
+     centres (`16-sim-utilities.md` §4.3); it is **not** `GarbageScalingFactor`. Then *q* += *G_t*, the tile's standing garbage is cleared, and *q* goes
      through the disposal stages of `16-sim-utilities.md` §4.3; the remainder becomes the tile's
      standing garbage as specified there (including the backlog exchange with the landfill
      store). [STATIC]
@@ -607,7 +603,7 @@ A tile is "air polluted" if air ≥ `AirPollutedThreshold`. Water and garbage us
 in the same way (≥ comparisons). The map-view scale maxima are `Max*PolluteForUI`. The query text
 bands sit at 1/8, 1/4, 1/2 and 4/5 of the maximum.
 
-Details [STATIC, SIMECO 0x1000C95C query, 0x1000E3A3 / 0x1000E406 / 0x1000E469 overlays]:
+Details [STATIC]:
 * **Map overlay.** The value is v = min(value, M). If v = 0 the tile is not tinted. Otherwise the
   colour index is ⌊(N − 1)·v / M⌋, where N is the colour ramp's entry count. The values are:
   * air and water: the stored, relaxed cell value;
@@ -941,7 +937,7 @@ Police / fire layer record (34 bytes, no version/sentinel header): [DATA sizes; 
 | 0x1A | 4 | u32 | avgCoverage | Last full-sweep average coverage (0–255) [INFERRED] |
 | 0x1E | 4 | u32 | pctCovered | Last full-sweep coverage percent (0–100) [INFERRED] |
 
-Correction: fields 0x0E–0x16 were earlier read as upkeep, unjailed prisoners and unknown. They are
+Fields 0x0E–0x16 are
 the running sweep statistics. DATA, Berlin day 40: 1 945 cells, Σ*D* 84 177 (mean 43.3, matching
 avgCoverage 43); 557 of the cells have *D* = 0. The fire record uses the same layout [INFERRED].
 **Not saved** [STATIC]: the coverage accumulators (rebuilt from the stations on load) and the

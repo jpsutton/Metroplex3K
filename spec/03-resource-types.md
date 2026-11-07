@@ -145,35 +145,35 @@ All owned by `24-bat-buildings.md`.
 
 ## 4. `[ResourceFactories]` (`Sys/Default.ini`)
 
-Each line maps a Type ID (key) to a class ID (value) that names the decoder for that type.
+Each line maps a Type ID (key) to a decoder for that type.
 [STATIC] [DATA] An implementation needs only the key list: it tells which Types are decoded into
 shared, cached resource objects when requested by key. Types without a line (sprite types 0 and 1,
-save records, BAT records) are read directly by their owning subsystem.
+save records, BAT records) are read directly.
 
-| Type | Factory class | Type | Factory class |
-|------|---------------|------|---------------|
-| `2026960B` | `00436EB4` | `22CEFD99` | `42CEFD0B` |
-| `FFD30C03` | `FFD30C02`, then `02AE197F` | `62DFCCEC` | `42DFCC92` |
-| `C179C042` | `02AE197F` | `A20BF670` | `820C0620` |
-| `207EDC0E` | `02AE197F` | `C25C74F2` | `625C758F` |
-| `220055E1` | `02AE197F` | `625C6226` | `225C61E8` |
-| `E223741F` | `02AE197F` | `222B7EE4` | `622B7F03` |
-| `00006300` | `00006500` | `822B51AA` | `C22B517C` |
-| `00006301` | `00006500` | `C22B54FA` | `C22B54D7` |
-| `21FD6EEF` | `1A1E8FFC` | `C25C2BF7` | `C25C2BB0` |
-| `625C6CC7` | `025C6D8B` | `23DFAE5F` | `03DFAE27` |
-| `81F53D09` | `A1F53F57` | `62B9DA24` | `22B9DA43` |
-| `A2E3D533` | `42E411C2` | `856CD19A` | `1A1E8FFC` |
+| Type | Type |
+|------|------|
+| `2026960B` | `22CEFD99` |
+| `FFD30C03` | `62DFCCEC` |
+| `C179C042` | `A20BF670` |
+| `207EDC0E` | `C25C74F2` |
+| `220055E1` | `625C6226` |
+| `E223741F` | `222B7EE4` |
+| `00006300` | `822B51AA` |
+| `00006301` | `C22B54FA` |
+| `21FD6EEF` | `C25C2BF7` |
+| `625C6CC7` | `23DFAE5F` |
+| `81F53D09` | `62B9DA24` |
+| `A2E3D533` | `856CD19A` |
 
 Notes:
-* `FFD30C03` appears twice (values `FFD30C02`, then `02AE197F`). Both lines are delivered when
+* `FFD30C03` appears twice in the section. Both lines are delivered when
   the section is enumerated (`02-containers.md` §5.3). Which of the two registrations is in
-  effect afterwards was not determined [OPEN: does the second registration for a Type replace
+  effect afterwards is [OPEN: does the second registration for a Type replace
   the first, or is it ignored?]. It makes no difference to an implementation: `FFD30C03` records
   are `TKB1` property lists either way (§5). `C179C042` is registered but occurs in no shipped
   file. [DATA]
-* Every Type mapped to `02AE197F` carries `TKB1` payloads, so that value can be read as "decode
-  as a `TKB1` property list". [INFERRED, high]
+* The five `TKB1` Types (`FFD30C03`, `C179C042`, `207EDC0E`, `220055E1`, `E223741F`) share one
+  decoder: decode as a `TKB1` property list. [INFERRED, high]
 
 ## 5. Generic record encodings
 

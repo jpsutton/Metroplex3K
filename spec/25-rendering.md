@@ -58,14 +58,6 @@ point with **256 units per tile** on each ground axis, so a map of `Wm` tiles sp
 r = 3: (z, Wm·256 − 1 − x), where (x, z) is the sub-tile world position and the result is the
 view-space pair). [INFERRED, high confidence: must agree with the tile rotation above]
 
-The original also has a fixed-constant variant that uses 0xFFFF − c regardless of map size (exact
-only for 256-tile maps). It is used only to lay out the parts of a composite 3-D object relative to
-each other: every part is rotated and projected, and the part offsets are then taken relative to the
-smallest projected (screen) x and y of the group. Because only differences are used, the constant cancels
-and the result is the same for every map size. It is **not** a defect in observable behaviour, and
-an implementation may use either constant for that purpose. The group's anchor position itself is
-kept in unrotated world coordinates. [STATIC]
-
 ### 2.3 Projection formula
 
 For a view tile (u, v) whose relevant altitude is h (terrain altitude units, see
@@ -229,16 +221,10 @@ Each frame is composed back to front in this order: [STATIC partial, INFERRED or
   rotation. The screen x anchor stays the left vertex (u_max, v_min).
   * World corner by piece rotation: r = 0 → (x+1, z); r = 1 → (x, z) [INFERRED];
     r = 2 → (x, z+1); r = 3 → (x+1, z+1) [INFERRED].
-* Evidence:
-  * Solving H from sprite T over the sloped terrain-bound pieces of 8 shipped cities gives this
-    corner for 877 of 1,108 rot-0 pieces and 809 of 1,017 rot-2 pieces. In the remaining cases the
-    sprite top is not the tile's top corner, so the method does not apply. H is the same at all
-    four camera rotations.
-  * Covered: road 11201/31 (slope along z), road 11202/32 and rail 46/16008 (slope along x).
-  * Rotations 1 and 3 are too rare to confirm (38 and 7 pieces).
-  * Rendering Berlin (132,137), (142,135), (147,125) and (148,74) with this rule gives continuous
-    ramps.
-  * The earlier "world corner (x+1, z+1)" rule held only for some piece families.
+* Evidence: this corner fits most sloped terrain-bound pieces of 8 shipped cities, and H is the
+  same at all four camera rotations. Covered: road 11201/31 (slope along z), road 11202/32 and
+  rail 46/16008 (slope along x). Rotations 1 and 3 are too rare to confirm. Rendering several
+  Berlin sites with this rule gives continuous ramps.
 * The stored piece altitude is not used for terrain-bound pieces. The save stores either the
   lowest or the highest corner (Berlin roads: 91 vs 90).
 * Pieces whose stored altitude is above every corner keep it. These are bridge decks, inclines and
@@ -272,16 +258,14 @@ shrunk by 100 units on every side. [STATIC] A moving object is drawn after every
 box lies entirely behind it on both axes, and before any static object in front. The tie-break
 rule is given below.
 
-**Mover versus static ordering** [STATIC, SIMSPR 0x1000C7A6 / 0x1000C802 / 0x1000E52A]:
+**Mover versus static ordering** [STATIC]:
 
 * Every draw-list entry has a layer byte. Statics are always layer 1.
 * Comparator:
   * If the two entries have the same layer, or their boxes do not overlap (touching counts as
     overlap), the higher key draws first.
   * Otherwise the lower layer draws first.
-* A post-pass moves each entry of layer ≥ 2 to after the last of its next 6 entries that should
-  precede it, at most 7 times per position. So a mover of layer ≥ 2 draws over every static whose
-  box it overlaps, whatever the keys.
+* Outcome: a mover of layer ≥ 2 draws over every static whose box it overlaps, whatever the keys.
 * Static box: [(x−s+1)·256, (x+1)·256] × [z·256, (z+s)·256] in unrotated world units. It is shrunk
   by 100 per side when tile flag bit 1 is set. Bit 1 is forced for footprints with s > 1; for 1 × 1
   pieces the caller sets it [OPEN which pieces]. The box has no height range.
@@ -291,7 +275,7 @@ rule is given below.
   * flags & 3 = 0: centred on the anchor, with half-size from its screen width (at least 100);
   * otherwise snapped to its tile (tile·256 − 2 … tile·256 + 258), shrunk by 50 when flags bit 1
     is set.
-* Which layer and flags cars and trains pass is [OPEN]: they are set by another module. Recommended:
+* Which layer and flags cars and trains pass is [OPEN]: they are not known. Recommended:
   layer 2 with the anchor-centred box, so a car draws over the deck it is entering.
 
 For picking (§3) a finer key is used: 0x40000000 − 0x4000·(u + v) − 0x40·h; the smaller value is
@@ -300,7 +284,7 @@ nearer. [STATIC]
 ## 6. Terrain rendering
 
 * **Terrain is not sprite-based.** `00000009_Landscape.DAT` holds only flora and landscape objects
-  (29 sprite sets), and no terrain-slope sprites exist. The terrain module rasterises each tile
+  (29 sprite sets), and no terrain-slope sprites exist. Each tile is rasterised
   procedurally as a quadrilateral and colours it from the terrain palettes (`04-graphics-formats.md`
   §7). [DATA]/[STATIC]
 * **Tile polygon.** The four vertices are the tile's corner altitudes from the vertex grid
@@ -310,8 +294,8 @@ nearer. [STATIC]
   bottom corners do not, the quad is filled as two triangles split along the left–right diagonal.
   Otherwise it is split along the top–bottom diagonal. [STATIC; split rule INFERRED from a
   "fold" flag]
-* **Palette slots.** The terrain renderer works from nine palette images (slot table in
-  `04-graphics-formats.md` §7.1): 0 `palBasic`, 1–3 `data1Pal`–`data3Pal`, 4 land palette
+* **Palette slots.** Terrain colour comes from nine palette images (slot table in
+  `04-graphics-formats.md` §7.1; slot names are labels only): 0 `palBasic`, 1–3 `data1Pal`–`data3Pal`, 4 land palette
   (`62B9DA24:455A72B1:n`), 5 `palUnder`, 6 `palWater`, 7 `palEdgeL`, 8 `palEdgeD`. [STATIC]
 ### 6.1 Palette images as tables
 
@@ -346,13 +330,12 @@ uses file rows 256–511 (shore to snow) and submerged ground uses file rows 255
 near the surface, darker with depth). This matches the palette contents described in
 `04-graphics-formats.md` §7.2. [DATA]
 
-shade(v) is a per-vertex byte (0..63 in practice) held by the terrain object beside the altitude and
+shade(v) is a per-vertex byte (0..63 in practice) stored beside the altitude and
 water grids. It encodes slope lighting. The formula that derives it from neighbouring altitudes is
 given in §6.6 where known.
 
-Each vertex colour is cached (one 16-bit display colour per vertex of the (W+1)×(H+1) vertex grid).
-The cache is invalidated when the vertex changes. The whole cache is cleared whenever the zoom level
-changes and either the old or the new zoom is below 3, because of the far-zoom adjustment below. [STATIC]
+Vertex colours are 16-bit display colours and are recomputed when a vertex changes, and when the
+zoom level changes with either the old or the new zoom below 3 (far-zoom adjustment below). [STATIC]
 
 **Far-zoom colour adjustment (zoom 0, 1, 2).** At zooms below 3, every terrain, water and edge
 colour, and every palBasic tint, is adjusted per channel c (0..255) as
@@ -491,13 +474,9 @@ Berlin, mean earth-face colour just above the slab's bottom edge):
 
 So the **lower-left** face uses palEdgeL at even rotations and palEdgeD at odd rotations, and the
 lower-right face the opposite: the shading alternates with rotation parity on screen.
-Correction: an earlier revision gave a per-world-border formula ((r & 1) for constant-x faces,
-(¬r & 1) for constant-z faces). With the view transform that formula gives a view-fixed result,
-which contradicts this measurement; use the table.
 
 **Flush ("no water") segments** [STATIC]:
-* Each edge segment carries a flag, bit 0x40 of its edge-tile byte. The flag is supplied by the
-  caller that creates the segment; which segments get it is [OPEN].
+* Each edge segment can carry a flush flag. Which segments get it is [OPEN].
 * When the flag is set:
   * the surface height ignores water (surface = alt);
   * the water part is skipped;
@@ -508,7 +487,7 @@ which contradicts this measurement; use the table.
 
 ### 6.6 Vertex shade (slope lighting)
 
-The shade byte of every vertex is recomputed by the terrain object whenever altitudes change. Only
+The shade byte of every vertex is recomputed whenever altitudes change. Only
 the vertices in the changed rectangle are recomputed. It is also recomputed for the whole map on
 load and after generation. Shade does **not** depend on the view rotation. [STATIC]
 
@@ -539,27 +518,17 @@ Use single-precision floats and truncation as stated. Column differences of one 
 
 ## 7. Zoom-dependent detail and building animation
 
-* **Per-zoom substitution.** The view keeps a per-tile cell grid. Each cell has a run-time 16-bit
-  flag word; it is **neither** the sprite-instance `LayerFlags` field **nor** an occupant flag.
-  [STATIC]
-  * The bit with mask {0x10, 0x20, 0x40, 0x80, 0x100} for z = 0..4 means "the cell's object image
-    is built and valid at zoom z".
-  * The bit is set when the object rebuilds its image for that zoom and rotation. Rebuilding is
-    done lazily for cells that are present (bit 0x4000) and not yet valid. The bit is cleared
-    through the view's deferred update queue when the object changes, and set again after the
-    rebuild.
-  * While the bit is clear, the generic substitute sprite chosen by footprint size is drawn.
-    Visually, a building briefly shows the footprint placeholder until its image is ready.
-  * Other bits: 0x4000 = cell present/rebuildable. 0x1 is tested together with 0x4000 [OPEN
-    meaning].
-  * A clone with all images ready simply draws the object's own image at every zoom.
-  * The `LayerFlags` record field (§4.2) is unrelated to this mask. [STATIC]
+* **Per-zoom substitution.** A building's image for a given zoom and rotation is built lazily.
+  Until it is ready, the generic substitute sprite chosen by footprint size is drawn, so a building
+  briefly shows the footprint placeholder. When the object changes, its image is rebuilt the same
+  way. A clone with all images ready simply draws the object's own image at every zoom. The
+  `LayerFlags` record field (§4.2) is unrelated to this behaviour. [STATIC]
 * Automata appear only at zooms for which their sprite-instance record has images (§4.2): vehicles
   at the 3 closest zooms and people at the 2 closest zooms. [INFERRED]
 * **Animated buildings.** These have sprite-instance records with AnimFrames > 1 (SprInstCLSID
   0x7312). Animation frame a is drawn by adding a·AnimSetCount to the frame index. The extra frame
   is usually a small overlay image (lights, smoke, flags) whose anchor is offset through negative L
-  values in its span. [DATA] No separate timer for these frames was found in the view module. The
+  values in its span. [DATA] These frames have no separate timer. The
   only time-driven building animation is the sprite-script runner (§7.1). The other frame choices
   follow simulation state. [INFERRED]
 * Building overlay animation is script-driven (§7.1). Smoke plumes and other attached effects are
@@ -579,52 +548,53 @@ index and timer, and each draws its own overlay. A renderer must run every scrip
 not only the first. offX/offY are added to the pixel offset of every D/DA/S/P draw in the script.
 [STATIC]
 
-**Compilation.** Each text op compiles to one or more entries in a flat op list. `G n` targets
-and `R n` arithmetic count **compiled entries**, not text tokens: [STATIC]
+**Op semantics.** Jump targets `G n` and `R n` count **entries**, not text tokens. An entry is one
+draw, one wait, one jump, one label, or one date-window arm. `S` and `P` expand into several entries
+(a draw and a wait per frame): [STATIC]
 
-| Text | Compiled to | Runtime meaning |
-|---|---|---|
-| `S start count ms` | for f = start … start+count−1: `Draw(f)`, `Wait(ms)` (2·count entries) | play frames in sequence |
-| `P start count ms` | as S forward (start … start+count−1), then backward start+count−2 … start+1, each `Draw`+`Wait(ms)` | ping-pong loop (not sound) |
-| `D f dx dy` | `Draw(f)` at (offX+dx, offY+dy) | show frame f opaque |
-| `DA f dx dy` | `DrawAlpha(f)` at (offX+dx, offY+dy) | show frame f, using frame **f+1** as its alpha plane |
-| `W ms` | `Wait(ms)` | see timing below |
-| `WR base range` | `WaitRandom` | next = now + base + rand() mod range, a uniform value in [base, base+range) ms |
-| `G n` | `Goto` | step := n (absolute compiled index) |
-| `R n` | `RandomSkip` | step := step + 1 + (rand() mod n), so it lands on one of the next n entries (normally n `G` entries) |
-| `L n` | `Label(n)` | no-op marker. It is skipped at no cost in the same update |
-| `WL mmddMMDD n` | `DateWindow(label n)` | see below |
-| `WD mmddMMDD n` | `DateWindow(index n)` | as WL but n is an absolute compiled index |
-| `GL n` | `GotoWindowTarget` | step := position of label **t**, where t is the target of the most recently armed WL. The number written after GL is **ignored** |
-| `CB a b`, `CE a b`, `CD` | (nothing) | parsed. No runtime effect was found |
+| Text | Meaning |
+|---|---|
+| `S start count ms` | play frames start … start+count−1 in sequence, each followed by a wait of ms (2·count entries) |
+| `P start count ms` | as S forward (start … start+count−1), then backward start+count−2 … start+1, each frame followed by a wait of ms; ping-pong loop (not sound) |
+| `D f dx dy` | show frame f opaque at (offX+dx, offY+dy) |
+| `DA f dx dy` | show frame f at (offX+dx, offY+dy), using frame **f+1** as its alpha plane |
+| `W ms` | wait; see timing below |
+| `WR base range` | wait until now + base + rand() mod range, a uniform value in [base, base+range) ms |
+| `G n` | continue at entry n (absolute index) |
+| `R n` | continue at step + 1 + (rand() mod n), so it lands on one of the next n entries (normally n `G` entries) |
+| `L n` | label marker. It is skipped at no cost in the same update |
+| `WL mmddMMDD n` | arm a date window (start mm/dd, end MM/DD) whose exit target is label n; see below |
+| `WD mmddMMDD n` | as WL but n is an absolute entry index |
+| `GL n` | continue at the label that is the target of the most recently armed WL. The number written after GL is **ignored** |
+| `CB a b`, `CE a b`, `CD` | parsed. No runtime effect |
 
 Frame numbers f are indices into the record's frame list. [STATIC] D with fewer than three numbers
 (for example `D 0`) keeps the dx/dy of the previous D/DA in the same script. [STATIC]
 
-**Runner.** Each running animated sprite owns a millisecond clock, `now`, that starts at 0 when its
-animation starts. For each script of the current (zoom, rotation) slot it also keeps a step index
+**Timing.** Each running animated building has a millisecond clock, `now`, that starts at 0 when
+its animation starts. For each script of the current (zoom, rotation) slot it also keeps a step index
 (start 0) and a next-time value (start 0, so the first entry runs at once). On every view update
 with elapsed time dt: [STATIC]
 
 1. now += dt_µs >> 10. Elapsed time is in microseconds, and the shift divides by 1024, not 1000.
    The animation clock therefore runs about 2.3% slow against real time.
-2. For each script with next-time ≤ now: if step ≥ list length, step := 0, so a script with no
-   final `G` loops from the start. Skip any Label entries. Execute **exactly one** other entry:
-   * Draw / DrawAlpha: set this script's current overlay frame and offset, invalidate the old and
-     new rectangles, then step+1.
-   * Wait(ms): next := now + ms + j·((ms>>6) + (ms>>5)), then step+1. j = 0..3 is fixed for each
-     sprite object, which gives a deterministic 0–14% per-building slowdown that desynchronises
+2. For each script with next-time ≤ now: if step is past the last entry, step := 0, so a script with
+   no final `G` loops from the start. Skip any labels. Execute **exactly one** other entry:
+   * a draw (`D`, `DA`, or one frame of `S`/`P`): set this script's current overlay frame and
+     offset, invalidate the old and new rectangles, then step+1;
+   * a wait of ms: next := now + ms + j·((ms>>6) + (ms>>5)), then step+1. j = 0..3 is fixed for each
+     building, which gives a deterministic 0–14% per-building slowdown that desynchronises
      neighbours (for W 200 the period is 200/209/218/227 ms). A clone should pick j uniformly per
-     building instance.
-   * WaitRandom: as defined in the table, then step+1. No j term applies.
-   * Goto / RandomSkip / GotoWindowTarget: change step only. The new entry runs on the next update.
-   * DateWindow: arm the date window (start mm/dd, end MM/DD, target n), then step+1.
+     building instance;
+   * `WR`: as defined in the table, then step+1. No j term applies;
+   * `G` / `R` / `GL`: change step only. The new entry runs on the next update;
+   * `WL` / `WD`: arm the date window (start mm/dd, end MM/DD, target n), then step+1.
 3. After the entry, if a date window is armed and today's **game date** (month, day from the city
    clock) is outside [start, end), with the start inclusive and the end day **exclusive**: jump to
    the target (label n for WL, index n for WD) and disarm. While the date is inside, the window
    stays armed and is re-checked after every later entry.
 
-Because a Draw and the following Wait are separate entries, each takes its own update. The frame
+Because a draw and the following wait are separate entries, each takes its own update. The frame
 period of `S … ms` is therefore ms (plus the j term) plus about one update interval. **It is not
 a global 15 Hz tick.** For example, `S 35 5 200` holds each frame about 200–230 ms. [STATIC]
 
@@ -637,7 +607,7 @@ started by the cap logic (§7.3) and destroyed when it is stopped. A restarted a
 again at step 0. The state is also re-bound when the view zoom or rotation changes, because each
 (zoom, rotation) slot has its own scripts. [STATIC]
 
-**Pause.** The elapsed time comes from the view's real-time update, not from the simulation clock,
+**Pause.** The elapsed time is real time, not the simulation clock,
 so game speed has no effect. [STATIC] View updates **continue while the game is paused**: with the
 simulation paused, building animations (smoke plumes) keep running, automata keep moving, and the
 view scrolls normally. [OBSERVED]
@@ -722,7 +692,7 @@ separate frame range for each zoom. [STATIC]/[DATA]
   m = machine class [INFERRED].
 * The cap counts animating **buildings** (parents). Their child sprites and automata are not
   counted. [STATIC]
-* Selection runs on every view change (scroll, zoom, rotate) and on the animation-option message.
+* Selection runs on every view change (scroll, zoom, rotate) and when the animation option changes.
   First, gather up to 200 animatable objects in the visible rectangle. Then keep every currently
   animating building that is still among them. Fill the remaining (cap − kept) slots with
   **uniformly random** picks from the other candidates; if the candidates fit, take them all.
@@ -731,7 +701,7 @@ separate frame range for each zoom. [STATIC]/[DATA]
 * All building animation is off unless the animation display option is enabled and a zoom-like
   view value is ≥ 2 (the closer zoom levels). [STATIC for the gate; INFERRED that the value is the
   zoom index]
-* Day/night cycle: none was found (there are no night sprites or strings). [INFERRED]
+* Day/night cycle: none exists (there are no night sprites or strings). [INFERRED]
 * **Construction appearance.** There are no multi-stage construction sprites. While a lot is in
   state 4 (under construction), the building layer draws a substitute **construction-site
   occupant** in place of the building, chosen from `SC3BuildingLayer.ini [DefaultBuildingData]` with
@@ -756,8 +726,7 @@ separate frame range for each zoom. [STATIC]/[DATA]
   and `54DA2E59_HolidayF.DAT`). Holiday records add new IDs; they do not overwrite base records.
   [DATA]
 * Seasonal pedestrians come from date-ranged PPLPROD modes (`26-automata.md` §3.5). Country blocks
-  suffixed `:holidays` are used only when holiday content is enabled. The sprite-script layer in the
-  view also understands `ScriptCountries:` lists and the `:holidays` suffix. [STATIC]
+  suffixed `:holidays` are used only when holiday content is enabled. Sprite scripts also understand `ScriptCountries:` lists and the `:holidays` suffix. [STATIC]
 
 ## 9. Overlays
 
@@ -811,18 +780,15 @@ gradient that none of the eight layers was seen to use.
 | Flammability | data2Pal | light orange | red-orange | land with buildings or flora |
 | Traffic | data2Pal along networks (grey → orange with load) | — | — | road and rail tiles; zoned tiles are tinted by zone type (greens, a tan/yellow and a blue-violet) |
 
-In every layer the occupant filter of that view decides what stays drawn [STATIC, SIMSPR
-0x100182BA / 0x10018A22]: Pollution draws no occupants at all; Traffic only occupants with flag
-mask 0x4100 (ordinary roads are hidden, their tiles carry the colour); Electric Power only
-occupants with flag 0x400000 [INFERRED: lines and plants]; Crime occupants with
-(flags & 0x4800) = 0x4800 or flag 0x100 with type 0x334A, Flammability the same with type 0x32CA
-[INFERRED: police / fire stations]; Aura, Land Value and Density use filter group `A1C085DB:1`
-(contents not decoded); the default view draws everything. (Correction: an earlier revision said
-networks stay visible in every layer.) Land outside the layer's tile set keeps its normal terrain
+In every layer a filter decides which occupants stay drawn [STATIC]: Pollution draws no occupants
+at all; Traffic hides ordinary roads (their tiles carry the colour); Electric Power shows only
+power lines and plants [INFERRED]; Crime shows only police stations and Flammability only fire
+stations [INFERRED]; Aura, Land Value and Density apply a fixed filter whose visible effect is
+[OPEN]; the default view draws everything. Land outside the layer's tile set keeps its normal terrain
 colour; water and shore tiles are never tinted. The low end of both ramps is the grey bottom row
 (≈ RGB 189,194,197 lit / 181,186,189 shaded). Colours are shaded by relief like terrain.
 
-**Quantisation and tile sets** [STATIC, per-tile dispatcher SIMSPR 0x1001A303]. Colour =
+**Quantisation and tile sets** [STATIC]. Colour =
 `T_slot[row][shade >> 1]` (flat tile: column 7). Palette files `Dirt\Palette\data1Pal.bmp`,
 `data2Pal.bmp`, `data3Pal.bmp`; row 0 is the top row of the image as displayed. Standard row =
 trunc((255 − v) · 31/255) (single-float 31/255, truncation): v = 0 → row 31 (grey), v = 255 →
@@ -839,8 +805,7 @@ row 0. "Zoned only" means zone byte ≠ 0.
 | Traffic | network tile: max(traffic type 0x15, type 2) | network tiles; other tiles with zone ∉ {0, 0x16} get the zone-type tint of the Zones display | data2 on networks | standard |
 | Density | RCI development byte | zoned only | data1 | standard |
 
-data3Pal is used by none of the eight views. (Correction: the earlier inferred row = 31 −
-⌊value × 32 / 256⌋ is replaced by the formula above.)
+data3Pal is used by none of the eight views.
 
 **Pollution value for the overlay** [OPEN]:
 * The pollution layer stores 15-bit air and water amounts per 2 × 2-tile cell
@@ -851,8 +816,6 @@ data3Pal is used by none of the eight views. (Correction: the earlier inferred r
 * Recommended: overlay byte = min(255, ⌊v × 256 / MaxPolluteForUI⌋), with v the cell's air (or
   water) amount. It is consistent with the chart's scale, and a cell at the UI maximum lands on
   the top row.
-* The clean side's guess v / 128 saturates at 32 640, which is about 3 × the UI maximum, so most
-  real cities would sit in the bottom third of the ramp.
 
 **Navigator minimap colours** [STATIC + OBSERVED]:
 * The navigator's minimap has no data layer by default. It draws land and water from the same
@@ -860,20 +823,21 @@ data3Pal is used by none of the eight views. (Correction: the earlier inferred r
   row 3).
 * Measured on screen, the minimap colours are exactly these pixels:
 
-  | Column k | Colour | Column k | Colour |
-  |---|---|---|---|
-  | 0 (water) | #6A699C | 6 | #83715A |
-  | 1 | #7B916A | 7 | #7B655A |
-  | 2 | #8B9D6A | 8 | #73655A |
-  | 3 | #9CA173 | 9 | #6A6162 |
-  | 4 | #9C9573 | 10 | #736D73 |
-  | 5 | #948562 | 11 | #7B797B |
+  | Column k | Colour |
+  |---|---|
+  | 0 (water) | #6A699C |
+  | 1 | #7B916A |
+  | 5 | #948562 |
+  | 11 | #7B797B |
+
+  (Samples only; the other columns run on the same path, green → khaki → brown → grey. The engine
+  reads the image.)
 
 * Use k from the tile's height above water by the rule of `11-world-terrain.md` §9: v < 1 → 0;
   v < 10 → v/2 + 1; else v × 10/256 + 5, capped at 11. [INFERRED: same rule as the Neighbors
   image]
 * There is no single base land colour: land shades run green → khaki → brown → grey with height.
-  The clean side's guess of RGB 90,130,70 is close to columns 1–2 only.
+ 
 * Map-edge pixels outside the diamond are the navigator panel's own background.
 * A data layer selected through the navigator's layers button draws its colours over this base.
 
@@ -891,20 +855,15 @@ data3Pal is used by none of the eight views. (Correction: the earlier inferred r
 
   | Zone | Flat-tile colour | palBasic row |
   |---|---|---|
-  | Dense industrial | #C67D00 | 21 (#D89300) |
-  | Medium industrial | #AD8A18 | 22 (#C59C27) |
-  | Light industrial | #A59242 | 23 (#BBA44A) |
-  | Dense residential | #215D08 | 24 (#2F6F10) |
-  | Medium residential | #427129 | 25 (#4C8236) |
-  | Unzoned building lot | #AD5D21 | 34 (#C76A2B) |
+  | Dense industrial | #C67D00 | 21 |
+  | Dense residential | #215D08 | 24 |
+  | Unzoned building lot | #AD5D21 | 34 |
 
-  Each measured colour is about 0.88 × its row, which is the flat-tile relief shade.
-* By the row pattern [INFERRED]:
-  * light residential = row 26 (#5B9648);
-  * dense, medium and light commercial = rows 27–29 (blues #4346B1, #565FA6, #6A72AB);
-  * seaport = row 30 (#71BFCA);
-  * airport = row 31 (#67B88D);
-  * landfill = rows 32/33 (browns).
+  Rows: medium and light industrial 22 and 23, medium residential 25. Each measured colour is
+  about 0.88 × its row colour, which is the flat-tile relief shade. The engine reads the colours
+  from `palBasic`.
+* By the row pattern [INFERRED]: light residential = row 26; dense, medium and light commercial =
+  rows 27–29 (blues); seaport = row 30; airport = row 31; landfill = rows 32/33 (browns).
 * Zone colours appear elsewhere only as the 50/50 palBasic tint of §6.4 on zoned terrain, and in
   the zoning drag preview.
 
@@ -950,7 +909,7 @@ Observed behaviour `[OBSERVED]`:
   e.g. §5,005 for a §5,000 plant on a tile with trees.
 * The cost is charged on release, immediately, even while the simulation is paused.
 
-[OPEN] These are drawn by the view module, not the terrain module. Known facts: the terraform
+[OPEN] Known facts: the terraform
 tools compute a planned cost for the tile under the cursor every time the cursor moves
 (`11-world-terrain.md`), and flag the preview as unaffordable when funds are short (see
 `09-ui-screens.md`). The tint mechanism of §6.4 (palBasic row averaged into the vertex colours)
@@ -979,8 +938,8 @@ is the terrain-side highlight primitive.
   * screen redraws, captured at 60 fps, each showed jumps of 150–300 px.
 
   The loop therefore runs many updates per displayed frame, and the scroll speed depends on the
-  machine. There is no original px/s figure to match. On zoom change the view passes 60.0 to its
-  update scheduler [STATIC], which reads as the designers' intended rate. **Recommended:** run view
+  machine. There is no original px/s figure to match. On zoom change the original sets an
+  update rate of 60.0 [STATIC], which reads as the designers' intended rate. **Recommended:** run view
   updates at a fixed 60 Hz. That gives keyboard scroll = 32 px × 60 = 1920 px/s, and drag scroll =
   the `08-ui-framework.md` §8.3 per-update step × 60.
 * **Redraw.** The city surface is cached and updated through dirty rectangles (per tile changes and
@@ -1011,10 +970,10 @@ world or view coordinates is [INFERRED: world tile coordinates].
 * Terrain: which edge segments are created with the flush flag (§6.5). The quad-split (shape) table for land tiles
   (the edge-face classifier is known).
 * Data-map overlays: the mapping from each data layer, and its 0..255 value, to a ramp (slot 1–3)
-  and row 0..31. This is decided in the view module, not traced.
+  and row 0..31. [OPEN]
 * The underground view's sprite set and the hiding of above-ground objects. The selection highlight, the
-  placement preview and the cost text at the cursor (view module, not traced).
+  placement preview and the cost text at the cursor [OPEN].
 * None for the view update rate: it is unthrottled in the original; 60 Hz is recommended (§10).
 * The meaning of each SprInstCLSID and of LayerFlags; whether the 2× magnification uses any filtering.
 * Edge-scroll rectangle sizes.
-* Which layer and flags cars and trains pass to the sprite manager (§5.2).
+* Which layer and flags cars and trains use (§5.2).

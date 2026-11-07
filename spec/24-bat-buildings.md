@@ -96,7 +96,7 @@ The BAT model is a voxel grid:
 | … | 4 | u32 | marker | 0xEAEAEAEA (record ends here) |
 
 All marker values must be written exactly; the reader skips them without checking `[STATIC]`.
-The parser in the dirty room verifies every marker, constant and length on 17/17 files `[DATA]`.
+All 17 shipped files conform on every marker, constant and length `[DATA]`.
 
 #### 1.3.3 Packed cell block
 
@@ -104,11 +104,10 @@ The parser in the dirty room verifies every marker, constant and length on 17/17
 (`02-containers.md`) `[DATA]`. The decompressed data starts with `cellCount` × 32-byte cell
 records. Readers use only the first `cellCount × 32` bytes.
 
-Writer defect, recorded for byte-exactness `[STATIC]` `[DATA]`: the original writer compresses
-`B = n + floor(n/9) + 1000` bytes where `n = cellCount × 32`, i.e. the cell array plus whatever
-followed it in memory. The RefPack header therefore announces `B` bytes (verified 17/17). A
-compatible writer should emit the cell array followed by `B − n` filler bytes (zeros are fine; the
-content is never read).
+Writer quirk, recorded for byte-exactness `[DATA]`: with `n = cellCount × 32`, the RefPack header
+of the decompressed size holds `B = n + floor(n/9) + 1000` (17/17 files), which is larger than the
+cell array. A compatible writer should emit the cell array followed by `B − n` filler bytes (zeros
+are fine; the content is never read).
 
 #### 1.3.4 Cell record (32 bytes)
 
@@ -234,7 +233,7 @@ from `BACustom/`), so that the `.bld` is self-contained `[DATA]` (11/17 files, 8
 | 0x35 | 4 | f32 | invHeight | 1/height |
 | 0x39 | 4 | u32 | nameLength | |
 | 0x3D | var | chars | name | texture file name (no terminator) |
-| … | 12 | u32[3] | pixelKey | in-memory key order Type, Group, Instance = `E3F87B10`, `C3F8D4A9`, `n` |
+| … | 12 | u32[3] | pixelKey | key as Type, Group, Instance = `E3F87B10`, `C3F8D4A9`, `n` |
 | … | 4 | u32 | category | 6 = paint, 7 = detail, 16 = prop image `[DATA]` |
 
 Padded buffer dimensions are the next power of two ≥ the image dimension, independently per axis
@@ -298,14 +297,14 @@ are:
 
 | Code | Category | Code | Category |
 |---|---|---|---|
-| 0x208 | Residential | 0x210 | College |
-| 0x209 | Commercial | 0x211 | Library |
-| 0x20A | Industrial | 0x212 | Museum |
-| 0x20B | Police Station | 0x213 | Historic Statue |
-| 0x20C | Jail | 0x214 | Mayor's House |
-| 0x20D | Fire Station | 0x215 | City Hall |
-| 0x20E | Hospital | 0x216 | Performing Arts Center |
-| 0x20F | School | 0x217 | Other |
+| 0x208 | residential | 0x210 | college |
+| 0x209 | commercial | 0x211 | library |
+| 0x20A | industrial | 0x212 | museum |
+| 0x20B | police | 0x213 | statue |
+| 0x20C | jail | 0x214 | mayor |
+| 0x20D | fire | 0x215 | city hall |
+| 0x20E | hospital | 0x216 | arts |
+| 0x20F | school | 0x217 | other |
 
 The category is descriptive metadata only. The game's import does not copy it into the
 rendered-building database (§2.2), and no simulation rule reads it `[STATIC]`. A player can use it
@@ -359,8 +358,8 @@ building browser `[DATA]` (17/17).
 
 ### 1.10 Parser coverage
 
-The analysis team's parser reads every record of 17/17 shipped `.bld` files with all
-markers, constants, lengths, list links, palette ranges and cross-references asserted `[DATA]`.
+All records of all 17 shipped `.bld` files conform to the layouts above: markers, constants,
+lengths, list links, palette ranges and cross-references `[DATA]`.
 
 ## 2. How the game imports custom buildings
 
@@ -408,8 +407,8 @@ tile for zoom 0–3); heights at zooms 0–2 are the zoom-3 height divided by 8,
 The 8-byte sprite header holds (s16 0, s16 height − W/4, s16 width, s16 W/4) with W = nominal
 width `8·2^z·lotSize` for 237 of the 240 shipped BAT sprites; three sprites of one building are 1–2
 px narrower than W (width and W/4 field then differ slightly) `[DATA]` (field meanings in
-`04-graphics-formats.md`). The analysis team verified the directory record,
-the composite-sprite record and the sprite headers of 15/15 buildings `[DATA]`.
+`04-graphics-formats.md`). The directory record,
+the composite-sprite record and the sprite headers of all 15 buildings conform `[DATA]`.
 
 ### 2.3 Building ID
 
@@ -434,8 +433,7 @@ should read the ID from the information record when present.
    The loaded buildings are bucketed by lot size and processed bucket by bucket.
 4. **Render.** For each building: normalise orientation (§1.3.6), render the four sprite sizes
    for the four view rotations (§3), allocate 16 sprite IDs, write the sprites, the composite-sprite
-   record and the directory record (§2.2). A progress bar runs from 0 to 100 % in steps of 16 % per
-   lot-size bucket after an initial 100-unit phase `[STATIC]` (cosmetic).
+   record and the directory record (§2.2).
 5. **Remove.** Buildings the user removed are deleted from the database: records whose keys are not
    in the keep-list are dropped `[INFERRED]`.
 6. **Register.** The game then knows the BAT buildings as the set of directory records in
@@ -511,7 +509,7 @@ contain no BAT buildings). Consequently:
 
 * Model axes: row index `r` and column index `c` of the column grid (0..N−1) and level `z`.
 * Rendering uses a 2:1 axonometric (dimetric) projection like the game's (`25-rendering.md` §2).
-  The program renders one *master* image per view at 128 px per tile, i.e. 16 px per cell, and
+  One *master* image is rendered per view at 128 px per tile, i.e. 16 px per cell, and
   derives all four game zooms from it (§3.1.1) `[STATIC]`.
 * Exact projection `[STATIC]` `[DATA]`. Let s be half the screen width of one cell's footprint
   diamond: s = 8 px in the master, 4 px at zoom 3. A model point (x, y, z), in cells and levels
@@ -521,8 +519,8 @@ contain no BAT buildings). Consequently:
   X = s·(y − x), Y = s·(x + y)/2 − s·z.
 
   So in view 0 the +x (row) axis runs down-left, the +y (column) axis runs down-right, and one
-  level rises by s, the same as the height of a cell's footprint diamond. The program keeps this
-  as one fixed screen offset for each of the 12 vertices of §3.2.1. At zoom 3 this gives 4 px per
+  level rises by s, the same as the height of a cell's footprint diamond. Each of the 12 vertices of §3.2.1
+  therefore has a fixed screen offset. At zoom 3 this gives 4 px per
   level. Fitting silhouettes of 13 shipped `.bld` models against their pre-rendered zoom-3 sprites
   agrees: the mirror choice above has mean IoU 0.85 against 0.75 for the mirrored one, and 4.0 px
   per level beats 3.5, 4.25, 4.5 and 5.
@@ -549,9 +547,8 @@ against a 2× reduction of the zoom-3 sprite is 7.8 levels, and 14.6 and 16.0 fo
 reductions. Because the master is not stored, the exact
 kernel is `[OPEN]`.
 
-The program also contains an optional tone adjustment for the three smallest zooms (colour
-multiplied by 0.9, 0.8 or 0.7, then offsets added). The shipped pre-rendered sprites show no trace
-of it: the mean colour is identical at every zoom (138.7, 136.7, 124.6) `[DATA]`. An engine should
+An optional tone adjustment for the three smallest zooms (colour multiplied by 0.9, 0.8 or 0.7,
+then offsets added) is not visible in the shipped pre-rendered sprites: the mean colour is identical at every zoom (138.7, 136.7, 124.6) `[DATA]`. An engine should
 not apply it.
 
 ### 3.2 Geometry
@@ -580,8 +577,7 @@ Each polygon carries a one-byte normal code = kind × 8 + dir.
 | 2 | −x+y | 6 | +x−y |
 | 3 | −x | 7 | +x |
 
-`kind` selects the surface type. The program uses the "normal used by the lighting tables" column
-for shading:
+`kind` selects the surface type. Shading uses the "normal used by the lighting tables" column:
 
 | kind | Surface | Normal used by the lighting tables (horizontal part × unit dir, vertical part) |
 |---|---|---|
@@ -610,44 +606,41 @@ The face slots do not move, because slot k always belongs to polygon k.
 
 #### 3.2.4 Shape table (rot = 0) `[STATIC]`
 
-The 14 cell shapes are fixed geometry, specified here as behaviour: a cell of shape k is drawn as
-exactly the polygons listed for k, each filled with the texture of the given face slot. Each
-polygon is written as "slot: kind/dir — vertex coordinates (x,y,z) in drawing order", in the cell's
-local unit cube (x, y across the cell, z up); §3.2.3 rotates them. Texture corners follow §3.3.
+The 14 cell shapes are fixed geometry: a cell of shape k is drawn as exactly the polygons listed
+for k, in slot order, each filled with the texture of its face slot. Each polygon is written as
+"slot: surface kind/direction". Vertex positions are the corners of the shape described in the
+Description column, taken in the cell's local unit cube (x, y across the cell, z up) and the 12
+vertices of §3.2.1; each wall is the full vertical face of the box on that side, each slope or
+top is the plane named by the description, and every polygon is wound consistently with the cube's
+top face. §3.2.3 rotates them. Texture corners follow §3.3.
 
-| Shape | Description | Polygons (slot: normal — vertices) |
+| Shape | Description | Polygons (slot: normal) |
 |---|---|---|
-| 0 | cube | 0: top — (1,1,1)(1,0,1)(0,0,1)(0,1,1); 1: wall −x — (0,1,1)(0,0,1)(0,0,0)(0,1,0); 2: wall −y — (0,0,1)(1,0,1)(1,0,0)(0,0,0); 3: wall +x — (1,0,1)(1,1,1)(1,1,0)(1,0,0); 4: wall +y — (1,1,1)(0,1,1)(0,1,0)(1,1,0); 5: bottom — (1,1,0)(1,0,0)(0,0,0)(0,1,0) |
-| 1 | half cube cut along the vertical diagonal plane through (0,0) and (1,1); keeps the x ≥ y half | 0: top — (1,1,1)(1,0,1)(0,0,1); 1: wall −x+y — (1,1,1)(0,0,1)(0,0,0)(1,1,0); 2: wall −y — (0,0,1)(1,0,1)(1,0,0)(0,0,0); 3: wall +x — (1,0,1)(1,1,1)(1,1,0)(1,0,0); 4: bottom — (0,0,0)(1,0,0)(1,1,0) |
-| 2 | 45° ramp (wedge) rising from z=0 at x=0 to z=1 at x=1 | 0: wall +y — (1,1,1)(0,1,0)(1,1,0); 1: 45° −x — (1,1,1)(1,0,1)(0,0,0)(0,1,0); 2: wall −y — (1,0,1)(1,0,0)(0,0,0); 3: wall +x — (1,0,1)(1,1,1)(1,1,0)(1,0,0); 4: bottom — (1,1,0)(1,0,0)(0,0,0)(0,1,0) |
-| 3 | 45° valley (inner) roof corner: top corners (1,1),(1,0),(0,0) high, corner (0,1) at ground | 0: 45° +y — (1,0,1)(0,0,1)(0,1,0); 1: 45° −x — (1,1,1)(1,0,1)(0,1,0); 2: wall −y — (0,0,1)(1,0,1)(1,0,0)(0,0,0); 3: wall +x — (1,0,1)(1,1,1)(1,1,0)(1,0,0); 4: wall +y — (1,1,1)(0,1,0)(1,1,0); 5: wall −x — (0,0,1)(0,0,0)(0,1,0); 6 (no slot): bottom — (1,1,0)(1,0,0)(0,0,0)(0,1,0) |
-| 4 | 45° hip (outer) roof corner: apex above corner (1,0) | 0: 45° +y — (1,0,1)(0,1,0)(1,1,0); 1: 45° −x — (1,0,1)(0,0,0)(0,1,0); 2: wall −y — (1,0,1)(1,0,0)(0,0,0); 3: wall +x — (1,0,1)(1,1,0)(1,0,0); 4: bottom — (1,1,0)(1,0,0)(0,0,0)(0,1,0) |
-| 5 | inverted ramp (overhang): full top, underside sloping from z=1 at x=0 to z=0 at x=1 | 0: top — (1,1,1)(1,0,1)(0,0,1)(0,1,1); 1: wall −y — (0,0,1)(1,0,1)(1,0,0); 2: wall +x — (1,0,1)(1,1,1)(1,1,0)(1,0,0); 3: wall +y — (1,1,1)(0,1,1)(1,1,0); 4: underside — (0,1,1)(0,0,1)(1,0,0)(1,1,0) |
-| 6 | cube with the upper corner at (0,1) cut off by the plane through (1,1,1), (0,0,1) and (0,1,0) | 0: top — (1,1,1)(1,0,1)(0,0,1); 1: wall −x — (0,0,1)(0,0,0)(0,1,0); 2: wall −y — (0,0,1)(1,0,1)(1,0,0)(0,0,0); 3: wall +x — (1,0,1)(1,1,1)(1,1,0)(1,0,0); 4: wall +y — (1,1,1)(0,1,0)(1,1,0); 5: steep −x+y — (1,1,1)(0,0,1)(0,1,0); 6 (no slot): bottom — (1,1,0)(1,0,0)(0,0,0)(0,1,0) |
-| 7 | corner tetrahedron: apex above (1,0), base triangle (0,0),(1,0),(1,1) | 0: steep −x+y — (1,0,1)(0,0,0)(1,1,0); 1: wall −y — (1,0,1)(1,0,0)(0,0,0); 2: wall +x — (1,0,1)(1,1,0)(1,0,0); 3: bottom — (0,0,0)(1,0,0)(1,1,0) |
-| 8 | legacy floor marker (no volume) | 0: floor — (1,1,0)(1,0,0)(0,0,0)(0,1,0) |
-| 9 | upper half of a two-cell shallow ramp: z = ½ at x=0 rising to 1 at x=1 | 0: wall +y — (1,1,1)(0,1,½)(0,1,0)(1,1,0); 1: shallow −x — (1,1,1)(1,0,1)(0,0,½)(0,1,½); 2: wall −y — (1,0,1)(1,0,0)(0,0,0)(0,0,½); 3: wall +x — (1,0,1)(1,1,1)(1,1,0)(1,0,0); 4: wall −x — (0,1,½)(0,0,½)(0,0,0)(0,1,0); 5: bottom — (1,1,0)(1,0,0)(0,0,0)(0,1,0) |
-| 10 | lower half of a two-cell shallow ramp: z = 0 at x=0 rising to ½ at x=1 | 0: wall +y — (1,1,½)(0,1,0)(1,1,0); 1: shallow −x — (1,1,½)(1,0,½)(0,0,0)(0,1,0); 2: wall −y — (1,0,½)(1,0,0)(0,0,0); 3: wall +x — (1,0,½)(1,1,½)(1,1,0)(1,0,0); 4: bottom — (1,1,0)(1,0,0)(0,0,0)(0,1,0) |
-| 11 | shallow valley corner, upper: corners (1,1),(1,0),(0,0) at 1, corner (0,1) at ½ | 0: shallow +y — (1,0,1)(0,0,1)(0,1,½); 1: shallow −x — (1,1,1)(1,0,1)(0,1,½); 2: wall −y — (0,0,1)(1,0,1)(1,0,0)(0,0,0); 3: wall +x — (1,0,1)(1,1,1)(1,1,0)(1,0,0); 4: wall +y — (1,1,1)(0,1,½)(0,1,0)(1,1,0); 5: wall −x — (0,0,1)(0,0,0)(0,1,0)(0,1,½); 6 (no slot): bottom |
-| 12 | shallow valley corner, lower: corners (1,1),(1,0),(0,0) at ½, corner (0,1) at 0 | 0: shallow +y — (1,0,½)(0,0,½)(0,1,0); 1: shallow −x — (1,1,½)(1,0,½)(0,1,0); 2: wall −y — (0,0,½)(1,0,½)(1,0,0)(0,0,0); 3: wall +x — (1,0,½)(1,1,½)(1,1,0)(1,0,0); 4: wall +y — (1,1,½)(0,1,0)(1,1,0); 5: wall −x — (0,0,½)(0,0,0)(0,1,0); 6 (no slot): bottom |
-| 13 | shallow hip corner, upper: corner (1,0) at 1, the others at ½ | 0: shallow +y — (1,0,1)(0,1,½)(1,1,½); 1: shallow −x — (1,0,1)(0,0,½)(0,1,½); 2: wall −y — (1,0,1)(1,0,0)(0,0,0)(0,0,½); 3: wall +x — (1,0,1)(1,1,½)(1,1,0)(1,0,0); 4: wall +y — (1,1,½)(0,1,½)(0,1,0)(1,1,0); 5: wall −x — (0,1,½)(0,0,½)(0,0,0)(0,1,0); 6 (no slot): bottom |
-| 14 | shallow hip corner, lower: corner (1,0) at ½, the others at 0 | 0: shallow +y — (1,0,½)(0,1,0)(1,1,0); 1: shallow −x — (1,0,½)(0,0,0)(0,1,0); 2: wall −y — (1,0,½)(1,0,0)(0,0,0); 3: wall +x — (1,0,½)(1,1,0)(1,0,0); 4: bottom — (1,1,0)(1,0,0)(0,0,0)(0,1,0) |
+| 0 | cube | 0: top; 1: wall −x; 2: wall −y; 3: wall +x; 4: wall +y; 5: bottom |
+| 1 | half cube cut along the vertical diagonal plane through (0,0) and (1,1); keeps the x ≥ y half | 0: top; 1: wall −x+y; 2: wall −y; 3: wall +x; 4: bottom |
+| 2 | 45° ramp (wedge) rising from z=0 at x=0 to z=1 at x=1 | 0: wall +y; 1: 45° −x; 2: wall −y; 3: wall +x; 4: bottom |
+| 3 | 45° valley (inner) roof corner: top corners (1,1),(1,0),(0,0) high, corner (0,1) at ground | 0: 45° +y; 1: 45° −x; 2: wall −y; 3: wall +x; 4: wall +y; 5: wall −x; 6 (no slot): bottom |
+| 4 | 45° hip (outer) roof corner: apex above corner (1,0) | 0: 45° +y; 1: 45° −x; 2: wall −y; 3: wall +x; 4: bottom |
+| 5 | inverted ramp (overhang): full top, underside sloping from z=1 at x=0 to z=0 at x=1 | 0: top; 1: wall −y; 2: wall +x; 3: wall +y; 4: underside |
+| 6 | cube with the upper corner at (0,1) cut off by the plane through (1,1,1), (0,0,1) and (0,1,0) | 0: top; 1: wall −x; 2: wall −y; 3: wall +x; 4: wall +y; 5: steep −x+y; 6 (no slot): bottom |
+| 7 | corner tetrahedron: apex above (1,0), base triangle (0,0),(1,0),(1,1) | 0: steep −x+y; 1: wall −y; 2: wall +x; 3: bottom |
+| 8 | legacy floor marker (no volume) | 0: floor |
+| 9 | upper half of a two-cell shallow ramp: z = ½ at x=0 rising to 1 at x=1 | 0: wall +y; 1: shallow −x; 2: wall −y; 3: wall +x; 4: wall −x; 5: bottom |
+| 10 | lower half of a two-cell shallow ramp: z = 0 at x=0 rising to ½ at x=1 | 0: wall +y; 1: shallow −x; 2: wall −y; 3: wall +x; 4: bottom |
+| 11 | shallow valley corner, upper: corners (1,1),(1,0),(0,0) at 1, corner (0,1) at ½ | 0: shallow +y; 1: shallow −x; 2: wall −y; 3: wall +x; 4: wall +y; 5: wall −x; 6 (no slot): bottom |
+| 12 | shallow valley corner, lower: corners (1,1),(1,0),(0,0) at ½, corner (0,1) at 0 | 0: shallow +y; 1: shallow −x; 2: wall −y; 3: wall +x; 4: wall +y; 5: wall −x; 6 (no slot): bottom |
+| 13 | shallow hip corner, upper: corner (1,0) at 1, the others at ½ | 0: shallow +y; 1: shallow −x; 2: wall −y; 3: wall +x; 4: wall +y; 5: wall −x; 6 (no slot): bottom |
+| 14 | shallow hip corner, lower: corner (1,0) at ½, the others at 0 | 0: shallow +y; 1: shallow −x; 2: wall −y; 3: wall +x; 4: bottom |
 | 15 | prop cell: the table holds a cube, but the cell is never drawn as geometry | as shape 0 |
 
 Shapes 9 + 10 and 11 + 12, and likewise 13 + 14, pair up to make two-cell shallow slopes. Shipped
 models use shapes 0–7, 9, 10 and 15 (§1.3.4).
 
-Texture corner codes per vertex `[STATIC]`: each polygon also lists, for every vertex, the face
-texture corner it maps to:
-
-* 0 = top-left, 1 = top-right, 2 = bottom-right, 3 = bottom-left;
-* 4 = left edge at half height, 6 = right edge at half height;
-* code 5 occurs once (shape 12, slot 3, at vertex (1,1,½)) and should be treated as the right
-  edge at half height `[INFERRED]`.
-
-Read along the face, "top" is the vertex with the larger z (for slopes, the higher edge), and
-"left" is the first vertex of the polygon's top edge. Mid-height corners therefore sample the
-texture at v = 8 texels inside a 16-texel face (§3.3).
+Texture corners `[STATIC]`: each polygon vertex maps to a corner of the face texture: top-left,
+top-right, bottom-right or bottom-left, or the left or right edge at half height for the
+half-height shapes. Read along the face, "top" is the vertex with the larger z (for slopes, the
+higher edge), and "left" is the first vertex of the polygon's top edge. Mid-height corners
+therefore sample the texture at v = 8 texels inside a 16-texel face (§3.3).
 
 #### 3.2.5 Visibility per view `[STATIC]`
 
@@ -689,11 +682,9 @@ Texture coordinates of a face corner are, in texels:
 * u = 16 × u₀ + 16 × (high nibble of the paint/detail offset byte);
 * v = 16 × v₀ + 8 × (low nibble of the offset byte).
 
-(u₀, v₀) is the corner's position on the face, given by its texture-corner code in the shape
-table (§3.2.4): top-left (0,0), top-right (1,0), bottom-right (1,1), bottom-left (0,1), left
+(u₀, v₀) is the corner's position on the face, given by its texture corner (§3.2.4): top-left (0,0), top-right (1,0), bottom-right (1,1), bottom-left (0,1), left
 mid-height (0,½), right mid-height (1,½). v₀ is measured downwards from the face's top edge,
-matching the top-to-bottom row order of the texture `[INFERRED, medium]`, because the program
-builds the numeric corner table at run time. One full face therefore covers 16 × 16 texels, and
+matching the top-to-bottom row order of the texture `[INFERRED, medium]`. One full face therefore covers 16 × 16 texels, and
 the low-nibble offset steps in half-face (8-texel) units, which is what the half-height shapes
 need.
 
@@ -707,10 +698,10 @@ colours.
 Each face gets a colour multiplier computed from six directional lights and its normal **n**:
 shade = min(1, Σᵢ max(0, **n**·**dᵢ**) · colourᵢ) per channel, where **dᵢ** = (cos a·cos e,
 sin a·cos e, sin e) for light azimuth a and elevation e. The texel colour is multiplied by the
-shade `[INFERRED]` (modulation). The program keeps three light sets — *Construct*, *Texture* and
+shade `[INFERRED]` (modulation). There are three light sets — *Construct*, *Texture* and
 *Preview*; sprites for the game use **Preview**. Light directions are fixed relative to the model (the lot), **not** to the camera
-`[DATA]`. Each view renders the model turned (§3.1) under the same model-space lights. The program precomputes
-shades for 8 horizontal facings and for faces sloped at 45°, 30° and 60°, plus top and bottom.
+`[DATA]`. Each view renders the model turned (§3.1) under the same model-space lights. Shades are tabulated
+for 8 horizontal facings and for faces sloped at 45°, 30° and 60°, plus top and bottom.
 
 | Light | Azimuth a | Elevation e | INI key (`Res/BA/BATConfig.ini`, section `[Lights]`) | Built-in colour if key missing |
 |---|---|---|---|---|
@@ -758,8 +749,8 @@ X, Y, Z are the prop's box size in cells; the four quoted names are BMP files in
 per camera rotation. Props usually list four lines whose image lists are rotations of each other
 (so the user can turn the prop), with X and Y swapped as needed; single-line files give one fixed
 orientation. Images are 24-bit BMP with magenta (255,0,255) transparency, named `<prop> <k>.bmp`.
-The analysis team's parser reads 14/14 `.met` files (429 lines) with every
-referenced image present in the same folder `[DATA]`.
+All 14 `.met` files (429 lines) conform, and every
+referenced image is present in the same folder `[DATA]`.
 
 ### 4.2 Detail palette layout `.plt` `[DATA]` (24 files under `Res/BA/DETAILS/<style>/<set>/`)
 
@@ -799,8 +790,8 @@ buildings, shipped pre-filled with 15 buildings.
 
 ## 5. BAT application (`Baapp.exe`) — functional summary
 
-The BAT is a separate program sharing the model/renderer library with the game `[STATIC]`. It runs
-from `Apps/`, single instance (named mutex), uses the game's UI framework and fonts
+The BAT is a separate program `[STATIC]`. It runs
+from `Apps/`, one instance at a time, uses the game's UI look and fonts
 (`systemloadsave.fbf`, `title12.fbf`, `title9.fbf`, `main9.fbf`, `main10.fbf`, `Serif17.fbf`,
 `system9.fbf`), text tables `Res/Text/<LANG>/BATStringsMain.IXF` and `BAMBEStringsMain.ixf`, UI
 bitmaps under `Res/BA/UI/Shared/…`, cursors under `Res/BA/UI/Shared/Cursors/` and hotkeys
@@ -825,10 +816,9 @@ The BAT itself never writes `BAT.DAT`; buildings reach the game only through the
 
 ## 6. `MaxisAddOn.dll`
 
-A data-free add-on library shipped with the game `[STATIC]`. It contains no BAT, building-set or
-file-format behaviour and reads no files. Building sets (`Res/Sprites/BuildingSets/<id>/`,
-`SC3CityScheme.ini` sections `[BuildingSets]` and `[ReplaceableBuildings]`) are discovered by the
-game itself (`13-buildings-occupants.md`). An implementation can ignore this file.
+Ignore this file: it holds no BAT, building-set or file-format behaviour. Building sets
+(`Res/Sprites/BuildingSets/<id>/`, `SC3CityScheme.ini` sections `[BuildingSets]` and
+`[ReplaceableBuildings]`) are described in `13-buildings-occupants.md`.
 
 ## 7. Persisted state
 
@@ -839,8 +829,7 @@ database `Apps/BARender/BAT.DAT` (§2.2) and its backup `Apps/Res/BA/RenderedBui
 
 ## Open questions
 
-1. (Resolved: §3.2.) Remaining: the exact numeric texture-corner table. The corner codes are
-   resolved, but the program builds the numeric values at run time.
+1. (Resolved: §3.2, §3.3.)
 2. (Vertical scale resolved: §3.1.) Still open: the exact rasteriser rules (edge inclusion,
    texture filtering) and the exact resampling kernel from the 128-px master (§3.1.1).
 3. (Wall/light assignment resolved: §3.4.) Still open: how the shade combines with the texel

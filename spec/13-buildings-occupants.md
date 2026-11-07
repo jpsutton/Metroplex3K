@@ -118,33 +118,32 @@ landfill pieces `0x00030026`; airport parts `0x001F4226`; network pieces `0x0007
 
 The "occupant flag word" tested by networks (`12-networks.md` §5.2), disasters (`21-disasters.md`)
 and automata (`26-automata.md`) is **not** attribute 0x72 and is not saved. It is a run-time
-value that depends on the occupant's **class**:
+value that depends on the kind of occupant. Full flag words quoted in this section are labels
+only; they are not needed by an implementation beyond the single-bit meanings given here and
+used by other documents.
 
-* **Network pieces** (all classes of the network subsystem) have a fixed word per piece class.
+* **Network pieces** have a fixed word per piece type.
   Every one has 0x4 and 0x800 (network piece). All except pipes and plain power lines also have
   0x4000. Then the network bits of the piece: 0x8000 road, 0x10000 highway, 0x20000 rail,
-  0x40000 subway, 0x400000 power line, 0x800000 pipe; crossing pieces combine them (e.g. road + rail
-  = 0x2C804). 0x200000 marks highway on-ramps, and 0x80000 / 0x100000 mark two further piece
-  variants [OPEN: meaning]. Values in use: road 0xC804, highway 0x14804, rail 0x24804, subway
-  0x44804, power line 0x400804, pipe 0x800804, road+highway 0x1C804, road+rail 0x2C804,
-  rail+highway 0x34804, rail+subway 0x64804, road+power 0x40C804, highway+power 0x414804,
-  rail+power 0x424804, on-ramps 0x214804 / 0x21C804, and the variants 0x8C804, 0x94804, 0xA4804,
-  0x480804, 0x10C804, 0x114804, 0x124804.
-* **Flora** (trees, `11-world-terrain.md` §6): 0x404. Flora is the only occupant with bit 0x400.
-* **Utility buildings**: power plants 0x400104 (they conduct power), water facilities 0x800104
-  (they connect to pipes), other utility classes 0x104. **Transit stations**: 0x4104.
-* **Other building classes** owned by simulation subsystems (services, garbage, deal buildings,
-  disasters' objects, etc.): 0x104; a few landmark/deal classes 0x40000104.
-* **Generic (zoned and ordinary) buildings**: **0x104** [STATIC]. The occupant flag getter for
-  these classes is a constant `0x104` (same word as the other non-network building classes
-  above). There is no per-agent-type variation of this word for generic buildings.
-* Automata (vehicles, pedestrians): 0x100A204.
+  0x40000 subway, 0x400000 power line, 0x800000 pipe; crossing pieces combine them (e.g. a
+  road + rail crossing has both the road and rail bits). 0x200000 marks highway on-ramps, and
+  0x80000 / 0x100000 mark two further piece variants [OPEN: meaning].
+* **Flora** (trees, `11-world-terrain.md` §6): has bit 0x400. Flora is the only occupant with bit 0x400.
+* **Utility buildings**: power plants carry the power-conducting bit 0x400000 in addition to the
+  building word (they conduct power), water facilities carry 0x800000 (they connect to pipes);
+  transit stations carry 0x4000 in addition.
+* **Other building types** owned by simulation subsystems (services, garbage, deal buildings,
+  disasters' objects, etc.) carry the plain building word; a few landmark/deal types carry
+  an additional high bit (0x40000000).
+* **Generic (zoned and ordinary) buildings** carry the plain building word (0x104, label only;
+  the same word as the other non-network buildings). There is no per-agent-type variation of
+  this word for generic buildings [STATIC].
+* Automata (vehicles, pedestrians) carry their own word (label only).
 
 Consequences: bit **0x8000 = road piece** (including every crossing that contains road). So riot
 sites and pedestrian spawn tiles are tiles whose occupant is a road piece. Bit **0x400** = flora,
 bit **0x800** = network piece, so the "non-flammable / indestructible" exclusions of
-`21-disasters.md` skip trees and network pieces. Correction: earlier revisions treated these
-as unidentified building flags.
+`21-disasters.md` skip trees and network pieces.
 
 ### 3.2 What is NOT in the occupant attributes
 
@@ -190,8 +189,8 @@ type T [STATIC]:
 
 1. If the table has an entry for T, use it (distance 0).
 2. Otherwise walk up `[AgentTypeHierarchy]` (`child=parent`) from T. The **distance** of an entry E
-   is the number of child→parent steps from T to E [STATIC]: the type-hierarchy service returns
-   that step count when E is an ancestor of T, and reports no match otherwise.
+   is the number of child→parent steps from T to E [STATIC]; it is defined only when E is an
+   ancestor of T, and otherwise there is no match.
 3. Use the matching entry with the smallest distance (ties: first found / ascending ID order as
    stated by the consumer). If none matches, the table's default applies (usually zero).
 
@@ -343,12 +342,12 @@ they are placed by the player once unlocked (`22-advisors-news-petitioners.md`,
 
 ## Persisted state
 
-The occupant manager saves occupant instances, not this subsystem. The full byte layout is in
+The occupant instances are saved as described here, not by the building subsystem. The full byte layout is in
 `10-save-format.md` §6.2. This section gives the building-level meaning of the fields.
 
 * **Which occupants are saved**: every building, prop and tree in record `E0FAADC7:A0AB89F0:1`,
-  with the count in `20631788:A0AB89F0:0`. Network pieces are saved separately by the network
-  manager as 8-byte entries (placement word plus a piece word whose low 16 bits are the network
+  with the count in `20631788:A0AB89F0:0`. Network pieces are saved separately
+  as 8-byte entries (placement word plus a piece word whose low 16 bits are the network
   occupant ID; `10-save-format.md` §6.2.6) [STATIC][DATA].
 * **Identity**: the occupant attribute key, `207EDC0E:0000057E:<occupant ID>` for buildings and props
   or `220055E1:0000057E:<occupant ID>` for airport and seaport parts (flora is saved separately, in the
@@ -360,10 +359,10 @@ The occupant manager saves occupant instances, not this subsystem. The full byte
   anchor for ordinary placement), rotation 0–3, and footprint sizeX × sizeZ (1–63 tiles per side;
   1–5 shipped, always square in shipped files) [STATIC][DATA]. No separate lot rectangle is stored.
   It is anchor plus footprint.
-* **Occupant kind** (small integer, not saved). Every occupant class exposes a fixed kind value
-  used by several simulation tests. Building and facility classes report **1**. Network tile
-  pieces (road, rail, highway, pipe, power line, subway, …) report **2**. Flora (trees) report
-  **5**. Other small integers exist on some non-tile classes; the aura gate only cares that they
+* **Occupant kind** (small integer, not saved). Every occupant has a fixed kind value
+  used by several simulation tests. Buildings and facilities have kind **1**. Network tile
+  pieces (road, rail, highway, pipe, power line, subway, …) have kind **2**. Flora (trees) has kind
+  **5**. Other small integers exist on some non-tile occupants; the aura gate only cares that they
   are not 1. This is **not** the lot-state word below and is **not** attribute 0x72. The aura
   cell average (`17-sim-services.md` §8.4) counts a tile when the occupant query succeeds and the
   occupant is absent or kind 1. [STATIC]

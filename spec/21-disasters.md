@@ -45,7 +45,7 @@ All IDs are `u32`. The *type ID* is used by scenario scripts, by the UI menu and
 | `0x13873256` | Space junk | `0x52FE8D52` | `[SpaceDebrisDisaster]` (empty) |
 | `0xC4C90997` | Parade (not a disaster; an event reusing the framework) | `0x84C92CBE` | `[ParadeEvent]`, `[ParadeEventTunables]`, `[ParadeEventParadeBlocks]`, `[ParadeEventParadeConfigs]` |
 
-The program also contains a tenth disaster implementation that is not listed in `[DisasterDescriptions]` and is therefore never instantiated; it reads the whirlpool tunables. An implementation can ignore it. [STATIC]
+The program also contains a tenth disaster implementation that is not listed in `[DisasterDescriptions]` and is therefore unused; it reads the whirlpool tunables. An implementation can ignore it. [STATIC]
 
 Empty sections `[SmiteDisaster]` and `[PlaneCrashDisaster]` exist in the shipped INI but no
 type with those names is instantiated; plane crashes, flooding, volcanoes and meteors are **not**
@@ -74,7 +74,7 @@ for fire) and the divisor for the disaster sound's intensity; the second is the 
 
 ## 3. Starting a disaster (menu and scenario)
 
-The layer offers a "start disaster of type T" entry that runs that type's *random start* routine (random location and parameters, warning flag set); the Disasters menu uses it, so menu disasters behave exactly like random occurrences but bypass the occurrence timers and the disasters-enabled flag. [STATIC for the entry; INFERRED that the menu calls it]
+The layer offers a "start disaster of type T" entry that starts that type at a random location with random parameters and the warning flag set; the Disasters menu uses it, so menu disasters behave exactly like random occurrences but bypass the occurrence timers and the disasters-enabled flag. [STATIC for the entry; INFERRED that the menu calls it]
 
 A disaster can be started by (a) the player through the Disasters menu (not blocked by the
 disasters-enabled flag, §4.3), (b) a scenario script command, (c) the random trigger (§4), or (d) a cheat/console
@@ -119,7 +119,7 @@ Tick rates, converted to game time with `14-sim-clock.md` §6 [STATIC per that d
 |---|---|---|---|
 | DisasterManager (random-occurrence check) | 4 | once per simulated **month** | "random-check tick" |
 | DisasterInstanceDayTick | 2 | once per simulated **day** | "day tick" |
-| DisasterInstanceMinuteTick | 0 | once per simulated **minute** while any disaster instance is active (scheduler command 3) | "minute tick" |
+| DisasterInstanceMinuteTick | 0 | once per simulated **minute** while any disaster instance is active (minute-tick scheduling) | "minute tick" |
 
 Consequences (game time, shipped values): fire random interval 48–240 random-check ticks = 4–20
 years between random fire attempts; tornado 48–360 = 4–30 years; riot 48–300 = 4–25 years at
@@ -129,7 +129,7 @@ hour; tornado warning phases 60 ticks = 1 game hour each; earthquake phases T1�
 hours; riot brew 80 minutes, riot duration 20–240 minutes. Because a simulated day under minute
 resolution takes at least 72 s real time (`14-sim-clock.md` §4), 60 minute ticks last at least
 3 s real time. `[INFERRED: that the random checks and the per-instance updates are driven by
-the agents named above, as stated in 14-sim-clock.md; the issuer of command 3 is OPEN there]`
+the agents named above, as stated in 14-sim-clock.md; what starts minute-tick scheduling is OPEN there]`
 The emergency elapsed counter advances once per simulated day (daily item 1 in
 `14-sim-clock.md` §6.1), not on the monthly random-check tick. [STATIC]
 
@@ -149,7 +149,7 @@ Values named "…Times100" are percentages × 100 (e.g. 33 = 0.33 %). [INFERRED 
 
 ### 4.3 Disasters enabled ("disasters off")
 
-* The flag is a property of the city (owned by the city object, persisted with the city settings,
+* The flag is a property of the city (persisted with the city settings,
   see `10-save-format.md`), not of the disaster layer. Scenario command
   `cmdEnableDisableDisasters` sets it (non-zero argument = enabled). [STATIC]
 * When the layer initialises or the flag changes, the layer registers (enabled) or unregisters
@@ -292,8 +292,8 @@ intensity 0 and goes out unless it survives 10 stage completions.
 Spread from a burning building with chance p (percent): [STATIC]
 
 1. If the burning count exceeds *MaxFires*, or the building is no longer valid, no spread.
-2. **Contact set.** For every occupant returned by the building database's "occupants touching
-   this occupant" query, ignite it (§5.3, intensity 0) if Rand(100) < p.
+2. **Contact set.** For every occupant touching
+   this occupant, ignite it (§5.3, intensity 0) if Rand(100) < p.
 3. **Ring set.** Take the occupant's tile bounding rectangle, enlarge it by 2 tiles on every side,
    clip to the map, and split the enlarged rectangle minus the original into up to four
    non-overlapping strips (top, bottom, left, right). In each strip, collect up to 6 occupants whose
@@ -317,8 +317,7 @@ Destroyed buildings become rubble through the generic destroy routine (§9). **R
 have no lifetime**: no timer removes them. Developers skip lots in the rubble (`0x08`) and burnt
 (`0x10`) states, and the growth site check rejects them unless the new building has the same agent
 type, so rubble stays until the player demolishes it (`DemolishRubbleTile` cost,
-`SC3BudgetLayer.ini`). [STATIC negative search over the growth, building and occupant code;
-INFERRED conclusion]
+`SC3BudgetLayer.ini`). [INFERRED]
 
 ## 6. Moving disasters
 
@@ -359,11 +358,10 @@ phase 4 with the counter already at its threshold, i.e. touches down on the next
 
 Movement and damage [STATIC]: in phase 5 the funnel effect moves the tornado (§12.5); each minute
 tick elapsed += 1; when elapsed ≥ lifetime (or the tornado leaves the map) it ends. A damage step
-happens each time the funnel's reported position enters a **new tile** (correction: not once per
+happens each time the funnel's reported position enters a **new tile** (not once per
 minute tick). On each step, with probability Rand(100) ≤ DestroyChance[variant], the occupant at the current tile is
 destroyed with damage type `0x08` (rubble), an explosion effect and explosion sound (the explosion
-notification of `06-audio.md` §10.5) are produced at the tile, and if the occupant was over water (occupant flag bit
-0x400000) a splash effect is spawned. Destroyed cost and count are accumulated per tornado.
+notification of `06-audio.md` §10.5) are produced at the tile, and if the occupant was over water a splash effect is spawned. Destroyed cost and count are accumulated per tornado.
 
 Speed, path and width [STATIC unless tagged]:
 
@@ -419,8 +417,7 @@ Clean Industry, Industrial Pollutant Fee, Waste Disposal) + WeightForEachToxicWa
 where the pollution term is computed as ⌊WeightForPollution × avgAir ÷ `MaxAirPolluteForUI`⌋.
 The product is formed first, then divided with signed 32-bit integer division. avgAir is the
 pollution layer's last completed sweep average (`17-sim-services.md` §7.4). `MaxAirPolluteForUI`
-is the `SC3Pollution.ini` key of `17-sim-services.md` §7.2.2, the air scale maximum [STATIC]. Correction: P_total
-and P_norm are exactly these two values; they were previously OPEN.
+is the `SC3Pollution.ini` key of `17-sim-services.md` §7.2.2, the air scale maximum [STATIC].
 
 Random trigger [STATIC]: a cloud may start only if fewer than the maximum instances are active,
 at least `AverageDurationBetweenOccurrences` has elapsed since the previous one, and score >
@@ -438,8 +435,7 @@ Life cycle (minute ticks) [STATIC]:
    tiles one puff is placed at a uniformly random point within ±6 tiles (±0x600 world units) of
    the scanned tile (if on the map), at a random altitude between `MinHeightAboveTerrain` and
    `MaxHeightAboveTerrain`, until the instance has its number of puffs: n = `MinCloudsPerInstance`
-   + ⌊(`MaxCloudsPerInstance` − `MinCloudsPerInstance`) × (level + 1) / 5⌋ (correction: not a random
-   range) [STATIC]. The cloud's centre is then the centre of the puffs' bounding box.
+   + ⌊(`MaxCloudsPerInstance` − `MinCloudsPerInstance`) × (level + 1) / 5⌋ [STATIC]. The cloud's centre is then the centre of the puffs' bounding box.
 3. **No drift**: the cloud speed (`Min/MaxToxicCloudSpeed`, value × 256 / 60000) and the start
    direction are handed to the puffs, but the puffs never apply them (§12.7), and the disaster layer
    does not move them: the cloud stays where it formed [STATIC].
@@ -539,7 +535,7 @@ phases 4–5 (attack running):
 | Bomb hits ground | r₁ = Rand(100). If r₁ ≤ `PercentageOfBuildingsCatchFireByUFOBombs`: **ignite** — if the occupant at the tile is in UFO category 0 (ordinary/low-tech, see below) and fewer than `MaxLowTechBuildingsDestroyedPerAttack` category-0 buildings have been hit, count it and set it on fire (§5.3, intensity 0). Otherwise (r₁ greater): with probability Rand(100) ≤ `PercentageOfBuildingsDestroyedByUFOBombs` **destroy** it: explosion effect (and a splash effect if the occupant stands over water), explosion sound (the explosion notification of `06-audio.md` §10.5), damage type `0x08`, cost added to the attack, per-category counter incremented. With the shipped values (100 / 100) every bomb takes the ignite branch. |
 | Beam (destroy) | The occupant at the tile is destroyed with damage type `0x08` (no extra effect); cost and per-category counter are updated as above. |
 | Abduction | Abduction counter += 1 (presentation only). |
-| Crop circle | Only if every tile of the 4 × 4 block with corner (x, z) qualifies as crop land (agricultural lot, see locusts §6.4): the occupant `0x207EDC0E:0x0000057E:0x000013CE` ("Crop Circle", `OccupantAttribs.IXF`, 4 × 4 footprint) is placed with its anchor at (x, z) and the crop-circle counter += 1. It is an ordinary occupant with no removal timer [STATIC; persistence INFERRED]. Whether placement first clears the field occupants under it is not traced. Original quirk: the saucer reports its hover point (lot centre), which this test treats as the block corner. |
+| Crop circle | Only if every tile of the 4 × 4 block with corner (x, z) qualifies as crop land (agricultural lot, see locusts §6.4): the occupant `0x207EDC0E:0x0000057E:0x000013CE` ("Crop Circle", `OccupantAttribs.IXF`, 4 × 4 footprint) is placed with its anchor at (x, z) and the crop-circle counter += 1. It is an ordinary occupant with no removal timer [STATIC; persistence INFERRED]. Whether placement first clears the field occupants under it is [OPEN]. Original quirk: the saucer reports its hover point (lot centre), which this test treats as the block corner. |
 
 **Launching the swarm** (on entering the attack phase) [STATIC]. Let W be the map width in tiles
 `[INFERRED: the map-size quantity used is the width]`.
@@ -548,8 +544,7 @@ phases 4–5 (attack running):
    (capacity 256 each; rules below).
 2. Saucer count n: kind 5 → max(6, ⌊W/16⌋ + 1); kind 4 → max(5, ⌊W/16⌋ + 1); kinds 2 and 3 → 1.
    Then n = min(n, `MaxUFOsPerInstance`). If the UFO-swarm cheat is active, n =
-   `MaxUFOsPerInstanceCheatSwarm` instead. (The general formulas are max(3·(s + 2), …) and
-   max(3·s + 5, …) with a strength parameter s that is always 0 in the shipped program.)
+   `MaxUFOsPerInstanceCheatSwarm` instead.
 3. Kinds other than 5 make every saucer passive (no bombing). Kinds other than 2 add 5 roaming
    abduction passes. Each bomb target and each crop-circle target is handed to the swarm.
 4. If the cheat swarm is used, or kind = 2, or fewer than 3 bomb targets, or fewer than 3 crop
@@ -568,7 +563,7 @@ is classified by walking its agent-type hierarchy (`13-buildings-occupants.md`, 
 | 3 high-tech | 13870 *University*, 1001 *Arcology*, 9100 *IndCleanHighDensity*, 12310 *Airport*, 12330 *Seaport*, 19001 (toxic waste plant) | `MaxHighTechBuildingsDestroyedPerAttack` |
 | 2 spaceport | 12350 *Spaceport* | `MaxSpaceportBuildingsDestroyedPerAttack` |
 | 1 landmark | 14160 *HistoricBuilding*, 18000 *Landmarks* | `MaxLandmarkBuildingsDestroyedPerAttack` |
-| 0 low-tech | anything else, only if its occupant flag word has neither 0x400 (flora) nor 0x800 (network piece) (`13-buildings-occupants.md` §3.1a) | `MaxLowTechBuildingsDestroyedPerAttack` |
+| 0 low-tech | anything else, only if its occupant is neither flora nor a network piece (`13-buildings-occupants.md` §3.1a) | `MaxLowTechBuildingsDestroyedPerAttack` |
 
 Targets are then emitted, up to `MaxTotalBuildingsToDestroy` in total, in this order: low-tech,
 landmark, spaceport, high-tech, power, each list truncated to its cap. A target point is the
@@ -613,8 +608,7 @@ dispatch (command `0x1000A006`) is the counter-measure `[INFERRED]`.
 **Phases** (minute ticks) [STATIC]: first premonition at `TimeBeforeFirstPremonitionMessage`,
 second at `TimeBeforeSecondPremonitionMessage`, swarm launched at `TimeBeforeLocustAttack`.
 `TimeBeforeThirdPremonitionMessage`, `TimeBeforeLocustAttackEnd` and `SwarmSpeed` are loaded or
-present but not used by the disaster logic (`SwarmSpeed` is read into a variable that nothing
-reads; the swarm's speed belongs to the automaton, `26-automata.md`) `[STATIC]`. Without the
+present but not used by the disaster logic (`SwarmSpeed` has no effect here; the swarm's speed belongs to the automaton, `26-automata.md`) `[STATIC]`. Without the
 warning flag the instance starts at the launch phase with zero thresholds and launches at once.
 
 **Launching the swarm** [STATIC]:
@@ -636,7 +630,7 @@ tile (x, z), the occupant there is destroyed with damage type `0x20` (§9; crops
 only reports its crop targets), its cost is added to the attack and the eaten-crop counter is
 incremented. Locusts destroy no other buildings, but the swarm automaton itself gives flora it
 flies over damage type `0x20` (burnt tree, §12.9) [STATIC]. The "arrived" report triggers the
-crop-duster check below; "all gone" has no handler. [STATIC]
+crop-duster check below; "all gone" has no effect. [STATIC]
 
 **Crop duster** [STATIC]: a dispatch (command `0x1000A006`) at tile (x, z) places the dispatch
 icon occupant at (x + 1, z) (x + 1 only if x < W − 1) and sends a crop-duster plane there; at most 3
@@ -656,8 +650,8 @@ bridges (damage type `0x08`) — sound items `WhirlpoolDestroysBridge`, `Whirlpo
 analogy with the earthquake table the first block is: max instances (1), minimum gap in months
 (24) and a second period (96), magnitude min/max in tenths (25/85), occurrence chance per 10000
 (83), and a size parameter (7); the second block holds the warning-phase thresholds (0/20/40/60),
-then size/strength/timing values (superseded by the confirmed table below). The same IDs are also read
-by the unused, never-instantiated disaster implementation (§2).
+then size/strength/timing values. The same IDs are also read
+by the unused disaster implementation (§2).
 
 Whirlpool tunables, confirmed by use [STATIC]:
 
@@ -713,7 +707,7 @@ and shaking the screen (sound items `SpaceJunkHits`, `SpaceJunkHitsWater`,
 space junk (shipped: 1, 120, 720, 1, 99, 20; then 0, 60, 120, 180, 300, 3000000, 30, 50, 300000, 10,
 1960): max instances, minimum gap and second period in months, magnitude min/max, occurrence chance
 per 10000, then warning-phase thresholds (0/60/120/180), and size/timing values ending with the
-first calendar year in which space junk can occur (1960) (superseded by the confirmed table below).
+first calendar year in which space junk can occur (1960).
 The object persists a dated history (§Persisted state).
 
 Space-junk tunables confirmed by use [STATIC]:
@@ -906,7 +900,7 @@ fault line: [STATIC]
    * with probability Pdestroy(class)/10000 the occupant anchored at that tile is destroyed
      (§9; with a 1-in-50 chance a visual explosion/splash effect is also spawned);
    * otherwise with probability Pignite(class)/10000 it is set on fire (§5.3, intensity 0) unless
-     it is a flora occupant (occupant flag bit 0x400, `13-buildings-occupants.md` §3.1a);
+     it is a flora occupant (`13-buildings-occupants.md` §3.1a);
    * otherwise nothing.
    Only the occupant whose anchor tile is exactly (x, z') is affected.
 3. The earthquake also updates the history entry used by §7.2.
@@ -923,7 +917,7 @@ fault line: [STATIC]
 |---|---|---|
 | `0x6484A25D` | UnrestThreshold | Riots (random) only when the city unrest statistic U (0–100) ≥ this (8). |
 | `0x2484A264` / `0x6484A26A` | IntervalMin / IntervalMax | Random-check interval range (48 / 300). |
-| `0x4484A270` | SiteAuraMax | A tile can host a random riot only if the local aura value there (signed) < this (50). Correction: not police coverage. |
+| `0x4484A270` | SiteAuraMax | A tile can host a random riot only if the local aura value there (signed) < this (50). |
 | `0x4484A278` | SearchRadius | Half-size in tiles of the square searched around a random point (40). |
 | `0xE484A27D` / `0xA484A283` | DurMax / DurMin | Riot duration at zero / full police coverage, in minute ticks (240 / 20). |
 | `0x2484A289` / `0x2484A290` | — | Range of the crowd's throw interval in µs (300000 / 600000 = 0.3–0.6 s), §12.10. |
@@ -954,7 +948,7 @@ with L = round(residents × workforce fraction) and J = jobs: 0 if L ≤ J, 100 
    simultaneous riots. For each of the n riots, independently (a failed try is silent): pick a random
    tile (Rand(width), Rand(height)), search the square of half-size SearchRadius around it
    (clipped to the map) in the outward spiral of §8.4 and start a riot at the first tile whose local
-   aura value < SiteAuraMax and whose occupant is a road piece (flag `0x8000`). Random riots start
+   aura value < SiteAuraMax and whose occupant is a road piece. Random riots start
    with the warning flag set.
 
 Game-time scale: the check is the monthly random-check tick (§4.1), so with shipped values the
@@ -983,8 +977,8 @@ out on the next tick. [STATIC]
   [STATIC]
 
 **Riot sites and the site search** [STATIC]. A valid random riot site is a tile whose local aura
-value < SiteAuraMax and whose occupant has occupant flag bit `0x8000` set, i.e. a **road piece** (any crossing that
-includes road counts) (`13-buildings-occupants.md` §3.1a) [STATIC]. It is the same flag bit that makes a tile eligible
+value < SiteAuraMax and whose occupant is a **road piece** (any crossing that
+includes road counts) (`13-buildings-occupants.md` §3.1a) [STATIC]. Road pieces are also the tiles eligible
 for pedestrian spawning (`26-automata.md` §5.8) [STATIC]. The search around a start point (cx, cz) covers
 the rectangle [cx − SearchRadius, cx + SearchRadius] × [cz − SearchRadius, cz + SearchRadius]
 clipped to the map, in an **outward square spiral** starting **at** (cx, cz): the start tile, then
@@ -992,7 +986,7 @@ legs of growing length 1, 1, 2, 2, 3, 3, … alternating between the x and z axe
 reversing every two legs (+x 1, +z 1, −x 2, −z 2, +x 3, +z 3, …). Tiles outside the rectangle are
 skipped; the spiral ends once it has passed the rectangle on all four sides, so every tile of the
 rectangle is visited exactly once, nearest rings first. The first valid tile wins, i.e. the
-nearest qualifying road tile. Correction: earlier versions described a wrapping raster. The same
+nearest qualifying road tile. The same
 spiral is used by the random-fire target search (§5.2), the toxic puff placement (§6.2) and the
 toxic origin search. [STATIC]
 
@@ -1035,16 +1029,15 @@ Rules, in order:
    requested type, or already burnt (type `0x10`), or already rubble (type `0x08`) and the request
    is `0x08` or `0x02`, nothing happens.
 4. The routine returns the destruction cost = the occupant type's cost + footprint w × h × the
-   per-tile demolition cost (budget tool cost index 12) [STATIC; index meaning INFERRED], except
+   per-tile demolition cost [STATIC], except
    when it is a lot building already in a destroyed state of type `0x10` or `0x08` (no cost). The
    **calling disaster** adds it to its own per-instance total; the instance total is added to the
    layer's disaster cost (§10.2) when that disaster ends [STATIC].
-5. The occupant is removed from the world (through the city's removal service; if that fails,
-   directly from the occupant database).
+5. The occupant is removed from the world.
 6. Replacement: a lot building is put back as the **same object** with its lot state set to the
    damage type (`0x08` rubble, `0x10` burnt, `0x20` eaten, `0x02` abandoned); its look is then chosen
    by state from `SC3BuildingLayer.ini [DefaultBuildingData]` (`25-rendering.md`). No separate
-   rubble occupant is created (correction: agent types 15410/15411/15420/15421 are the stand-in
+   rubble occupant is created (agent types 15410/15411/15420/15421 are the stand-in
    models, not occupants placed by this routine). For flora (agent type 300) destroyed by `0x10` or
    `0x20`, a burnt variant of the same flora family is placed at the tile's terrain height (variant
    index 8 for fire, 9 otherwise; family 4 if the lookup fails). Anything else is simply removed.
@@ -1056,7 +1049,7 @@ Rules, in order:
    with probability 9/10 each, independent of the distance (one Rand(10) draw per tile, in the
    order the tiles are visited; a draw of 0 leaves the tile clean). This applies to any destruction of a nuclear
    plant by any disaster. The centre tile is the anchor + half the footprint. Whether the
-   power-plant explosion of `16-sim-utilities.md` goes through this routine is not traced.
+   power-plant explosion of `16-sim-utilities.md` goes through this routine is [OPEN].
 
 
 ## 10. Emergency response and dispatch
@@ -1118,7 +1111,7 @@ Fire-fighter and police dispatch are implemented by the fire-protection and poli
    the **4 × 4-tile cell** containing that tile (`17-sim-services.md` §2.1) is increased by
    `DispatchEffect`. A cell therefore gains up to 16 × `DispatchEffect` when the whole cell is inside
    the disc, and its coverage byte is recomputed as clamp(raw / 16, 0, 255), i.e. the average over
-   the cell's 16 tiles. (The stamping routine supports a linear fall-off from an inner to an
+   the cell's 16 tiles. (The effect model supports a linear fall-off from an inner to an
    outer effect value, effect − (effect − effectEdge) × d / R; dispatch passes the same value for
    both, so the effect is flat over the disc.)
 4. Recalling a unit reverses its stamp.
@@ -1195,16 +1188,13 @@ frame (smallest first), followed by the five alpha cells (sidecar comment conven
   spray, toxic puffs, toxic rain and the whirlpool vortex use **shifted zoom**: image index
   k = z + 1 for z < 4 and k = 4 at z = 4, where the zoom-4 image is drawn magnified 2× (spans doubled);
   the smallest image (k = 0) of these sets is never used.
-* **Detail level (machine class).** Not a player setting: a machine class 1–7 computed from a CPU
-  probe at every start (not saved): CPU generation < 5 → 1; 5 → 2 (3 if > 189 MHz); 6 → 4 (5 if
-  > 259 MHz); 7–9 → 5 (6 if > 299 MHz); > 9 → 7. The `-p a b c d` command line overrides it with c
-  clamped to 5–10. The same value is the m of `26-automata.md` §7.1. It gates: ground shadows of
+* **Detail level.** Not a player setting: a detail class 1–7 chosen at every start from the
+  machine's speed (not saved); an implementation may choose it freely. The same value is the m of
+  `26-automata.md` §7.1. It gates: ground shadows of
   puffs, saucers, locusts and debris (class ≥ 4); explosion frame 0 (skipped below 4); explosion and
   tornado debris counts (§12.3, §12.5); the giant-locust count (§12.9). [STATIC]
-* **Draw class.** Effects are inserted into the city renderer with a small integer draw class:
-  fire flames 2, explosion 1, splash 2, puff 5 (its shadow 1), toxic rain 1, vortex 1, crater 1,
-  saucer/beam/bomb/shadow 1, locust 1. All are depth-sorted with the ordinary sprite list of
-  `25-rendering.md` by their (x, z, y) position `[INFERRED: class semantics not resolved]`.
+* **Draw order.** Effects are depth-sorted with the ordinary sprite list of
+  `25-rendering.md` by their (x, z, y) position `[INFERRED]`.
 
 ### 12.2 Fire flames [STATIC][DATA]
 
@@ -1238,8 +1228,8 @@ frame (smallest first), followed by the five alpha cells (sidecar comment conven
   frame: 9 frames ≈ 1.8 s, 11 ≈ 2.4 s, 12 ≈ 2.7 s, 13 ≈ 3.0 s. Below detail class 4 frame 0 is
   skipped.
 * Blast push: the effect has a blast stage (after 100 000 µs, a push vector to objects within
-  200 / 300 / 400 units for sizes 1 / 2 / 3), but every caller disables it and nothing in the program
-  handles the push — **no effect on automata** [STATIC]. An implementation omits it.
+  200 / 300 / 400 units for sizes 1 / 2 / 3), but every caller disables it, so there is
+  **no effect on automata** [STATIC]. An implementation omits it.
 * Debris (after 200 000 µs, only when zoom > 0 or variant > 3): variant 5 (UFO): one inner UFO
   part dropped with zero velocity plus class/2 + 2 outer UFO parts in a ring at horizontal speed 0.8,
   offset Rand[20, 30) in x and z; other variants: class/2 pieces offset Rand[10, 25) in x and z and
@@ -1273,7 +1263,7 @@ frame (smallest first), followed by the five alpha cells (sidecar comment conven
   zoom > 0; kind Rand(8), frame period Rand[200 000, 300 000) µs) orbits the moving funnel: radius
   from 30 growing 3 × 10⁻⁵ units/µs, random start angle, angular rate 1.5 × 10⁻⁵ rad/µs at constant
   tangential speed 0.45 units/ms, rising ⌊8.94 × 1.3 × 10⁻⁴ × dt_µs⌋ per update. At radius > 160
-  (≈ 4.3 s) it is released at 0.45 units/ms in direction angle + π (as coded: back towards the
+  (≈ 4.3 s) it is released at 0.45 units/ms in direction angle + π (back towards the
   centre) with vy = 0.143, then behaves as in §12.13. [STATIC]
 * Sprites (`EffectSprites`, shifted zoom, ID = base + k): start/end `0xFFFE5000` (alpha `5100`),
   loop A `0xFFFE5200` (`5300`), loop B `0xFFFE5400` (`5500`), dirt spray `0xFFFE5600` (`5700`),
@@ -1342,7 +1332,7 @@ frame (smallest first), followed by the five alpha cells (sidecar comment conven
   `0xFFFC1600 + z` (direct zoom), only above detail class 3.
 * **Puffs do not drift.** The cloud's velocity is handed to each puff but never applied; puffs
   stay where they were placed (§6.2 step 2), and the disaster layer never moves them. The cloud
-  therefore does not travel `[STATIC: no reader of the stored velocity]`.
+  therefore does not travel `[STATIC]`.
 * Opacity fades in from 0 to 1 at 0.00015 per ms (≈ 6.7 s); on dissipation it fades out at the
   same rate, then the puff reports "gone" (the cloud counts its puffs down, §6.2 step 5) and is
   removed.
@@ -1430,7 +1420,7 @@ queue in order; a beam or crop-circle command first inserts a "fly there" leg.
   is within 1536 units). The locust disaster destroys the crop on "eat" (§6.4).
 * **Passing over trees**: whenever a swarm's tile changes, every tile that drops out of its 5 × 5
   neighbourhood and holds flora is given damage type `0x20` (burnt-tree replacement, §9). So swarms
-  strip trees along their path `[STATIC; contradicts the earlier "locusts do not destroy flora"]`.
+  strip trees along their path `[STATIC]`.
 * **End**: a swarm whose queue is empty is removed on the next update (no fade). A swarm that
   arrives at a crop within 6 tiles (Chebyshev) of a crop-duster spray point (§6.4) fades out over
   9 s and is removed (sound/effect 0xF2). When the last swarm is gone the swarm object reports "all
@@ -1448,7 +1438,7 @@ queue in order; a beam or crop-circle command first inserts a "fly there" leg.
   sprays again, at most 5 times or until the next point is off the map. A retarget only appends a
   waypoint, flown after the current run (with its own 5 sprays). With no waypoints left it flies home
   in 100-unit steps and is removed within 100 units of home. Whether the plane exists without the
-  holiday data is not traced.
+  holiday data is [OPEN].
 * **Dispatch icon**: occupant `0x207EDC0E:0x0000057E:0x00003FAF` ("Locust Swarm Dispatch Icon",
   1 × 1 footprint), placed at (x + 1, z) with sound 246; no timer — removed only when a 4th dispatch
   evicts it or when the locust attack ends (which also removes the planes).
@@ -1464,12 +1454,11 @@ queue in order; a beam or crop-circle command first inserts a "fly there" leg.
 * Every RandRange(`0x2484A289`, `0x2484A290`) µs (shipped 0.3–0.6 s) it throws an object: a short
   projectile from a random point up to 80 units ahead along its heading, velocity (1.2 cos φ, 0.2,
   1.2 sin φ) with random φ. A projectile that hits a building ignites it (riot ignition, §8.4).
-* Reports to the riot: "entered tile" (the riot site moves there; the road piece there gets its two
-  per-instance **lock bits** cleared while any crowd stands on it, ref-counted per tile; fire does
-  the same on a burning occupant. One bit allows replacement by development (building placement
-  fails on a locked tile), the other allows clearing by tools (network placement, terraforming and
-  zoning will not remove a locked tile) [STATIC; naming INFERRED]), "left tile"
-  (bits set again when no crowd remains), "destroyed" (the
+* Reports to the riot: "entered tile" (the riot site moves there; the road piece there cannot
+  be replaced by development (building placement fails on it) or cleared by tools (network
+  placement, terraforming and zoning will not remove it) while any crowd stands on it, counted per
+  tile; fire does the same on a burning occupant [STATIC]), "left tile"
+  (tile released when no crowd remains), "destroyed" (the
   riot relocates, §8.4), and "hit building" (ignite). Event-driven, no fixed cadence.
 * Lifetime: until the riot ends (its duration rule) or the crowd's script ends; then all affected
   lots are restored.
@@ -1504,7 +1493,7 @@ queue in order; a beam or crop-circle command first inserts a "fly there" leg.
 
 * Sprites: `EffectSprites` `0xFFFD0000 + kind × 5 + z` (kinds 0–7 "explosion debris 0…7"; UFO outer
   parts `0xFFFD0080 + z`, inner parts `0xFFFD0085 + z`), 8-frame strips, direct zoom, no alpha set.
-  Ground shadow `0xFFFD0100 + kind × 5 + z` (UFO parts `0xFFFD0180`/`0185 + z`) only when the machine
+  Ground shadow `0xFFFD0100 + kind × 5 + z` (UFO parts `0xFFFD0180`/`0185 + z`) only when the detail
   class ≥ 4 and fewer than (class − 3) × 20 pieces are alive.
 * Motion: x += vx × dt_ms, z += vz × dt_ms, vy −= 0.0003 × dt_ms, y += vy × 8.94 × dt_ms (gravity).
   Hitting a building: horizontal speed 0, vy × 0.2, keeps falling. Ground: bounce (vx, vz × 0.25, vy ×
@@ -1534,8 +1523,7 @@ queue in order; a beam or crop-circle command first inserts a "fly there" leg.
 All disaster randomness uses the game generator defined in `14-sim-clock.md` §8 (also summarised
 in `16-sim-utilities.md` §1.1): integer LCG *s* ← *s* × 0x41C64E6D + 0x3039 (mod 2³²) whose output is bits
 16…47 of the 64-bit value *s*_old × 0x41C64E6D + 0x3039; `Rand(n)` = output mod *n* (for
-*n* < 0xFFFFFF; 0 when *n* = 0). The disaster objects each own a generator seeded from the
-system millisecond clock at construction, so disaster randomness is not reproducible across runs
+*n* < 0xFFFFFF; 0 when *n* = 0). The disaster objects each own a time-seeded generator, so disaster randomness is not reproducible across runs
 and need not be bit-exact. [STATIC]
 
 A "centre-weighted" variant is used for some ranges: for range [a, b], let m = ⌊(b−a)/2⌋, draw
@@ -1568,10 +1556,6 @@ through §10.1 with the saved elapsed count (UI sound, notification; if no disas
 it counts as a false alarm and re-activates only while the counter is < 3). The original never
 clears its "pending" copy, so a repeat of that notification would re-declare an emergency that has
 since ended — an original defect an implementation should not copy. [STATIC]
-
-(Correction: earlier versions listed this record as reserved0 / emergencyActive / flagA /
-disasterCost / flagB and reported a writer/loader mismatch; both came from misreading object
-offsets. The order above is the writer's and the loader's.)
 
 ### Per-disaster records — key `E1F6ABE2:<G>:00000000`
 
@@ -1620,7 +1604,7 @@ Every tunable in `SimTune.INI [Tunables]` is consumed by the disaster subsystem:
 
 ### Built-in defaults [STATIC]
 
-No loader passes a default to the getter: a key that is absent (from `SimTune.INI [Tunables]` or
+A key that is absent (from `SimTune.INI [Tunables]` or
 the `SC3DisasterLayer.ini` section) leaves the variable at its built-in initial value, and the
 per-key fix-ups of the named-key sections run only when the key is present. Built-in values that
 differ from the shipped ones (all others equal the shipped values):
@@ -1644,29 +1628,29 @@ duration slope (§8.1). Tornado: speed = ⌊value⌋ × 256 / 60000, with the va
 8-bit** number (values > 127 wrap negative); the built-in speeds are fractional and truncate to
 0, so missing speed keys give speed 0 (original defect); LifetimeMin 0 → 1, LifetimeMax ≤ Min →
 Min + 1. Toxic (only when the key is present): MinClouds < 1 → 1; MinCloudDuration 0 → 10;
-MaxCloudDuration ≤ Min → Min + 1. Values parse with an atoi-style reader after trimming spaces, so
+MaxCloudDuration ≤ Min → Min + 1. Values are parsed as integers after trimming spaces, so
 `Key = 20;` reads 20. Relief percentages are stored as bytes (values > 255 wrap). [STATIC]
 
 **Live instances in saves** [DATA]: none of the 222 parsed files (the 59 shipped city, scenario,
-starter-town and terrain files plus 163 observed-run saves) holds an active fire, tornado, riot or
+starter-town and terrain files plus 163 saved games from played runs) holds an active fire, tornado, riot or
 toxic-cloud instance; every such record is the 12-byte empty form (count 0). The 10 starter towns
 lack the toxic record. The per-instance element layouts therefore remain unobserved.
 
 ## Open questions
 
-* Issuer of the per-minute disaster tick (scheduler command 3, `14-sim-clock.md` §6.3 rule 5);
+* What starts the per-minute disaster tick (`14-sim-clock.md` §6.3 rule 5);
   game-time conversion in §4.1 assumes one minute tick per simulated minute.
 * Field meanings of active fire, tornado, riot and toxic-cloud instances in their save records
   (element types are known, `10-save-format.md` §6.5; no parsed save has one active).
 * Meaning of the detail words of history entries.
 * Riot: the crowd's next-road-piece choice (generic vehicle rule assumed) and the meaning of the two
-  occupant flags cleared under the crowd (§12.10).
-* UFO: draw-layer semantics of the effect draw class; exact cap mapping for the high-tech and power
+  tile-lock states under the crowd (§12.10).
+* UFO: exact cap mapping for the high-tech and power
   target lists.
 * Locusts: whether the "die" sprite set is ever shown; the crop-duster plane's speed and altitude.
 * Whirlpool: exact inset of the random centre inside the chosen water rectangle.
 * Toxic cloud: the exact per-tile layer and occupant test of the random-origin search (§6.2).
 * Space junk: exact number of pieces per event (depends on how minute ticks map to real time).
-* Purpose of the unused, never-instantiated tenth disaster implementation (§2).
+* Purpose of the unused tenth disaster implementation (§2).
 * Occupant-group membership tests (agent-type hierarchy, `CitySim.ini [AgentTypeHierarchy]`) are
   assumed to follow `13-buildings-occupants.md`.

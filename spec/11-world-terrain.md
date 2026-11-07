@@ -45,10 +45,9 @@ Related documents: `10-save-format.md` (container and record framing), `25-rende
 * On screen one altitude unit is A = 2^z pixels at zoom z, i.e. a quarter of the tile diamond's
   height (`25-rendering.md`) [STATIC].
 * A floating-point **height scale** is persisted with the terrain. It is 3.266 in all 59 shipped
-  files [DATA]. When a terrain store is created, the value is taken from the city's world-scale
-  setting. When a file is loaded, the file's value replaces it. The terrain reports it to other
-  subsystems as "world height per altitude unit", or 0.0 while the terrain is not initialised
-  [STATIC]. Its exact use elsewhere is `[OPEN]` (probably 3-D placement of
+  files [DATA]. A newly created terrain takes the value from the city's world-scale setting,
+  and a loaded file's value replaces it [STATIC]. It acts as the "world height per altitude unit".
+  Its exact use elsewhere is `[OPEN]` (probably 3-D placement of
   automata and effects).
 * Shipped terrains use the altitude range 4–255 [DATA]. The sea level is 30 in most shipped
   `.sct` files and 30–116 elsewhere [DATA].
@@ -83,7 +82,7 @@ The terrain generator uses the same linear congruential generator as the rest of
   taking outputs until one is ≤ N, and return it [STATIC].
 * Uniform integer in [lo, hi): lo + uniform(hi − lo) [STATIC].
 
-The terrain generator owns a private generator instance; it is seeded once at the start of each
+The terrain generator uses its own random sequence; it is seeded once at the start of each
 generation with the seed passed by the caller [STATIC].
 
 ## 3. Terrain generation ("New City" random terrain)
@@ -96,15 +95,16 @@ original terrain exactly, provided integer arithmetic, truncation and RNG call o
 
 The generator works on its own vertex grids, then copies the result into the city terrain.
 
-| Operation | Inputs | Effect |
-|---|---|---|
-| Initialise | map width W and height H in tiles | creates R × C working grids with R = W + 1 rows and C = H + 1 columns: altitude (u8), water surface (u8), tree density (u8), sea mask (1 bit) |
-| Set difficulty | 1, 2 or 3 | selects the band-compression table (3.4 step 7) |
-| Generate | seed (u32), hills (u8), water (u8), trees (u8), flags (u8) | runs steps 1–12 below |
-| Apply | target terrain | copies water level, altitudes, water surface + sea bit, tree density into the target, vertex by vertex, rows in ascending order |
+Parameters: map width W and height H in tiles; difficulty 1, 2 or 3 (selects the band-compression
+table, 3.4 step 7); seed (u32), hills (u8), water (u8), trees (u8) and flags (u8). The generator
+runs steps 1–12 below on R × C working grids with R = W + 1 rows and C = H + 1 columns:
+altitude (u8), water surface (u8), tree density (u8), sea mask (1 bit).
 
-The row index of the working grids is the first coordinate of the city terrain's vertex
-accessors (the same index that is the row index of the persisted altitude array).
+Outcome: the water level, the altitudes, the water surface with its sea bit and the tree density
+are copied into the city terrain, vertex by vertex, rows in ascending order.
+
+The row index of the working grids is the first coordinate of the city terrain's vertices
+(the same index that is the row index of the persisted altitude array).
 
 Option semantics:
 
@@ -127,12 +127,12 @@ Option semantics:
 
 * **difficulty**: the New City dialog passes its difficulty choice (1 = easy, 2 = medium,
   3 = hard). Any other value behaves like 1.
-* The New City dialog's terrain preview calls Generate with seed = timer, hills = 64, water = 64,
+* The New City dialog's terrain preview runs the generator with seed = timer, hills = 64, water = 64,
   trees = 64 and flags = 0x24 (coast on the last-column edge plus a river across columns).
 * Map edge per New City size `[OBSERVED]` (from the saves): Miniature 64, Small 128, Medium 192,
   Large 256 tiles. Miniature maps are drawn with the same earth edge faces, which look
   proportionally deep on such a small map.
-* **Correction** `[OBSERVED]`: after the New City dialog is confirmed, the game opens a
+* `[OBSERVED]` After the New City dialog is confirmed, the game opens a
   **Terrain Edit** panel over the generated map before the city starts (`09-ui-screens.md` §3.4).
   That panel makes the generator inputs reachable:
   * **Pick Features** is a small isometric diagram of the map, drawn with compass, zoom and rotate
@@ -161,6 +161,8 @@ Option semantics:
 ### 3.2 Random helpers used by the generator
 
 Let rand(n) be the uniform integer of section 2 (output mod n; rand(0) = 0 with no RNG step).
+The helper names below (randRange, centreRand, lowRand, jitter2, jitter4, uniformReal) are names
+local to this specification, not names from the original.
 
 * **randRange(lo, hi)** = lo + rand(hi − lo).
 * **centreRand(lo, hi)**: half = ⌊(hi − lo)/2⌋; a = rand(half); b = rand(half); m = min(a, b);
@@ -300,14 +302,16 @@ The terrain tools are selected from the tool menu. The menu items name each tool
 below, as listed in `MenuItem.INI` (see `09-ui-screens.md`) [DATA]. Each tool performs the matching
 terrain operation and charges the matching `[SpecialCosts]` price [STATIC].
 
-| Tool | Menu item ID (`MenuItem.INI`) | Tool sound ID | Cost key in `SC3BudgetLayer.ini` `[SpecialCosts]` |
-|---|---|---|---|
-| Raise terrain | `0x825AD7F6` | 18 | `RaiseTerrain` |
-| Lower terrain | `0xC25AD94F` | 19 | `LowerTerrain` |
-| Level terrain | `0x825AD954` | – (none) | `LevelTerrain` |
-| Place water | `0x02E763C1` | 20 | `DecorativeWater` |
+| Tool | Menu item ID (`MenuItem.INI`) | Cost key in `SC3BudgetLayer.ini` `[SpecialCosts]` |
+|---|---|---|
+| Raise terrain | `0x825AD7F6` | `RaiseTerrain` |
+| Lower terrain | `0xC25AD94F` | `LowerTerrain` |
+| Level terrain | `0x825AD954` | `LevelTerrain` |
+| Place water | `0x02E763C1` | `DecorativeWater` |
 
-Tree planting is a separate tool (menu item `0x4253EC3F`, sound 17); see section 6.
+Raise, lower and place water each have their own tool sound; level has none.
+
+Tree planting is a separate tool (menu item `0x4253EC3F`); see section 6.
 
 **Tree tool** [OBSERVED; cost STATIC]:
 * One click plants flora on one tile. The price is the Flora entry of
@@ -321,7 +325,7 @@ Tree planting is a separate tool (menu item `0x4253EC3F`, sound 17); see section
 * Which flora kind and density the tool plants is [OPEN]. Use the city's flora set (§6).
 
 **Clearing under terrain tools** (§4.2 step 3) [OBSERVED]:
-* The clearing service removes **flora only**. When raise, lower or level would move vertices
+* Clearing removes **flora only**. When raise, lower or level would move vertices
   under trees, the trees on the affected tiles are removed and charged as part of the total. For
   example, a raise on a shore tile with several trees was previewed at §40–55 and charged §70, with
   the propagated neighbours' trees removed too. The per-tile clearing price was not separated from
@@ -332,8 +336,8 @@ Tree planting is a separate tool (menu item `0x4253EC3F`, sound 17); see section
 * Power lines and pipes were not tested separately [OPEN]. They are networks and are expected to
   block the operation like roads.
 
-The terrain reads the four prices by index from the budget's `[SpecialCosts]` table. The table
-is indexed in this fixed order [STATIC]: 0 `LowDensityZone`, 1 `MedDensityZone`, 2
+The four prices come from the budget's `[SpecialCosts]` table, whose keys are numbered in this
+fixed order [STATIC]: 0 `LowDensityZone`, 1 `MedDensityZone`, 2
 `HighDensityZone`, 3 `LandfillZone`, 4 `AirportZone`, 5 `SeaportZone`, 6 `Dezone`, 7 `Demolish`,
 8 `LevelTerrain`, 9 `RaiseTerrain`, 10 `LowerTerrain`, 11 `DecorativeWater`. Each price is money
 per altitude unit per vertex; all terrain costs below are computed as ⌊price × units / 4⌋, i.e.
@@ -344,44 +348,41 @@ and 150, so one unit on a whole tile costs §25, and wetting a whole dry tile co
 
 All statements are [STATIC] unless tagged otherwise.
 
-Every terrain tool works in two phases against the terrain: **plan** (compute the change without
-writing it, return legality, a money cost and the affected rectangle) and **commit** (write the
-change). The tool combines the plan with a second price and with the city's funds:
+Every terrain tool first evaluates the operation without writing anything (legality, money cost
+and affected rectangle) and only then writes the change. The tool combines the evaluation with a
+second price and with the city's funds:
 
 1. **Footprint.** Raise and lower use the single tile under the cursor: tile (⌊x/256⌋, ⌊y/256⌋)
    with its four corner vertices. There is no brush-size setting. Level uses a rectangle (see 4.5).
    Water uses the tile under the cursor (see 4.6).
-2. **Plan.** The terrain plans the operation (sections 4.3–4.6). It returns: legal yes/no, the
+2. **Evaluate.** The operation is evaluated (sections 4.3–4.6). It yields: legal yes/no, the
    terrain cost C_t in money, and the affected rectangle R (the bounding box of every vertex the
    operation would change, including propagation).
-3. **Clearing price.** The tool asks the city's clearing/bulldoze service for the price C_c of
-   clearing rectangle R (flag value 0, one pass) [STATIC]; that service also reports whether
-   clearing is possible. Its rules are owned by the occupant/demolition subsystem
-   (`13-buildings-occupants.md`); the `[SpecialCosts]` `Demolish` key is the likely unit price
-   [INFERRED].
+3. **Clearing price.** The price C_c of clearing rectangle R is added [STATIC]; clearing can also
+   be impossible there, which makes the operation illegal. The clearing rules are those of
+   demolition (`13-buildings-occupants.md`); the `[SpecialCosts]` `Demolish` key is the likely unit
+   price [INFERRED].
 4. **Total.** Total T = C_t + C_c. The operation is *unaffordable* when T ≠ 0 and T exceeds the
    current funds (signed 64-bit comparison).
-5. **Hover preview.** While the mouse moves without a button, the tool only plans, so the UI can
-   show T and highlight R. The vertices that would change mark their (up to four) adjacent tiles
-   in a run-time "changed" bitset that the renderer uses for the highlight.
+5. **Hover preview.** While the mouse moves without a button, the tool only evaluates, so the UI
+   can show T and highlight R. The (up to four) tiles adjacent to each vertex that would change are
+   highlighted.
 6. **Apply** (on button press and on every drag tick while the button is held):
-   * if the plan was illegal, UI sound ID 30 ("not allowed" [INFERRED]) is played and nothing
+   * if the operation is illegal, the UI "not allowed" sound is played [INFERRED] and nothing
      changes;
-   * else if unaffordable, UI sound ID 32 ("no money" [INFERRED]) is played and nothing changes;
-   * else the clearing service clears R (charging C_c), the terrain commits the plan (4.9), the
-     total T is deducted from the funds [INFERRED: the deduction call was not traced], and the
-     tool sound is started (sound IDs: raise 18, lower 19, water 20); on release it
-     is stopped.
-   * Each drag tick re-plans at the current cursor tile, so holding the button over one tile
+   * else if unaffordable, the UI "no money" sound is played [INFERRED] and nothing changes;
+   * else R is cleared (charging C_c), the change is written (4.9), the total T is deducted from
+     the funds [INFERRED; exact point of deduction OPEN], and the tool's sound (raise, lower or
+     water) is started; on release it is stopped.
+   * Each drag tick re-evaluates at the current cursor tile, so holding the button over one tile
      keeps raising (or lowering) it by one altitude unit per tick. The tick rate is the UI's
      mouse-drag rate [INFERRED].
-   * Which of the tool's two apply handlers is "press" and which is "drag" was not separated;
-     both behave as above. The sound action codes used are start, a looping parameter change
-     (value 0x400) and stop [STATIC]; the exact looping semantics are `[OPEN]`.
+   * Press and drag behave as above. The tool sound is started, kept looping while the button is
+     held and stopped on release [STATIC]; the exact looping semantics are `[OPEN]`.
 
-Operation codes (passed to validators, 4.7): raise = 1, lower = 2, level = 4, water = 32.
-Codes 8 and 16 belong to further terrain operations that the four tools do not use (most likely
-the grading done for network and building placement, see `12-networks.md`) [INFERRED].
+The refusal rules of 4.7 distinguish four operation kinds: raise, lower, level and water. Two
+further kinds of terrain operation exist that the four tools do not use (most likely the grading
+done for network and building placement, see `12-networks.md`) [INFERRED].
 
 ### 4.3 Raise and lower: per-click change
 
@@ -401,7 +402,7 @@ altitude + 1, capped at 255 (− 1, floored at 0).
 4. **Base cost:** let n be the number of vertices of the rectangle (inclusive of all corners,
    i.e. 4 for one tile) whose altitude actually changes (raise: altitude < 255; lower: altitude
    > 0). C_t += ⌊P · n / 4⌋ with P = `RaiseTerrain` (or `LowerTerrain`).
-5. Run the validators (4.7) with the affected rectangle, the cost and the operation code.
+5. Apply the refusal rules (4.7) with the affected rectangle, the cost and the operation kind.
 
 With the shipped prices (25) a single raise click on an unconstrained tile therefore costs 25.
 
@@ -446,7 +447,7 @@ outwards from the ring one layer at a time:
 3. After the layer: cost C_t += ⌊(P_raise · raised + P_lower · lowered) / 4⌋, where P_raise =
    `RaiseTerrain` and P_lower = `LowerTerrain` (for all three tools, including level).
 4. Repeat with the new ring until a layer changes nothing (raised + lowered = 0), or until the new
-   ring would exceed 1020 entries (propagation simply stops there; the plan stays legal).
+   ring would exceed 1020 entries (propagation simply stops there; the operation stays legal).
 5. Affected rectangle R: the bounding box of the final ring, extended by one vertex towards the
    low side on both axes (not below 0) and clamped to W − 1 / H − 1 on the high side, in tile
    units.
@@ -454,7 +455,7 @@ outwards from the ring one layer at a time:
 The effect: raising a tile on a slope drags the surrounding terrain up in a cone with gradient 4
 units per vertex; the cone is cut off where existing terrain already satisfies the band.
 Propagation is not blocked by buildings or networks inside the terrain itself; such restrictions
-come only from validators and the clearing service (4.7).
+come only from the refusal rules and the clearing (4.7).
 
 ### 4.5 Level
 
@@ -467,7 +468,6 @@ come only from validators and the clearing service (4.7).
 * Base cost: C_t += ⌊`LevelTerrain` · Σ|alt(v) − L| / 4⌋ over all vertices v of the rectangle
   (inclusive), i.e. the price is per altitude unit moved per vertex.
 * Commit sets every vertex of the rectangle to L and applies the propagation.
-* Operation code 4.
 
 ### 4.6 Decorative water
 
@@ -478,10 +478,10 @@ All [STATIC] unless tagged.
   1. The tile must not already be fully wet: count the tile's corners whose altitude ≤ water
      surface; if all 4 are wet the operation is illegal.
   2. Every tile in the 3 × 3 block centred on the target tile (clipped to the map) is checked for
-     an occupant. An occupant there makes the operation illegal unless it carries occupant flag
-     bit 0x400 and reports itself removable [STATIC for the test; that this admits flora and
+     an occupant. An occupant there makes the operation illegal unless it is a clearable kind and
+     reports itself removable [STATIC for the test; that this admits flora and
      similar clearable objects is INFERRED].
-  3. Validators (4.7) with operation code 32.
+  3. Refusal rules (4.7) for the water operation.
 * Cost: n = number of footprint vertices that are dry (altitude > water surface). C_t =
   ⌊`DecorativeWater` · n / 4⌋. The clearing price of the 3 × 3 block is added as in 4.2 step 3.
 * Commit: for each dry footprint vertex, set its water surface equal to its altitude. That
@@ -489,7 +489,7 @@ All [STATIC] unless tagged.
   not changed. Repeated application on neighbouring tiles grows a pond whose surface follows
   the ground; it does not flood lower neighbouring vertices.
 * After commit, derived data is recomputed for the vertex rectangle extended by 3 on every side
-  (clamped to the grid), and the rest of the game is told which tile rectangle changed; see 4.9.
+  (clamped to the grid), and that tile rectangle is refreshed in the rest of the game; see 4.9.
 
 ### 4.6.1 Water-surface effect of raise, lower and level
 
@@ -497,17 +497,16 @@ When raise, lower or level commits, the water surface of the affected area is re
 global sea level (water level byte) [STATIC]. Consequences: decorative water and raised lakes
 inside the affected area disappear; vertices lowered below the sea level become sea-level water;
 vertices raised above it become dry. The exact rectangle reset is the affected rectangle R of
-4.4 [INFERRED: the bounds expression was only partly decoded].
+4.4 [INFERRED; exact bounds OPEN].
 
-### 4.7 Validators and limits near buildings, networks and the edge
+### 4.7 Refusal rules and limits near buildings, networks and the edge
 
-* Other subsystems can register **terraform validators** with the terrain. After planning, each
-  validator is called with (affected rectangle R, planned cost, operation code). If any returns
-  "refuse", the operation is illegal [STATIC].
-* The disaster subsystem registers a validator while a disaster is active: operations 1, 2, 4,
-  8 and 16 (not water) are refused when R comes within 5 tiles (1280 fixed-point units) of the
-  disaster's position on both axes [STATIC]. See `21-disasters.md`.
-* Buildings, zones, networks and flora inside R are handled by the clearing service of 4.2 step
+* Outside rules can refuse a terraform operation after it is evaluated, given the affected
+  rectangle R, the planned cost and the operation kind. If any refuses, the operation is illegal
+  [STATIC].
+* While a disaster is active, every operation except water is refused when R comes within 5 tiles
+  (1280 fixed-point units) of the disaster's position on both axes [STATIC]. See `21-disasters.md`.
+* Buildings, zones, networks and flora inside R are handled by the clearing of 4.2 step
   3: their clearing price is added to the cost, and they are cleared on commit [STATIC for the
   call; which objects refuse clearing (for example landmarks) belongs to the demolition rules,
   INFERRED].
@@ -516,10 +515,8 @@ vertices raised above it become dry. The exact rectangle reset is the affected r
 
 ### 4.8 Global altitude shift and salt toggles (cheat commands)
 
-The terrain accepts five cheat commands with the identifiers `Load terrain`, `Salt on`,
-`Salt off`, `Terrain one up`, `Terrain one down`, `Terrain ten up` and `Terrain ten down`
-[STATIC]. These are the typed cheat codes. They load a terrain, switch salt water on or off, and
-shift the whole terrain up or down by 1 or 10 altitude units [INFERRED from the names]. Rendering
+Typed cheat codes (listed in `27-platform.md`) can load a terrain, switch salt water on or off,
+and shift the whole terrain up or down by 1 or 10 altitude units [STATIC]. Rendering
 of underwater areas depends on whether the water is salt (sea) or fresh [INFERRED].
 
 **Salt off** clears the sea-water flag (pollution-cell bit 30) of every tile. **Salt on**
@@ -549,9 +546,9 @@ budget of a quarter of the side instead of ⌊water × R / 256⌋. Neither comma
 or the water surface; only the salt bit changes. The water renderer and the neighbour features
 that read it change accordingly.
 
-### 4.9 Commit order and notifications
+### 4.9 Commit order and refresh
 
-For raise, lower and level the commit repeats the plan computation and writes as it goes [STATIC]:
+For raise, lower and level the write repeats the evaluation and writes as it goes [STATIC]:
 
 1. Build the ring (4.3/4.5) with target altitudes.
 2. For each propagation layer: compute the layer (4.4), add its cost, then write the new
@@ -561,8 +558,8 @@ For raise, lower and level the commit repeats the plan computation and writes as
 4. Reset the water surface of the affected area to sea level (4.6.1).
 5. Recompute derived terrain data (slopes, textures, shore flags) for the rectangle from
    (footprint low corner − 3, clamped to 0) to the affected rectangle's high corner (clamped to
-   the grid), then tell the rest of the game that this tile rectangle changed. Networks, occupants
-   and the display then update that area.
+   the grid), then refresh that tile rectangle in the rest of the game: networks, occupants
+   and the display update that area.
 
 ## 5. Water
 
@@ -573,8 +570,7 @@ For raise, lower and level the commit repeats the plan computation and writes as
   `London, England.sct`) [DATA].
 * A vertex is **under water** when its altitude is below the water surface at that vertex. The
   generator treats a vertex as land when its altitude is greater than its water surface [STATIC].
-  **Tile water test** [STATIC, SIMDIRT 0x100065F0, terrain interface slot 0x54; checked in the
-  disassembly]. A tile (x, z) counts as water if **any** of its four corners has water-surface height
+  **Tile water test** [STATIC]. A tile (x, z) counts as water if **any** of its four corners has water-surface height
   ≥ terrain altitude. The corners are tested in the order (x,z), (x+1,z), …, and the test stops at
   the first match; equality counts as water. A tile with a corner off the map is not water. The
   test is used by:
@@ -586,9 +582,9 @@ For raise, lower and level the commit repeats the plan computation and writes as
 * **Sea (salt) vs fresh water**: the generator produces a per-vertex sea flag next to the water
   surface (section 3.4 step 10) and hands it to the terrain together with the water surface
   [STATIC]. Vertices reached from a coastal edge are sea; inland lakes and rivers are fresh.
-  **Storage**: the terrain does not keep the flag itself. When a water surface is written at
-  vertex (x, z) together with a set sea flag, the terrain sets the per-cell **sea-water flag** (bit
-  30 of the pollution state word, `17-sim-services.md` §7.2.1) for each of the up to four tiles
+  **Storage**: the flag is not part of the terrain record. When a water surface is written at
+  vertex (x, z) together with a set sea flag, the per-cell **sea-water flag** (bit
+  30 of the pollution state word, `17-sim-services.md` §7.2.1) is set for each of the up to four tiles
   that share the vertex: (x−1, z−1), (x−1, z), (x, z−1) and (x, z), clipped to the map. Each tile
   maps to its 2 × 2 cell [STATIC]. Writing a surface with the sea flag clear never clears the
   flag. Only a whole-terrain reset clears all flags [STATIC]. The flag is therefore persisted
@@ -629,11 +625,11 @@ the table [STATIC][DATA 59/59].
 The generator yields a tree density 0–255 per vertex (section 3.4 step 11). When the terrain
 receives a density d for vertex (x, z) [STATIC]:
 
-* if the terrain is still being built (new-terrain staging), the density is buffered per vertex;
-* otherwise, if d ≥ 32, the city's flora service is asked to plant flora at fixed-point position
+* while a new terrain is still being built, the density is only recorded per vertex;
+* otherwise, if d ≥ 32, flora is planted at fixed-point position
   (256·a, 256·b) with density level ⌊d / 32⌋ (1–7); d < 32 plants nothing.
 
-**Planting a tree (the flora service).** Planting at tile (x, z) with level n works as follows
+**Planting a tree.** Planting at tile (x, z) with level n works as follows
 [STATIC; checked against an original new city, where all 65,536 flora cells were predicted]:
 
 1. If the tile already holds an occupant:
@@ -644,9 +640,9 @@ receives a density d for vertex (x, z) [STATIC]:
    * h = 1–4 makes palm possible.
    * h = 3–126 makes deciduous possible.
    * h = 8–126 makes pine possible.
-   * Where palm and deciduous are both possible (h = 3–4), draw `Rand(2)`: non-zero gives palm, 0
+   * Where palm and deciduous are both possible (h = 3–4), draw rand(2): non-zero gives palm, 0
      gives deciduous.
-   * Otherwise, where deciduous and pine are both possible (h ≥ 8), draw `Rand(2)`: 0 gives pine,
+   * Otherwise, where deciduous and pine are both possible (h ≥ 8), draw rand(2): 0 gives pine,
      non-zero gives deciduous.
    * With no draw, the kind is palm if palm is possible, else deciduous. So h = 0, h = 5–7 and
      h ≥ 127 all give deciduous.
@@ -659,22 +655,22 @@ receives a density d for vertex (x, z) [STATIC]:
    | 5–7 | deciduous |
    | 8–126 | 50 % deciduous, 50 % pine |
 
-   The chooser returns wetlands (kind 1) for a wet tile. Step 3 refuses every wet tile, so this
+   The kind choice would give wetlands (kind 1) for a wet tile. Step 3 refuses every wet tile, so this
    path never plants wetlands.
 3. Refuse if the tile is wet. A tile is wet when **any** of its four corners has water surface ≥
    altitude. The test includes equality, so a dry-looking tile with one corner exactly at sea level
    is refused. The kind draw of step 2 has already been made by this point.
 4. Create occupant `FFD30C03:80F48961`. Its instance comes from the (kind, n) table of
-   `10-save-format.md` §6.3; one more `Rand(2)` picks between the two alternatives. This draw is
+   `10-save-format.md` §6.3; one more rand(2) picks between the two alternatives. This draw is
    made for every tree that is planted. Kind must be 0–4 and n must be 0–9, otherwise nothing is
    planted.
 5. Set the occupant's height to the tile altitude and add it to the occupant collection.
 
 The saved flora byte is kind × 16 + n, with n = ⌊d / 32⌋ used as is (1–7), not reduced by one.
 
-The draws use a generator of `16-sim-utilities.md` §1.1 that belongs to the flora service alone.
-Nothing else draws from it. It is seeded from the millisecond tick count when the flora layer is
-set up [STATIC]. Every call is `Rand(2)`, so each result depends only on bit 16 of the new state,
+The draws use a separate generator of the kind in `16-sim-utilities.md` §1.1, used only for
+planting flora. It is seeded from the millisecond tick count when the flora layer is
+set up [STATIC]. Every call is rand(2), so each result depends only on bit 16 of the new state,
 and the low 17 bits of the state evolve on their own.
 
 In the original new city with terrain seed 411355049, the low 17 bits at the start of the apply
@@ -775,7 +771,7 @@ falls to about 45–50 %.
   16-bit two's complement, and a stored −1 is the same as the marker (see 9.5).
 * Reading a height takes the **low 8 bits as a signed byte** (−128…127). Every height read in
   9.4–9.6 uses this rule. A test for "unset" compares the full 16-bit cell with 0xFFFF.
-* The image uses a private generator instance (the LCG of section 2). It is seeded with the
+* The image uses its own generator (the LCG of section 2). It is seeded with the
   constant **0x83010C56** at the start of every build.
 
 Coordinate correspondence: column p follows the city's second coordinate z, and row q follows
@@ -807,7 +803,7 @@ the tile (x, z) uses cell (⌊x/2⌋, ⌊z/2⌋).
 | 2 | (R − 2, ⌊C/2⌋) |
 | 3 | (⌊R/2⌋, C − 2) |
 
-These are the same edge-midpoint tiles that the deal manager tests when a new city creates its
+These are the same edge-midpoint tiles that the new-city neighbour test uses when it creates its
 neighbours (`19-sim-economy.md` §10.6). The window repeats the test live each time it is built. It
 does **not** use the stored neighbour `exists` byte.
 
@@ -833,7 +829,8 @@ draws a random number.
 
 1. For each corner in the order (0, 0), (0, 255), (255, 0), (255, 255): if the cell is unset, write
    centreRand(−2, 10) (section 3.2).
-2. Run **fill(0, 0, 255, 255)**. fill(x0, y0, x1, y1) works on the rectangle with corners
+2. Run **fill(0, 0, 255, 255)** (fill and mix are names local to this specification).
+   fill(x0, y0, x1, y1) works on the rectangle with corners
    (x0, y0) and (x1, y1), where x is p and y is q. It repeats these steps:
    1. If x0 + 1 ≥ x1 **and** y0 + 1 ≥ y1, stop.
    2. mx = ⌊(x0 + x1)/2⌋. If x0 + x1 is odd and rand(2) ≠ 0, then mx += 1. Compute my from y0 and
@@ -885,10 +882,10 @@ The coloured 256 × 256 image is what the window displays.
   left side (p = 0, neighbour 1) faces upper left, its right side (neighbour 3) faces lower right
   and its bottom side (neighbour 2) faces lower left. The city block is the small diamond in the
   centre.
-* The image widget receives an angle that depends on the view rotation: 315°, 45°, 135° and 225°
+* The image is drawn at an angle that depends on the view rotation: 315°, 45°, 135° and 225°
   for rotations 0, 1, 2 and 3 [STATIC]. Each rotation step therefore turns the diamond by a
   further 90°, consistent with 315° meaning 45° clockwise [INFERRED].
-* The widget occupies the window rectangle (31, 40)–(333, 342), which is 302 × 302 pixels. The
+* The image occupies the window rectangle (31, 40)–(333, 342), which is 302 × 302 pixels. The
   rotated image is scaled so that the diamond's diagonals fill it [STATIC rectangle; OBSERVED
   fit]. The resampling filter is [OPEN]. Nearest-neighbour is visually indistinguishable.
 * The neighbour outlines, names and populations are drawn on top (`09-ui-screens.md` §6.7).
@@ -924,8 +921,8 @@ Notes:
   z). The writer emits row x = W first, then W−1, …, then 0, and the reader fills rows in the same
   descending order [STATIC]. Reading the file in order therefore gives the rows reversed. Rendered
   heightmaps of all 59 files are coherent (coasts, rivers and valleys are continuous) [DATA].
-* Verification: a parser walks the inner record directory, finds this record, checks the length
-  formula and the markers, and renders the heightmaps. It succeeds on 59/59 shipped city-family
+* Verification: finding this record in the inner record directory, checking the length
+  formula and the markers, and rendering the heightmaps succeeds on 59/59 shipped city-family
   files (21 `.sct`, 10 `.st3`, 13 `.SNR`, 15 `.sc3`) [DATA].
 * After loading, the engine recomputes all derived terrain data (slopes, textures, shore flags)
   for the whole map [STATIC].
@@ -935,26 +932,18 @@ Notes:
   `Madison, WI.sc3`) [DATA]. This suggests a per-tile flag set by certain 3 × 3 objects. The terrain
   itself never sets or reads these bits, so their meaning is `[OPEN]`. A new terrain starts with all bits clear. Preserve the bits on load and
   save.
-* Three further per-tile bitsets exist at run time and are not persisted [STATIC].
 * Sizes: W = H = 128, 192 or 256; record length = 8 + (21 if markers) + 4 + 2(W+1)(H+1) + 1 +
   W·H/8 + (15 if markers) [DATA].
 
 ## Open questions
 
 * Meaning of the persisted per-tile bitset (3 × 3 block pattern in saved cities).
-* Terraforming: the clearing service's rules (which occupants refuse to be cleared, price per
-  object) are owned by the demolition subsystem; whether costs are charged while editing terrain
+* Terraforming: the clearing rules (which occupants refuse to be cleared, price per
+  object); whether costs are charged while editing terrain
   before a city is founded; exact water-surface reset rectangle on raise/lower/level; the
-  press-vs-drag handler split and sound looping; the tree-planting tool's rules.
-* The run-time per-tile "changed" bitset used for the plan preview highlight versus the persisted
-  tileBits (they are different bitsets).
-* Closed: the rule for when a tile counts as water (§ water test above: any corner, water ≥ ground). The sea flag storage is resolved in §5.
+  tool sound looping; the tree-planting tool's rules.
 * Neighbors-window region image (§9.7): the resampling filter used when the rotated image is
   scaled into the 302 × 302 widget, and the turning direction for view rotations 1–3.
-* A whole-terrain operation exists that clears every sea flag and then re-marks sea cells by
-  walking inward from edges where more than 60 % of the edge is under water (similar to §3.4 step
-  10). Which command triggers it (probably the `Salt on` cheat of §4.8) and its exact walk rules
-  have not been documented.
 * Row and column indexing of the 32 × 512 land and underwater palettes and of the 512-entry edge
   palettes; how the data-map palettes (64 × 32) are indexed.
 * World-space meaning of the persisted height scale (3.266).

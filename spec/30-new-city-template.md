@@ -1,8 +1,7 @@
 # 30 — New-city template (observed initial state)
 
-Status: observed data. Provenance tag for everything here: `[OBSERVED]` (build 2.0.949, original
-running under a compatibility layer; city saved immediately after **New City** and accepting the
-terrain, before the simulator ran). This document closes issue 1.1 of `29-open-issues.md`.
+Status: observed data. Provenance tag for everything here: `[OBSERVED]` (build 2.0.949; city
+saved immediately after **New City** and accepting the terrain, before the simulator ran).
 
 ## 1. Method
 
@@ -23,7 +22,7 @@ compared byte for byte across the files.
 | Tool-availability record `41193C3A:E1193C2A` | start year | Same size, 256 bytes; flag bytes at fixed offsets change with the year (`09-ui-screens.md` §7a.2) |
 | Neighbour record `C2910E7D:82937B60` | random | Names and populations are random (§6.6 of `10-save-format.md`); size 277–299 bytes |
 | World record `206C6E7C:E11BDDF6` (725 bytes) | random | Only the last four bytes differ between cities: a per-city 32-bit value, see §7 |
-| Disaster manager `206C6E7C:21F6ABCA` (28 bytes) | nothing meaningful | Bytes 20–23 were 0 in 11 files and a fixed non-zero word in the 3 Miniature files; write 0 |
+| Disaster emergency state `206C6E7C:21F6ABCA` (28 bytes) | nothing meaningful | Bytes 20–23 were 0 in 11 files and a fixed non-zero word in the 3 Miniature files; write 0 |
 
 ## 3. Occupant record
 
@@ -35,7 +34,7 @@ holds count 0, entry format 1 (the "occupant entries (empty)" and "occupant coun
 Each record is shown in full as hexadecimal bytes, offsets in the left column. Sizes include the
 8-byte record header.
 
-| Record `T:G:I` | Size | Owner |
+| Record `T:G:I` | Size | Contents |
 |---|---|---|
 | `013DEE82:022E288E:0000000B` | 45 | advisor topic |
 | `013DEE82:028D0FC5:0000000B` | 108 | advisor topic |
@@ -67,7 +66,7 @@ Each record is shown in full as hexadecimal bytes, offsets in the left column. S
 | `E1F6ABE2:C446F87C:00000000` | 12 | disaster table entry |
 | `E1F6ABE2:C4C90997:00000000` | 46 | disaster table entry |
 
-The twelve 4-byte records `206C6E7C:409FF3BA:<n>` (instances 2, 3, 4, 6, 7, 8, 10, 11, 12, 15, 16, 18) hold one u32 each:
+The twelve 4-byte per-zone-type records `206C6E7C:409FF3BA:<n>` are described in `10-save-format.md` §6.4. Their new-city values, one u32 per instance:
 
 | Instances | Value (little-endian bytes) |
 |---|---|
@@ -427,6 +426,6 @@ and (6) fill the per-city values of §7.
 ## Open questions
 
 1. Meanings of the individual words of the records in §4. Their values are given, not explained.
-2. Why the three Miniature saves carry a non-zero word at bytes 20–23 of the disaster manager.
+2. Why the three Miniature saves carry a non-zero word at bytes 20–23 of the disaster emergency-state record.
 3. Whether the traffic record's two non-zero bytes and the land-value trailing bytes are scalar
    statistics or part of a layout the format document describes differently.

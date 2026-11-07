@@ -65,7 +65,7 @@ The `-l` and `-c` command-line switches override both (§2).
 | `-c<country>` | Country, by name or number [STATIC] |
 | `-x…` | Parsed and ignored [STATIC] |
 | `-p<a> <b> <c> <d>` | Overrides the measured machine profile (§3): `a` = CPU speed in MHz, clamped 100–1000 (default 200 if omitted); `b` = physical memory in MB, ≥ 16 (default 128); `c` = CPU **generation** G of §3 step 2 (not the machine class), clamped 5–10 (default 6); `d` = memory class, ≥ 4 (default 5). [STATIC] |
-| `-cheats:<value>` | Enables a developer cheat flag and passes `<value>` to the command processor [STATIC]. Effect [OPEN]. |
+| `-cheats:<value>` | Enables a developer cheat mode [STATIC]. Effect [OPEN]. |
 | `-intro:off` | Skip the intro movie [STATIC] |
 | `-sound:off` | Do not initialise sound [STATIC] |
 | `-music:off` | Initialise sound but disable music [STATIC] |
@@ -186,7 +186,7 @@ strings, so they are given relative to the end of string 2, written `S+`):
 The three on/volume pairs are, in this order, **music**, **sound effects** and **ambience** (the
 categories of `06-audio.md` §8) [STATIC]. **Volume defaults** [STATIC]: when no `SC3.cfg` exists, or
 record 1 is missing, each volume is 1024 and each "on" flag is true. When a volume read from the file
-is outside 0–1024, the sound system replaces it at start-up with a fixed repair value: music 1000,
+is outside 0–1024, it is replaced at start-up with a fixed repair value: music 1000,
 sound effects 700, ambience 900. The repair values are not first-run defaults. Other defaults: language −1,
 width and height 0 (meaning "use the default mode", §3), all bool flags false except flag f, and the 32
 device-name bytes all 0xFF, meaning that no device is selected [STATIC].
@@ -210,9 +210,7 @@ device-name bytes all 0xFF, meaning that no device is selected [STATIC].
 | 14 | u32, u32, resource key, resource key |
 | 15 | string |
 
-Records 3–15 are each loaded into a separate settings block that carries a "present" flag; a block
-whose record is missing or truncated is marked absent and its owner uses built-in defaults
-[STATIC]. Which window or panel owns each block (records 3–12 are window/panel geometry and option
+If a record among 3–15 is missing or truncated, its settings use built-in defaults [STATIC]. Which window or panel owns each block (records 3–12 are window/panel geometry and option
 blocks [INFERRED]) is [OPEN]. A record that fails to parse does not abort loading of the others.
 
 A reimplementation does not have to share this file with the original, so it may store the same
@@ -222,20 +220,16 @@ settings in its own format. It must honour the semantic defaults above.
 
 ### 5.1 Mechanism
 
-The city owns a **cheat-code registry**. Game subsystems register phrases with it. When the player
-submits text in the in-game cheat entry box (`09-ui-screens.md`) whose beginning matches a
-registered phrase, the registry raises a "cheat entered" notification carrying the phrase's identity
-and the full entered text, and the owning subsystem reacts. Some cheats take an argument: the text
-typed after the phrase. The registry also keeps an "active" flag per phrase, which some cheats set
-or toggle and which the affected subsystems query [STATIC].
+The player types a phrase in the in-game cheat entry box (`09-ui-screens.md`). If the beginning of
+the entered text matches a known phrase, the cheat takes effect. Some cheats take an argument: the
+text typed after the phrase. Some cheats set or toggle a per-phrase "active" state that the
+affected game systems then honour [STATIC].
 
 Unless stated otherwise, cheat state lasts only for the current session. It is not saved with the
-city (only the cheat log of §5.1a is), and it is reset when a city is loaded or a new one started [STATIC for the flags kept by
-the subsystems; INFERRED for the registry flags].
+city (only the cheat log of §5.1a is), and it is reset when a city is loaded or a new one started [STATIC for the effects;
+INFERRED for the active state].
 
-[OPEN] Whether phrase matching is case-insensitive. Some shell cheats compare the typed text with an
-upper-case form to choose between two responses, so the matching itself is probably
-case-insensitive.
+[OPEN] Whether phrase matching is case-insensitive. Probably it is [INFERRED].
 
 ### 5.1a Cheat IDs and the cheat log
 
@@ -259,7 +253,7 @@ cheats. Its meaning is [OPEN]. Round-trip it, and write 0 for a new city [INFERR
 | 0xE37FB7B8 | `***` | yes (8) |
 | 0xC2FA8E82 | `power to the masses` | yes (10) |
 | 0x42FA93FE | `water in the desert` | yes (3) |
-| 0xC2FAA2F5 | `garbage in, garbage out` [INFERRED, high: same owner and ID series as the two above; the owner sets this ID's active flag itself] | yes (6) |
+| 0xC2FAA2F5 | `garbage in, garbage out` [INFERRED, high: same ID series as the two above] | yes (6) |
 | 0x23B4418F | `so sue me` | – |
 | 0xC37A5AAA | `I love red tape` | – |
 | 0xA3558FD6 | `call cousin Vinnie` | – |
@@ -276,7 +270,7 @@ cheats. Its meaning is [OPEN]. Round-trip it, and write 0 for a new city [INFERR
 | 0x43110C27 | `force Moe to say` | – |
 | 0xC310F7D4 | `force Gus to say` | – |
 | 0x831109B4 | `stop forcing advice` | – |
-| 0xC352E7AE, 0x0352E7C2, 0x0352E7CC, 0x8352E7D6, 0x4352E7E1, 0x4352E7ED, 0x4352E7F6, 0xA352E800, 0x03546E10, 0xE352E809, 0xA352E814, 0xE352E822, 0x4352E828, 0x0352E873, 0x0352E87C, 0x0352E885, 0xE352E88F, 0x4352E897, 0xC352E8A2, 0xC352E8AC, 0xC352E8B4, 0x8352E8BD, 0x2352E8C7 | the §5.2 phrases, respectively (one ID per phrase, in this list's order): `fund`, `advisor`, `moremoney`, `maxis`, `1234`, `sc3k`, `mayor`, `hello`, `simon says`, `simcity`, `money`, `ticker`, `electronic arts`, `erts`, `will wright`, `help`, `sim`, `easter egg`, `llama`, `scurk`, `bat`, `porntipsguzzardo`, `broccoli` | never (not logged) |
+| (the ~23 ticker-only phrases of §5.2) | – | never (not logged) |
 
 All rows are [STATIC] unless tagged. [OPEN] The IDs of `pay tribute to your king`, `zyxwvu`,
 `let's make a deal`, `nerdz rool`, `Salt on`, `Salt off`, `Load terrain`, and the force phrases
@@ -285,37 +279,13 @@ also be logged. An implementation that cannot reproduce such an ID should not lo
 
 ### 5.2 Shell cheats: news-ticker responses only
 
-Their only effect is to post a triggered news-ticker message from string table 0x42C1ED2D
-(`22-advisors-news-petitioners.md`) [STATIC]. The message IDs below are string IDs in that table.
+About two dozen further phrases (names, greetings, product and company words, and a few jokes)
+have no effect except to post a triggered news-ticker message (string table `0x42C1ED2D`,
+`22-advisors-news-petitioners.md`). A few answer differently when typed in capitals, and one echoes
+the text typed after it. None changes city funds or saved state, and none is logged (§5.1a).
+Reproducing them is [OPEN] optional. [STATIC]
 
-| Phrase | Ticker message ID |
-|---|---|
-| `fund` | 0x325 or 0x326 (depends on whether typed in capitals) |
-| `advisor` | 0x327 |
-| `moremoney` | 0x32A |
-| `maxis` | 0x32B if typed as `MAXIS`, else 0x32C |
-| `1234` | 0x32D |
-| `sc3k` | 0x32E |
-| `mayor` | 0x32F |
-| `hello` | 0x330 |
-| `simcity` | 0x331 |
-| `money` | 0x332 |
-| `ticker` | 0x333 |
-| `electronic arts` | 0x334 |
-| `erts` | 0x335 |
-| `will wright` | 0x336 |
-| `help` | 0x337 or 0x338 (capitals or not) |
-| `sim` | 0x339 or 0x33A (capitals or not) |
-| `easter egg` | 0x33B |
-| `llama` | 0x33C |
-| `scurk` | 0x33D |
-| `bat` | 0x33E |
-| `porntipsguzzardo` | 0x33F |
-| `broccoli` | 0x340 |
-| `simon says` | 0x341, and the text typed after the phrase is echoed on the ticker |
-
-The shell also registers the phrase `***`, whose effect is in the user-interface layer [OPEN]. None
-of the money-themed phrases in this table change city funds [STATIC].
+The phrase `***` has an effect that is [OPEN].
 
 ### 5.3 Gameplay and developer cheats
 
@@ -341,15 +311,15 @@ the session.
 | `Salt off` | action | Clears the salt-water flag on every cell (x = 0 … width−2, y = 0 … height−2), which makes all water fresh. [STATIC] |
 | `Terrain one up`, `Terrain one down`, `Terrain ten up`, `Terrain ten down` | action | Shift the whole map vertically by +1, −1, +10 or −10 altitude units. For every cell, the ground altitude and the water-surface altitude each become clamp(value + delta, 2, 253), and the map's sea level becomes clamp(sea level + delta, 2, 253). The map is then re-derived (slopes, water, redraw) as after a terrain edit. [STATIC] |
 | `Load terrain <arg>` | action | Developer cheat that loads a terrain named by the argument. [STATIC; argument handling INFERRED] |
-| `traffic lights <arg>` | action | The argument is the text after the 15-character prefix `traffic lights `. If it is `on` or `ON`, a traffic-simulator option is switched on; otherwise it is switched off. [STATIC] The traffic simulator stores the option in a flag that nothing reads [STATIC]. Toggling it on or off in a running city had **no visible effect** [OBSERVED]. Treat it as an accepted no-op. |
-| `tuneup` | action | Developer cheat. It asks the sim-variables service's tuning object (class 0x2424854F) to run its action. That object works on the developer tuning file `\Sys\SimTune.INI`, which is not shipped [STATIC]. Entering it in a running city had **no visible effect** [OBSERVED]. Treat it as an accepted no-op. |
+| `traffic lights <arg>` | action | The argument is the text after the 15-character prefix `traffic lights `. If it is `on` or `ON`, a traffic-simulator option is switched on; otherwise it is switched off. [STATIC] Toggling it on or off in a running city had **no visible effect** [OBSERVED]. Treat it as an accepted no-op. |
+| `tuneup` | action | Developer cheat. It is a developer tuning command that reads `\Sys\SimTune.INI`, which is not shipped [STATIC]. Entering it in a running city had **no visible effect** [OBSERVED]. Treat it as an accepted no-op. |
 | `The Birds` | toggle | Toggles a flag in the sprite/animation layer; visual effect only. [INFERRED] |
-| `force petitioners to say <n>`, `force <advisor> to say <n>`, `stop forcing advice` | debug | Advisor names: Mortimer = budget, Moe = transportation, Constance = city planning, Maria = public safety, Randall = health & education, Gus = utilities, Karen = environment. `<n>` is parsed as a **decimal** integer (C `atoi`) and is a topic ID of that advisor. It is appended to the advisor's forced-topic list. At the end of every evaluation of that advisor (weekly, `22-advisors-news-petitioners.md` §3.6, after the rules, the topic-list step and the post-update rules), every topic in the list is raised as a plain topic (no key, L = 0). So a forced topic stays listed until `stop forcing advice`. That cheat empties the forced lists of all seven advisors; the topics then lapse at the next evaluation by the normal life cycle (§3.4). Forcing the same n twice adds it twice. The lists are not saved. [STATIC] |
+| `force petitioners to say <n>`, `force <advisor> to say <n>`, `stop forcing advice` | debug | Advisor names: Mortimer = budget, Moe = transportation, Constance = city planning, Maria = public safety, Randall = health & education, Gus = utilities, Karen = environment. `<n>` is parsed as a **decimal** integer and is a topic ID of that advisor. It is appended to the advisor's forced-topic list. At the end of every evaluation of that advisor (weekly, `22-advisors-news-petitioners.md` §3.6, after the rules, the topic-list step and the post-update rules), every topic in the list is raised as a plain topic (no key, L = 0). So a forced topic stays listed until `stop forcing advice`. That cheat empties the forced lists of all seven advisors; the topics then lapse at the next evaluation by the normal life cycle (§3.4). Forcing the same n twice adds it twice. The lists are not saved. [STATIC] |
 
 ## 6. Single instance
 
 A named system mutex `SimCity 3000 Mutex` enforces a single running instance. If the mutex already
-exists, the new process finds the existing top-level window (class `Gonzo`, title `SimCity 3000`),
+exists, the new process finds the existing top-level window (title `SimCity 3000`),
 restores it, brings it to the foreground, and exits [STATIC].
 
 ## 7. Networking and on-line features
@@ -372,7 +342,6 @@ present. The ticker works without advertisements [INFERRED from the design].
 ## 8. Version and copy-protection checks
 
 * The executable's file version is `2.0.949` [DATA].
-* A pre-release expiry message is present but is not active in the release build [INFERRED].
 * The GOG build has no CD check [INFERRED]. An implementation must not implement copy protection.
   Copy-protection driver files that may be present in `Apps/` (`DRVMGT.DLL`, `DPLAYERX.DLL`,
   `CLCD32.DLL`, `CLCD16.DLL`) are not game components and must be ignored [STATIC].
@@ -388,7 +357,7 @@ present. The ticker works without advertisements [INFERRED from the design].
 * **Writable data.** Store preferences and caches in a per-user writable location instead of
   `Apps/`. Keep city saves in `Cities/`, or in a user directory mirrored to it.
 * **Ignore** `Apps/ddraw.dll`, `Apps/DDrawCompat.ini` and `Apps/SimUtil2.dat`. The last is
-  100,000 random bytes that no module references [STATIC].
+  100,000 random bytes that the game does not use [STATIC].
 
 ## Open questions
 

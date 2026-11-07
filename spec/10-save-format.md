@@ -2,7 +2,7 @@
 
 Status: working draft. Layers 1–3 (container, packed segment, inner record database) are complete and
 verified on all 59 shipped files. Per-record payload layouts are given where decoded; the rest are
-catalogued with size, version and owning subsystem and marked `[OPEN]`.
+catalogued with size and version and marked `[OPEN]`.
 
 Related documents: `02-containers.md` (IXF container, RefPack), `03-resource-types.md`,
 `11-world-terrain.md` (terrain record), `23-scenarios.md` (scenario scripts and texts).
@@ -18,7 +18,7 @@ three-layer structure [DATA, 59/59 files]:
 2. **Packed segment**: the large record `035F62A4:035F62A4:00000001` holds a RefPack-compressed blob.
 3. **Inner record database**: the decompressed blob is itself a small keyed database: a header, the
    simulation records concatenated, and a trailing directory of (Type, Group, Instance, offset)
-   entries. Each simulation subsystem writes one or more records into it.
+   entries. It holds one or more records for each simulation area.
 
 Shipped corpus used for verification: 15 `.sc3` (in `Cities/`), 10 `.st3` (in
 `Cities/StarterTowns/`), 21 `.sct` (in `Cities/Terrains/`) and 13 `.SNR` (in `Cities/Scenarios/`).
@@ -28,7 +28,7 @@ IXF index stores each key on disk as Group, Instance, Type (see `02-containers.m
 
 ## 2. Primitive encodings used inside records
 
-All records are produced by a single serial-record writer with these primitives [STATIC]:
+All records use these primitives [STATIC]:
 
 | Primitive | Encoding |
 |---|---|
@@ -122,14 +122,14 @@ Container details that matter to a reader [DATA]:
 
 ### 3.2 City information `00000FA1:617E198D:00000000` (all kinds) [DATA 59/59][STATIC]
 
-Versioned record, version 4 in all files. Written by the city object; read first on load.
+Versioned record, version 4 in all files. Read first on load.
 
 | Offset | Size | Type | Field | Meaning |
 |---|---|---|---|---|
 | 0x00 | 8 | hdr | header | §2.1, version 4 |
 | — | var | string | marker | Only if header flag bit 0: `City Data Start` |
 | +0 | 16 | s32×4 | appVersion | Version of the program that wrote the file: major, minor, build, revision. Shipped: 2.0.876–2.0.941 (cities, scenarios, terrains), 1.0.544 (starter towns) |
-| +16 | 4 | u32 | (unknown) | 3 in all shipped files; **4** in files written by build 2.0.949 `[OBSERVED]`, whose appVersion is (2, 0, 949, 0). It comes from the same version object as appVersion, so it is probably a format revision [INFERRED]. Write 4 together with appVersion 2.0.949 |
+| +16 | 4 | u32 | (unknown) | 3 in all shipped files; **4** in files written by build 2.0.949 `[OBSERVED]`, whose appVersion is (2, 0, 949, 0). It is probably a format revision [INFERRED]. Write 4 together with appVersion 2.0.949 |
 | +20 | var | string | author | Login name of the user who saved the file (e.g. a short user ID). Informational only |
 | … | 4 | u32 | mapWidth | City size in tiles along X: 128, 192 or 256 |
 | … | 4 | u32 | mapHeight | City size in tiles along Y; equals mapWidth in all files |
@@ -142,7 +142,7 @@ Versioned record, version 4 in all files. Written by the city object; read first
 | … | 4 | u32 | foundingYear | Starting year chosen when the city was founded: 1900, 1950 or 2000 |
 | … | 1 | u8 | flagA | Boolean, restored on load. One of the two New City options **Disasters** / **Auto Budget**: flagA and flagB are both 1 when both boxes are checked and both 0 when both are cleared `[OBSERVED]`. Which flag is which is [OPEN] [INFERRED: flagB = Auto Budget, since it is 1 in all shipped files]. Shipped: 1 in starter towns and a few cities, else 0 |
 | … | 1 | u8 | flagB | Boolean, restored on load: the other of Disasters / Auto Budget (see flagA) `[OBSERVED]`. 1 in all shipped files |
-| … | 1 | u8 | flagC | Boolean written from a global service; ignored on load [OPEN]; 0 or 1 |
+| … | 1 | u8 | flagC | Boolean taken from a global setting when saving; ignored on load [OPEN]; 0 or 1 |
 | — | var | string | marker | Only if header flag bit 0: `City Data End` |
 
 The map size read here drives the dimensions of every per-tile layer in the inner database. A loader
@@ -163,12 +163,12 @@ program version 1.0.544) contain only the first field (4 bytes); all other files
 
 | Offset | Size | Type | Field | Meaning |
 |---|---|---|---|---|
-| 0x00 | 4 | u32 | stateA | Restored into a city-level state word on load. The current program resets it to 0 immediately before writing, so every file it writes has 0. The 1.0.544 starter towns hold 1–10 here (one distinct value per town) [OPEN meaning] |
+| 0x00 | 4 | u32 | stateA | Restored on load. The current program resets it to 0 immediately before writing, so every file it writes has 0. The 1.0.544 starter towns hold 1–10 here (one distinct value per town) [OPEN meaning] |
 | 0x04 | 4 | u32 | cityId | 1 or 2 in shipped files. In cities created by build 2.0.949 it is a large value fixed when the city is created (e.g. 0x24F4FD33) and unchanged in later saves of that city. It grows with the real time at which the city was created `[OBSERVED]`, so it is a time-derived city identifier [INFERRED]. A new city should store a value derived from the current time |
 | 0x08 | 4 | s32 | stateB | 0, 1 or 2 [OPEN] |
 | 0x0C | 4 | s32 | stateC | 0 or 550–711 [OPEN] |
-| 0x10 | 4 | s32 | stateD | Value from a global service; 1 in all files [OPEN] |
-| 0x14 | 4 | s32 | stateE | Value from a global service; 54 in all files [OPEN] |
+| 0x10 | 4 | s32 | stateD | 1 in all files [OPEN] |
+| 0x14 | 4 | s32 | stateE | 54 in all files [OPEN] |
 
 A writer should copy fields 1–5 from the loaded file (round-trip) and write 0 for field 0. Cities
 created by build 2.0.949 store 0, *id*, 1, 54, 1, 54, where *id* is the creation stamp above
@@ -200,7 +200,7 @@ directly. Decision rule: city-only fields are present iff fileKind (§3.3) is 3 
 
 ### 3.6 Cheat log `430E2EE6:530E2EE6:00000000` and `630E2EE6:730E2EE6:00000000` [DATA][STATIC]
 
-Written by the application shell. Both are optional.
+Both are optional.
 
 `430E2EE6:530E2EE6`:
 
@@ -226,7 +226,7 @@ The record is omitted when no cheat has been used.
 | Offset | Size | Type | Field | Meaning |
 |---|---|---|---|---|
 | 0x00 | 8 | hdr | header | §2.1, version 1 |
-| 0x08 | 4 | u32 | value | 1 in all files; supplied by a global service [OPEN] |
+| 0x08 | 4 | u32 | value | 1 in all files [OPEN] |
 | 0x0C | var | string | text | Empty in all files [OPEN] |
 
 `99F47014:79F4702D:00000000` (cities, terrains, scenarios): **user building set**, i.e. the city's
@@ -372,28 +372,27 @@ Rules [DATA, 59/59][STATIC]:
 ### 5.2 Record catalogue (payload order as written)
 
 Every record in the 59 shipped databases is listed below, in the order in which the payloads are
-laid out (which is the order in which the city object asks its simulator subsystems to save, §8).
+laid out (§8).
 Sizes in bytes over all shipped files; "Ver" is the DEADBEEF-header version ("–" = the record has no
 versioned header). Kinds: C = `.sc3`, S = `.SNR`, T = `.st3`, R = `.sct` (terrain); a kind is listed
-when at least one file of that kind contains the record. Subsystem ownership [STATIC];
-sizes/versions/kinds [DATA].
+when at least one file of that kind contains the record. Sizes/versions/kinds [DATA].
 
 Status: **D** = decoded (every byte typed, semantics documented), **P** = partially decoded (every
 byte typed, the meaning of some fields `[OPEN]`; such fields must be preserved on round trip). No
 record is opaque [DATA 59/59].
 
-| # | Key (T:G:I) | Kinds | Size | Ver | Owner subsystem | Status | Layout |
+| # | Key (T:G:I) | Kinds | Size | Ver | Contents | Status | Layout |
 |---|---|---|---|---|---|---|---|
 | 1 | `206C6E7C:21737DE5:00000000` | CSTR | 35 343 – 140 335 | 3 | Terrain ("dirt": altitude, water, sea level) | D | `11-world-terrain.md` Persisted state; summary §6.1 |
-| 2 | `E0FAADC7:A0AB89F0:00000001` | CSTR | 8 – 697 628 | 2 | Occupant manager: every building and prop instance (not flora, not network pieces) | D (some per-class property meanings open) | §6.2 |
-| 3 | `20631788:A0AB89F0:00000000` | CSTR | 16 | 2 | Occupant manager counters (entry count, entry format) | D | §6.2.1 |
-| 4 | `206C6E7C:2147C2DD:00000001` | CST | 1 392 – 153 768 | 4 | Network manager: surface-layer piece list | D | `12-networks.md` |
-| 5 | `206C6E7C:2147C2DD:00000002` | CST | 1 128 – 80 848 | 4 | Network manager: pipe-layer piece list | D | `12-networks.md` |
-| 6 | `206C6E7C:2147C2DD:00000003` | CST | 112 – 47 616 | 4 | Network manager: subway-layer piece list | D | `12-networks.md` |
-| 7 | `206C6E7C:2147C2DD:00000000` | CSTR | 24 | 4 | Network manager header (three list counts) | D | `12-networks.md` |
+| 2 | `E0FAADC7:A0AB89F0:00000001` | CSTR | 8 – 697 628 | 2 | Every building and prop instance (not flora, not network pieces) | D (some per-class property meanings open) | §6.2 |
+| 3 | `20631788:A0AB89F0:00000000` | CSTR | 16 | 2 | Occupant counters (entry count, entry format) | D | §6.2.1 |
+| 4 | `206C6E7C:2147C2DD:00000001` | CST | 1 392 – 153 768 | 4 | Network surface-layer piece list | D | `12-networks.md` |
+| 5 | `206C6E7C:2147C2DD:00000002` | CST | 1 128 – 80 848 | 4 | Network pipe-layer piece list | D | `12-networks.md` |
+| 6 | `206C6E7C:2147C2DD:00000003` | CST | 112 – 47 616 | 4 | Network subway-layer piece list | D | `12-networks.md` |
+| 7 | `206C6E7C:2147C2DD:00000000` | CSTR | 24 | 4 | Network list header (three list counts) | D | `12-networks.md` |
 | 8 | `406B1196:80AB8AB0:00000000` | CSTR | 16 400 – 65 552 | 3 | Flora (tree) layer: kind×16 + level per tile; the only persistent form of flora occupants | D | §6.3; `11-world-terrain.md` §6 |
-| 9 | `206C6E7C:409FF3BA:00000000` | CSTR | 50 274 – 198 060 | – | Zone manager (zone type per tile, developer scan order and statistics) | D (element 0 of zoneTileCount OPEN) | §6.4 |
-| 10 | `206C6E7C:409FF3BA:<z+1>` (12 records, I = 2,3,4,6,7,8,0A,0B,0C,0F,10,12) | CSTR | 4 | – | Zone manager: developer class per zone type | D | §6.4 |
+| 9 | `206C6E7C:409FF3BA:00000000` | CSTR | 50 274 – 198 060 | – | Zone data (zone type per tile, developer scan order and statistics) | D (element 0 of zoneTileCount OPEN) | §6.4 |
+| 10 | `206C6E7C:409FF3BA:<z+1>` (12 records, I = 2,3,4,6,7,8,0A,0B,0C,0F,10,12) | CSTR | 4 | – | Developer class per zone type | D | §6.4 |
 | 11 | `E1F6ABE2:02963821:00000000` | CSTR | 12 | 1 | Disaster: tornado | P | §6.5 |
 | 12 | `E1F6ABE2:C446F87C:00000000` | CSR | 44 – 76 | 1 | Disaster: whirlpool | P | §6.5 |
 | 13 | `E1F6ABE2:45326359:00000000` | CSR | 36 – 40 | 1, 2 | Disaster: locust swarm | P | §6.5 |
@@ -403,7 +402,7 @@ record is opaque [DATA 59/59].
 | 17 | `E1F6ABE2:C336F77C:00000000` | CSTR | 48 | 1 | Disaster: earthquake | P | §6.5 |
 | 18 | `E1F6ABE2:621CDA33:00000000` | CSTR | 12 | 1 | Disaster: fire | P | §6.5 |
 | 19 | `E1F6ABE2:0336F76A:00000000` | CSTR | 60 – 108 | 1 | Disaster: UFO | P | §6.5 |
-| 20 | `206C6E7C:21F6ABCA:00000000` | CSTR | 28 | 505 | Disaster manager (emergency state) | P | §6.5 |
+| 20 | `206C6E7C:21F6ABCA:00000000` | CSTR | 28 | 505 | Disaster emergency state | P | §6.5 |
 | 21 | `E1F6ABE2:C4C90997:00000000` | CSR | 46 | 2 | Disaster: parade/celebration event | P | §6.5 |
 | 22 | `C2910E7D:82937B60:00000000` | CSTR | 273 – 849 | – | Neighbours (neighbour cities, names, deals) | P | §6.6 |
 | 23 | `206C6E7C:80F1E6D3:00000000` | CSTR | 32 800 – 131 104 | 2 | RCI valve-effect layer (two per-tile maps + R/C/I taxable-unit totals) | D | §6.7 |
@@ -417,18 +416,18 @@ record is opaque [DATA 59/59].
 | 31 | `206C6E7C:20EC9849:00000000` | CSTR | 94 – 144 | 2 | Commercial layer: valves 5000/5001 | D | §6.11 |
 | 32 | `206C6E7C:A106CF3D:00000000` | CSTR | 94 – 144 | 2 | Industrial layer: valves 8000/8001 | D | §6.11 |
 | 33 | `206C6E7C:C0AB8A88:00000000` | CSTR | 4 258 – 16 546 | 1 | Land-value layer (half resolution) | P | §6.12 |
-| 34 | `206C6E7C:029CA804:00000000` | CSTR | 102 573 – 409 773 | 9 | Traffic simulator | D | `18-sim-transport.md` |
+| 34 | `206C6E7C:029CA804:00000000` | CSTR | 102 573 – 409 773 | 9 | Traffic | D | `18-sim-transport.md` |
 | 35 | `E11BCC69:A11BCC54:00000000` | CSTR | 1 981 – 2 231 | – | Budget (funds, taxes, departments, bonds, histories) | D | `19-sim-economy.md` |
 | 36 | `206C6E7C:E11BDDF6:00000000` | CSTR | 725 | 2 | World layer (`SC3WorldLayer.ini`: economic phases, five charts); **not** the aura | P | §6.13 |
 | 37 | `206C6E7C:E0AFDF68:00000000` | CSTR | 668 | 1 | Utilities: power layer (production table, `power %` chart) | P | §6.14 |
 | 38 | `206C6E7C:02BF0033:00000000` | CSTR | 212 – 8 404 | 4 | Utilities: water layer (service bitmap, `water %` chart, monthly totals) | P | §6.14 |
 | 39 | `206C6E7C:61448030:00000000` | CSTR | 16 409 – 65 561 | 1 | Flammability layer | P | `17-sim-services.md`; §6.15 |
-| 40 | `206C6E7C:01FD7A8C:00000000` | CSTR | 1 032 – 4 104 | 1 | Geometry spacing/reservation grid, one byte per 4×4-tile block (segment flag, point flag, overlap counter) | D (clients OPEN) | §6.3 |
+| 40 | `206C6E7C:01FD7A8C:00000000` | CSTR | 1 032 – 4 104 | 1 | Geometry spacing/reservation grid, one byte per 4×4-tile block (segment flag, point flag, overlap counter) | D (users of the grid OPEN) | §6.3 |
 | 41 | `013DEE82:022E288E:0000000B` | CSTR | 45 – 276 | 1 | Advisor topic list: utilities advisor | D | `22-advisors-news-petitioners.md` P.1 |
 | 42 | `013DEE82:C28D0F40:0000000B` | CSTR | 66 – 192 | 1 | Advisor topic list | D | idem |
 | 43 | `013DEE82:828D0A2F:0000000B` | CSTR | 66 – 263 | 1 | Advisor topic list | D | idem |
 | 44 | `013DEE82:828D04EB:0000000B` | CSTR | 24 – 129 | 1 | Advisor topic list | D | idem |
-| 45 | `022E288E:422E28E8:00000000` | CSR | 14 | 1 | Advisor manager: six booleans, one per advisor slot [INFERRED]; meaning OPEN | P | idem P.4 |
+| 45 | `022E288E:422E28E8:00000000` | CSR | 14 | 1 | Advisor flags: six booleans, one per advisor slot [INFERRED]; meaning OPEN | P | idem P.4 |
 | 46 | `206C6E7C:C28D0B6E:00000000` | CSTR | 12 – 292 | 1 | Reward buildings state | D | idem P.3 |
 | 47 | `013DEE82:C28D0B6E:0000000B` | CSTR | 24 – 150 | 1 | Advisor topic list | D | idem P.1 |
 | 48 | `013DEE82:028D0FC5:0000000B` | CSTR | 87 – 150 | 1 | Advisor topic list | D | idem |
@@ -443,15 +442,14 @@ Notes on the catalogue:
 * The record set differs by kind only as shown: terrains have no network lists (4–6) and an empty
   occupant record (8 bytes); starter towns lack several disaster records (12–14, 16 and 21 are
   `CSR` only, i.e. absent from `.st3`) and record 45. A loader must treat every record as optional
-  and initialise the subsystem to its new-city state when its record is absent [DATA][INFERRED].
+  and initialise that part of the city to its new-city state when its record is absent [DATA][INFERRED].
 * `206C6E7C:C259C02D` is the aura (mayor-rating) layer, driven by `SC3Aura.ini`.
   `206C6E7C:E11BDDF6` is the world layer, driven by `SC3WorldLayer.ini` [STATIC, confirmed].
-Subsystem order (load and save order) [STATIC]: terrain; occupant manager; network manager;
-geometry layer; zone manager; disaster manager; neighbours; RCI development layer; ordinances; aura;
-pollution; crime; police; fire; residential; commercial; industrial; land value; traffic; budget;
-world layer; power; water; flammability; scenario; advisor manager; the six advisors; petitioners.
-Records appear in the packed segment in this order (the table above). A few further subsystems
-exist in the original but write no record in any shipped file and need no persisted state [DATA].
+Record-group order on disk [STATIC]: terrain; occupants; networks; geometry layer; zone data;
+disasters; neighbours; RCI development layer; ordinances; aura; pollution; crime; police; fire;
+residential; commercial; industrial; land value; traffic; budget; world layer; power; water;
+flammability; scenario; advisor flags; the six advisor topic lists; petitioners.
+Records appear in the packed segment in this order (the table above).
 
 Parser coverage over the 59 files is reported in §9.
 
@@ -482,16 +480,16 @@ hdr (version 3), markers `DirtBag Start`/`DirtBag End`, f32 scale constant, (W+1
 altitudes (rows stored last-to-first), u8 sea level, (W+1)·(H+1) u8 vertex water levels (same order),
 W·H/8 bytes of per-tile bit flags (W·H/32 u32 words).
 
-### 6.2 Occupant manager `E0FAADC7:A0AB89F0:1` and `20631788:A0AB89F0:0`
+### 6.2 Occupant records `E0FAADC7:A0AB89F0:1` and `20631788:A0AB89F0:0`
 
 Status: decoded byte-exact; every byte of both records in all 59 shipped files is accounted for
 (59/59 files, 8 225 274 bytes, 284 321 entries) [DATA]. Some property meanings remain `[OPEN]`
 (§6.2.5).
 
-The occupant manager stores every building (zoned, civic, landmark, reward, BAT) and prop. **Flora
+The occupant record stores every building (zoned, civic, landmark, reward, BAT) and prop. **Flora
 (trees) is not stored here**: its only persistent form is the flora layer of §6.3. **Network pieces (road, rail, highway, power line, pipe,
 subway) are not in this record**; they are stored, in a compact 8-byte form, in the network lists
-`206C6E7C:2147C2DD:1..3` (§6.2.6) [DATA][STATIC]. Terrains contain an empty manager (8-byte header,
+`206C6E7C:2147C2DD:1..3` (§6.2.6) [DATA][STATIC]. Terrains contain an empty occupant record (8-byte header,
 count 0).
 
 #### 6.2.1 Counters record `20631788:A0AB89F0:00000000` (16 bytes, all files)
@@ -584,27 +582,27 @@ and agent type. Each class writes the common fields and then its own properties,
 32-bit property IDs [STATIC]. Every shipped entry falls into one of the signatures below
 (284 321 entries) [DATA]. Agent-type names are from `CitySim.ini` `[AgentTypes]`.
 
-| Entries | Classes (agent types) | Owner | Fields present | Property IDs → value [DATA ranges; meaning] |
-|---|---|---|---|---|
-| 275 260 | zoned buildings, props, most civic buildings | — | none | — |
-| 3 030 | bus station 12210, rail station 12230, subway station 12360, subway/rail station 12361 | transport | intProps | `6352CCCF` ∈ {5, 10}; `6352CCD0` ∈ {5, 6, 10, 11, 12} [OPEN] |
-| 2 190 | water pump 12810, water tower 12840, desalination plant 12830 | water | datePair, intProps | `8351FDF3` = two u16 (low, high) e.g. (1500, 1500), (300, 300), (1500, 904) [INFERRED: capacity, current output]; `8351FDF4` = two u16 (low 0–≈1200, high 2 tower / 3 pump) [INFERRED: high = facility type code; low = the facility's used share of its component's supply, `16-sim-utilities.md` §3.4 step 7 (INFERRED, high: Madrid day 33, low / output ≈ 0.89 for every facility)]; `8351FDF5` ∈ {0, 1, 3} [INFERRED: water-source status of the facility]; `8351FDF6` bool [OPEN] |
-| 521 (+82) | power plants 12111–12118 (and waste-to-energy 12853) | power | datePair, intProps | `2351FAF8` = consecutive overworked months (u16; 0–3); `2351FAF9` = maximum life in months; `2351FAFA` = decline age in months; `2351FAFB` = bool "life expired / plant replaced" [INFERRED from the power-plant model in `16-sim-utilities.md`] |
-| 82 | waste-to-energy 12853 | power + garbage | datePair, intProps | the four power-plant properties plus `A352179A` (0–1 750), `A352179B` (0–52 500), `A352179C` (0–52 500) [INFERRED: burn capacity per run (`OptimalGarbageCap` 1 750) and the same × 30 per month, as for the incinerator] |
-| 92 | water treatment 12820 | water | datePair, intProps | `0351D624` ∈ {0, 42 500, 60 000}; `0351D625`, `0351D626` 0–1 800 000; `0351D627` bool [OPEN] |
-| 67 | incinerator 12852 | garbage | datePair, intProps | `E352C57C` (0–1 500), `E352C57D`, `E352C57E` (0–45 000), `E352C57F` bool [INFERRED: `E352C57C` = burn capacity per pollution run (`OptimalGarbageCap`, 1 500), the 0–45 000 values = the same × 30 per month (`16-sim-utilities.md` §4.1); bool OPEN] |
-| 126 | recycling centre 12851 | garbage | datePair, intProps | `4352C330` (45), `4352C331` (50 000), `4352C332` bool [INFERRED: `4352C330` = reduction percent (`OptimalPctReduction`), `4352C331` = population served (`OptimalPopServed`), the two inputs of the recycling ratio, `16-sim-utilities.md` §4.3; bool OPEN] |
-| 386 | fire station 13002 | fire | intProps | `2352C88D` = three bytes (b0, b1, b2) packed in the low 24 bits; `2352C88E` ∈ {30, 50}; `2352C88F` 30–51 [OPEN] |
-| 304 | police station 13130 | police | intProps | `A352C8E8` = three bytes packed as above; `A352C8E9` ∈ {30, 50}; `A352C8EA` 28–60 [OPEN] |
-| 408 | hospital 13310 | health | intProps, floatProps | `A352D404` (1 500), `A352D406` 49–60, `A352D407` 99–117; float `A352D405` (≈0.14) [OPEN] |
-| 751 | K-12 school 13010 | education | intProps | `8352D5E9` 98–117, `8352D5EA` 29–36 [OPEN] |
-| 103 | local college 13873 | education | intProps, floatProps | `2352D114` 147–175, `2352D116` 122–150; float `2352D115` [OPEN] |
-| 350 | library 14130 | education | intProps | `A3544E00` 49–60 [OPEN] |
-| 154 | museum 14140 | education | intProps | `63544FDD` 73–90 [OPEN] |
-| 83 | jail 13881 | police | intProps | `0352FBBD` 0–360 [INFERRED: inmates], `0352FBBE` 60–90 [OPEN] |
-| 22 | stadium 14600 | — | datePair, strProps | `43530181` = team name string |
-| 283 | university 13871, military base 11002, city hall 10120, golf course 14370 and other civic/landmark types | — | datePair | — |
-| 109 | parks, landmarks and other nameable buildings | — | name (± datePair) | — |
+| Entries | Classes (agent types) | Fields present | Property IDs → value [DATA ranges; meaning] |
+|---|---|---|---|
+| 275 260 | zoned buildings, props, most civic buildings | none | — |
+| 3 030 | bus station 12210, rail station 12230, subway station 12360, subway/rail station 12361 | intProps | `6352CCCF` ∈ {5, 10}; `6352CCD0` ∈ {5, 6, 10, 11, 12} [OPEN] |
+| 2 190 | water pump 12810, water tower 12840, desalination plant 12830 | datePair, intProps | `8351FDF3` = two u16 (low, high) e.g. (1500, 1500), (300, 300), (1500, 904) [INFERRED: capacity, current output]; `8351FDF4` = two u16 (low 0–≈1200, high 2 tower / 3 pump) [INFERRED: high = facility type code; low = the facility's used share of its component's supply, `16-sim-utilities.md` §3.4 step 7 (INFERRED, high: Madrid day 33, low / output ≈ 0.89 for every facility)]; `8351FDF5` ∈ {0, 1, 3} [INFERRED: water-source status of the facility]; `8351FDF6` bool [OPEN] |
+| 521 (+82) | power plants 12111–12118 (and waste-to-energy 12853) | datePair, intProps | `2351FAF8` = consecutive overworked months (u16; 0–3); `2351FAF9` = maximum life in months; `2351FAFA` = decline age in months; `2351FAFB` = bool "life expired / plant replaced" [INFERRED from the power-plant model in `16-sim-utilities.md`] |
+| 82 | waste-to-energy 12853 | datePair, intProps | the four power-plant properties plus `A352179A` (0–1 750), `A352179B` (0–52 500), `A352179C` (0–52 500) [INFERRED: burn capacity per run (`OptimalGarbageCap` 1 750) and the same × 30 per month, as for the incinerator] |
+| 92 | water treatment 12820 | datePair, intProps | `0351D624` ∈ {0, 42 500, 60 000}; `0351D625`, `0351D626` 0–1 800 000; `0351D627` bool [OPEN] |
+| 67 | incinerator 12852 | datePair, intProps | `E352C57C` (0–1 500), `E352C57D`, `E352C57E` (0–45 000), `E352C57F` bool [INFERRED: `E352C57C` = burn capacity per pollution run (`OptimalGarbageCap`, 1 500), the 0–45 000 values = the same × 30 per month (`16-sim-utilities.md` §4.1); bool OPEN] |
+| 126 | recycling centre 12851 | datePair, intProps | `4352C330` (45), `4352C331` (50 000), `4352C332` bool [INFERRED: `4352C330` = reduction percent (`OptimalPctReduction`), `4352C331` = population served (`OptimalPopServed`), the two inputs of the recycling ratio, `16-sim-utilities.md` §4.3; bool OPEN] |
+| 386 | fire station 13002 | intProps | `2352C88D` = three bytes (b0, b1, b2) packed in the low 24 bits; `2352C88E` ∈ {30, 50}; `2352C88F` 30–51 [OPEN] |
+| 304 | police station 13130 | intProps | `A352C8E8` = three bytes packed as above; `A352C8E9` ∈ {30, 50}; `A352C8EA` 28–60 [OPEN] |
+| 408 | hospital 13310 | intProps, floatProps | `A352D404` (1 500), `A352D406` 49–60, `A352D407` 99–117; float `A352D405` (≈0.14) [OPEN] |
+| 751 | K-12 school 13010 | intProps | `8352D5E9` 98–117, `8352D5EA` 29–36 [OPEN] |
+| 103 | local college 13873 | intProps, floatProps | `2352D114` 147–175, `2352D116` 122–150; float `2352D115` [OPEN] |
+| 350 | library 14130 | intProps | `A3544E00` 49–60 [OPEN] |
+| 154 | museum 14140 | intProps | `63544FDD` 73–90 [OPEN] |
+| 83 | jail 13881 | intProps | `0352FBBD` 0–360 [INFERRED: inmates], `0352FBBE` 60–90 [OPEN] |
+| 22 | stadium 14600 | datePair, strProps | `43530181` = team name string |
+| 283 | university 13871, military base 11002, city hall 10120, golf course 14370 and other civic/landmark types | datePair | — |
+| 109 | parks, landmarks and other nameable buildings | name (± datePair) | — |
 
 Rules [STATIC][DATA]:
 
@@ -612,7 +610,7 @@ Rules [STATIC][DATA]:
   8 destroyed (rubble), 16 fire-damaged; bit 0x200 is an additional developer flag (shipped values
   513, 514, 516). Semantics in `13-buildings-occupants.md` (Persisted state).
 * Property lists are written in ascending ID order. A writer must write every property its class
-  owns; the class loaders read them by ID, and several stop reading at the first missing ID.
+  has; readers of several classes find them by ID and stop reading at the first missing ID.
 * `name` is written only when it differs from the occupant type's default name.
 
 **Values written for newly placed buildings** `[OBSERVED]` (build 2.0.949, buildings placed on
@@ -658,7 +656,7 @@ dialog). The meanings of the other values are [OPEN]; write them as observed for
 
 #### 6.2.6 Network pieces (`206C6E7C:2147C2DD:1..3`)
 
-Network pieces are serialised by the network manager (`12-networks.md` Persisted state) as a
+Network pieces are stored (`12-networks.md` Persisted state) as a
 compact 8-byte entry with entry format 1 [STATIC][DATA]. These entries are **not** references into
 the occupant record. They are the pieces themselves, so no entry of `E0FAADC7` matches them.
 
@@ -672,14 +670,14 @@ Piece word [STATIC; values DATA]:
 | Bits | Label (label only; not needed by an implementation) | Meaning |
 |---|---|---|
 | 0–15 | `6355941D` | Network occupant ID. The piece's attribute key is `E223741F:A317745F:<ID>` |
-| 16 | `6355941E` | **Span flag**: the piece is the end of a bridge or tunnel span (`18-sim-transport.md` §3.1 flag 0x4000, §5.5) [STATIC] |
+| 16 | `6355941E` | **Span flag**: the piece is the end of a bridge or tunnel span (`18-sim-transport.md` §3.1, §5.5) [STATIC] |
 | 17–18 | `6355941F` | **Span direction**, read only when bit 16 is set: 0 = −x, 1 = −z, 2 = +x, 3 = +z [STATIC; DATA below] |
 | 19–26 | `63559420` | **Span length** in tiles, read only when bit 16 is set [STATIC] |
-| 27 | `63559421` | **Damaged flag**: the piece "reports itself damaged" and gets traffic flag 0x80 (`18-sim-transport.md` §3.1) [STATIC] |
+| 27 | `63559421` | **Damaged flag**: the piece is treated as damaged by the traffic layer (`18-sim-transport.md` §3.1) [STATIC] |
 
 On load, all four fields are copied back into the piece. Direction and length are restored only if
 the span flag is set; otherwise they stay 0 [STATIC]. The span record therefore **is** persisted,
-and the traffic layer's flag 0x4000 comes back when it rebuilds its flags from the loaded pieces.
+and the traffic layer's bridge/tunnel-span marking comes back when it is rebuilt from the loaded pieces.
 DATA: spans occur in pairs, one at each end, pointing at each other. Mount Herrang has piece 64 at
 x 56 (dir 2, len 23) and at x 79 (dir 0, len 23), with 56 + 23 = 79. A Better Betterfeld has piece
 63 at z 51 (dir 3, len 16) and at z 67 (dir 1, len 16). Spans appear in Mount Herrang (4 entries),
@@ -697,9 +695,8 @@ surface pieces [DATA]. Footprint is always 1×1 and is not stored.
 
 #### 6.2.7 Load and save procedure
 
-Save [STATIC]: for every occupant held by the manager, in manager iteration order, the occupant
-is asked to describe itself. Occupants that decline (none in practice) are skipped. Then the
-entry is written and `count` is incremented. The counters record is written after the entry record.
+Save [STATIC]: one entry is written for every occupant, in the city's occupant order, and
+`count` is incremented per entry. An occupant could in principle be skipped (none in practice). The counters record is written after the entry record.
 Network pieces are not iterated here.
 
 Load [STATIC]:
@@ -714,7 +711,7 @@ Load [STATIC]:
    occupant into the world at (x, z).
 
 The occupant record must be loaded before the network lists, because pieces are inserted into the
-same world grid. Network lists are loaded by the network manager.
+same world grid.
 
 BAT buildings [STATIC][INFERRED]: a BAT-made building is saved exactly like a shipped building.
 Its key is `207EDC0E:0000057E:<its occupant ID>`. Its appearance (`00006300:BA1DBF1E:<id>`) is
@@ -722,7 +719,7 @@ Its key is `207EDC0E:0000057E:<its occupant ID>`. Its appearance (`00006300:BA1D
 (`13-buildings-occupants.md`, `24-bat-buildings.md`). No shipped save contains a BAT building, so
 this is not verified against data.
 
-### 6.3 Geometry-subsystem layers `406B1196:80AB8AB0:0` (flora) and `206C6E7C:01FD7A8C:0` (spacing grid)
+### 6.3 Geometry layers `406B1196:80AB8AB0:0` (flora) and `206C6E7C:01FD7A8C:0` (spacing grid)
 
 `406B1196:80AB8AB0:00000000` [DATA 59/59]:
 
@@ -757,7 +754,7 @@ Shipped data uses only kinds 2, 3, 4 and levels 0–6. Distribution over all 59 
 122 275 cells, kind 3 119 408, kind 4 30 456; level 0: 956, 1: 120 062, 2: 51 655, 3: 31 366,
 4: 21 589, 5: 15 082, 6: 31 429. The maximum value is 0x46 [DATA 59/59].
 
-**Save** [STATIC]: start from an all-zero W × H grid. For each flora object in the flora collection,
+**Save** [STATIC]: start from an all-zero W × H grid. For each flora object in the city,
 read its anchor tile (x, z) and its kind/level byte and store the byte at (x, z) if
 0 ≤ x < W and 0 ≤ z < H (otherwise skip). When two flora objects share an anchor tile, the one
 visited later wins. A city without flora writes all zeros.
@@ -768,27 +765,26 @@ visited later wins. A city without flora writes all zeros.
 2. Read W and H. If they differ from the city's map size, the load fails.
 3. Visit cells in storage order (x descending from W − 1, then z ascending). For each non-zero byte b: kind =
    b ÷ 16, level = b mod 16. If kind ≤ 4 and level ≤ 9, choose the occupant instance from the
-   table above, create that flora occupant, set its level to `level`, place it on tile (x, z) and
-   add it to the flora collection.
+   table above, create that flora occupant, set its level to `level`, place it on tile (x, z).
 4. Choosing between the two instances of a level 6–7 cell (and of kind-1 levels 1–7) uses one draw of
-   the flora subsystem's own random generator, which returns 0 or 1 (the second instance is used
+   a random generator used only for flora, which returns 0 or 1 (the second instance is used
    for 1). A draw is taken for **every** valid non-zero cell, even when both table entries are equal.
-   The generator is created at subsystem start with an unspecified seed `[INFERRED]` (not
+   The generator is created at start-up with an unspecified seed `[INFERRED]` (not
    reproducible), so which of the two sprites a dense cell shows after reload may differ from the
    saved city. The cell value itself (kind, level) is always preserved.
 
 Round-trip the grid verbatim when flora is not modified.
 
 `206C6E7C:01FD7A8C:00000000` [DATA 59/59]: hdr (version 1), then a map layer of (W/4)·(H/4) u8
-cells (one byte per 4×4-tile block), written by the geometry subsystem's quarter-resolution grid.
+cells (one byte per 4×4-tile block).
 99.3 % of cells are 0. The other values are 1, 2, 3, 4, 8, 12, 16 and 20 [DATA].
 
-This grid is a **spacing / reservation map** kept by the geometry subsystem for other subsystems.
-It is not derived from flora (non-zero blocks hold no flora in most cases [DATA]). Callers give
-positions in tiles. A position is mapped to the 4 × 4 block that contains it, and positions outside
+This grid is a **spacing / reservation map** used by the airport and seaport rules.
+It is not derived from flora (non-zero blocks hold no flora in most cases [DATA]). Positions are
+given in tiles. A position is mapped to the 4 × 4 block that contains it, and positions outside
 the map are skipped. Each cell byte holds three independent fields [STATIC]:
 
-| Bits | Field | Operations offered by the subsystem |
+| Bits | Field | Operations |
 |---|---|---|
 | 0 (0x01) | segment flag | *test segment*: true if any block within ±4 tiles (one block) of an axis-aligned segment between two tile positions has the flag set. *Reserve segment*: if the test is false, set the flag on all those blocks, otherwise fail. *Release segment*: clear the flag on the same blocks. *Test block*: the flag of a single block. |
 | 1 (0x02) | point flag | *test point*: true if any block in the 3 × 3 block neighbourhood (±4 tiles) of a position has the flag. *Reserve point*: if the test is false, set the flag on the 3 × 3 neighbourhood, otherwise fail. *Release point*: clear it on the 3 × 3 neighbourhood. *Test block*: the flag of a single block. |
@@ -798,8 +794,8 @@ the map are skipped. Each cell byte holds three independent fields [STATIC]:
 The shipped values match this layout: 1, 2 and 3 are flag combinations, and 4–20 are c = 1–5
 [DATA].
 
-**Clients** [STATIC]. Only the zone developer's airport and seaport rules (`15-sim-growth.md` §5.5)
-and the grid's own removal handler use the grid:
+**Users of the grid** [STATIC]. Only the zone developer's airport and seaport rules
+(`15-sim-growth.md` §5.5) and the removal rules below use the grid:
 * *segment flag* = airport runway strips. The runway rule reserves the segment of the runway it
   is about to lay and builds nothing if the reservation fails. The airport-buildings rule's
   random placement (its step 3) only places on a tile whose block has the segment flag set. The
@@ -811,24 +807,20 @@ and the grid's own removal handler use the grid:
   and lays the pier body only if *add* succeeds. With the 15 limit, a 5 × 5-block area can take up
   to 15 overlapping piers, so the spacing between piers is in practice set by the pier rule's own
   gap counter.
-* After every successful *add* and every *remove*, the grid notifies another city subsystem with
-  the tile position and 1 or 0 [STATIC; INFERRED that it is the automata/boat layer].
-* **Release on removal**: the grid listens for occupant removal of airport/seaport parts (by
-  part index, attribute 0x1F4). Removing a runway part (index 1) removes the rest of its runway
+* **Release on removal**: when an airport/seaport part is removed (part index, attribute 0x1F4),
+  the grid is updated. Removing a runway part (index 1) removes the rest of its runway
   line and releases its segment. Removing a part of index 4 releases the point at its anchor.
   Removing a pier part (index 7–9) walks the connected pier pieces, and at the pier head *removes*
   one count. No other decay or reset exists. A new city starts with all zeros [INFERRED].
 
-Correction: the previous revision said no developer rule other than the pier touches the grid and
-left the flag clients OPEN. An engine that implements the airport and seaport rules must model the
-grid. Otherwise it should round-trip the grid verbatim.
+An engine that implements the airport and seaport rules must model the grid. Otherwise it should
+round-trip the grid verbatim.
 
 Both records are consumed exactly in 59/59 shipped files [DATA].
 
-### 6.4 Zone manager `206C6E7C:409FF3BA:*`
+### 6.4 Zone data `206C6E7C:409FF3BA:*`
 
-Owner: the zone manager (zone layer plus the zone developers' scheduler), see `15-sim-growth.md`.
-Status: decoded; every byte consumed in 59/59 files by `savezone_parse` [DATA 59/59][STATIC].
+See `15-sim-growth.md`. Status: decoded; every byte consumed in 59/59 files [DATA 59/59][STATIC].
 
 **Instance 0** (50 274 – 198 060 bytes). It has **no versioned header** and no markers, even in
 terrain files. Tile coordinates are (x, z) as in `00-README.md` (Conventions), both 0-based. W, H as in §6 conventions; N = W·H.
@@ -896,8 +888,7 @@ Rules [STATIC][DATA]:
   with the first 32 768 positions (a bias that a faithful clone must keep). The original never seeds
   this generator [STATIC], so it starts from the C runtime's initial seed 1 in each thread
   [INFERRED: Microsoft C runtime behaviour]. It is a single generator shared by every part of the
-  program that uses the C-runtime `rand()` on the same thread (for example the audio cell choice of
-  `06-audio.md` §5.2, disasters, services and the user interface), so the shuffle depends on all
+  program that uses the C-runtime `rand()` on the same thread, so the shuffle depends on all
   earlier draws in that thread [INFERRED]. Exact reproduction is therefore impractical; an
   implementation stays compatible because the list is saved.
 * **Stride mode** (mode ≠ 0; unused in shipped files): on each take, index += 1; if index > count the
@@ -924,8 +915,7 @@ Rules [STATIC][DATA]:
   catalogue (50 274 bytes) is a played 128 × 128 city, not a new one.
 
 **Instances z+1** for each zone type z that has a developer (z = 1,2,3,5,6,7,9,10,11,14,15,17), 4 bytes,
-no header [DATA 59/59]. The writer creates one per zone type that has a developer; the developer
-itself then appends nothing (records are 4 bytes in all files). On load, the record is applied only if
+no header [DATA 59/59]. One is written per zone type that has a developer (records are 4 bytes in all files). On load, the record is applied only if
 the stored class equals the class of the developer currently configured for that zone
 (`SC3ZoneLayer.ini [ZoneDeveloperDescriptions]`) [STATIC]:
 
@@ -933,9 +923,9 @@ the stored class equals the class of the developer currently configured for that
 |---|---|---|---|---|
 | 0x00 | 4 | u32 | developerClass | Developer class ID for zone type z: 0x619BA64E residential, 0x41A3ADC1 commercial, 0xE1A53B30 industrial, 0xC1F81E7E airport, 0x82D2D72B seaport, 0x82348DE5 landfill (`15-sim-growth.md` §2) |
 
-### 6.5 Disasters `E1F6ABE2:<disaster>:0` and manager `206C6E7C:21F6ABCA:0` — decoded (detail words open)
+### 6.5 Disasters `E1F6ABE2:<disaster>:0` and emergency state `206C6E7C:21F6ABCA:0` — decoded (detail words open)
 
-Owner: disaster subsystem. Every record begins with hdr (§2.1); the version
+Every record begins with hdr (§2.1); the version
 column is the highest version a reader accepts. Semantics and behaviour: `21-disasters.md`
 Persisted state. Verified by parsing: [DATA 59/59, every record consumed exactly].
 
@@ -993,13 +983,13 @@ active instances (u32 count, then self-serialised instance objects); no shipped 
 | 0x1A | 16 | s32[4] | route | (x1, z1, x2, z2) of the route; equals (x, z, …) when set. 22 shipped files hold uninitialised filler (0xCDCDCDCD) here when no parade was ever placed; a writer should write 0 |
 | 0x2A | 4 | u32 | e | Present only if version ≥ 2. 0 or a large count [OPEN] |
 
-**Manager `206C6E7C:21F6ABCA:0`** (28 bytes): hdr version **505** (0x01F9), then five u32
+**Emergency state `206C6E7C:21F6ABCA:0`** (28 bytes): hdr version **505** (0x01F9), then five u32
 (reserved, emergencyActive, flagA, disasterCost, flagB) — see `21-disasters.md`. Terrains hold
 0xCDCDCDCD in disasterCost (uninitialised); a reader must accept any value [DATA].
 
 ### 6.6 Neighbours `C2910E7D:82937B60:0` — decoded (deal fields partly open)
 
-Owner: neighbour/deal manager. No versioned header, no markers. Semantics in
+No versioned header, no markers. Semantics in
 `19-sim-economy.md` §10, §12 and its Persisted state. Verified by parsing all shipped files.
 [DATA 59/59].
 
@@ -1015,7 +1005,7 @@ map coordinate, 0…W−1; z the second, 0…H−1). Corner tiles: (0, 0) → 0,
 |---|---|---|---|
 | var | string | cityName | Neighbour city name (new city: a random entry of string table `C29A6083`, instances 41–76, distinct across the four) |
 | var | string | mayorName | Neighbour mayor name (new city: distinct entry of the same table, instances 2–37) |
-| 4 | u32 | population | Neighbour population (new city: 2000 + RandInt(0, 12999), drawn from the neighbour subsystem's own instance of the simulation generator of `14-sim-clock.md` §8 [INFERRED], which is seeded from the clock, so values are not reproducible) |
+| 4 | u32 | population | Neighbour population (new city: 2000 + RandInt(0, 12999), drawn from a generator of the kind in `14-sim-clock.md` §8 [INFERRED], which is seeded from the clock, so values are not reproducible) |
 | 4 | u32 | populationCap | 4 000 000 in every shipped file and at creation [STATIC: constant; INFERRED: growth ceiling] |
 | 1 | u8 | exists | 1 = a neighbour city exists on this edge. At creation it is cleared when the tile at the middle of that edge carries the sea-water flag (pollution cell bit 30, `17-sim-services.md` §7.2.1) [STATIC] |
 | 4 | u32 | nRoad | Number of road connections to this neighbour |
@@ -1035,7 +1025,7 @@ Note the count order (road, rail, power, pipe, highway, subway) differs from the
 |---|---|---|---|
 | var | string | neighbourName | Partner city name (copy of that neighbour's cityName) [DATA 59/59] |
 | var | string | text | Display text template; shipped files hold a placeholder string [DATA] |
-| 4 | s32 | reportedQuantity | For buy deals: the quantity the utility layer last reported as actually drawn from the neighbour (`16-sim-utilities.md` §2.7) [DATA: Moscow power buy deal = column 0 of the current power-production row in the shipped file and 3 later saves (32 897, 33 815, 34 349, 34 747); London water buy deal 20 752 = the water record's purchaseDeal]. Correction: earlier text called this the cancellation penalty |
+| 4 | s32 | reportedQuantity | For buy deals: the quantity the utility layer last reported as actually drawn from the neighbour (`16-sim-utilities.md` §2.7) [DATA: Moscow power buy deal = column 0 of the current power-production row in the shipped file and 3 later saves (32 897, 33 815, 34 349, 34 747); London water buy deal 20 752 = the water record's purchaseDeal] |
 | 4 | s32 | monthlyAmount | Simoleons per month paid or received [DATA: for sell types = trunc(quantity × rate / BASE)] |
 | 1 | u8 | neighbourIndex | 0–3 (§1 above) [DATA 59/59: consistent with neighbourName] |
 | 1 | u8 | dealType | 0–5 (`19-sim-economy.md` §10.1) |
@@ -1058,9 +1048,8 @@ must keep both as stored and not recompute one from the other [DATA].
 
 ### 6.7 RCI development layer `206C6E7C:80F1E6D3:0` — decoded
 
-Owner: the valve layer of the growth subsystem (it applies `SC3ValveLayer.ini`
-effects, `15-sim-growth.md` §3.3). Every byte consumed in 59/59 files by `savezone_parse`
-[DATA 59/59][STATIC]. Size = 8 + 2·W·H + 24 (32 800 / 73 760 / 131 104 bytes).
+This record applies the `SC3ValveLayer.ini` effects (`15-sim-growth.md` §3.3). Every byte consumed
+in 59/59 files [DATA 59/59][STATIC]. Size = 8 + 2·W·H + 24 (32 800 / 73 760 / 131 104 bytes).
 
 | Offset | Size | Type | Field | Meaning |
 |---|---|---|---|---|
@@ -1100,8 +1089,7 @@ See `19-sim-economy.md`.
 ### 6.9 Aura layer `206C6E7C:C259C02D:0` — decoded
 
 This is the aura (mayor-rating) layer of `17-sim-services.md` §8; its tunables are in
-`SC3Aura.ini`. [STATIC: the `SC3Aura.ini` loader, the aura sweep and this record's reader/writer
-belong to the same object] The record has no versioned header and no markers. With
+`SC3Aura.ini`. The record has no versioned header and no markers. With
 C = (W/4)·(H/4), size = C + 150 (1174 / 2454 / 4246 bytes for 128 / 192 / 256 maps).
 [DATA 59/59]
 
@@ -1188,7 +1176,7 @@ Valve block (41 bytes) [DATA 59/59; semantics in `15-sim-growth.md` §3]:
 `206C6E7C:C106C4F5:0` (residential layer, version 3) is decoded. It holds the hdr, u32 n (= 2),
 the two valve blocks (3000, 3001), the 1 900-byte residential state below, and then the end marker
 (present only when flags bit 0 is set). Record size is 1 994 bytes, or 2 046 bytes with markers.
-[DATA 59/59; field order STATIC from the writer] Semantics are in
+[DATA 59/59; field order STATIC] Semantics are in
 `20-sim-population.md`; the facility side is in `17-sim-services.md` §5–§6.
 
 Residential state (offsets relative to the end of the second valve block):
@@ -1250,8 +1238,8 @@ is 0. [DATA]
 
 ### 6.13 World layer `206C6E7C:E11BDDF6:0` — partially decoded
 
-This is the *world layer*: the object that loads `SC3WorldLayer.ini` (`JobToResFactor`,
-`ExternalJobDemand`, `EconomicPhases`, `[ListOfWorldValveMapping]`) and owns the jobs valve. It is
+This is the *world layer*: the record driven by `SC3WorldLayer.ini` (`JobToResFactor`,
+`ExternalJobDemand`, `EconomicPhases`, `[ListOfWorldValveMapping]`), which also holds the jobs valve. It is
 **not** the aura (see §6.9). [STATIC] Its semantics belong to `15-sim-growth.md`.
 
 725 bytes in every file, hdr version 2. [DATA 59/59]
@@ -1310,7 +1298,7 @@ decline age, overwork months) is **not** in this record (see `16-sim-utilities.m
 | +132 | 8 | s64 | supply | Σ over the month's pipe components of the component supply *S*, after any neighbour purchase (`16-sim-utilities.md` §3.4 steps 3–4). It exceeds the sum of facility outputs when the 500-pass flood cap makes facilities count twice (Madrid day 33: 228 528 vs 119 437) [STATIC; DATA] |
 | +140 | 8 | s64 | used | `supply` − Σ component leftovers (§3.4 step 7) [STATIC] |
 | +148 | 16 | s64 × 2 | saleDeal | Water delivered to a neighbour sale deal this month, and a second accumulator [STATIC partial; 0 in all files] |
-| +164 | 16 | s64 × 2 | purchaseDeal | Water drawn from a neighbour purchase deal this month, and that amount × deal rate / 1000 [STATIC partial]. Non-zero only in London (20 752 and 5 167 = ⌊20 752 × 249 / 1000⌋) [DATA]; correction: earlier text said 0 in all files |
+| +164 | 16 | s64 × 2 | purchaseDeal | Water drawn from a neighbour purchase deal this month, and that amount × deal rate / 1000 [STATIC partial]. Non-zero only in London (20 752 and 5 167 = ⌊20 752 × 249 / 1000⌋) [DATA] |
 | +180 | 4 | u32 | unwatered | Buildings whose needs-water mark is still set after distribution, i.e. buildings without water (§3.4 "Counts") [STATIC; DATA: equals the number of buildings whose lot centre tile is dry in the saved bitmap: Berlin day 40 17, Madrid day 33 3, Madison 11] (4 – 12 038 in shipped cities) |
 | +184 | 4 | u32 | needWater | Number of buildings with a needs-water mark; set to 100 instead when none is left unwatered [STATIC] (968 – 21 445) |
 | +188 | 4 | u32 | meanPollution | Mean water-pollution value at the facility tiles this month (`16-sim-utilities.md` §3.3 step 5) [STATIC] |
@@ -1337,13 +1325,13 @@ and u8 (sweep/state fields, [OPEN]). Total 25 + W·H bytes [DATA 59/59]. See `17
 ### 6.18 Networks, traffic, budget, scenario state
 
 See `12-networks.md`, `18-sim-transport.md`, `19-sim-economy.md` and `23-scenarios.md` §8. All
-parse 59/59 with `save_parse` except the scenario state, which no shipped file contains.
+parse 59/59 except the scenario state, which no shipped file contains.
 
 ### 6.19 Graph-history block ("chart", 132 bytes) and where the 14 graph series are stored
 
 There is **no separate graph-history record**. Each of the 14 series of the Graphs window
-(`09-ui-screens.md` §7.3) is a small chart object owned by the subsystem that produces the data,
-and it is written **inside that subsystem's record** as one 132-byte block [STATIC][DATA 59/59].
+(`09-ui-screens.md` §7.3) is stored as one 132-byte block **inside the record of the data it charts**
+[STATIC][DATA 59/59].
 Every record that embeds a history uses this same block (it is also used by series that are not
 shown in the Graphs window, such as the aura and treasury histories).
 
@@ -1358,7 +1346,7 @@ Rules [STATIC]:
 
 * Samples are unsigned. Each array is a fixed-length FIFO: a new sample enters at index 0 and the
   oldest leaves the far end. Index 0 is the newest sample [STATIC].
-* A chart is either **fixed-scale** or **auto-scale** (a property set by the owning subsystem when
+* A chart is either **fixed-scale** or **auto-scale** (a property fixed when
   the chart is created; it is not stored). Fixed-scale: `max` is the scale given at creation, and
   on load and on each new sample any sample greater than `max` is clamped to `max`.
   Auto-scale: after load and whenever a new sample exceeds the current `max`, `max` is recomputed
@@ -1377,14 +1365,14 @@ Rules [STATIC]:
   * Fixed scales: education 150, life expectancy 89, pollution 100, crime 260, aura 260,
     unemployment 100, water 100.
 * Treasury samples are (max(funds, −100,000) + 100,000) / 1000, an integer in $1000 with 0 =
-  −$100,000. The label reverses this (sample × 1000 − 100,000) [STATIC, SIMMISC 6382–6461].
+  −$100,000. The label reverses this (sample × 1000 − 100,000) [STATIC].
 * The Graphs window plots each series as sample × 100 / max, with 0 at the bottom of the plot. It
   uses no minimum, no nice steps and no extra headroom; a series whose max is 0 is not drawn
-  [STATIC, SIMUI 0x1002ED75].
-* A writer must emit all 33 words; a new chart holds the subsystem's initial sample in all 32
+  [STATIC].
+* A writer must emit all 33 words; a new chart holds the initial sample in all 32
   slots (often 0; 127 for the aura) and its creation scale in `max`.
 
-Location of the 14 series (title string instance IDs, hexadecimal, in table `029541F4`) [STATIC owner; DATA position]:
+Location of the 14 series (title string instance IDs, hexadecimal, in table `029541F4`) [DATA position]:
 
 | ID | Series | Record | Position |
 |---|---|---|---|
@@ -1427,10 +1415,9 @@ confidence: chart 3 exceeds chart 2 in the industrial and farming cities `Crater
 4. **Marker strings.** If flag bit 0 is set, the record's start and end marker strings are skipped
    at the positions its layout gives (§2.1); records documented as marker-free (crime, §6.10) have
    none even when the bit is set. Implementations should not validate their text.
-5. **Missing records.** Before loading, every subsystem is initialised to its new-city state. The
-   city loader then asks each subsystem, in subsystem order (§5.2), to load its records; a subsystem
-   whose record is absent or fails to parse keeps its initial state and the load continues (the city
-   loader ignores the subsystems' load results). Optional outer records (cheat log, view state, §3.7
+5. **Missing records.** Every part of the city starts from its new-city state. A part whose
+   record is absent or fails to parse keeps that state and the load continues (record order,
+   §5.2). Optional outer records (cheat log, view state, §3.7
    records) are likewise skipped when absent. A missing or unreadable city information record (§3.2)
    or packed segment (§4) aborts the load.
 6. **Truncated records.** Readers stop at the first field that cannot be read and keep the values read
@@ -1445,12 +1432,12 @@ confidence: chart 3 exceeds chart 2 in the industrial and farming cities `Crater
 ### 7.2 Load order [STATIC]
 
 1. Read the city information record (§3.2); this fixes the map size.
-2. Read the file kind (§3.3) and the state words (§3.4); create the map and all subsystems.
+2. Read the file kind (§3.3) and the state words (§3.4); create the map.
 3. Apply name, mayor, date, speed, founding year and the two restored flags from §3.2.
 4. Read `79FDB6C8:59FDB6FD` (§3.7).
-5. Ask each simulator subsystem, in subsystem order (§5.2), to load its inner records from the packed
-   segment. The occupant manager precedes the networks and all layers that refer to occupants.
-6. Other components (application shell, views, scenario layer) then read their own records.
+5. Load the inner records from the packed segment in the order of §5.2. The occupant records
+   precede the networks and all layers that refer to occupants.
+6. The view-state records and the scenario records are then read.
 
 ### 7.3 Versions written and accepted
 
@@ -1473,9 +1460,9 @@ an older version as absent (§7.1 rule 5) and report that the city may be incomp
 | `20631788:A0AB89F0` | 2 | — |
 | `2147C2DD` networks | 4 | exactly 4 (`12-networks.md`) |
 | `406B1196:80AB8AB0` geometry layer | 3 | [OPEN] |
-| `409FF3BA` zone manager | – | — |
+| `409FF3BA` zone data | – | — |
 | disaster lists `E1F6ABE2:*` | 1 (parade 2) | locusts: version ≥ 2 adds a leading s32 (1 and 2 both occur); parade: version ≥ 2 adds the trailing u32 |
-| `21F6ABCA` disaster manager | 505 | [OPEN] |
+| `21F6ABCA` disaster emergency state | 505 | [OPEN] |
 | `82937B60` neighbours | – | — |
 | `80F1E6D3` RCI layer | 2 | an older version is also read [OPEN layout] |
 | `C0A81498` pollution | 3 | versions 1 and 2 are also read [OPEN layout] |
@@ -1496,7 +1483,7 @@ an older version as absent (§7.1 rule 5) and report that the city may be incomp
 
 No checksum, CRC, signature or encryption exists at any level. The only integrity data are the sizes
 in the IXF index, the segment header (packed and raw sizes) and the RefPack header [DATA 59/59;
-STATIC]. `Apps/SimUtil2.dat` (100 000 high-entropy bytes) is not referenced by any module and plays no
+STATIC]. `Apps/SimUtil2.dat` (100 000 high-entropy bytes) plays no
 part in saving or loading [STATIC]; an implementation ignores it.
 
 ### 8.1 Which files the game writes [STATIC]
@@ -1513,32 +1500,32 @@ or scenario is saved as an ordinary city: file kind 3 (§3.3), city-only preview
 
 ### 8.2 Procedure [STATIC]
 
-1. Notify all components that a save to the target path is about to start.
+1. Begin the save to the target path.
 2. Create a unique temporary file in the program's working directory (`Apps/`): try the name
    `RZ_<n>.tmp` with n = the current time in seconds since 1970, creating it exclusively (fail if it
    exists); on failure decrement n and retry, up to 10 000 attempts. The empty file is closed again.
 3. Open an IXF database on the temporary file for writing. The index is preallocated for 1024
    entries (0x5000 bytes), so the first record is written at offset 20 484 (`02-containers.md`).
-4. Ask every component to write its records into the open file. They are written in this order, which is also the order of the
+4. Write the records into the open file. They are written in this order, which is also the order of the
    IXF index entries and of the record data (back to back) in every game-written file [DATA]:
 
-   | # | Record | Writer |
-   |---|---|---|
-   | 1 | `430E2EE6:530E2EE6:0` (§3.6; not a cheat count). Not written by build 2.0.949 in normal play `[OBSERVED]`: it is absent from six game-written saves, including saves made after three game years of simulation. It occurs only in the shipped files. A writer should omit it; a loader must accept either | application shell |
-   | 2 | `630E2EE6:730E2EE6:0` cheat IDs (only if at least one cheat was used) | application shell |
-   | 3 | `C359837E:43598384:0` file kind | city |
-   | 4 | `035AD1CB:835AD1D1:0` state words (field 0 forced to 0) | city |
-   | 5 | `E2F42628:62F42635:0` preview (§8.4) | city |
-   | 6 | `79FDB6C8:59FDB6FD:79FDB71E` | city |
-   | 7 | `99F47014:79F4702D:0` user building set (§3.7) | city scheme settings |
-   | 8 | `0525A6B9:4525A6E2:1` scheme selection (§3.7) | city |
-   | 9 | `00000FA1:617E198D:0` city information (§8.5) | city |
-   | — | every simulator subsystem record, in subsystem order (§5.2), into the packed segment (§8.3) | subsystems |
-   | 10 | `A1634F05:01E1A5E6:0` | city view |
-   | 11 | `620EDFCE:A20FB3B9:0` | isometric view |
-   | — | scenario records and `206C6E7C:C3DE4D66:0`, only while a scenario is active | scenario layer |
+   | # | Record |
+   |---|---|
+   | 1 | `430E2EE6:530E2EE6:0` (§3.6; not a cheat count). Not written by build 2.0.949 in normal play `[OBSERVED]`: it is absent from six game-written saves, including saves made after three game years of simulation. It occurs only in the shipped files. A writer should omit it; a loader must accept either |
+   | 2 | `630E2EE6:730E2EE6:0` cheat IDs (only if at least one cheat was used) |
+   | 3 | `C359837E:43598384:0` file kind |
+   | 4 | `035AD1CB:835AD1D1:0` state words (field 0 forced to 0) |
+   | 5 | `E2F42628:62F42635:0` preview (§8.4) |
+   | 6 | `79FDB6C8:59FDB6FD:79FDB71E` |
+   | 7 | `99F47014:79F4702D:0` user building set (§3.7) |
+   | 8 | `0525A6B9:4525A6E2:1` scheme selection (§3.7) |
+   | 9 | `00000FA1:617E198D:0` city information (§8.5) |
+   | — | every inner record, in the order of §5.2, into the packed segment (§8.3) |
+   | 10 | `A1634F05:01E1A5E6:0` |
+   | 11 | `620EDFCE:A20FB3B9:0` |
+   | — | scenario records and `206C6E7C:C3DE4D66:0`, only while a scenario is active |
 
-   If any subsystem reports a write failure, the save is reported as failed.
+   If any record fails to write, the save is reported as failed.
 5. Close the database. Closing writes the segment directory record `035F62A4:035F62A4:0`, then the
    segment record `035F62A4:035F62A4:1` (§8.3), and finally the IXF index (entries in write order,
    then the all-zero terminator).
@@ -1546,7 +1533,7 @@ or scenario is saved as an ordinary city: file kind 3 (§3.3), city-only preview
    the target path with `_` (for example `Madison.sc3` becomes `Madison.sc_`).
 7. Copy the temporary file to the target path (failing if the target exists). If the copy fails,
    rename the backup back to the target. If it succeeds, delete the temporary file and the backup.
-8. Notify all components that the save to the path has completed, and refresh the user interface
+8. The save is complete; refresh the user interface
    (title bar, menus). The city's file kind becomes 3 for later saves.
 
 Operating-system errors map to messages: file not found `015E410C:27`, path not found `2D`, name too
@@ -1556,11 +1543,11 @@ resulting file bytes are the same.
 
 ### 8.3 Building the packed segment [STATIC][DATA]
 
-1. When the first subsystem record is written, a packed segment is started with the next free
+1. When the first inner record is written, a packed segment is started with the next free
    instance (1) under Type/Group 0x035F62A4. The inner database begins with the 8-byte header of §5.1,
    whose two words are filled in at step 3.
-2. Each subsystem record is appended to the buffer as it is written; its key and start offset are
-   remembered. Records are therefore laid out in write order, which is the subsystem order of §5.2.
+2. Each inner record is appended to the buffer as it is written; its key and start offset are
+   remembered. Records are therefore laid out in write order, which is the order of §5.2.
 3. On close, the directory is appended: one 16-byte entry (Type, Group, Instance, offset) per record,
    **sorted by (Group, Instance, Type) ascending** (true in all 59 shipped files). Then the two header
    words are filled in: count and directory offset.
@@ -1577,7 +1564,7 @@ RefPack stream loads correctly.
 
 ### 8.4 Preview record (§3.5)
 
-Written by the city for the load dialogs [STATIC]: application version, then (cities only)
+Used by the load dialogs [STATIC]: application version, then (cities only)
 population, treasury, 0, day of year, year, mayor name, city name, then image version 2 and a
 thumbnail of W × H pixels for a W × H city, 16 bits per pixel in the current display pixel format
 (code 5 or 7), compressed like the segment block (u32 length + RefPack). The thumbnail is the city
@@ -1589,7 +1576,7 @@ overview map, one pixel per tile [INFERRED from its dimensions; colour mapping O
 Fields are written in order: application version (major, minor, build, revision of the running
 program), the constant 3, the operating-system user name, map width, height and the third size value,
 city name, mayor name, day of year, year, speed, founding year, the two flags restored on load, and a
-third flag taken from a global service. A compatible engine should write its own version numbers
+third flag taken from a global setting. A compatible engine should write its own version numbers
 here; the loader ignores them.
 
 ### 8.6 Differences by file kind (what a reader must tolerate) [DATA]
@@ -1597,7 +1584,7 @@ here; the loader ignores them.
 | Kind | Differences from a city save |
 |---|---|
 | `.sc3` (city) | Reference layout. Cheat records optional; `TUTORIAL.SC3` lacks the cheat count |
-| `.sct` (terrain) | File kind 4; marker strings on (flags 3) in most versioned records; preview without city-only fields; empty occupant manager (8 bytes); no network lists |
+| `.sct` (terrain) | File kind 4; marker strings on (flags 3) in most versioned records; preview without city-only fields; empty occupant record (8 bytes); no network lists |
 | `.st3` (starter town) | File kind 5; written by 1.0.544: no `59FDB6FD`, `79F4702D`, `4525A6E2` or cheat records; 4-byte state words; 162 × 152 preview without city-only fields; no records for several disasters or the utilities-advisor flags |
 | `.SNR` (scenario) | File kind 3; extra scenario outer records (`23-scenarios.md`); container irregularities of §3.1 |
 
@@ -1640,10 +1627,10 @@ meanings open; X documented in another document):
 | `20631788:A0AB89F0` | 59 | 944 | 944 | P |
 | `2147C2DD:0..3` networks | 59+37+36+16 | 3 376 016 | all | D |
 | `406B1196:80AB8AB0` | 59 | 3 482 544 | all | P |
-| `409FF3BA:0` zone manager | 59 | 10 507 806 | all | D |
+| `409FF3BA:0` zone data | 59 | 10 507 806 | all | D |
 | `409FF3BA:<z+1>` developer IDs | 708 | 2 832 | 2 832 | D |
 | disaster lists (10 kinds) | 540 | 17 242 | all (blocks opaque) | P |
-| `21F6ABCA` disaster manager | 59 | 1 652 | 1 652 | P |
+| `21F6ABCA` disaster emergency state | 59 | 1 652 | 1 652 | P |
 | `82937B60` neighbours | 59 | 23 601 | 23 601 | P |
 | `80F1E6D3` RCI layer | 59 | 6 965 088 | all | D |
 | `E1193C2A` ordinances | 59 | 15 104 | 15 104 | D |
@@ -1676,7 +1663,7 @@ when it creates a new city. The fields whose meaning is still open are:
 * deal penalty/month fields in the neighbours record (§6.6);
 * the detail words of disaster history entries (§6.5);
 * two water statistics and the order of the power categories (§6.14);
-* the six advisor-manager booleans (record 45);
+* the six advisor-flag booleans (record 45);
 * minor scalars in the pollution, flammability, land-value, police and fire records.
 
 ## Open questions
@@ -1685,7 +1672,7 @@ when it creates a new city. The fields whose meaning is still open are:
 2. §3.2: meaning of the constant 3 after `appVersion`, of the third map-size value, and of flags A–C.
 3. §3.4: meanings of the six state words (field 0 held 1–10 in the 1.0.544 starter towns).
 4. §3.7: meaning of the u32 and string of `79FDB6C8:59FDB6FD:79FDB71E` (1 and empty in every
-   shipped file). (`99F47014:79F4702D` and `0525A6B9:4525A6E2` are now decoded.)
+   shipped file).
 5. §3.8: semantics of the view fields (centre units, zoom/rotation encoding) and the window-view u32.
 6. §8.1: exact extension-fixing rule for user-typed names (`.sc2` → `.sc3`).
 7. §8.4: colour mapping of the preview thumbnail.
