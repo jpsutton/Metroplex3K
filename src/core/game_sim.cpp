@@ -559,6 +559,12 @@ void Game::soundLoop(int id, bool on, int pct) {
 }
 
 // Flora burnt by a disaster (damage 0x20 of a locust swarm, spec 21 s9): the tile's tree becomes the burnt variant (level 9) of its family.
+void Game::removeDusterIcon(int x, int z) {
+  City& c = city();
+  const int i = c.occupantAt(x, z);
+  if (i >= 0 && i < int(world_.occupants.size()) && world_.occupants[size_t(i)].occId == 0x3FAF) c.bulldoze(x, z, x, z);
+}
+
 void Game::burnFlora(int x, int z) {
   if (!world_.inTiles(x, z)) return;
   uint8_t& f = world_.flora[world_.tIdx(x, z)];
@@ -654,6 +660,11 @@ void Game::disasterFxFrame(uint32_t dtMs) {
   fx_.setGround([vw](int x, int z) { return int32_t(std::max<int>(vw->altAt(x, z), vw->waterAt(x, z)) * 256); });
   fx_.setRoad([this](int x, int z) { return city().hasRoadPiece(x, z); });
   fx_.setWater([vw](int x, int z) { return vw->altAt(x, z) < vw->waterAt(x, z); });
+  if (simReady_ && !disasters_.active(DisasterType::Locusts) && (!dusterIcons_.empty() || fx_.cropDusterCount())) {   // the locust attack ended: icons and planes go
+    for (const auto& ic : dusterIcons_) removeDusterIcon(ic.first, ic.second);
+    dusterIcons_.clear();
+    fx_.endCropDusters();
+  }
   disasters_.setTornadoDriven(true);   // the funnel effect moves tornadoes and reports their tiles
   {  // the whirlpool captures the street-sim boats inside its square
     DisasterFx::BoatPort bp;
@@ -685,7 +696,8 @@ void Game::disasterFxFrame(uint32_t dtMs) {
           case FxImpact::LocustFlora: burnFlora(im.x, im.z); break;
           case FxImpact::Debris: disasters_.debrisImpact(dw, im.x, im.z, out); break;
           case FxImpact::Rioter: disasters_.rioterAt(dw, im.x, im.z, out); break;   // any occupant that passes the ignition test (spec 21 s8.4)
-          case FxImpact::RioterWalk: disasters_.rioterEntered(im.x, im.z); break;   // the riot site follows the crowd; the mob sprite is drawn below
+          case FxImpact::RioterWalk: disasters_.rioterEntered(im.x, im.z); city().lockTile(im.x, im.z); break;   // the riot site follows the crowd; the mob sprite is drawn below
+          case FxImpact::RioterLeft: city().unlockTile(im.x, im.z); break;
           case FxImpact::RioterLost: disasters_.riotRelocate(dw, out); break;   // the crowd is destroyed: the riot relocates (3 tries) or ends
           case FxImpact::TornadoTile: disasters_.tornadoAt(dw, im.id, im.fx, im.fz, out); break;
           case FxImpact::TornadoLeft: disasters_.tornadoLeftMap(im.id); break;
@@ -745,32 +757,28 @@ void Game::disasterFxFrame(uint32_t dtMs) {
       sp.x = x; sp.z = z; sp.height = 0; sp.moving = true;
       scene_.sprites.push_back(sp);
     }
-    // The riot crowd is drawn with the vehicle sprite of VATTRIB 0x54 (ANSPRATT 11406: one sequence of frames 0-3, 32 rotations; spec 21 s12.10).
-    const auto crowds = fx_.crowdPoses();
-    auto va = automata_.vattrib.find(0x54);
-    if (!crowds.empty() && va != automata_.vattrib.end()) {
+    // Riot crowds and crop-duster planes are drawn with the street-sim vehicle sprite of their VATTRIB (0x54: ANSPRATT 11406, 32 rotations; 110: sprite 0x3FB0).
+    for (const auto& cp : fx_.vehiclePoses()) {
+      auto va = automata_.vattrib.find(cp.vattrib);
+      if (va == automata_.vattrib.end()) continue;
       auto an = automata_.ansprat.find(va->second.anim.instance);
-      if (an != automata_.ansprat.end()) {
-        auto si = automata_.sprites.find(an->second.sprite);
-        if (si != automata_.sprites.end() && si->second.zoomCount > 0 && si->second.animSetCount > 0) {
-          const SpriteInst& s = si->second;
-          const int zi = cam_.zoom - (5 - s.zoomCount);
-          const AnimSeq* seq = an->second.seqs.empty() ? nullptr : &an->second.seqs[0];
-          for (const auto& cp : crowds) {
-            if (zi < 0 || zi >= s.zoomCount) break;
-            const int o = s.rotCount > 0 ? (((cp.heading32 + cam_.rot * 8 + 16) & 31) * s.rotCount) / 32 : 0;
-            const int fv = seq && !seq->frames.empty() ? seq->frames[size_t(cp.ageMs / 150) % seq->frames.size()] : 0;
-            const long idx = long(fv) * s.animSetCount + long(zi) * s.zoomSetCount + o;
-            if (idx < 0 || idx >= long(s.frames.size())) continue;
-            const SpriteFrame& f = s.frames[size_t(idx)];
-            SceneSprite sp;
-            sp.category = f.category; sp.spriteId = f.spriteId; sp.magnify2x = f.flags == 2; sp.moving = true;
-            sp.x = int32_t(cp.x * 256.0); sp.z = int32_t(cp.z * 256.0);
-            sp.height = int32_t(std::max<int>(vw->altAt(int(cp.x), int(cp.z)), vw->waterAt(int(cp.x), int(cp.z))) * 256);
-            scene_.sprites.push_back(sp);
-          }
-        }
-      }
+      if (an == automata_.ansprat.end()) continue;
+      auto si = automata_.sprites.find(an->second.sprite);
+      if (si == automata_.sprites.end() || si->second.zoomCount <= 0 || si->second.animSetCount <= 0) continue;
+      const SpriteInst& s = si->second;
+      const int zi = cam_.zoom - (5 - s.zoomCount);
+      if (zi < 0 || zi >= s.zoomCount) continue;
+      const AnimSeq* seq = an->second.seqs.empty() ? nullptr : &an->second.seqs[0];
+      const int o = s.rotCount > 0 ? (((cp.heading32 + cam_.rot * 8 + 16) & 31) * s.rotCount) / 32 : 0;
+      const int fv = seq && !seq->frames.empty() ? seq->frames[size_t(cp.ageMs / 150) % seq->frames.size()] : 0;
+      const long idx = long(fv) * s.animSetCount + long(zi) * s.zoomSetCount + o;
+      if (idx < 0 || idx >= long(s.frames.size())) continue;
+      const SpriteFrame& f = s.frames[size_t(idx)];
+      SceneSprite sp;
+      sp.category = f.category; sp.spriteId = f.spriteId; sp.magnify2x = f.flags == 2; sp.moving = true;
+      sp.x = int32_t(cp.x * 256.0); sp.z = int32_t(cp.z * 256.0);
+      sp.height = int32_t(std::max<int>(vw->altAt(int(cp.x), int(cp.z)), vw->waterAt(int(cp.x), int(cp.z))) * 256) + int32_t(cp.heightUnits * 256.0);
+      scene_.sprites.push_back(sp);
     }
   }
 }
@@ -802,7 +810,13 @@ void Game::dispatchUnit(int kind, int tx, int tz) {
     City& c = city();
     if (kind == 0) c.police.dispatch(tx, tz);
     else if (kind == 1) c.fire.dispatch(tx, tz);
-    else if (kind == 2 && disasters_.active(DisasterType::Locusts)) fx_.dispatchCropDuster(std::min(world_.W - 1, tx + 1), tz);   // the plane goes to the dispatch icon at (x + 1, z)
+    else if (kind == 2 && disasters_.active(DisasterType::Locusts)) {   // the plane goes to the dispatch icon at (x + 1, z); at most 3, a 4th evicts the oldest
+      const int ix = std::min(world_.W - 1, tx + 1);
+      fx_.dispatchCropDuster(ix, tz);
+      if (dusterIcons_.size() >= 3) { removeDusterIcon(dusterIcons_.front().first, dusterIcons_.front().second); dusterIcons_.pop_front(); }
+      if (c.placeOverOccupants(0x3FAF, ix, tz)) dusterIcons_.emplace_back(ix, tz);
+      sound(246);
+    }
     if (street_) street_->dispatchEmergency(kind == 0 ? EmergencyType::PoliceCar : kind == 1 ? EmergencyType::FirePumper : EmergencyType::Ambulance, tx, tz);
   }
   centreOn(tx, tz);

@@ -112,6 +112,7 @@ void Game::attachWorld() {
   }
   bindRenderWorld();
   terra_ = std::make_unique<Terraformer>(world_);
+  terra_->setTileBlocked([this](int x, int z) { return simReady_ && city().tileLocked(x, z); });   // tiles under a riot crowd cannot be terraformed
   IniFile bl;
   treeTool_ = TreeTool();
   if (haveData_ && data_.ini().load("SC3BudgetLayer.ini", bl)) { terra_->setCosts(TerraformCosts::fromIni(bl)); treeTool_ = TreeTool::fromIni(bl); }

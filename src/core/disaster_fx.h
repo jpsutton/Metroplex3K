@@ -30,6 +30,7 @@ struct FxImpact {
     Rioter,        // the riot crowd threw something that landed on (x, z)
     RioterWalk,    // the riot crowd entered road tile (x, z)
     RioterLost,    // the crowd could not continue (no road ahead): destroyed
+    RioterLeft,    // the crowd left road tile (x, z) (also sent when it is destroyed or the riot ends)
     TornadoTile,   // funnel `id` is over a new tile; fx, fz = exact position
     TornadoLeft,   // funnel `id` left the map
     VortexAt,      // whirlpool vortex moved to tile (x, z)
@@ -85,8 +86,12 @@ class DisasterFx {
   std::vector<GiantPose> giantPoses() const { std::vector<GiantPose> v; for (const Giant& g : giants_) if (g.delay <= 0) v.push_back({g.sx, g.sy, g.variant}); return v; }
   bool giantSoundDue() { const bool b = giantSound_; giantSound_ = false; return b; }   // sound 0xFE when the fly-by starts
   // Riot crowds, for the owner to draw with the vehicle sprite of VATTRIB 0x54 (spec 21 s12.10): tile position, heading in 32 steps, age in ms.
-  struct CrowdPose { double x = 0, z = 0; int heading32 = 0, ageMs = 0; };
-  std::vector<CrowdPose> crowdPoses() const { std::vector<CrowdPose> v; for (const CrowdView& c : crowds_) v.push_back({c.x, c.z, c.heading32, c.ageMs}); return v; }
+  // Street-sim-style vehicles the effects own, for the owner to draw with the sprite of VATTRIB `vattrib`: the riot crowd (0x54) and crop-duster planes (110).
+  struct VehiclePose { double x = 0, z = 0, heightUnits = 0; int heading32 = 0, ageMs = 0; uint32_t vattrib = 0; };
+  std::vector<VehiclePose> vehiclePoses() const;
+  // Removes the crop-duster planes and clears the spray marks (the locust attack ended).
+  void endCropDusters() { planes_.clear(); sprayed_.clear(); dusters_.clear(); }
+  size_t cropDusterCount() const { return planes_.size(); }
   // Crop-duster dispatch to tile (x, z) (spec 21 s6.4 / 12.9): at most 3 active; the plane sprays up to 5 times along its heading. A swarm that arrives at a
   // crop within 6 tiles (Chebyshev) of a spray point fades out over 9 s. The plane itself is not drawn (its speed and altitude are [OPEN]).
   void dispatchCropDuster(int x, int z);
@@ -148,6 +153,7 @@ class DisasterFx {
   void spawnSplash(double x, double z, int set);
   void spawnSaucers(const DisasterCommand& c);
   void spawnPiece();
+  void updatePlanes(int dt);
   void spawnChunk(double x, double z, double heightUnits, int kind, double vx, double vz, double vy);
   void throwExplosionDebris(const Fx& e);
   void edgePoint(double& x, double& z, int edge);
@@ -181,6 +187,8 @@ class DisasterFx {
   BoatPort boats_;
   std::vector<std::pair<int, int>> sprayed_;   // spray points of the current locust attack
   struct Duster { int x = 0, z = 0; };
+  struct DusterPlane { double x = 0, z = 0, hx = 0, hz = 0, dirX = 1, dirZ = 0; std::vector<std::pair<int, int>> targets; size_t cur = 0; int sprays = 0; bool spraying = false; int ageMs = 0; double nextX = 0, nextZ = 0; };
+  std::vector<DusterPlane> planes_;
   std::vector<Duster> dusters_;
   bool raining_ = false;
   mutable int transientGen_ = 0;

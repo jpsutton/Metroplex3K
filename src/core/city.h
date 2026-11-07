@@ -132,6 +132,17 @@ class City {
   // Ordinances that became available since the last drain (the game forwards each to the advisors, spec 22 3.6).
   std::vector<uint32_t> announcedOrdinances;
   bool bulldoze(int x0, int z0, int x1, int z1);
+  // Per-tile LOCK bits (spec 21 s12.10): while a riot crowd stands on a road piece, the piece cannot be cleared by network placement, zoning
+  // or terraforming, and no development replaces it. Reference counted per tile (one count per crowd).
+  void lockTile(int x, int z) { if (inMap(x, z)) ++tileLocks_[idx(x, z)]; }
+  void unlockTile(int x, int z) { if (!inMap(x, z)) return; auto it = tileLocks_.find(idx(x, z)); if (it != tileLocks_.end() && --it->second <= 0) tileLocks_.erase(it); }
+  // Locked: a riot crowd stands on the piece, or a burning occupant covers the tile (the fire sets the same bits). Bulldozing is not blocked.
+  bool tileLocked(int x, int z) const {
+    if (!inMap(x, z)) return false;
+    const size_t i = idx(x, z);
+    if (tileLocks_.count(i)) return true;
+    return occ_[i] >= 0 && occ_[i] < int(world_->occupants.size()) && world_->occupants[size_t(occ_[i])].state == 16;
+  }
 
   // ---- quotes (spec 09 5.1): dry-run of the player actions. valid=false: nothing in the area is legal.
   struct Quote { bool valid = false; int64_t cost = 0; };
@@ -273,6 +284,7 @@ class City {
   int64_t lastPowerProduced() const { return power.stats().produced; }
 
  private:
+  std::map<size_t, int> tileLocks_;   // runtime only
   friend class GrowthAdapter;
   friend class LandValueAdapter;
   bool inMap(int x, int z) const { return world_ && world_->inTiles(x, z); }

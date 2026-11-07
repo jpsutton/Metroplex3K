@@ -48,7 +48,7 @@ int explFrames(int set, int size) { return set == 0 ? (size < 2 ? 9 : size == 2 
 
 void DisasterFx::clear() {
   fx_.clear(); incoming_.clear(); tornadoes_.clear(); puffs_.clear(); flames_.clear(); crowds_.clear(); vortices_.clear();
-  impacts_.clear(); sounds_.clear(); giants_.clear(); launcher_ = Launcher(); sprayed_.clear(); dusters_.clear();
+  impacts_.clear(); sounds_.clear(); giants_.clear(); launcher_ = Launcher(); sprayed_.clear(); dusters_.clear(); planes_.clear();
 }
 
 int32_t DisasterFx::groundAt(double x, double z) const {
@@ -144,12 +144,53 @@ void DisasterFx::spawnSaucers(const DisasterCommand& c) {
 }
 
 void DisasterFx::dispatchCropDuster(int x, int z) {
-  if (dusters_.size() >= 3) dusters_.erase(dusters_.begin());   // a 4th dispatch reuses the oldest
+  // At most 3 planes: a 4th dispatch retargets (queues a waypoint on) the oldest [STATIC]. A new plane starts at its home: a random tile at least 12 tiles
+  // (Manhattan) from the target [the aircraft-spawner list is not available here: the spec's fallback].
+  if (dusters_.size() >= 3 && !planes_.empty()) { planes_.front().targets.emplace_back(x, z); dusters_.erase(dusters_.begin()); dusters_.push_back({x, z}); return; }
   dusters_.push_back({x, z});
-  for (int i = 0; i < 5; i++) {   // up to 5 sprays along the heading [INFERRED: heading east, 1.5 tiles apart, 0.6 s apart]
-    Fx f; f.kind = Kind::Spray; f.life = 1000; f.x = x + 0.5 + 1.5 * i; f.z = z + 0.5; f.delay = 600 * (i + 1); f.size = 0;
-    spawn(f);
+  DusterPlane p; p.targets.emplace_back(x, z);
+  for (int tries = 0; tries < 50; tries++) {
+    p.hx = 1.0 + rndf() * std::max(1, W_ - 2); p.hz = 1.0 + rndf() * std::max(1, H_ - 2);
+    if (std::fabs(p.hx - x) + std::fabs(p.hz - z) >= 12.0) break;
   }
+  p.x = p.hx; p.z = p.hz;
+  planes_.push_back(p);
+}
+
+void DisasterFx::updatePlanes(int dt) {
+  const double step = 1.0 * kTilesPerSecPerWuMs * dt / 1000.0;   // 0.001 units/us = 1 world unit/ms
+  for (DusterPlane& p : planes_) {
+    p.ageMs += dt;
+    if (p.cur >= p.targets.size()) {   // flying home in 100-unit steps; removed within 100 units of home
+      const double dx = p.hx - p.x, dz = p.hz - p.z, d = std::sqrt(dx * dx + dz * dz);
+      if (d <= 100.0 / 256.0) { p.ageMs = -1; continue; }
+      p.dirX = dx / d; p.dirZ = dz / d; p.x += p.dirX * std::min(step, d); p.z += p.dirZ * std::min(step, d);
+      continue;
+    }
+    const double tx = p.spraying ? p.nextX : p.targets[p.cur].first + 0.5, tz = p.spraying ? p.nextZ : p.targets[p.cur].second + 0.5;
+    const double dx = tx - p.x, dz = tz - p.z, d = std::sqrt(dx * dx + dz * dz);
+    if (d > step && d > 1e-6) { p.dirX = dx / d; p.dirZ = dz / d; p.x += p.dirX * step; p.z += p.dirZ * step; continue; }
+    if (d > 1e-6) { p.dirX = dx / d; p.dirZ = dz / d; }
+    p.x = tx; p.z = tz;
+    // Arrival (at the target, or at the next spray point): report a spray point here, then step 512 world units (2 tiles) on along the heading.
+    Fx f; f.kind = Kind::Spray; f.life = 1000; f.x = p.x; f.z = p.z; f.y = 10.0; f.size = 0;
+    spawn(f);
+    p.sprays++; p.spraying = true;
+    p.nextX = p.x + p.dirX * 2.0; p.nextZ = p.z + p.dirZ * 2.0;
+    if (p.sprays >= 5 || p.nextX < 0 || p.nextZ < 0 || p.nextX >= W_ || p.nextZ >= H_) { p.cur++; p.spraying = false; p.sprays = 0; }
+  }
+  planes_.erase(std::remove_if(planes_.begin(), planes_.end(), [](const DusterPlane& p) { return p.ageMs < 0; }), planes_.end());
+}
+
+std::vector<DisasterFx::VehiclePose> DisasterFx::vehiclePoses() const {
+  std::vector<VehiclePose> v;
+  for (const CrowdView& c : crowds_) v.push_back({c.x, c.z, 0.0, c.heading32, c.ageMs, 0x54});
+  for (const DusterPlane& p : planes_) {
+    double a = std::atan2(p.dirZ, p.dirX); if (a < 0) a += 2 * kPi;
+    const int hv = int(std::lround(a * 32.0 / (2 * kPi)));
+    v.push_back({p.x, p.z, 10.0, hv >= 32 ? 0 : hv, p.ageMs, 110});   // ground + 2560 world units
+  }
+  return v;
 }
 
 // Debris pieces (spec 21 s12.13): kind 0-7 = explosion debris, 8 = UFO outer part, 9 = UFO inner part. Velocities are the spec's (world units per ms; the
@@ -327,8 +368,11 @@ void DisasterFx::syncState(const DisasterManager& m) {
   {
     std::vector<std::pair<int, int>> sites;
     for (const RiotInst& r : m.riots()) if (r.phase == 2) sites.emplace_back(r.x, r.z);
-    while (crowds_.size() > sites.size()) crowds_.pop_back();
-    for (size_t i = crowds_.size(); i < sites.size(); i++) { CrowdView cv; cv.x = sites[i].first + 0.5; cv.z = sites[i].second + 0.5; crowds_.push_back(cv); }
+    while (crowds_.size() > sites.size()) { report(FxImpact::RioterLeft, int(crowds_.back().x), int(crowds_.back().z)); crowds_.pop_back(); }   // the riot ended: its tile is released
+    for (size_t i = crowds_.size(); i < sites.size(); i++) {
+      CrowdView cv; cv.x = sites[i].first + 0.5; cv.z = sites[i].second + 0.5; crowds_.push_back(cv);
+      report(FxImpact::RioterWalk, sites[i].first, sites[i].second);   // the crowd starts on the site's road piece: it is locked
+    }
   }
   // Space-junk launcher: runs through the attack window T3..T4 (spec 21 s12.11); one piece per RandRange(768n, 1536n) µs, n = floor(0x44860913 / 1024).
   launcher_.on = false;
@@ -563,6 +607,7 @@ void DisasterFx::update(uint32_t dtMs) {
     g.sx += g.vx * dt; g.sy += g.vy * dt;
   }
   giants_.erase(std::remove_if(giants_.begin(), giants_.end(), [&](const Giant& g) { return g.delay <= 0 && (g.sx < -300 || g.sx > screenW_ + 300 || g.sy < -300 || g.sy > screenH_ + 300); }), giants_.end());
+  updatePlanes(dt);
   // Space-junk launcher.
   if (launcher_.on) {
     launcher_.nextMs -= dt;
@@ -588,12 +633,13 @@ void DisasterFx::update(uint32_t dtMs) {
           double a = std::atan2(double(nz - tz), double(nx - tx)); if (a < 0) a += 2 * kPi;
           const int hv = int(std::lround(a * 32.0 / (2 * kPi))); cv.heading32 = hv >= 32 ? 0 : hv;
         }
+        report(FxImpact::RioterLeft, tx, tz);
         cv.x = nx + 0.5; cv.z = nz + 0.5;
         report(FxImpact::RioterWalk, nx, nz);
         moved = true;
         break;
       }
-      if (!moved) { report(FxImpact::RioterLost, tx, tz); lost = true; }
+      if (!moved) { report(FxImpact::RioterLeft, tx, tz); report(FxImpact::RioterLost, tx, tz); lost = true; }
     }
     if (cv.throwMs >= cv.nextThrow) {
       cv.throwMs = 0; cv.nextThrow = rndRange(300, 600);
@@ -761,7 +807,7 @@ void DisasterFx::emitFx(const Fx& f, std::vector<SceneSprite>& out) const {
       push(out, base + uint32_t(z), 0, 0, f.stopped ? 0 : fr, f.x, f.z, std::max(0.0, f.y));
       break;
     }
-    case Kind::Spray: push(out, kDeathSpray + uint32_t(z), 5, 0, f.age / 125, f.x, f.z, 0); break;
+    case Kind::Spray: push(out, kDeathSpray + uint32_t(z), 5, 0, f.age / 125, f.x, f.z, f.y); break;
     case Kind::Plasma: push(out, kPlasmaBall + uint32_t(z), 0x80, 8, f.age / 100, f.x, f.z, f.y); break;
     case Kind::Piece:
       pushTint(out, kFxTintShadowTop, kShadowObject + uint32_t(z), 1, 0, f.x, f.z, 0, 24);

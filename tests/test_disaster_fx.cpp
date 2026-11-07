@@ -81,6 +81,30 @@ void testVortexCapture() {
   CHECK(count(got, FxImpact::VortexAt) >= 1);
 }
 
+void testWrecksAndPlanes() {
+  DisasterFx fx; fx.seed(6); fx.setMapSize(64, 64);
+  fx.spawnWreck(10.5, 10.5, 1);
+  DisasterCommand w; w.kind = DisasterCommand::Wreck; w.x = 20; w.z = 20; w.a = 5;
+  fx.onCommand(w);
+  CHECK(fx.count() == 2 && !fx.pendingImpacts());
+  std::vector<FxImpact> got;
+  run(fx, 30000, got);
+  CHECK(fx.count() == 2);        // a wreck floats about 30.7 s
+  run(fx, 6000, got);
+  CHECK(fx.count() == 0);        // then fades for about 3 s and is removed
+  // Crop-duster planes: at most 3, they spray, fly home and are removed; endCropDusters clears them at once.
+  DisasterFx p; p.seed(8); p.setMapSize(64, 64);
+  for (int i = 0; i < 4; i++) p.dispatchCropDuster(30 + i, 30);
+  CHECK(p.cropDusterCount() == 3);
+  bool pose = false; for (auto& v : p.vehiclePoses()) pose = pose || v.vattrib == 110;
+  CHECK(pose);
+  run(p, 120000, got);
+  CHECK(p.cropDusterCount() == 0);   // every plane flew its sprays and went home
+  p.dispatchCropDuster(10, 10);
+  p.endCropDusters();
+  CHECK(p.cropDusterCount() == 0);
+}
+
 void testCropDuster() {
   DisasterFx fx; fx.seed(9); fx.setMapSize(64, 64);
   DisasterCommand c; c.kind = DisasterCommand::LocustSwarm; c.a = 2;
@@ -161,6 +185,7 @@ int main() {
   testUfo();
   testLocusts();
   testVortexCapture();
+  testWrecksAndPlanes();
   testCropDuster();
   testDebrisLauncher();
   testTornadoFunnel();

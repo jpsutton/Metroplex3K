@@ -1217,7 +1217,7 @@ bool City::paintZoneType(int x0, int z0, int x1, int z1, int zt) {
   int cost = zoneCost(zt);
   for (int x = x0; x <= x1; x++)
     for (int z = z0; z <= z1; z++) {
-      if (!inMap(x, z)) continue;
+      if (!inMap(x, z) || tileLocked(x, z)) continue;
       size_t i = idx(x, z);
       if (world_->zone[i] == zt) continue;
       if (zt && !tileBuildable(x, z)) continue;
@@ -1619,6 +1619,7 @@ City::NetworkConfirm City::peekNetworkConfirm(NetworkKind k, const std::vector<s
 bool City::buildNetwork(NetworkKind k, const std::vector<std::pair<int, int>>& path) {
   lastFailNoMoney = false;
   if (path.empty()) return false;
+  for (const auto& t : path) if (tileLocked(t.first, t.second)) return false;   // a riot crowd stands on it
   if (!cfg_.haveTiling) return buildNetworkFallback(k, path);
   Tool tool = k == NetworkKind::Road ? TOOL_ROAD : k == NetworkKind::Rail ? TOOL_RAIL : k == NetworkKind::Power ? TOOL_POWER
             : k == NetworkKind::Pipe ? TOOL_PIPE : k == NetworkKind::Highway ? TOOL_HIGHWAY : TOOL_SUBWAY;
