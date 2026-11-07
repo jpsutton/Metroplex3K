@@ -690,6 +690,32 @@ void Game::disasterFxFrame(uint32_t dtMs) {
           case FxImpact::TornadoTile: disasters_.tornadoAt(dw, im.id, im.fx, im.fz, out); break;
           case FxImpact::TornadoLeft: disasters_.tornadoLeftMap(im.id); break;
           case FxImpact::VortexAt: disasters_.vortexPosition(dw, im.x, im.z, out); break;
+          case FxImpact::VortexScan: {   // first water-standing structure within +-1200 world units (4.7 tiles): a bridge collapses (spec 21 s12.6)
+            City& c = city();
+            auto onWater = [&](int x, int z) { return world_.inTiles(x, z) && world_.altAt(x, z) < world_.waterAt(x, z) && (c.isRoadTile(x, z) || c.isPowerLine(x, z)); };
+            int sx = -1, sz = -1;
+            for (int r = 0; r <= 4 && sx < 0; r++)
+              for (int dz = -r; dz <= r && sx < 0; dz++)
+                for (int dx = -r; dx <= r; dx++) if (std::max(std::abs(dx), std::abs(dz)) == r && onWater(im.x + dx, im.z + dz)) { sx = im.x + dx; sz = im.z + dz; break; }
+            if (sx < 0) break;
+            std::vector<std::pair<int, int>> run{{sx, sz}};
+            for (size_t i = 0; i < run.size() && run.size() < 80; i++) {
+              static const int d4[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+              for (auto& d : d4) {
+                const int nx = run[i].first + d[0], nz = run[i].second + d[1];
+                bool seen = false;
+                for (auto& t : run) seen = seen || (t.first == nx && t.second == nz);
+                if (!seen && onWater(nx, nz)) run.push_back({nx, nz});
+              }
+            }
+            sound(239);   // 0xEF bridge collapse
+            fx_.spawnWreck(run[0].first + 0.5, run[0].second + 0.5, int(rng_.rand(5)));   // wrecks: one at the first position, one on a random bridge tile
+            const auto& rt = run[rng_.rand(uint32_t(run.size()))];
+            fx_.spawnWreck(rt.first + 0.5, rt.second + 0.5, int(rng_.rand(5)));
+            for (const auto& t : run) c.bulldoze(t.first, t.second, t.first, t.second);
+            disasters_.vortexObjectSucked(dw, run[0].first, run[0].second, true, out);   // counted on the whirlpool
+            break;
+          }
           case FxImpact::VortexSucked: disasters_.vortexObjectSucked(dw, im.x, im.z, true, out); break;   // a boat: counted, the street sim already removed it
         }
       }

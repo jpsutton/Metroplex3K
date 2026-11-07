@@ -195,6 +195,7 @@ struct DisasterCommand {
     StampCoverage,     // a=service(0 fire,1 police), x,z; b=radius; value=effect; f=+1/-1
     SpawnUnit,         // a=service, x,z, id
     RemoveUnit,        // a=service, id
+    Wreck,             // x,z; a=wreck kind 0 car, 1 bus, 2 truck, 3 truck + dude, 4 floater dude, 5 debris field (spec 21 s12.6)
   } kind = Sound;
   int x = 0, z = 0;
   uint32_t id = 0;

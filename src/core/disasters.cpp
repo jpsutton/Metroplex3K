@@ -1343,6 +1343,7 @@ void DisasterManager::vortexPosition(DisasterWorld& w, int x0, int z0, DisasterO
         whirls_[0].destroyed++; whirls_[0].cost += cost_ - before;
         DisasterCommand& s = out.cmd(DisasterCommand::Sound); s.a = 240; s.x = x; s.z = z;
         DisasterCommand& sp = out.cmd(DisasterCommand::Splash); sp.x = x; sp.z = z;
+        DisasterCommand& wr = out.cmd(DisasterCommand::Wreck); wr.x = x; wr.z = z; wr.a = 5;   // a destroyed seaport / marina tile leaves a debris field
         DisasterCommand& e = out.cmd(DisasterCommand::Explosion); e.x = x; e.z = z; e.b = 0; e.c = 2;
       }
     }

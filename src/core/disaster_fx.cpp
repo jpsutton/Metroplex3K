@@ -31,6 +31,8 @@ constexpr uint32_t kSteamOpen = 0x48580000u, kSteamCycle = 0x4858200Au, kSteamCl
 constexpr uint32_t kShadowPuff = 0xFFFC1600u, kShadowObject = 0xFFFE1050u, kShadowLocust = 0x3FCB0000u;
 // Explosion debris (spec 21 s12.3): 8 kinds, kind i = FFFD0000 + i * 5 + z (8 frames, no plane); its ground shadow FFFD0100 + i * 5 + z.
 constexpr uint32_t kChunk = 0xFFFD0000u, kChunkShadow = 0xFFFD0100u;
+// Wrecks: direct zoom, no alpha, 250 ms frames (spec 21 s12.6): car 485B, bus 485C, truck 485D, truck + dude 485E, floater dude 4862, debris field 4860.
+constexpr uint32_t kWrecks[6] = {0x485B0000u, 0x485C0000u, 0x485D0000u, 0x485E0000u, 0x48620000u, 0x48600000u};
 constexpr uint32_t kDeathSpray = 0x3FB90000u;                            // + z, 10 frames (data), alpha +5
 constexpr uint32_t kVortexOpen = 0x48590000u, kVortexLoop = 0x4859200Au;    // shifted zoom, 11 frames, alpha +0x1005
 
@@ -150,30 +152,43 @@ void DisasterFx::dispatchCropDuster(int x, int z) {
   }
 }
 
-// A flying debris chunk: ballistic arc [INFERRED: gravity, launch speeds; the spec gives only the radial speed 0.8 u/ms of the UFO-exit ring].
-void DisasterFx::spawnChunk(double x, double z, double speedTilesPerSec, double upUnitsPerSec, double startUnits) {
-  Fx f; f.kind = Kind::Chunk; f.life = 1 << 30; f.variant = rndi(8);
-  const double a = rndf() * 2 * kPi;
-  f.x = x; f.z = z; f.y = startUnits;
-  f.vx = std::cos(a) * speedTilesPerSec; f.vz = std::sin(a) * speedTilesPerSec; f.vy = upUnitsPerSec;
+// Debris pieces (spec 21 s12.13): kind 0-7 = explosion debris, 8 = UFO outer part, 9 = UFO inner part. Velocities are the spec's (world units per ms; the
+// vertical one is scaled by 8.94 on use). Positions in tiles, height in altitude units.
+void DisasterFx::spawnChunk(double x, double z, double heightUnits, int kind, double vx, double vz, double vy) {
+  Fx f; f.kind = Kind::Chunk; f.life = 1 << 30; f.variant = kind;
+  f.x = x; f.z = z; f.y = heightUnits; f.vx = vx; f.vz = vz; f.vy = vy;
+  f.period = rndRange(32500, 195000) / 1000;
   spawn(f);
 }
 
-// 200 ms into an explosion its debris flies out (spec 21 s12.3), the top detail class assumed: detail / 2 = 2 pieces from random offsets (+-10..25 world
-// units, 0x300 up); the UFO-exit variant (plasma, size 3) throws a centre piece and detail / 2 + 2 in a ring at radial speed 0.8 u/ms.
+// 200 ms into an explosion its debris flies out (spec 21 s12.3), only when zoom > 0 or the variant is above 3; the piece count is class / 2 with the machine
+// class assumed 4 (spec: the class comes from a CPU probe; 4 is a typical mid machine).
 void DisasterFx::throwExplosionDebris(const Fx& e) {
-  const bool ring = e.set == 1 && e.size == 3;
+  const int cls = 4;
   const double wu = 1.0 / 256.0;
-  if (ring) {
-    spawnChunk(e.x, e.z, 0.0, 14.0, double(0x300) * wu);   // the centre piece goes straight up
-    for (int i = 0; i < 4; i++) spawnChunk(e.x, e.z, 0.8 * kTilesPerSecPerWuMs, 14.0 + rndf() * 8.0, double(0x300) * wu);
-  } else {
-    for (int i = 0; i < 2; i++) {
-      const double off = double(rndRange(10, 26)) * wu;
-      const double a = rndf() * 2 * kPi;
-      spawnChunk(e.x + std::cos(a) * off, e.z + std::sin(a) * off, 0.4 * kTilesPerSecPerWuMs, 14.0 + rndf() * 10.0, double(0x300) * wu);
+  const int variant = e.set == 3 ? 8 : e.set == 1 ? (e.size == 3 ? 5 : 1) : e.set == 2 ? 2 : 0;
+  if (zoom_ == 0 && variant <= 3) return;
+  auto uni = [&](double lo, double hi) { return lo + rndf() * (hi - lo); };
+  if (variant == 5) {   // UFO exit: one inner part dropped with zero velocity, cls / 2 + 2 outer parts in a ring at horizontal speed 0.8
+    spawnChunk(e.x, e.z, 3.0, 9, 0, 0, 0);
+    const int n = cls / 2 + 2;
+    for (int i = 0; i < n; i++) {
+      const double a = 2 * kPi * (i + rndf()) / n, off = uni(20, 30) * wu;
+      spawnChunk(e.x + std::cos(a) * off, e.z + std::sin(a) * off, 3.0, 8, std::cos(a) * 0.8, std::sin(a) * 0.8, uni(0.4, 0.6));
     }
+    return;
   }
+  for (int i = 0; i < cls / 2; i++) {
+    const double ox = uni(10, 25) * wu * (rndi(2) ? 1 : -1), oz = uni(10, 25) * wu * (rndi(2) ? 1 : -1);
+    if (variant == 8) spawnChunk(e.x + ox, e.z + oz, 3.0, rndi(4), uni(0.4, 1.2), uni(-0.16, 0.16), uni(0.2, 0.4));
+    else spawnChunk(e.x + ox, e.z + oz, 3.0, rndi(8), uni(-0.4, 0.4), uni(-0.4, 0.4), uni(0.4, 0.6));   // 768 world units above
+  }
+}
+
+void DisasterFx::spawnWreck(double x, double z, int kind) {
+  Fx f; f.kind = Kind::Wreck; f.life = 1 << 30; f.variant = clampi(kind, 0, 5); f.x = x; f.z = z; f.uid = nextWreckUid_++; f.period = 250;
+  f.hover = 30700;   // lifetime 30000 counted in dt_us / 1024: about 30.7 s, then it fades for about 3 s
+  spawn(f);
 }
 
 void DisasterFx::spawnPiece() {
@@ -193,6 +208,7 @@ void DisasterFx::onCommand(const DisasterCommand& c) {
       VortexView v; v.x = c.x + 0.5; v.z = c.z + 0.5; v.life = std::max(1, c.a); vortices_.push_back(v); break;
     }
     case DisasterCommand::UfoSwarm: spawnSaucers(c); break;
+    case DisasterCommand::Wreck: spawnWreck(c.x + 0.5, c.z + 0.5, c.a); break;
     case DisasterCommand::UfoLeave: {
       // Each saucer gets an exit command after its queue: explode (flag) or fade over 3 s [STATIC].
       size_t k = 0;
@@ -298,7 +314,8 @@ void DisasterFx::syncState(const DisasterManager& m) {
     std::vector<FlameView> keep;
     for (const BurnRecord& b : m.burning()) {
       const uint32_t h = uint32_t(b.x) * 73856093u ^ uint32_t(b.z) * 19349663u ^ b.occId * 2654435761u;
-      FlameView f; f.size = clampi(b.intensity, 0, 2) + 1;
+      // Every fire starts at size 0; each stage transition then sets size intensity + 1 (spec 21 s12.2).
+      FlameView f; f.size = b.steps > 0 ? clampi(b.intensity, 0, 2) + 1 : 0;
       // Placement [INFERRED]: the original samples the building's screen rectangle for an opaque pixel; here a stable point inside the footprint.
       f.x = b.x + (0.15 + 0.7 * double((h >> 3) % 100) / 100.0) * b.w; f.z = b.z + (0.15 + 0.7 * double((h >> 11) % 100) / 100.0) * b.h;
       f.period = 400 + int(h % 100); f.phase = int((h >> 8) % 15);   // random per flame: 0.4-0.5 s per frame
@@ -426,11 +443,36 @@ void DisasterFx::update(uint32_t dtMs) {
         if (f.age >= f.life) done = true;
         break;
       case Kind::Chunk: {
-        const double g = 40.0;   // altitude units per second squared [INFERRED]
-        f.x += f.vx * dts; f.z += f.vz * dts; f.y += f.vy * dts; f.vy -= g * dts;
-        if (f.y <= 0.0) done = true;
+        if (f.stopped) { if (f.age - f.stopAge >= 20000) done = true; break; }   // frozen on the ground, removed about 20 s later
+        if (f.orbitUid) {   // tornado piece: orbits the funnel (radius 30 -> 160 world units at 3e-5 rad/us, 0.45 u/ms), then is released
+          const TornadoView* tv = nullptr;
+          for (const TornadoView& t : tornadoes_) if (t.uid == f.orbitUid) tv = &t;
+          if (tv) {
+            f.orbitR += 0.45 * dt; f.orbitA += 0.03 * dt;
+            f.x = tv->x + std::cos(f.orbitA) * f.orbitR / 256.0; f.z = tv->z + std::sin(f.orbitA) * f.orbitR / 256.0;
+            f.y = 2.0 + f.orbitR / 40.0;
+            if (f.orbitR < 160.0) break;
+            f.vx = -std::sin(f.orbitA) * 0.5; f.vz = std::cos(f.orbitA) * 0.5; f.vy = 0.3;   // [INFERRED] release velocity
+          }
+          f.orbitUid = 0;
+        }
+        f.x += f.vx * dt / 256.0; f.z += f.vz * dt / 256.0;
+        f.vy -= 0.0003 * dt; f.y += f.vy * 8.94 * dt / 256.0;
+        const int tx = int(std::floor(f.x)), tz = int(std::floor(f.z));
+        if (tx < 0 || tz < 0 || tx >= W_ || tz >= H_) { done = true; break; }
+        if (f.y <= 0.0) {
+          if (isWaterAt(f.x, f.z)) { spawnSplash(f.x, f.z, 0); done = true; break; }
+          f.y = 0.0; f.vx *= 0.25; f.vz *= 0.25; f.vy *= -0.4; f.period = f.period * 3 / 2;
+          if (std::fabs(f.vx) + std::fabs(f.vy) + std::fabs(f.vz) < 0.02) { f.stopped = true; f.stopAge = f.age; }
+        }
         break;
       }
+      case Kind::Wreck:
+        if (!f.held) {
+          if (f.hover > 0) f.hover -= dt;
+          else { if (f.fadeMs < 0) { f.fadeMs = 3000; f.fadeLeft = 3000; } f.fadeLeft -= int(dt * 1.0); if (f.fadeLeft <= 0) done = true; }
+        }
+        break;
       case Kind::Spray:
         if (f.size == 0) { f.size = 1; sprayed_.emplace_back(int(std::floor(f.x)), int(std::floor(f.z))); }   // the sprayed rectangle is x_s +- 3, z_s +- 3
         if (f.age >= 8 * 125) done = true;
@@ -477,7 +519,16 @@ void DisasterFx::update(uint32_t dtMs) {
         FxImpact im; im.kind = FxImpact::TornadoTile; im.id = v.uid; im.x = tx; im.z = tz; im.fx = float(v.x); im.fz = float(v.z);
         impacts_.push_back(im);
         static const int throwPct[3] = {40, 70, 100};   // a flying debris piece per new land tile: the only visual difference between variants
-        if (!isWaterAt(tx + 0.5, tz + 0.5) && rndi(100) < throwPct[clampi(v.variant, 0, 2)]) spawnChunk(v.x, v.z, 0.8 * kTilesPerSecPerWuMs, 22.0 + rndf() * 14.0, 2.0);
+        if (!isWaterAt(tx + 0.5, tz + 0.5) && rndi(100) < throwPct[clampi(v.variant, 0, 2)]) {
+          Fx f; f.kind = Kind::Chunk; f.life = 1 << 30; f.variant = rndi(8); f.orbitUid = v.uid; f.orbitR = 30; f.orbitA = rndf() * 2 * kPi;
+          f.x = v.x; f.z = v.z; f.period = rndRange(32500, 195000) / 1000;
+          spawn(f);
+        }
+        if (!isWaterAt(tx + 0.5, tz + 0.5) && rndi(100) < throwPct[clampi(v.variant, 0, 2)]) {
+          Fx f; f.kind = Kind::Chunk; f.life = 1 << 30; f.variant = rndi(8); f.orbitUid = v.uid; f.orbitR = 30; f.orbitA = rndf() * 2 * kPi;
+          f.x = v.x; f.z = v.z; f.period = rndRange(32500, 195000) / 1000;
+          spawn(f);
+        }
       }
     }
     if (v.stage == 0 && v.stageMs >= 8 * 200) { v.stage = 1; v.stageMs -= 8 * 200; }
@@ -574,6 +625,20 @@ void DisasterFx::update(uint32_t dtMs) {
         }
       }
     }
+    if (!v.closing) {   // wrecks inside the square are captured too, on the same schedule (their lifetime stops running while held)
+      if (v.captureMs == 0) {
+        for (Fx& w : fx_) {
+          if (w.kind != Kind::Wreck || w.held || int(v.held.size()) >= 128) continue;
+          const double dx = w.x - v.x, dz = w.z - v.z;
+          if (std::fabs(dx) > 2400.0 / 256.0 || std::fabs(dz) > 2400.0 / 256.0) continue;
+          Captured c; c.wreckUid = w.uid; c.ang = std::atan2(dz, dx); c.dWu = std::sqrt(dx * dx + dz * dz) * 256.0;
+          w.held = true;
+          v.held.push_back(c);
+        }
+      }
+      v.scanMs += dt;
+      if (v.scanMs >= 2048) { v.scanMs -= 4096; FxImpact im; im.kind = FxImpact::VortexScan; im.x = int(std::floor(v.x)); im.z = int(std::floor(v.z)); impacts_.push_back(im); }
+    }
     for (size_t i = 0; i < v.held.size();) {
       Captured& c = v.held[i];
       const double stepWu = std::max(0.12 * dt, 1.0 * dt / 16.0), slowWu = std::max(0.06 * dt, 2.5 * dt / 16.0);
@@ -585,10 +650,14 @@ void DisasterFx::update(uint32_t dtMs) {
         c.ang += ((1e-5 - 4e-7) * f + 4e-7) * dt * 1000.0;
       } else { c.ang += 1e-5 * dt * 1000.0; c.orbitMs += dt; gone = c.orbitMs >= 600; }   // orbit at the centre, then it is sucked in [INFERRED duration]
       const double bx = v.x + std::cos(c.ang) * c.dWu / 256.0, bz = v.z + std::sin(c.ang) * c.dWu / 256.0;
-      if (boats_.move) boats_.move(c.id, bx, bz);
+      if (c.wreckUid) {
+        bool found = false;
+        for (Fx& w : fx_) if (w.kind == Kind::Wreck && w.uid == c.wreckUid) { w.x = bx; w.z = bz; found = true; if (gone) w.life = -1; }
+        if (!found) { v.held.erase(v.held.begin() + long(i)); continue; }
+      } else if (boats_.move) boats_.move(c.id, bx, bz);
       if (gone) {
-        if (boats_.remove) boats_.remove(c.id);
-        spawnSplash(bx, bz, 0); sounds_.push_back(251);
+        if (!c.wreckUid && boats_.remove) boats_.remove(c.id);
+        spawnSplash(bx, bz, c.wreckUid ? 1 : 2); sounds_.push_back(251);   // wrecks splash with the 2D49 set, boats and aircraft with 4864
         FxImpact im; im.kind = FxImpact::VortexSucked; im.x = int(std::floor(bx)); im.z = int(std::floor(bz)); impacts_.push_back(im);
         v.held.erase(v.held.begin() + long(i));
       } else ++i;
@@ -679,10 +748,19 @@ void DisasterFx::emitFx(const Fx& f, std::vector<SceneSprite>& out) const {
       break;
     }
     case Kind::Crater: push(out, kCraters[f.variant] + uint32_t(z), 5, 1, 0, f.x, f.z, 0); break;
-    case Kind::Chunk:
-      push(out, kChunkShadow + uint32_t(f.variant * 5 + z), 0, 0, f.age / 100, f.x, f.z, 0);
-      push(out, kChunk + uint32_t(f.variant * 5 + z), 0, 0, f.age / 100, f.x, f.z, std::max(0.0, f.y));
+    case Kind::Wreck:
+      push(out, kWrecks[f.variant] + uint32_t(z), 0, 0, f.age / 250, f.x, f.z, 0, level);
       break;
+    case Kind::Chunk: {
+      const int fr = f.age / std::max(1, f.period);
+      const uint32_t base = f.variant == 8 ? 0xFFFD0080u : f.variant == 9 ? 0xFFFD0085u : kChunk + uint32_t(f.variant * 5);
+      const uint32_t shadow = f.variant == 8 ? 0xFFFD0180u : f.variant == 9 ? 0xFFFD0185u : kChunkShadow + uint32_t(f.variant * 5);
+      // Ground shadow only at machine class >= 4 (assumed 4) and with fewer than (class - 3) * 20 pieces alive.
+      int alive = 0; for (const Fx& o : fx_) alive += o.kind == Kind::Chunk;
+      if (!f.stopped && alive < 20) push(out, shadow + uint32_t(z), 0, 0, fr, f.x, f.z, 0);
+      push(out, base + uint32_t(z), 0, 0, f.stopped ? 0 : fr, f.x, f.z, std::max(0.0, f.y));
+      break;
+    }
     case Kind::Spray: push(out, kDeathSpray + uint32_t(z), 5, 0, f.age / 125, f.x, f.z, 0); break;
     case Kind::Plasma: push(out, kPlasmaBall + uint32_t(z), 0x80, 8, f.age / 100, f.x, f.z, f.y); break;
     case Kind::Piece:

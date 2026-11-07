@@ -1734,7 +1734,9 @@ void StreetSim::pointSpawnPedestrians(int x, int y, int n) {
 std::vector<StreetSim::BoatRef> StreetSim::boatsInSquare(double cx, double cy, double half) const {
   std::vector<BoatRef> v;
   for (const auto& u : p_->autos)
-    if (u->alive && u->kind == AutomatonKind::Boat && std::fabs(u->x - cx) <= half && std::fabs(u->y - cy) <= half) v.push_back({u->id, u->x, u->y});
+    if (u->alive && (u->kind == AutomatonKind::Boat || u->kind == AutomatonKind::Aircraft) && std::fabs(u->x - cx) <= half && std::fabs(u->y - cy) <= half &&
+        p_->host.isWater(int(std::floor(u->x)), int(std::floor(u->y))))   // water vessels and aircraft over water (no altitude check) [STATIC]
+      v.push_back({u->id, u->x, u->y});
   return v;
 }
 void StreetSim::captureAutomaton(int id) { if (Auto* a = p_->find(id)) a->captured = true; }

@@ -34,6 +34,7 @@ struct FxImpact {
     TornadoLeft,   // funnel `id` left the map
     VortexAt,      // whirlpool vortex moved to tile (x, z)
     VortexSucked,  // the vortex pulled the boat it had captured into its centre at (x, z)
+    VortexScan,    // bridge scan at (x, z) (the vortex centre), every 4.1 s from 2 s
   } kind = UfoBomb;
   int x = 0, z = 0;
   uint32_t id = 0;
@@ -49,6 +50,8 @@ class DisasterFx {
   void setWater(std::function<bool(int, int)> w) { water_ = std::move(w); }
   void setRoad(std::function<bool(int, int)> r) { road_ = std::move(r); }   // tiles a rioter crowd can walk on
   void setMapSize(int w, int h) { W_ = w; H_ = h; }
+  // A floating wreck (spec 21 s12.6): kind 0 car, 1 bus, 2 truck, 3 truck + dude, 4 floater dude, 5 debris field.
+  void spawnWreck(double x, double z, int kind);
   // The street-sim boats the whirlpool can capture (spec 21 s12.6): list those in a square (id, x, y in tiles), take one over, place it, remove it.
   struct BoatPort {
     std::function<std::vector<std::tuple<int, double, double>>(double, double, double)> inSquare;
@@ -91,7 +94,7 @@ class DisasterFx {
   bool focus(double& x, double& z) const;
 
  private:
-  enum class Kind { Explosion, Splash, Crater, Saucer, Plasma, Swarm, Piece, Spray, Chunk };
+  enum class Kind { Explosion, Splash, Crater, Saucer, Plasma, Swarm, Piece, Spray, Chunk, Wreck };
   // Queued task of a saucer or swarm: type 0 fly to, 1 beam (hover, report), 2 crop circle, 3 abduction, 4 eat (swarm), 5 exit.
   struct Task { int type = 0; double x = 0, z = 0; int aux = 0; };
   struct Fx {
@@ -112,6 +115,11 @@ class DisasterFx {
     int ox = -1, oz = -1;             // swarm: tile at the last update
     bool passive = false;
     bool debrisDone = false;           // explosion: its debris pieces were thrown
+    uint32_t uid = 0;                  // wrecks: identity for the vortex
+    bool held = false;                 // wreck captured by a vortex (does not expire)
+    int period = 100;                  // debris / wreck: frame period (ms)
+    bool stopped = false; int stopAge = 0;   // debris at rest
+    uint32_t orbitUid = 0; double orbitR = 0, orbitA = 0;   // tornado piece orbiting funnel orbitUid
   };
   struct TornadoView {
     uint32_t uid = 0; double x = 0, z = 0, dx = 0, dz = 1, speed = 1; int variant = 0;
@@ -124,8 +132,8 @@ class DisasterFx {
   struct FlameView { double x = 0, z = 0; int size = 1; int period = 450; int phase = 0; };
   struct CrowdView { double x = 0, z = 0; int walkMs = 0, throwMs = 0, nextThrow = 450, heading32 = 0, ageMs = 0; };
   struct Giant { double sx = 0, sy = 0, vx = 0, vy = 0; int variant = 0, delay = 0; };
-  struct Captured { int id = 0; double ang = 0, dWu = 0; int orbitMs = 0; };
-  struct VortexView { double x = 0, z = 0, vx = 0.12 * 0.5, vz = 0.12 * 0.125; int age = 0, life = 0; bool closing = false; int closeAge = 0; int tx = -1, tz = -1; int captureMs = 0; std::vector<Captured> held; };
+  struct Captured { int id = 0; uint32_t wreckUid = 0; double ang = 0, dWu = 0; int orbitMs = 0; };
+  struct VortexView { double x = 0, z = 0, vx = 0.12 * 0.5, vz = 0.12 * 0.125; int age = 0, life = 0; bool closing = false; int closeAge = 0; int tx = -1, tz = -1; int captureMs = 0, scanMs = 0; std::vector<Captured> held; };
   struct Launcher { bool on = false; int nextMs = 0; int scale = 2929; };
 
   uint32_t rnd() { rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5; return rng_; }
@@ -140,7 +148,7 @@ class DisasterFx {
   void spawnSplash(double x, double z, int set);
   void spawnSaucers(const DisasterCommand& c);
   void spawnPiece();
-  void spawnChunk(double x, double z, double speedTilesPerSec, double upUnitsPerSec, double startUnits);
+  void spawnChunk(double x, double z, double heightUnits, int kind, double vx, double vz, double vy);
   void throwExplosionDebris(const Fx& e);
   void edgePoint(double& x, double& z, int edge);
   void updateSaucer(Fx& f, int dt, bool& done);
@@ -179,6 +187,7 @@ class DisasterFx {
   std::vector<FxImpact> impacts_;
   std::vector<int> sounds_;
   int locustEdge_ = 0;
+  uint32_t nextWreckUid_ = 1;
   int64_t flameClockMs_ = 0;
   mutable int zoom_ = 2, rot_ = 0;
 };

@@ -135,10 +135,10 @@ void testOneShots() {
   CHECK(fx.count() == 2);
   CHECK(!fx.pendingImpacts());   // explosions never hold a disaster open
   std::vector<FxImpact> got;
-  run(fx, 2000, got);
-  CHECK(fx.count() == 0 || fx.count() == 1);   // the splash (1.6 s) is gone; the 13-frame explosion (3.0 s) may remain
-  run(fx, 2000, got);
-  CHECK(fx.count() == 0 && got.empty());
+  run(fx, 5000, got);
+  CHECK(fx.count() >= 1 && fx.count() <= 3);   // splash and explosion are over; the explosion's two debris pieces are still bouncing or at rest
+  run(fx, 60000, got);
+  CHECK(fx.count() == 0 && got.empty());   // pieces freeze on the ground and are removed about 20 s later
 }
 
 void testManagerHold() {
