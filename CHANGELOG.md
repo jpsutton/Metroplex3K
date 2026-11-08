@@ -15,6 +15,10 @@ version in `CMakeLists.txt` as the release notes, so every release needs a `## [
   `install-desktop.sh`, which adds the menu entry for the current user (`--remove` takes it out). The window class and
   Wayland application id are now `metroplex3k`, so desktops match the running window to its icon.
 
+### Fixed
+- The music started the same song on every launch because the audio random generator always had the same seed. It is now
+  seeded from the clock, so the song order differs between launches. `M3K_AUDIO_SEED=N` pins it for reproducible runs.
+
 ### Changed
 - Faster rendering on integrated GPUs and older CPUs, most of all at the farthest zoom. On a Core i5-5200U (HD 5500) at the
   farthest zoom with the simulation running and the view panning, the mean frame rate went from 44 to 61 FPS and the 99th
