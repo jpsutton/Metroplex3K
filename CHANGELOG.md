@@ -4,7 +4,7 @@ All notable changes to Metroplex3K are recorded here. The format follows [Keep a
 and the project uses [Semantic Versioning](https://semver.org/). The release workflow publishes the section for the
 version in `CMakeLists.txt` as the release notes, so every release needs a `## [x.y.z]` section.
 
-## [1.0.1] - Unreleased
+## [1.0.1] - 2026-11-08
 
 ### Added
 - Arch Linux packages (`metroplex3k` and `metroplex3k-tools`), built from `packaging/linux/arch/PKGBUILD`, signed, and
