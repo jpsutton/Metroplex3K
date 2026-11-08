@@ -4,7 +4,7 @@ All notable changes to Metroplex3K are recorded here. The format follows [Keep a
 and the project uses [Semantic Versioning](https://semver.org/). The release workflow publishes the section for the
 version in `CMakeLists.txt` as the release notes, so every release needs a `## [x.y.z]` section.
 
-## [1.0.2] - Unreleased
+## [1.0.2] - 2026-11-08
 
 ### Added
 - `--fullscreen` (or `-f`) starts the game in a borderless full-screen window; `F11` still toggles it while running.
