@@ -1,0 +1,52 @@
+name: staging
+
+# Fast checks only (target: about a minute, seconds when the compiler cache is warm).
+# Runs for every pull request into `staging` and for every push to `staging` (the push also refreshes the cache).
+# The heavy checks and the packages live in release.yml and run only for the pull request into `release`.
+on:
+  pull_request:
+    branches: [staging]
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+concurrency:
+  group: staging-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static checks
+        run: tools/ci/static-checks.sh
+
+      - name: Install build tools
+        run: sudo apt-get install -y --no-install-recommends ninja-build
+
+      - name: Compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: staging-fast
+          max-size: 500M
+          save: ${{ github.event_name != 'pull_request' }}
+
+      # Core library and unit tests only, lightly optimised (-O1: tests run about 4x faster than at -O0): no SDL, tools, probes or app.
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS_DEBUG=-O1
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DM3K_BUILD_APP=OFF -DM3K_BUILD_TOOLS=OFF -DM3K_BUILD_PROBES=OFF
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Unit tests
+        run: ctest --test-dir build -j "$(nproc)" --output-on-failure

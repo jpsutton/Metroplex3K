@@ -1,0 +1,152 @@
+name: release
+
+# The extensive checks and the packages. Runs for the single pull request from `staging` into `release`, and again when
+# that pull request is merged (a push to `release`), which also publishes the GitHub release and the `v<version>` tag.
+# A manual run (workflow_dispatch) builds and checks everything but publishes nothing.
+on:
+  pull_request:
+    branches: [release]
+  push:
+    branches: [release]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: repository checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Static checks
+        run: tools/ci/static-checks.sh
+      - name: Version
+        id: ver
+        run: echo "version=$(sed -n 's/^project(Metroplex3K VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)" >> "$GITHUB_OUTPUT"
+      # The release-gate report (docs/RELEASE-GATE.md) must be committed, say PASS, and match this version.
+      # After the merge the tag does not exist yet, so the same check runs on the push.
+      # A manual run is a dry run: it reports a missing report but still builds and packages.
+      - name: Release gate report, changelog, tag
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' }}
+        run: tools/ci/check-release-gate.sh
+
+  build:
+    name: build (${{ matrix.os }})
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build libsdl2-dev libglew-dev libgl-dev
+      - name: Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install sdl2
+      - name: Dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: vcpkg install sdl2:x64-windows
+        shell: bash
+
+      - name: Configure (Linux, macOS)
+        if: runner.os != 'Windows'
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DM3K_VERSION_SUFFIX=""
+          ${{ runner.os == 'Linux' && '-G Ninja' || '' }}
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: >
+          cmake -S . -B build -A x64 -DM3K_VERSION_SUFFIX=""
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-windows
+        shell: bash
+
+      - name: Build (app, tools, probes, tests)
+        run: cmake --build build --config Release --parallel
+
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure --parallel 4
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          app=$(find build -type f \( -name metroplex3k -o -name metroplex3k.exe \) | head -1)
+          [ -n "$app" ] || { echo "the application was not built (SDL2 missing?)"; exit 1; }
+          out=$("$app" --version); echo "$out"
+          case "$out" in "Metroplex3K ${{ needs.checks.outputs.version }} "*) ;; *) echo "unexpected version output"; exit 1;; esac
+          "$app" --help >/dev/null
+
+      - name: Package
+        run: cpack --config build/CPackConfig.cmake -C Release -B build
+
+      - name: Check the package contents
+        run: python3 tools/ci/check-package.py build ${{ needs.checks.outputs.version }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metroplex3k-${{ runner.os }}
+          path: |
+            build/metroplex3k-*.tar.gz
+            build/metroplex3k-*.zip
+          if-no-files-found: error
+
+  sanitizers:
+    name: unit tests under ASan and UBSan
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y --no-install-recommends ninja-build
+      - name: Configure
+        run: >
+          cmake -S . -B build-san -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined"
+          -DM3K_BUILD_APP=OFF -DM3K_BUILD_TOOLS=OFF -DM3K_BUILD_PROBES=OFF
+      - name: Build
+        run: cmake --build build-san
+      - name: Unit tests
+        run: ctest --test-dir build-san --output-on-failure -j "$(nproc)"
+
+  publish:
+    name: publish the GitHub release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/release'
+    needs: [checks, build, sanitizers]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Release notes from CHANGELOG.md
+        run: |
+          v='${{ needs.checks.outputs.version }}'
+          awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "empty release notes"; exit 1; }
+          cat notes.md
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v='${{ needs.checks.outputs.version }}'
+          ls -l dist
+          gh release create "v$v" dist/* --target "$GITHUB_SHA" --title "Metroplex3K $v" --notes-file notes.md

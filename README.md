@@ -77,8 +77,13 @@ Android: design notes only, see [docs/ANDROID.md](docs/ANDROID.md).
 Run: `build/metroplex3k [--game-dir DIR] [--city FILE] [--language NAME]`. `--game` is an alias for `--game-dir`.
 `NAME` is an installed language (English, French, German, ...); the default is `$M3K_LANGUAGE`, else the OS locale.
 
-CI (`.github/workflows`) builds on Linux, macOS and Windows (Windows without the app) only for pushes to the `build`
-branch. It runs the tests only for pull requests that target `build`.
+Pre-built packages for Linux, macOS and Windows are attached to each [GitHub release](https://github.com/jpsutton/Metroplex3K/releases);
+see [docs/USER-GUIDE.md](docs/USER-GUIDE.md). `metroplex3k --version` prints the version.
+
+CI (`.github/workflows`): pull requests into `staging` run fast checks (static checks, core build and unit tests, about a
+minute). The single pull request from `staging` into `release` runs the extensive checks (Linux, macOS and Windows builds
+with the app, unit tests, sanitizers, packaging) and, once merged, publishes the release. See
+[docs/RELEASING.md](docs/RELEASING.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Controls
 
@@ -121,7 +126,9 @@ tools/          developer tools (headless)
 tools/probes/   checks that compare the engine with a real install (see tools/probes/README.md)
 tests/          test_*.cpp, plain executables registered with CTest
 spec/           the compatible-engine specification (00-README.md is the index)
-docs/           ARCHITECTURE.md, ANDROID.md, LICENSING.md
+docs/           USER-GUIDE.md, RELEASING.md, RELEASE-GATE.md, ARCHITECTURE.md, ANDROID.md, LICENSING.md, IP-REVIEW.md
+CHANGELOG.md    release notes (the release workflow publishes the section for the current version)
+release-gate/   release-gate reports, one per released version
 STATUS.md       current implementation status
 ```
 
@@ -166,12 +173,9 @@ The [1.0 tracking issue (#106)](https://github.com/jpsutton/Metroplex3K/issues/1
 [`1.0`](https://github.com/jpsutton/Metroplex3K/milestone/1) holds what must be done or waived before the release;
 milestone [`post-1.0`](https://github.com/jpsutton/Metroplex3K/milestone/2) holds gaps accepted for 1.x.
 
-Before 1.0:
-
-| Area | Gap | Issue |
-|------|-----|-------|
-| Release | No packaged binaries, version number, changelog or user guide; CI builds only for the `build` branch and Windows is built without the app | [#90](https://github.com/jpsutton/Metroplex3K/issues/90) |
-| Verification | `probe_verify` needs to become a documented release gate (reference cities, save round trips, screenshots) | [#93](https://github.com/jpsutton/Metroplex3K/issues/93) |
+Before 1.0: packaging, versioning and the release gate are in place. What remains is running the release gate
+(`tools/release-gate.sh`, on a machine with the game install; see [docs/RELEASE-GATE.md](docs/RELEASE-GATE.md)) and
+cutting the release as described in [docs/RELEASING.md](docs/RELEASING.md).
 
 After 1.0: scenario verification ([#91](https://github.com/jpsutton/Metroplex3K/issues/91)), disaster comparison with the original ([#92](https://github.com/jpsutton/Metroplex3K/issues/92)), an audio listening pass ([#94](https://github.com/jpsutton/Metroplex3K/issues/94)), UI pixel differences ([#95](https://github.com/jpsutton/Metroplex3K/issues/95)), scenario spec polish ([#97](https://github.com/jpsutton/Metroplex3K/issues/97)), BAT tool UI
 ([#98](https://github.com/jpsutton/Metroplex3K/issues/98)), guessed details in growth
