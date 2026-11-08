@@ -4,4 +4,4 @@
 #
 # Sourced by the CI scripts that run in an archlinux container (as root): the packages Metroplex3K builds with.
 set -euo pipefail
-pacman -Syu --noconfirm --needed base-devel git cmake ninja sdl2 glew >/dev/null
+pacman -Syu --noconfirm --needed base-devel git cmake ninja sdl2 glew librsvg >/dev/null

@@ -27,6 +27,10 @@ class FrameLog {
     double gameMs = 0;      // Game::frame (incl. locking the target, excluding present)
     double presentMs = 0;   // presenter present / vsync wait
     double delayMs = 0;     // SDL_Delay when vsync is off
+    // GPU city (GlPresenter::stats), 0 without it. The city columns are only filled on frames that were rasterised;
+    // the overlay upload happens every frame.
+    double glAtlasMs = 0, glBinMs = 0, glUploadMs = 0, glBaseMs = 0, glOverlayMs = 0, glDispatchMs = 0;
+    int glItems = 0;
     int w = 0, h = 0;
   };
 
@@ -38,7 +42,7 @@ class FrameLog {
     start_ = Clock::now();
     std::fprintf(f_, "# metroplex3k frame log, render=%s sim=%s\n", backend.c_str(), simMode.c_str());
     std::fprintf(f_, "frame,t_ms,loop_ms,events_ms,game_ms,sim_ms,sim_wait_ms,async_end_ms,street_ms,raster_ms,ui_ms,present_ms,delay_ms,"
-                     "rastered,sim_day,paused,speed,zoom,w,h\n");
+                     "rastered,sim_day,paused,speed,zoom,w,h,gl_atlas_ms,gl_bin_ms,gl_upload_ms,gl_base_ms,gl_overlay_ms,gl_dispatch_ms,gl_items\n");
     return true;
   }
   bool active() const { return f_ != nullptr; }
@@ -47,10 +51,10 @@ class FrameLog {
     if (!f_) return;
     const double t = std::chrono::duration<double, std::milli>(Clock::now() - start_).count();
     const double ui = std::max(0.0, s.gameMs - p.simMs - p.simWaitMs - p.asyncEndMs - p.streetMs - p.rasterMs);   // HUD, windows, blits, fps overlay
-    std::fprintf(f_, "%llu,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d\n",
+    std::fprintf(f_, "%llu,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d\n",
                  static_cast<unsigned long long>(frames_), t, s.loopMs, s.eventsMs, s.gameMs, p.simMs, p.simWaitMs, p.asyncEndMs,
                  p.streetMs, p.rasterMs, ui, s.presentMs, s.delayMs, p.rastered ? 1 : 0, p.simDay ? 1 : 0, p.paused ? 1 : 0,
-                 p.speed, p.zoom, s.w, s.h);
+                 p.speed, p.zoom, s.w, s.h, s.glAtlasMs, s.glBinMs, s.glUploadMs, s.glBaseMs, s.glOverlayMs, s.glDispatchMs, s.glItems);
     if (++frames_ % 120 == 0) std::fflush(f_);
     loop_.push_back(s.loopMs);
     if (!p.paused && p.rastered) running_.push_back(s.loopMs);

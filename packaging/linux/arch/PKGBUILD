@@ -12,7 +12,7 @@ pkgdesc="Engine compatible with a classic city-building game; reads your own cop
 arch=(x86_64 aarch64)
 url="https://github.com/jpsutton/Metroplex3K"
 license=(GPL-3.0-or-later)
-makedepends=(cmake ninja git sdl2 glew)
+makedepends=(cmake ninja git sdl2 glew librsvg)
 options=(!debug !lto)
 
 _root="$(realpath "${startdir}/../../..")"
@@ -41,6 +41,15 @@ package_metroplex3k() {
   install -Dm755 "${srcdir}/build/metroplex3k" "${pkgdir}/usr/bin/metroplex3k"
   install -Dm644 "${_root}/README.md" "${_root}/CHANGELOG.md" "${_root}/docs/USER-GUIDE.md" \
     -t "${pkgdir}/usr/share/doc/metroplex3k"
+  # Launcher entry and icon (the scalable SVG plus PNGs rendered from it).
+  install -Dm644 "${_root}/packaging/linux/metroplex3k.desktop" "${pkgdir}/usr/share/applications/metroplex3k.desktop"
+  install -Dm644 "${_root}/packaging/linux/metroplex3k.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/metroplex3k.svg"
+  local size
+  for size in 16 24 32 48 64 128 256 512; do
+    install -dm755 "${pkgdir}/usr/share/icons/hicolor/${size}x${size}/apps"
+    rsvg-convert -w "${size}" -h "${size}" "${_root}/packaging/linux/metroplex3k.svg" \
+      -o "${pkgdir}/usr/share/icons/hicolor/${size}x${size}/apps/metroplex3k.png"
+  done
   _docs
 }
 

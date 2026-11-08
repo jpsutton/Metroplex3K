@@ -362,7 +362,7 @@ void Game::initAudio() {
   Bytes b;
   if (ini.empty() || !readFile(ini, b)) return;
   auto a = std::make_unique<AudioSystem>();
-  a->init(AudioIni::parse(std::string(b.begin(), b.end())), makeDirLoader(dir));
+  a->init(AudioIni::parse(std::string(b.begin(), b.end())), makeDirLoader(dir), 44100, audioSeed_);
   a->setAsyncMusic(true);
   swapAudio(std::move(a));
   applySettingsToAudio();

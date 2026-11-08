@@ -21,6 +21,11 @@ Release builds are not code-signed.
 
 The separate `-tools` archive holds `diag`, `conformance` and `probe_verify` (section 6).
 
+**Application menu (Linux).** The Arch package installs the launcher entry and icon itself. For the `.tar.gz`, run
+`./install-desktop.sh` in the unpacked folder; it adds a menu entry for your user that starts the `metroplex3k` next to the
+script (move the folder first, then run it; run `./install-desktop.sh --remove` before deleting the folder). The launcher
+needs a game folder it can find (section 2), for example by saving the choice on the first screen.
+
 ## 2. Give it your game data
 
 The game root is the folder that contains `Apps/`. Any of these works; the first match wins:
@@ -41,9 +46,10 @@ Check what the engine can read with the `diag` tool: `diag /path/to/game`.
 Start `metroplex3k`. Options:
 
 ```
-metroplex3k [--version] [--game-dir DIR] [--city FILE] [--language NAME] [--frame-log FILE]
+metroplex3k [--version] [--game-dir DIR] [--city FILE] [--language NAME] [--fullscreen] [--frame-log FILE]
 ```
 
+- `--fullscreen` (or `-f`) starts in a borderless full-screen window. `F11` toggles it while the game runs.
 - `--city FILE` opens a city, terrain or scenario file at start.
 - `--language NAME` picks an installed language (English, French, German, ...). Default: `$M3K_LANGUAGE`, else the OS locale.
 
@@ -64,6 +70,7 @@ settings folder.
 | `M3K_PRESENT=gl\|gl-basic\|sdl` | How frames reach the screen. Falls back to `sdl` when OpenGL is unavailable. |
 | `M3K_SIM_THREAD=0` | Run the simulation tick on the frame thread |
 | `M3K_NOISE_SEED=N` | Pin the terrain noise seed (reproducible terrain) |
+| `M3K_AUDIO_SEED=N` | Pin the audio seed (the song order is otherwise different on every launch) |
 | `M3K_FRAMELOG=FILE` | Same as `--frame-log` |
 
 ## 5. Settings

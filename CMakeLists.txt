@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Metroplex3K VERSION 1.0.1 LANGUAGES CXX)
+project(Metroplex3K VERSION 1.0.2 LANGUAGES CXX)
 
 # Release builds pass -DM3K_VERSION_SUFFIX="" (the release workflow does). Development builds are "<version>-dev".
 set(M3K_VERSION_SUFFIX "-dev" CACHE STRING "Suffix appended to the version string; empty for a release build")
@@ -139,6 +139,11 @@ endif()
 # and the developer/verification tools (component `tools`: diag, conformance, probe_verify).
 install(FILES LICENSE README.md CHANGELOG.md DESTINATION . COMPONENT app)
 install(DIRECTORY docs/ DESTINATION docs COMPONENT app FILES_MATCHING PATTERN "*.md")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  # Launcher entry and icon; tools/install-desktop.sh puts them in the user's menu for an unpacked archive.
+  install(FILES packaging/linux/metroplex3k.desktop packaging/linux/metroplex3k.svg DESTINATION launcher COMPONENT app)
+  install(PROGRAMS tools/install-desktop.sh DESTINATION . COMPONENT app)
+endif()
 if(TARGET metroplex3k)
   install(TARGETS metroplex3k RUNTIME DESTINATION . COMPONENT app)
   if(WIN32 AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.21)

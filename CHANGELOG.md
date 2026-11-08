@@ -4,6 +4,33 @@ All notable changes to Metroplex3K are recorded here. The format follows [Keep a
 and the project uses [Semantic Versioning](https://semver.org/). The release workflow publishes the section for the
 version in `CMakeLists.txt` as the release notes, so every release needs a `## [x.y.z]` section.
 
+## [1.0.2] - 2026-11-08
+
+### Added
+- `--fullscreen` (or `-f`) starts the game in a borderless full-screen window; `F11` still toggles it while running.
+- `run.sh` in the project root builds the checkout and runs it with a frame log (`--installed` runs the installed build
+  instead, for comparison; `--fullscreen`, `--no-build`, `--no-log` and `-- ARGS` are also accepted).
+- A launcher entry and icon on Linux. The Arch package installs `metroplex3k.desktop` and the icon (scalable SVG plus PNGs
+  from 16 to 512 px), so Metroplex3K shows up in the application menu. The generic Linux archive carries the same files and
+  `install-desktop.sh`, which adds the menu entry for the current user (`--remove` takes it out). The window class and
+  Wayland application id are now `metroplex3k`, so desktops match the running window to its icon.
+
+### Fixed
+- The music started the same song on every launch because the audio random generator always had the same seed. It is now
+  seeded from the clock, so the song order differs between launches. `M3K_AUDIO_SEED=N` pins it for reproducible runs.
+
+### Changed
+- Faster rendering on integrated GPUs and older CPUs, most of all at the farthest zoom. On a Core i5-5200U (HD 5500) at the
+  farthest zoom with the simulation running and the view panning, the mean frame rate went from 44 to 61 FPS and the 99th
+  percentile frame time from 70 ms to 40 ms. The GPU city pass bins its sprites into tiles in one pass instead of scanning the
+  whole list per tile row. The draw list is sorted by (key, index) pairs and cached in three parts (surface pieces,
+  buildings, flora), so a simulation day rebuilds only what changed. A panned frame redraws the exposed terrain strips
+  without scanning every tile in view. The output is pixel-identical.
+- The frame log (`--frame-log`) has seven more columns at the end with the GPU city timings: atlas, tile binning, buffer
+  upload, base layer upload, overlay upload, dispatch and the number of sprites.
+- The repository is public. The Arch packages are published in the `jpsutton` pacman repository, and the macOS install
+  script works without credentials.
+
 ## [1.0.1] - 2026-11-08
 
 ### Added

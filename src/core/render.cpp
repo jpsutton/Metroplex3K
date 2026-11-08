@@ -622,8 +622,11 @@ void Renderer::drawTerrain(const Camera& cam, const RenderOptions& opt, int y0, 
   ctx.XS = xs; ctx.XE = xe;
 
   float u0, v0, u1, v1, u2, v2, u3, v3;
-  screenToView(cam, 0, 0, u0, v0); screenToView(cam, fbW_, 0, u1, v1);
-  screenToView(cam, 0, fbH_, u2, v2); screenToView(cam, fbW_, fbH_, u3, v3);
+  // Tile range: bounding box (in view space) of the clip rectangle this call draws, not of the whole screen. Bands and
+  // pan strips are small, and every tile outside the rectangle is rejected below anyway.
+  const int cx0 = std::max(0, xs), cx1 = std::min(xe, fbW_), cy0 = std::max(0, y0), cy1 = std::min(y1, fbH_);
+  screenToView(cam, cx0, cy0, u0, v0); screenToView(cam, cx1, cy0, u1, v1);
+  screenToView(cam, cx0, cy1, u2, v2); screenToView(cam, cx1, cy1, u3, v3);
   int pad = 4 + (maxAlt_ + 1) / 2;
   int umin = int(std::floor(std::min(std::min(u0, u1), std::min(u2, u3)))) - 2;
   int umax = int(std::ceil(std::max(std::max(u0, u1), std::max(u2, u3)))) + 2 + pad;
@@ -940,8 +943,11 @@ void Renderer::drawTerrainGrid(const Camera& cam, const RenderOptions& opt, int 
   Ctx ctx{fb_.data(), fbW_, y1, z, noiseLand_, noiseEdge_, y0};
   ctx.XS = xs; ctx.XE = xe;
   float u0, v0, u1, v1, u2, v2, u3, v3;
-  screenToView(cam, 0, 0, u0, v0); screenToView(cam, fbW_, 0, u1, v1);
-  screenToView(cam, 0, fbH_, u2, v2); screenToView(cam, fbW_, fbH_, u3, v3);
+  // Tile range: bounding box (in view space) of the clip rectangle this call draws, not of the whole screen. Bands and
+  // pan strips are small, and every tile outside the rectangle is rejected below anyway.
+  const int cx0 = std::max(0, xs), cx1 = std::min(xe, fbW_), cy0 = std::max(0, y0), cy1 = std::min(y1, fbH_);
+  screenToView(cam, cx0, cy0, u0, v0); screenToView(cam, cx1, cy0, u1, v1);
+  screenToView(cam, cx0, cy1, u2, v2); screenToView(cam, cx1, cy1, u3, v3);
   int pad = 4 + (maxAlt_ + 1) / 2;
   int umin = int(std::floor(std::min(std::min(u0, u1), std::min(u2, u3)))) - 2;
   int umax = int(std::ceil(std::max(std::max(u0, u1), std::max(u2, u3)))) + 2 + pad;
@@ -1482,7 +1488,6 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
     statics = cachedStatics_;
     animCands = cachedAnim_;
   } else {
-    placeholdersBuilt_ = 0;
     const bool net = true;
     // Surface pieces on the terrain are registered to a corner fixed in the piece's own frame (World::surfaceDrawY, spec 25 5.1).
     auto surfaceY = [&](const NetPiece& np) {
@@ -1494,11 +1499,7 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
       for (const auto& np : v)
         if (!filter || !opt.showNet || opt.showNet(np)) addOccupant(np.pieceId, net, false, np.x, np.z, onTerrain ? surfaceY(np) : np.y, np.rot, 1, 1, true);
     };
-    if (opt.underground) {
-      if (opt.pipes) addNets(w.pipes, false, false);
-      if (opt.subways) addNets(w.subway, false, false);
-    } else {
-      addNets(w.surface, true, true);
+    auto addBuildings = [&]() {
       for (const auto& o : w.occupants) {
         if (opt.showOccupant && !opt.showOccupant(o)) continue;
         bool port = o.keyType == T_OCC_ATTR_PORT;
@@ -1511,6 +1512,8 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
         addOccupant(id, false, port, o.x, o.z, o.y, o.rot, o.sizeX, o.sizeZ, false);
         if (data_ && lookupFailed) addPlaceholder(o);
       }
+    };
+    auto addFlora = [&]() {
       for (int x = 0; x < w.W && opt.flora; x++)
         for (int zz = 0; zz < w.H; zz++) {
           uint8_t c = w.flora[w.tIdx(x, zz)];
@@ -1518,9 +1521,74 @@ void Renderer::buildItems(const Camera& cam, const RenderOptions& opt, const Ren
           uint32_t inst = floraInstance(c, uint32_t(x * 73856093u ^ zz * 19349663u) >> 7);
           if (inst) addOccupant(inst, false, false, x, zz, w.altAt(x, zz), 0, 1, 1, false);
         }
+    };
+    // Stable sort by key, descending. Items are large, so sort (key, index) pairs and gather once instead of moving
+    // whole items through stable_sort's merge passes; the resulting order is identical.
+    auto sortByKey = [](std::vector<Item>& v) {
+      std::vector<std::pair<uint32_t, uint32_t>> ord(v.size());
+      for (size_t i = 0; i < v.size(); i++) ord[i] = {v[i].key, uint32_t(i)};
+      std::stable_sort(ord.begin(), ord.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+      std::vector<Item> out;
+      out.reserve(v.size());
+      for (const auto& o : ord) out.push_back(v[o.second]);
+      v.swap(out);
+    };
+    if (itemCacheOn_ && !opt.underground) {
+      // Rebuild only the parts whose key changed (all of them after an invalidation), then merge the three sorted parts.
+      uint64_t pk[3];
+      itemPartKeys(cam, opt, pk);
+      for (int p = 0; p < 3; p++) {
+        ItemPart& part = itemParts_[p];
+        if (itemCacheValid_ && part.valid && part.key == pk[p]) continue;
+        flat.clear(); statics.clear(); animCands.clear();
+        placeholdersBuilt_ = 0;
+        if (p == 0) addNets(w.surface, true, true);
+        else if (p == 1) addBuildings();
+        else addFlora();
+        sortByKey(flat); sortByKey(statics);
+        part.flat = std::move(flat); part.statics = std::move(statics); part.anim = std::move(animCands);
+        part.placeholders = placeholdersBuilt_; part.key = pk[p]; part.valid = true;
+        flat.clear(); statics.clear(); animCands.clear();
+      }
+      placeholdersBuilt_ = 0;
+      for (const ItemPart& part : itemParts_) placeholdersBuilt_ += part.placeholders;
+      // Merge (key, global index) pairs: std::merge takes ties from the earlier range, i.e. the earlier part, which is the
+      // order the concatenation would have been stable-sorted in.
+      auto mergeParts = [&](std::vector<Item> ItemPart::*member, std::vector<Item>& out) {
+        const std::vector<Item>* src[3] = {&(itemParts_[0].*member), &(itemParts_[1].*member), &(itemParts_[2].*member)};
+        using KI = std::pair<uint32_t, uint32_t>;
+        auto byKeyDesc = [](const KI& a, const KI& b) { return a.first > b.first; };
+        std::vector<KI> acc, nxt, cur;
+        uint32_t base = 0;
+        for (int p = 0; p < 3; p++) {
+          cur.resize(src[p]->size());
+          for (size_t i = 0; i < cur.size(); i++) cur[i] = {(*src[p])[i].key, base + uint32_t(i)};
+          base += uint32_t(cur.size());
+          nxt.resize(acc.size() + cur.size());
+          std::merge(acc.begin(), acc.end(), cur.begin(), cur.end(), nxt.begin(), byKeyDesc);
+          acc.swap(nxt);
+        }
+        const uint32_t n0 = uint32_t(src[0]->size()), n1 = n0 + uint32_t(src[1]->size());
+        out.clear();
+        out.reserve(acc.size());
+        for (const KI& e : acc) out.push_back(e.second < n0 ? (*src[0])[e.second] : e.second < n1 ? (*src[1])[e.second - n0] : (*src[2])[e.second - n1]);
+      };
+      mergeParts(&ItemPart::flat, flat);
+      mergeParts(&ItemPart::statics, statics);
+      for (const ItemPart& part : itemParts_) animCands.insert(animCands.end(), part.anim.begin(), part.anim.end());
+    } else {
+      placeholdersBuilt_ = 0;
+      if (opt.underground) {
+        if (opt.pipes) addNets(w.pipes, false, false);
+        if (opt.subways) addNets(w.subway, false, false);
+      } else {
+        addNets(w.surface, true, true);
+        addBuildings();
+        addFlora();
+      }
+      sortByKey(flat);
+      sortByKey(statics);
     }
-    std::stable_sort(flat.begin(), flat.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
-    std::stable_sort(statics.begin(), statics.end(), [](const Item& a, const Item& b) { return a.key > b.key; });
     if (itemCacheOn_) { cachedFlat_ = flat; cachedStatics_ = statics; cachedAnim_ = animCands; itemCacheKey_ = itemKey; itemCacheValid_ = true; }
   }
   // Cull against this frame's screen and move to screen coordinates (cached lists are origin-relative).
@@ -1869,30 +1937,41 @@ uint64_t Renderer::terrainLayerKey(const Camera& cam, const RenderOptions& opt) 
   return h;
 }
 
-uint64_t Renderer::itemListKey(const Camera& cam, const RenderOptions& opt) const {
+// Keys of the three item-list parts (see ItemPart). Each includes everything shared (camera, flags, generation), so a
+// part key changes whenever that part's content or any shared input changes.
+void Renderer::itemPartKeys(const Camera& cam, const RenderOptions& opt, uint64_t part[3]) const {
   const World& w = *world_;
-  uint64_t h = 1469598103934665603ull;
-  auto mix = [&](uint64_t v) { h = (h ^ v) * 0x9E3779B97F4A7C15ull; h ^= h >> 31; };
+  uint64_t base = 1469598103934665603ull;
+  auto mixTo = [](uint64_t& h, uint64_t v) { h = (h ^ v) * 0x9E3779B97F4A7C15ull; h ^= h >> 31; };
   // No camera position or window size: the list is origin-relative and culled per frame.
-  mix(uint64_t(cam.zoom)); mix(uint64_t(cam.rot));
-  mix(uint64_t(w.W)); mix(uint64_t(w.H)); mix(itemsGen_);
-  mix(uint64_t(opt.underground) | uint64_t(opt.constructionSites) << 1 | uint64_t(opt.flora) << 2 | uint64_t(opt.pipes) << 3 |
+  mixTo(base, uint64_t(cam.zoom)); mixTo(base, uint64_t(cam.rot));
+  mixTo(base, uint64_t(w.W)); mixTo(base, uint64_t(w.H)); mixTo(base, itemsGen_);
+  mixTo(base, uint64_t(opt.underground) | uint64_t(opt.constructionSites) << 1 | uint64_t(opt.flora) << 2 | uint64_t(opt.pipes) << 3 |
       uint64_t(opt.subways) << 4 | uint64_t(bool(opt.showNet)) << 5 | uint64_t(bool(opt.showOccupant)) << 6);
-  mix(opt.ownImageFlags); mix(opt.filterEpoch);   // animation time is not part of the key: overlays are built per frame
+  mixTo(base, opt.ownImageFlags); mixTo(base, opt.filterEpoch);   // animation time is not part of the key: overlays are built per frame
+  uint64_t n = base, o = base, f = base;
   if (opt.underground) {
-    if (opt.pipes) h = hashVec(h, w.pipes);
-    if (opt.subways) h = hashVec(h, w.subway);
+    if (opt.pipes) n = hashVec(n, w.pipes);
+    if (opt.subways) n = hashVec(n, w.subway);
   } else {
-    h = hashVec(h, w.surface);
-    for (const Occupant& o : w.occupants) {   // only the fields buildItems reads
-      mix(uint64_t(uint32_t(o.x)) << 32 | uint32_t(o.z));
-      mix(uint64_t(uint32_t(o.y)) << 32 | uint32_t(o.rot));
-      mix(uint64_t(uint32_t(o.sizeX)) << 32 | uint32_t(o.sizeZ));
-      mix(uint64_t(o.occId) << 32 | o.keyType);
-      mix(uint64_t(o.state) << 32 | o.agentType);
+    n = hashVec(n, w.surface);
+    for (const Occupant& oc : w.occupants) {   // only the fields buildItems reads
+      mixTo(o, uint64_t(uint32_t(oc.x)) << 32 | uint32_t(oc.z));
+      mixTo(o, uint64_t(uint32_t(oc.y)) << 32 | uint32_t(oc.rot));
+      mixTo(o, uint64_t(uint32_t(oc.sizeX)) << 32 | uint32_t(oc.sizeZ));
+      mixTo(o, uint64_t(oc.occId) << 32 | oc.keyType);
+      mixTo(o, uint64_t(oc.state) << 32 | oc.agentType);
     }
-    if (opt.flora) { h = hashVec(h, w.flora); h = hashVec(h, w.alt); }
+    if (opt.flora) { f = hashVec(f, w.flora); f = hashVec(f, w.alt); }
   }
+  part[0] = n; part[1] = o; part[2] = f;
+}
+
+uint64_t Renderer::itemListKey(const Camera& cam, const RenderOptions& opt) const {
+  uint64_t part[3];
+  itemPartKeys(cam, opt, part);
+  uint64_t h = 1469598103934665603ull;
+  for (uint64_t k : part) { h = (h ^ k) * 0x9E3779B97F4A7C15ull; h ^= h >> 31; }
   return h;
 }
 

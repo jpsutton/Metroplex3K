@@ -373,6 +373,12 @@ class Renderer : public ICityRasterizer {
   bool itemCacheOn_ = false, itemCacheValid_ = false;
   uint64_t itemCacheKey_ = 0, itemsGen_ = 0;
   std::vector<Item> cachedFlat_, cachedStatics_;
+  // The cached list is built from three independently cached parts (surface pieces, buildings, flora) so a change to one
+  // (a sim day mostly changes a few buildings) does not rebuild the others. Each part is stable-sorted by depth key; the
+  // parts are merged in this order, which gives the same list as sorting their concatenation.
+  struct ItemPart { uint64_t key = 0; bool valid = false; int placeholders = 0; std::vector<Item> flat, statics; std::vector<AnimCand> anim; };
+  ItemPart itemParts_[3];
+  void itemPartKeys(const Camera& cam, const RenderOptions& opt, uint64_t part[3]) const;
   void loadPalettes();
   void makeFallbackPalettes();
   void ensureShade();
