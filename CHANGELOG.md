@@ -6,10 +6,16 @@ version in `CMakeLists.txt` as the release notes, so every release needs a `## [
 
 ## [1.0.1] - Unreleased
 
-### Known issues carried over from 1.0.0
-- The Linux archive is built on Ubuntu and links GLEW 2.2 (`libGLEW.so.2.2`). On distributions that ship a different
-  GLEW version (for example Arch, which has 2.3) it fails to start with "error while loading shared libraries". Workaround
-  in `docs/USER-GUIDE.md`.
+### Added
+- Arch Linux packages (`metroplex3k` and `metroplex3k-tools`), built from `packaging/linux/arch/PKGBUILD`, signed, and
+  published in the `jpsutton` pacman repository (https://github.com/jpsutton/arch-repo). They use the system SDL2 and
+  GLEW, which fixes the start-up failure of the generic Linux archive on Arch (`libGLEW.so.2.2` not found).
+- A macOS install script, `tools/install-macos.sh`: downloads the latest release, checks it against `SHA256SUMS` and
+  installs it without the Gatekeeper quarantine prompt.
+- Every release asset now has a detached GPG signature; `SHA256SUMS` and the public key are attached to the release.
+
+### Fixed
+- `probe_verify` finds its `conformance` helper when started through a symlink or from `PATH`, and on Windows.
 
 ## [1.0.0] - 2026-11-08
 

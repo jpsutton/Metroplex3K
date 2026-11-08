@@ -105,6 +105,30 @@ jobs:
             build/metroplex3k-*.zip
           if-no-files-found: error
 
+  arch:
+    name: Arch packages
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      # packaging/linux/arch/PKGBUILD in an archlinux container; makepkg runs the unit tests (check()).
+      - name: Build the Arch packages (archlinux container)
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/src" -w /src archlinux:latest tools/ci/build-arch.sh
+      - name: Check the package files
+        run: |
+          set -euo pipefail
+          v='${{ needs.checks.outputs.version }}'
+          for p in metroplex3k metroplex3k-tools; do
+            ls out/"$p-$v-1-"*.pkg.tar.zst
+          done
+          [ "$(ls out/*.pkg.tar.zst | wc -l)" = 2 ] || { echo "expected exactly two packages"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metroplex3k-arch
+          path: out/*.pkg.tar.zst
+          if-no-files-found: error
+
   sanitizers:
     name: unit tests under ASan and UBSan
     needs: checks
@@ -126,7 +150,7 @@ jobs:
   publish:
     name: publish the GitHub release
     if: github.event_name == 'push' && github.ref == 'refs/heads/release'
-    needs: [checks, build, sanitizers]
+    needs: [checks, build, arch, sanitizers]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -137,6 +161,17 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      # Every asset gets a detached .sig, plus SHA256SUMS (also signed) and the public key. The packages' signatures are
+      # what jpsutton/arch-repo checks; tools/install-macos.sh checks SHA256SUMS.
+      - name: Sign (archlinux container)
+        env:
+          METROPLEX3K_GPG_KEY: ${{ secrets.METROPLEX3K_GPG_KEY }}
+        run: |
+          [ -n "$METROPLEX3K_GPG_KEY" ] || { echo "::error::METROPLEX3K_GPG_KEY is not set"; exit 1; }
+          docker run --rm -e METROPLEX3K_GPG_KEY \
+            -v "$GITHUB_WORKSPACE:/src" -w /src archlinux:latest \
+            tools/ci/sign-release.sh dist
+          sudo chown -R "$(id -u):$(id -g)" dist
       - name: Release notes from CHANGELOG.md
         run: |
           v='${{ needs.checks.outputs.version }}'
@@ -150,3 +185,16 @@ jobs:
           v='${{ needs.checks.outputs.version }}'
           ls -l dist
           gh release create "v$v" dist/* --target "$GITHUB_SHA" --title "Metroplex3K $v" --notes-file notes.md
+
+      # jpsutton/arch-repo checks for new releases hourly; this makes it publish now. Best effort: needs a token with
+      # Actions: write on that repository.
+      - name: Update the pacman repository
+        env:
+          ARCH_REPO_DISPATCH_TOKEN: ${{ secrets.ARCH_REPO_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$ARCH_REPO_DISPATCH_TOKEN" ]; then
+            echo "::notice::ARCH_REPO_DISPATCH_TOKEN is not set; jpsutton/arch-repo picks up the release within the hour"
+            exit 0
+          fi
+          GH_TOKEN=$ARCH_REPO_DISPATCH_TOKEN gh workflow run publish.yml -R jpsutton/arch-repo \
+            || echo "::warning::could not notify jpsutton/arch-repo; it picks up the release within the hour"

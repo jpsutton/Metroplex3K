@@ -21,6 +21,66 @@ One exception to flag: the MPEG-1 VLC tables in `src/core/tqi.cpp` — see [docs
 **No game assets are redistributed.** This repository contains no art, sound, music, video, text, maps or
 buildings from the original game. Everything is read at run time from the copy you own. You must own the game.
 
+## Installing
+
+Pre-built packages are on the [Releases page](https://github.com/jpsutton/Metroplex3K/releases/latest). Release archives
+and packages are signed; `SHA256SUMS` and the public key (`metroplex3k-signing-key.asc`) are attached to each release.
+
+| Platform | Packages |
+| --- | --- |
+| Linux | Arch Linux package repository (below), or a `.tar.gz` for other distributions (Ubuntu 24.04 or newer; needs SDL2 and GLEW 2.2) |
+| macOS | `.zip` (Apple silicon), installed by a script (below) |
+| Windows | `.zip` (x86-64); `SDL2.dll` is included |
+
+Windows and macOS builds are not signed by Microsoft or Apple, so your system warns the first time you open them. There is
+no self-update; install again to update.
+
+### Arch Linux
+
+The packages (`metroplex3k`, and `metroplex3k-tools` with the diagnostics) are built in an Arch container, signed, and
+published in the [jpsutton pacman repository](https://github.com/jpsutton/arch-repo), which also carries my other projects.
+The package links your system's SDL2 and GLEW, so it works with whatever versions Arch ships. Set the repository up with its
+script, then install:
+
+```bash
+curl -fsSLO https://jpsutton.github.io/arch-repo/setup.sh
+bash setup.sh --install metroplex3k
+```
+
+To set it up by hand, add this to `/etc/pacman.conf`, then trust the key and install:
+
+```ini
+[jpsutton]
+Server = https://jpsutton.github.io/arch-repo/$arch
+```
+
+```bash
+curl -fsSLO https://jpsutton.github.io/arch-repo/jpsutton-signing-key.asc
+sudo pacman-key --add jpsutton-signing-key.asc
+sudo pacman-key --lsign-key 8476350364502FEDD331B66BEDB90079E3C73E41
+sudo pacman -Sy metroplex3k
+```
+
+Updates arrive through `pacman -Syu`. To build the package yourself: `cd packaging/linux/arch && makepkg -si`.
+
+### macOS
+
+The easiest way to install or update is the install script. It downloads the latest `.zip`, checks it against the release's
+`SHA256SUMS`, and unpacks Metroplex3K into `~/Applications/Metroplex3K`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jpsutton/Metroplex3K/release/tools/install-macos.sh | bash
+```
+
+Add `-s -- --tools` after `bash` to also install the developer tools. Metroplex3K needs SDL2 (`brew install sdl2`). Files
+downloaded with `curl` aren't quarantined, so the program starts without a Gatekeeper prompt. Run the same command again to
+update. If you download the `.zip` in a browser instead, macOS blocks the first launch; clear the quarantine with
+`xattr -dr com.apple.quarantine ~/Applications/Metroplex3K`.
+
+### Other Linux and Windows
+
+Unpack the archive anywhere and run `metroplex3k`. See [docs/USER-GUIDE.md](docs/USER-GUIDE.md).
+
 ## Supplying your game files
 
 You need a copy of SimCity 3000 Unlimited, for example the GOG release. The game root is the folder that contains
@@ -77,8 +137,7 @@ Android: design notes only, see [docs/ANDROID.md](docs/ANDROID.md).
 Run: `build/metroplex3k [--game-dir DIR] [--city FILE] [--language NAME]`. `--game` is an alias for `--game-dir`.
 `NAME` is an installed language (English, French, German, ...); the default is `$M3K_LANGUAGE`, else the OS locale.
 
-Pre-built packages for Linux, macOS and Windows are attached to each [GitHub release](https://github.com/jpsutton/Metroplex3K/releases);
-see [docs/USER-GUIDE.md](docs/USER-GUIDE.md). `metroplex3k --version` prints the version.
+`metroplex3k --version` prints the version.
 
 CI (`.github/workflows`): pull requests into `staging` run fast checks (static checks, core build and unit tests, about a
 minute). The single pull request from `staging` into `release` runs the extensive checks (Linux, macOS and Windows builds

@@ -84,7 +84,16 @@ std::vector<fs::path> filesWithExt(const fs::path& root, std::initializer_list<c
 
 // ---------------------------------------------------------------- l0
 void groupL0(const fs::path& root, const char* argv0) {
-  fs::path exe = fs::path(argv0).parent_path() / "conformance";
+  // `conformance` sits next to the real probe_verify binary. Resolve symlinks first (the Arch package links the tools into
+  // /usr/bin), and when argv0 has no directory part fall back to the running executable's path.
+  std::error_code ec;
+  fs::path self = fs::canonical(argv0, ec);
+#if defined(__linux__)
+  if (ec) { ec.clear(); self = fs::canonical("/proc/self/exe", ec); }
+#endif
+  if (ec) self = argv0;
+  fs::path exe = self.parent_path() / "conformance";
+  if (!fs::exists(exe)) exe = self.parent_path() / "conformance.exe";
   if (!fs::exists(exe)) { row("conformance tool next to probe_verify", "missing", "present", false); return; }
   const std::string cmd = "\"" + exe.string() + "\" --strict --allow-extra \"" + root.string() + "\" 2>&1";
   FILE* p = popen(cmd.c_str(), "r");

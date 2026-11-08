@@ -5,11 +5,13 @@ copy of that game (see the README for which game). Nothing from the game is bund
 
 ## 1. Install
 
-Download the archive for your system from the GitHub releases page and unpack it anywhere.
+**Arch Linux:** use the package repository, `bash setup.sh --install metroplex3k` (see the README). It uses your system's
+SDL2 and GLEW. **macOS:** the install script in the README. Otherwise download the archive for your system from the GitHub
+releases page and unpack it anywhere.
 
 | System | Archive | Needs |
 |--------|---------|-------|
-| Linux (x86-64) | `metroplex3k-<version>-Linux-x86_64.tar.gz` | SDL2 and GLEW runtime libraries (Debian/Ubuntu: `sudo apt install libsdl2-2.0-0 libglew2.2`) |
+| Linux (x86-64), not Arch | `metroplex3k-<version>-Linux-x86_64.tar.gz` | SDL2 and GLEW runtime libraries (Debian/Ubuntu: `sudo apt install libsdl2-2.0-0 libglew2.2`) |
 | macOS | `metroplex3k-<version>-Darwin-<arch>.zip` | SDL2 (`brew install sdl2`) |
 | Windows (x86-64) | `metroplex3k-<version>-Windows-AMD64.zip` | Nothing. `SDL2.dll` is in the archive. |
 
@@ -85,9 +87,10 @@ Delete `gamedir.txt` to forget the game folder. Delete `prefs.cfg` to reset pref
 - **Check an install against the engine.** `conformance /path/to/game` parses every shipped file and reports coverage.
   `probe_verify /path/to/game` runs the pass/fail checks used for releases (`docs/RELEASE-GATE.md`).
 - **Linux: `error while loading shared libraries`.** Install the SDL2 and GLEW libraries from section 1.
-  The 1.0.0 Linux archive was built on Ubuntu 24.04 and needs `libGLEW.so.2.2`. If your distribution has a newer GLEW
-  (Arch: `libGLEW.so.2.3`), either build from source (`cmake -S . -B build && cmake --build build`) or make a link the
-  program can find: `mkdir -p ~/m3k-libs && ln -s /usr/lib/libGLEW.so.2.3 ~/m3k-libs/libGLEW.so.2.2` and start it with
-  `LD_LIBRARY_PATH=~/m3k-libs ./metroplex3k`. This worked when tested with 1.0.0 on Arch.
+  The Linux `.tar.gz` is built on Ubuntu 24.04 and needs `libGLEW.so.2.2`. On a distribution with another GLEW, use that
+  distribution's package where there is one (Arch: the package repository in the README), or build from source
+  (`cmake -S . -B build && cmake --build build`). A workaround that worked with 1.0.0 on Arch: make a link the program can find,
+  `mkdir -p ~/m3k-libs && ln -s /usr/lib/libGLEW.so.2.3 ~/m3k-libs/libGLEW.so.2.2`, and start it with
+  `LD_LIBRARY_PATH=~/m3k-libs ./metroplex3k`.
 
 Report bugs at the project's GitHub issues page and include `metroplex3k --version`, your system, and the `diag` output.
