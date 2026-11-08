@@ -70,6 +70,7 @@ settings folder.
 | `M3K_PRESENT=gl\|gl-basic\|sdl` | How frames reach the screen. Falls back to `sdl` when OpenGL is unavailable. |
 | `M3K_SIM_THREAD=0` | Run the simulation tick on the frame thread |
 | `M3K_NOISE_SEED=N` | Pin the terrain noise seed (reproducible terrain) |
+| `M3K_AUDIO_SEED=N` | Pin the audio seed (the song order is otherwise different on every launch) |
 | `M3K_FRAMELOG=FILE` | Same as `--frame-log` |
 
 ## 5. Settings
