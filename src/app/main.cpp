@@ -320,6 +320,16 @@ int main(int argc, char** argv) {
       smp.presentMs = msBetween(tGame1, tPresent1);
       smp.delayMs = msBetween(tDelay0, FrameLog::Clock::now());
       smp.w = w; smp.h = h;
+#if defined(M3K_HAS_GL_PRESENT) && M3K_HAS_GL_PRESENT
+      if (glPresent && gpuCity) {
+        const GlPresenter::Stats& gs = glPresent->stats();
+        smp.glOverlayMs = gs.overlayMs;
+        if (game.lastFramePhases().rastered) {
+          smp.glAtlasMs = gs.atlasMs; smp.glBinMs = gs.binMs; smp.glUploadMs = gs.uploadMs;
+          smp.glBaseMs = gs.baseMs; smp.glDispatchMs = gs.dispatchMs; smp.glItems = gs.items;
+        }
+      }
+#endif
       frameLog.add(smp, game.lastFramePhases());
     }
   }
