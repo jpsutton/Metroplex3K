@@ -46,9 +46,10 @@ Check what the engine can read with the `diag` tool: `diag /path/to/game`.
 Start `metroplex3k`. Options:
 
 ```
-metroplex3k [--version] [--game-dir DIR] [--city FILE] [--language NAME] [--frame-log FILE]
+metroplex3k [--version] [--game-dir DIR] [--city FILE] [--language NAME] [--fullscreen] [--frame-log FILE]
 ```
 
+- `--fullscreen` (or `-f`) starts in a borderless full-screen window. `F11` toggles it while the game runs.
 - `--city FILE` opens a city, terrain or scenario file at start.
 - `--language NAME` picks an installed language (English, French, German, ...). Default: `$M3K_LANGUAGE`, else the OS locale.
 

@@ -64,18 +64,20 @@ static void audioCallback(void* user, Uint8* stream, int len) {
 
 int main(int argc, char** argv) {
   std::string gameArg, cityArg, langArg, frameLogArg;
+  bool fullscreenArg = false;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
     if ((a == "--game-dir" || a == "--game") && i + 1 < argc) gameArg = argv[++i];
     else if (a == "--city" && i + 1 < argc) cityArg = argv[++i];
     else if (a == "--frame-log" && i + 1 < argc) frameLogArg = argv[++i];
+    else if (a == "--fullscreen" || a == "-f") fullscreenArg = true;
     else if ((a == "--language" || a == "-l") && i + 1 < argc) langArg = argv[++i];
     else if (a == "--version" || a == "-V") {
       std::cout << "Metroplex3K " << M3K_VERSION_STRING << " (" << M3K_GIT_SHA << ")\n";
       return 0;
     }
     else if (a == "--help" || a == "-h") {
-      std::cout << "metroplex3k [--version] [--game-dir DIR] [--city FILE] [--language NAME] [--frame-log FILE]\n"
+      std::cout << "metroplex3k [--version] [--game-dir DIR] [--city FILE] [--language NAME] [--fullscreen] [--frame-log FILE]\n"
                    "Language: NAME (English, French, German, ...), $M3K_LANGUAGE, else the OS locale (an installed language).\n"
                    "Game data: DIR (game root, its Apps folder, or a parent), $M3K_GAME_DIR, the saved choice,\n"
                    "or auto-detected GOG install locations. You can also drop the folder or the GOG installer\n"
@@ -87,6 +89,7 @@ int main(int argc, char** argv) {
                    "layer / the cached sprite draw list. The GPU city needs the terrain cache and turns itself off without it.\n"
                    "Sim thread (default on): $M3K_SIM_THREAD=0 runs the sim day tick on the frame thread instead of a worker thread.\n"
                    "Terrain noise: seeded from the clock like the original; $M3K_NOISE_SEED=N pins it (reproducible captures).\n"
+                   "Fullscreen: --fullscreen (or -f) starts in a borderless full-screen window; F11 toggles it while running.\n"
                    "Frame log: --frame-log FILE or $M3K_FRAMELOG=FILE writes a per-frame timing CSV and prints a summary on exit.\n";
       return 0;
     }
@@ -106,13 +109,14 @@ int main(int argc, char** argv) {
   std::unique_ptr<GlPresenter> glPresent;
   bool gpuCityWanted = false;
   SDL_Window* win = nullptr;
+  const Uint32 windowFlagsExtra = fullscreenArg ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0;
 #if defined(M3K_HAS_GL_PRESENT) && M3K_HAS_GL_PRESENT
   // Default: GL present with the GPU city. M3K_PRESENT=sdl forces the SDL renderer, gl-basic the GL present alone.
   const char* presentEnv = std::getenv("M3K_PRESENT");
   const std::string presentMode = (presentEnv && *presentEnv) ? presentEnv : "gl";
   if (presentMode == "gl" || presentMode == "gl-basic") {
     gpuCityWanted = presentMode == "gl";
-    win = SDL_CreateWindow("Metroplex3K", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 800, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
+    win = SDL_CreateWindow("Metroplex3K", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 800, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | windowFlagsExtra);
     glPresent = std::make_unique<GlPresenter>();
     if (!win || !glPresent->init(win)) {
       std::cerr << "metroplex3k: OpenGL present unavailable (context failed); using the SDL renderer.\n";
@@ -122,7 +126,7 @@ int main(int argc, char** argv) {
     }
   }
 #endif
-  if (!win) win = SDL_CreateWindow("Metroplex3K", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 800, SDL_WINDOW_RESIZABLE);
+  if (!win) win = SDL_CreateWindow("Metroplex3K", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 800, SDL_WINDOW_RESIZABLE | windowFlagsExtra);
   if (!win) { std::cerr << "window: " << SDL_GetError() << "\n"; return 1; }
 
   // Phase 2 compute terrain: init before SDL_Renderer so the hidden GL context is ready.

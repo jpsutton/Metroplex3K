@@ -7,6 +7,9 @@ version in `CMakeLists.txt` as the release notes, so every release needs a `## [
 ## [1.0.2] - Unreleased
 
 ### Added
+- `--fullscreen` (or `-f`) starts the game in a borderless full-screen window; `F11` still toggles it while running.
+- `run.sh` in the project root builds the checkout and runs it with a frame log (`--installed` runs the installed build
+  instead, for comparison; `--fullscreen`, `--no-build`, `--no-log` and `-- ARGS` are also accepted).
 - A launcher entry and icon on Linux. The Arch package installs `metroplex3k.desktop` and the icon (scalable SVG plus PNGs
   from 16 to 512 px), so Metroplex3K shows up in the application menu. The generic Linux archive carries the same files and
   `install-desktop.sh`, which adds the menu entry for the current user (`--remove` takes it out). The window class and
