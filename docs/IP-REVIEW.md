@@ -96,6 +96,20 @@ depend on the end-user license agreement and on the country. This review did not
 activities, the license terms of the game, or the jurisdiction. These remain unassessed and are accepted as a risk by the
 owner.
 
+### 2.7 Publishing the repository
+
+The repository was made public on 2026-11-08. Before that, the history was squashed: the full history (889 commits,
+including the unscrubbed specification, the `diag.txt` dump and earlier wording that named the original game) was backed
+up to a private repository (`jpsutton/Metroplex3K-history`) and a local bare copy, and the public repository was rebuilt
+as three commits (the tree of 1.0.0, the tree of 1.0.1, and the current `staging`). The release tags were re-pointed and
+the dirty-side branch `spec-observed-updates` was deleted from the public repository. Issue and comment text was scanned
+for code addresses, module and decompiler names, and the few hits were edited.
+
+Residual exposure that a force-push cannot remove: GitHub keeps the head commits of the eleven earlier pull requests
+(`refs/pull/*/head`), so their pull-request pages and diffs still show the pre-scrub content, and commits stay reachable by
+hash until GitHub garbage-collects them. Only a request to GitHub Support (removal of sensitive data and a cached-view
+purge) clears that. Forks made before the squash would keep the old history, and there were none.
+
 ## 3. Specification review
 
 All 31 files in `spec/` were read in full by independent reviewers against the rules in `spec/00-README.md`, then
@@ -139,3 +153,4 @@ git ls-files | grep -iE '\.(png|bmp|ixf|dat|xa|wav|tgq|exe|dll|cur)$'   # must b
 3. Done: trademark search for the project name (see section 2.4).
 4. Legal review of the analysis stage and the game's EULA: declined by the owner. Risk accepted.
 5. Keep `refs/patchbay/*` and `build-*` directories out of any push.
+6. Optional: ask GitHub Support to purge the old pull-request refs (section 2.7).
