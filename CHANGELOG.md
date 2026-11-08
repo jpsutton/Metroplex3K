@@ -6,6 +6,12 @@ version in `CMakeLists.txt` as the release notes, so every release needs a `## [
 
 ## [1.0.2] - Unreleased
 
+### Added
+- A launcher entry and icon on Linux. The Arch package installs `metroplex3k.desktop` and the icon (scalable SVG plus PNGs
+  from 16 to 512 px), so Metroplex3K shows up in the application menu. The generic Linux archive carries the same files and
+  `install-desktop.sh`, which adds the menu entry for the current user (`--remove` takes it out). The window class and
+  Wayland application id are now `metroplex3k`, so desktops match the running window to its icon.
+
 ### Changed
 - The repository is public. The Arch packages are published in the `jpsutton` pacman repository, and the macOS install
   script works without credentials.

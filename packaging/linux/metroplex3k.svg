@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Metroplex3K launcher icon: an original skyline drawing. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b2a4a"/>
+      <stop offset="0.6" stop-color="#1f6f8b"/>
+      <stop offset="1" stop-color="#f2a65a"/>
+    </linearGradient>
+    <clipPath id="tile"><rect x="8" y="8" width="240" height="240" rx="48"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect x="8" y="8" width="240" height="240" fill="url(#sky)"/>
+    <circle cx="188" cy="82" r="22" fill="#ffe9b0" opacity="0.95"/>
+    <!-- far buildings -->
+    <g fill="#16405f" opacity="0.9">
+      <rect x="22" y="132" width="34" height="116"/>
+      <rect x="98" y="112" width="30" height="136"/>
+      <rect x="150" y="124" width="36" height="124"/>
+      <rect x="204" y="144" width="40" height="104"/>
+    </g>
+    <!-- near buildings -->
+    <g fill="#0a1d30">
+      <rect x="10" y="168" width="40" height="80"/>
+      <rect x="54" y="104" width="38" height="144"/>
+      <polygon points="116,248 116,64 128,40 140,64 140,248"/>
+      <rect x="146" y="148" width="34" height="100"/>
+      <rect x="184" y="120" width="40" height="128"/>
+      <rect x="226" y="176" width="22" height="72"/>
+    </g>
+    <!-- lit windows -->
+    <g fill="#ffd27a">
+      <rect x="62" y="118" width="6" height="8"/><rect x="76" y="118" width="6" height="8"/>
+      <rect x="62" y="138" width="6" height="8"/><rect x="76" y="150" width="6" height="8"/>
+      <rect x="62" y="170" width="6" height="8"/><rect x="76" y="186" width="6" height="8"/>
+      <rect x="123" y="92" width="6" height="8"/><rect x="123" y="116" width="6" height="8"/>
+      <rect x="123" y="144" width="6" height="8"/><rect x="123" y="176" width="6" height="8"/>
+      <rect x="153" y="164" width="6" height="8"/><rect x="167" y="180" width="6" height="8"/>
+      <rect x="192" y="136" width="6" height="8"/><rect x="208" y="152" width="6" height="8"/>
+      <rect x="192" y="172" width="6" height="8"/><rect x="208" y="196" width="6" height="8"/>
+      <rect x="20" y="184" width="6" height="8"/><rect x="34" y="204" width="6" height="8"/>
+    </g>
+    <!-- road -->
+    <rect x="8" y="232" width="240" height="16" fill="#06121f"/>
+    <rect x="30" y="238" width="26" height="3" fill="#f2c94c"/>
+    <rect x="86" y="238" width="26" height="3" fill="#f2c94c"/>
+    <rect x="142" y="238" width="26" height="3" fill="#f2c94c"/>
+    <rect x="198" y="238" width="26" height="3" fill="#f2c94c"/>
+  </g>
+</svg>

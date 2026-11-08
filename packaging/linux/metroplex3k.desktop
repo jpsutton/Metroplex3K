@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Metroplex3K
+GenericName=City-building game engine
+Comment=Engine compatible with a classic city-building game; needs your own copy of the game data
+Exec=metroplex3k
+Icon=metroplex3k
+Terminal=false
+Categories=Game;Simulation;
+Keywords=city;builder;simulation;
+StartupWMClass=metroplex3k

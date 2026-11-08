@@ -139,6 +139,11 @@ endif()
 # and the developer/verification tools (component `tools`: diag, conformance, probe_verify).
 install(FILES LICENSE README.md CHANGELOG.md DESTINATION . COMPONENT app)
 install(DIRECTORY docs/ DESTINATION docs COMPONENT app FILES_MATCHING PATTERN "*.md")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  # Launcher entry and icon; tools/install-desktop.sh puts them in the user's menu for an unpacked archive.
+  install(FILES packaging/linux/metroplex3k.desktop packaging/linux/metroplex3k.svg DESTINATION launcher COMPONENT app)
+  install(PROGRAMS tools/install-desktop.sh DESTINATION . COMPONENT app)
+endif()
 if(TARGET metroplex3k)
   install(TARGETS metroplex3k RUNTIME DESTINATION . COMPONENT app)
   if(WIN32 AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.21)

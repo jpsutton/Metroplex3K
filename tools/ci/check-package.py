@@ -31,6 +31,8 @@ def main():
     need.add("metroplex3k.exe" if app[0].endswith(".zip") and "Windows" in app[0] else "metroplex3k")
     if "Windows" in app[0]:
         need.add("SDL2.dll")
+    if "Linux" in app[0]:
+        need |= {"install-desktop.sh", "metroplex3k.desktop", "metroplex3k.svg"}
     for want in sorted(need):
         if want not in base:
             print(f"FAIL: {app[0]} lacks {want}")

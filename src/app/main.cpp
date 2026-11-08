@@ -96,6 +96,10 @@ int main(int argc, char** argv) {
   // Prefer native Wayland, fall back to X11 (SDL2 alone picks X11 whenever it is available). An explicit SDL_VIDEODRIVER wins. The environment
   // variable is used rather than SDL_HINT_VIDEODRIVER because sdl2-compat (SDL3 underneath) ignores the hint.
   setenv("SDL_VIDEODRIVER", "wayland,x11", 0);
+  // The window class (X11) and application id (Wayland) are the name of the desktop entry, so the launcher icon is shown for
+  // the running window. An explicit value from the environment wins.
+  setenv("SDL_VIDEO_X11_WMCLASS", "metroplex3k", 0);
+  setenv("SDL_VIDEO_WAYLAND_WMCLASS", "metroplex3k", 0);
 #endif
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { std::cerr << "SDL_Init: " << SDL_GetError() << "\n"; return 1; }
   // GL present: the window itself owns a GL context. Falls back to the SDL renderer when unavailable.

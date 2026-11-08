@@ -21,6 +21,11 @@ Release builds are not code-signed.
 
 The separate `-tools` archive holds `diag`, `conformance` and `probe_verify` (section 6).
 
+**Application menu (Linux).** The Arch package installs the launcher entry and icon itself. For the `.tar.gz`, run
+`./install-desktop.sh` in the unpacked folder; it adds a menu entry for your user that starts the `metroplex3k` next to the
+script (move the folder first, then run it; run `./install-desktop.sh --remove` before deleting the folder). The launcher
+needs a game folder it can find (section 2), for example by saving the choice on the first screen.
+
 ## 2. Give it your game data
 
 The game root is the folder that contains `Apps/`. Any of these works; the first match wins:

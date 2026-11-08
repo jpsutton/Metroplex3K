@@ -61,7 +61,7 @@ sudo pacman-key --lsign-key 8476350364502FEDD331B66BEDB90079E3C73E41
 sudo pacman -Sy metroplex3k
 ```
 
-Updates arrive through `pacman -Syu`. To build the package yourself: `cd packaging/linux/arch && makepkg -si`.
+The package adds Metroplex3K to your application menu. Updates arrive through `pacman -Syu`. To build the package yourself: `cd packaging/linux/arch && makepkg -si`.
 
 ### macOS
 
@@ -79,7 +79,8 @@ update. If you download the `.zip` in a browser instead, macOS blocks the first 
 
 ### Other Linux and Windows
 
-Unpack the archive anywhere and run `metroplex3k`. See [docs/USER-GUIDE.md](docs/USER-GUIDE.md).
+Unpack the archive anywhere and run `metroplex3k`. On Linux, `./install-desktop.sh` in the unpacked folder adds Metroplex3K to
+your application menu (`./install-desktop.sh --remove` removes it). See [docs/USER-GUIDE.md](docs/USER-GUIDE.md).
 
 ## Supplying your game files
 
