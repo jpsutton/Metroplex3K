@@ -4,7 +4,7 @@ All notable changes to Metroplex3K are recorded here. The format follows [Keep a
 and the project uses [Semantic Versioning](https://semver.org/). The release workflow publishes the section for the
 version in `CMakeLists.txt` as the release notes, so every release needs a `## [x.y.z]` section.
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-11-08
 
 First release. Metroplex3K is a clean-room C++17 engine that is compatible with a commercial city-building game. It loads
 the original game data from a copy you own and reads and writes the original city, terrain, scenario and BAT file formats.
@@ -38,4 +38,5 @@ No game assets are included.
 - Scenarios have not been run to every ending against the original, and disaster looks and timings are not yet compared
   with the original.
 - Sound has not had a full listening pass.
+- Long-run population: after about 470 simulated days, five of the six reference cities end within 2.1 % of the original's last save. Madrid ends 18.3 % above it (within the release gate's band of the last three saves, but a known deviation; the original's population dips there after pump outages).
 - Release builds are not code-signed. macOS Gatekeeper and Windows SmartScreen will warn on first launch.
