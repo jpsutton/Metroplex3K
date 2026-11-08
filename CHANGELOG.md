@@ -4,6 +4,13 @@ All notable changes to Metroplex3K are recorded here. The format follows [Keep a
 and the project uses [Semantic Versioning](https://semver.org/). The release workflow publishes the section for the
 version in `CMakeLists.txt` as the release notes, so every release needs a `## [x.y.z]` section.
 
+## [1.0.1] - Unreleased
+
+### Known issues carried over from 1.0.0
+- The Linux archive is built on Ubuntu and links GLEW 2.2 (`libGLEW.so.2.2`). On distributions that ship a different
+  GLEW version (for example Arch, which has 2.3) it fails to start with "error while loading shared libraries". Workaround
+  in `docs/USER-GUIDE.md`.
+
 ## [1.0.0] - 2026-11-08
 
 First release. Metroplex3K is a clean-room C++17 engine that is compatible with a commercial city-building game. It loads

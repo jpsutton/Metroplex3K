@@ -85,5 +85,9 @@ Delete `gamedir.txt` to forget the game folder. Delete `prefs.cfg` to reset pref
 - **Check an install against the engine.** `conformance /path/to/game` parses every shipped file and reports coverage.
   `probe_verify /path/to/game` runs the pass/fail checks used for releases (`docs/RELEASE-GATE.md`).
 - **Linux: `error while loading shared libraries`.** Install the SDL2 and GLEW libraries from section 1.
+  The 1.0.0 Linux archive was built on Ubuntu 24.04 and needs `libGLEW.so.2.2`. If your distribution has a newer GLEW
+  (Arch: `libGLEW.so.2.3`), either build from source (`cmake -S . -B build && cmake --build build`) or make a link the
+  program can find: `mkdir -p ~/m3k-libs && ln -s /usr/lib/libGLEW.so.2.3 ~/m3k-libs/libGLEW.so.2.2` and start it with
+  `LD_LIBRARY_PATH=~/m3k-libs ./metroplex3k`. This worked when tested with 1.0.0 on Arch.
 
 Report bugs at the project's GitHub issues page and include `metroplex3k --version`, your system, and the `diag` output.
