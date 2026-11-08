@@ -4,12 +4,11 @@ Metroplex3K is a C++17 engine that is compatible with *SimCity 3000 Unlimited* (
 It loads the original game data from **your own installation**, reads and writes the original city, terrain, scenario
 and BAT file formats, and re-implements the simulation, rendering and UI.
 
-> **Status: pre-1.0, feature complete apart from the gaps listed below.** The engine was first written from the
+> **Status: 1.0, feature complete apart from the gaps listed below.** The engine was first written from the
 > specification in `spec/` with only synthetic fixtures. It has since been run against a real GOG install: parsers,
 > save round trips (47 of 60 shipped saves byte-identical, the rest differ only in compression bytes), and budget,
-> pollution, crime, water and power results are checked against the shipped saves. The work left before 1.0 is
-> verification and packaging, tracked in [issue #106](https://github.com/jpsutton/Metroplex3K/issues/106). See
-> [Remaining gaps](#remaining-gaps) and [STATUS.md](STATUS.md).
+> pollution, crime, water and power results are checked against the shipped saves. 1.0 is released; the known gaps that remain
+> are tracked as GitHub issues in the `post-1.0` milestone. See [Remaining gaps](#remaining-gaps) and [STATUS.md](STATUS.md).
 
 ## Clean-room status
 
@@ -229,15 +228,12 @@ Known gaps, guesses and verification tasks are tracked as [GitHub issues](https:
 
 ### Remaining gaps
 
-The [1.0 tracking issue (#106)](https://github.com/jpsutton/Metroplex3K/issues/106) lists everything. Milestone
-[`1.0`](https://github.com/jpsutton/Metroplex3K/milestone/1) holds what must be done or waived before the release;
-milestone [`post-1.0`](https://github.com/jpsutton/Metroplex3K/milestone/2) holds gaps accepted for 1.x.
+Everything required for 1.0 is done (the [1.0 tracking issue, #106](https://github.com/jpsutton/Metroplex3K/issues/106), and
+milestone [`1.0`](https://github.com/jpsutton/Metroplex3K/milestone/1) are closed). Milestone
+[`post-1.0`](https://github.com/jpsutton/Metroplex3K/milestone/2) holds the gaps accepted for 1.x. Releases follow
+[docs/RELEASING.md](docs/RELEASING.md) and the release gate in [docs/RELEASE-GATE.md](docs/RELEASE-GATE.md).
 
-Before 1.0: packaging, versioning and the release gate are in place. What remains is running the release gate
-(`tools/release-gate.sh`, on a machine with the game install; see [docs/RELEASE-GATE.md](docs/RELEASE-GATE.md)) and
-cutting the release as described in [docs/RELEASING.md](docs/RELEASING.md).
-
-After 1.0: scenario verification ([#91](https://github.com/jpsutton/Metroplex3K/issues/91)), disaster comparison with the original ([#92](https://github.com/jpsutton/Metroplex3K/issues/92)), an audio listening pass ([#94](https://github.com/jpsutton/Metroplex3K/issues/94)), UI pixel differences ([#95](https://github.com/jpsutton/Metroplex3K/issues/95)), scenario spec polish ([#97](https://github.com/jpsutton/Metroplex3K/issues/97)), BAT tool UI
+Open gaps: scenario verification ([#91](https://github.com/jpsutton/Metroplex3K/issues/91)), disaster comparison with the original ([#92](https://github.com/jpsutton/Metroplex3K/issues/92)), an audio listening pass ([#94](https://github.com/jpsutton/Metroplex3K/issues/94)), UI pixel differences ([#95](https://github.com/jpsutton/Metroplex3K/issues/95)), scenario spec polish ([#97](https://github.com/jpsutton/Metroplex3K/issues/97)), BAT tool UI
 ([#98](https://github.com/jpsutton/Metroplex3K/issues/98)), guessed details in growth
 ([#99](https://github.com/jpsutton/Metroplex3K/issues/99)), services and pollution
 ([#100](https://github.com/jpsutton/Metroplex3K/issues/100)), economy and population
