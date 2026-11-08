@@ -1,0 +1,61 @@
+# Maintainer: Jared Sutton <jpsutton@protonmail.com>
+#
+# Builds Metroplex3K from the source checkout this file is in (release CI, tools/ci/build-arch.sh), or by hand:
+#   cd packaging/linux/arch && makepkg -si
+# The version comes from CMakeLists.txt. The application links the system SDL2 and GLEW, so it does not depend on the
+# GLEW version the generic Linux archive was built with.
+pkgbase=metroplex3k
+pkgname=(metroplex3k metroplex3k-tools)
+pkgver=0
+pkgrel=1
+pkgdesc="Engine compatible with a classic city-building game; reads your own copy of the game data"
+arch=(x86_64 aarch64)
+url="https://github.com/jpsutton/Metroplex3K"
+license=(GPL-3.0-or-later)
+makedepends=(cmake ninja git sdl2 glew)
+options=(!debug !lto)
+
+_root="$(realpath "${startdir}/../../..")"
+
+pkgver() {
+  sed -n 's/^project(Metroplex3K VERSION \([0-9.]*\).*/\1/p' "${_root}/CMakeLists.txt"
+}
+
+build() {
+  cmake -S "${_root}" -B "${srcdir}/build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DM3K_VERSION_SUFFIX="" \
+    -DM3K_BUILD_APP=ON -DM3K_BUILD_TOOLS=ON -DM3K_BUILD_PROBES=ON
+  cmake --build "${srcdir}/build"
+}
+
+check() {
+  ctest --test-dir "${srcdir}/build" --output-on-failure -j"$(nproc)"
+}
+
+_docs() {
+  install -Dm644 "${_root}/LICENSE" -t "${pkgdir}/usr/share/licenses/${pkgname}"
+}
+
+package_metroplex3k() {
+  depends=(glibc gcc-libs sdl2 glew libglvnd)
+  install -Dm755 "${srcdir}/build/metroplex3k" "${pkgdir}/usr/bin/metroplex3k"
+  install -Dm644 "${_root}/README.md" "${_root}/CHANGELOG.md" "${_root}/docs/USER-GUIDE.md" \
+    -t "${pkgdir}/usr/share/doc/metroplex3k"
+  _docs
+}
+
+package_metroplex3k-tools() {
+  pkgdesc="Metroplex3K developer tools: install diagnostics, conformance and release-gate checks"
+  depends=(glibc gcc-libs)
+  # probe_verify runs the conformance tool next to itself, so the three live together and /usr/bin has links.
+  local t
+  for t in diag conformance probe_verify; do
+    install -Dm755 "${srcdir}/build/${t}" "${pkgdir}/usr/lib/metroplex3k/tools/${t}"
+  done
+  install -dm755 "${pkgdir}/usr/bin"
+  ln -s /usr/lib/metroplex3k/tools/diag "${pkgdir}/usr/bin/metroplex3k-diag"
+  ln -s /usr/lib/metroplex3k/tools/conformance "${pkgdir}/usr/bin/metroplex3k-conformance"
+  ln -s /usr/lib/metroplex3k/tools/probe_verify "${pkgdir}/usr/bin/metroplex3k-probe-verify"
+  install -Dm644 "${_root}/docs/RELEASE-GATE.md" "${_root}/tools/probes/README.md" -t "${pkgdir}/usr/share/doc/metroplex3k-tools"
+  _docs
+}

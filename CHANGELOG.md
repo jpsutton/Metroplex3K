@@ -4,6 +4,19 @@ All notable changes to Metroplex3K are recorded here. The format follows [Keep a
 and the project uses [Semantic Versioning](https://semver.org/). The release workflow publishes the section for the
 version in `CMakeLists.txt` as the release notes, so every release needs a `## [x.y.z]` section.
 
+## [1.0.1] - 2026-11-08
+
+### Added
+- Arch Linux packages (`metroplex3k` and `metroplex3k-tools`), built from `packaging/linux/arch/PKGBUILD`, signed, and
+  published in the `jpsutton` pacman repository (https://github.com/jpsutton/arch-repo). They use the system SDL2 and
+  GLEW, which fixes the start-up failure of the generic Linux archive on Arch (`libGLEW.so.2.2` not found).
+- A macOS install script, `tools/install-macos.sh`: downloads the latest release, checks it against `SHA256SUMS` and
+  installs it without the Gatekeeper quarantine prompt.
+- Every release asset now has a detached GPG signature; `SHA256SUMS` and the public key are attached to the release.
+
+### Fixed
+- `probe_verify` finds its `conformance` helper when started through a symlink or from `PATH`, and on Windows.
+
 ## [1.0.0] - 2026-11-08
 
 First release. Metroplex3K is a clean-room C++17 engine that is compatible with a commercial city-building game. It loads
