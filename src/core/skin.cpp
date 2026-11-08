@@ -1,0 +1,665 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "core/skin.h"
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+
+namespace m3k {
+
+using namespace skin_group;
+
+const uint32_t kRciColors[3] = {rgba(0, 192, 0), rgba(0, 0, 192), rgba(192, 192, 0)};
+constexpr int RciGeometry::barX[3];
+
+int cell4For(bool enabled, bool pressed, bool checked, bool hover) {
+  if (!enabled) return CELL_DISABLED;
+  if (pressed || checked) return CELL_PRESSED;
+  if (hover) return CELL_HOVER;
+  return CELL_NORMAL;
+}
+int cell8For(bool enabled, bool pressed, bool checked, bool hover) {
+  int state = !enabled ? 3 : pressed ? 2 : hover ? 1 : 0;
+  return 2 * state + (checked ? 0 : 1);
+}
+
+Rect RciGeometry::bar(int i, double v) {
+  if (i < 0 || i > 2) return {};
+  // Spec 09 §4.5 [STATIC Q-BQ]: pixels = trunc(|u| × 16.0).
+  int h = int(std::trunc(std::fabs(v) * unitPx));
+  Rect r{barX[i], 0, barW, 0};
+  if (v > 0) {
+    int top = std::max(slotTop, zeroY - h);
+    r.y = top; r.h = zeroY - top;
+  } else if (v < 0) {
+    int bot = std::min(lowerBottom, lowerTop + h);
+    r.y = lowerTop; r.h = std::max(0, bot - lowerTop);
+  } else {
+    r.y = zeroY;
+  }
+  return r;
+}
+
+// ---- tool menu layout -----------------------------------------------------------------------
+ToolMenuLayout toolMenuLayout(int screenH) {
+  ToolMenuLayout L;
+  int hc = screenH <= 480 ? 0 : screenH <= 600 ? 1 : 2;  // 480 / 600 / >600
+  L.valid = true;
+  L.heightClass = hc == 0 ? 480 : hc == 1 ? 600 : 1000;
+  L.artGroup = hc == 0 ? Ui640 : UiBig;
+  // x is always 33. rows: {y, dx, dy} per height class.
+  static const int ry[9][3] = {{3, 3, 100}, {39, 39, 136}, {75, 75, 172}, {111, 111, 208}, {147, 147, 244},
+                               {219, 291, 388}, {255, 327, 424}, {291, 363, 460}, {183, 219, 316}};
+  static const int pdy[9][3] = {{0, 0, 97}, {11, 11, 108}, {11, 11, 108}, {11, 11, 108}, {11, 11, 108},
+                                {0, 0, 97}, {45, 118, 215}, {0, 118, 215}, {83, 119, 216}};
+  for (int n = 0; n < 9; n++) {
+    auto& r = L.root[n];
+    r.id = 0x1001 + n; r.x = 33; r.y = ry[n][hc]; r.dx = 0; r.dy = pdy[n][hc];
+    r.hasSub = n != 5;
+  }
+  auto run = [&](int n, std::vector<uint32_t> ids, int base) {
+    L.subIds[n] = ids;
+    for (size_t k = 0; k < ids.size(); k++) L.subY[n].push_back(base + 36 * int(k));
+  };
+  int b = hc == 2 ? 118 : 21;
+  run(0, {0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006}, b);
+  run(1, {0x3001, 0x3002, 0x3003, 0x3004, 0x3005, 0x3006, 0x3007, 0x3008}, b);
+  run(2, {0x4001, 0x4002, 0x4004, 0x4005, 0x4007, 0x4009, 0x400A}, b);
+  run(3, {0x5001, 0x5002, 0x5003, 0x5009, 0x500A, 0x500B}, b);
+  run(4, {0x6002, 0x6003, 0x6004, 0x6006, 0x6008, 0x6009, 0x600A}, b);
+  static const int revBase[3] = {57, 129, 226}, emBase[3] = {93, 129, 226}, optBase[3] = {57, 129, 226};
+  run(6, {0x8010, 0x8011, 0x8001, 0x8005, 0x8002, 0x8003, 0x8004}, revBase[hc]);
+  run(7, {0x9001, 0x900A, 0x9002, 0x9006, 0x9003, 0x9004, 0x9005}, optBase[hc]);
+  if (hc > 0) { L.subY[7][0] -= 1; L.subY[7][1] -= 1; }  // original table: first two Options buttons 1 px high
+  run(8, {0xA001, 0xA002, 0xA003, 0xA004, 0xA006, 0xA005}, emBase[hc]);
+
+  if (hc == 0) {
+    L.pieces = {{Ui640, 0xFFFF, 0, false}};
+  } else if (hc == 1) {
+    L.pieces = {{UiBig, 0xFFFF, 0, false}, {UiBig, 0xFFFE, 417, false}};
+  } else {
+    // FFFE is the column's bottom cap (bevelled bottom edge): it sits against the top of the navigator panel
+    // (navTop - 90 so its bevel is hidden under the panel), and the FFFC filler tiles between FFFF and the cap
+    // [OBSERVED: no seam at any window height]. At 768 the cap is directly below FFFF.
+    const int capY = std::max(97 + 417, screenH - kNavPanelH - 90);
+    L.pieces = {{Ui1024, 0xFFFD, 0, false}, {UiBig, 0xFFFF, 97, false}};
+    if (screenH > 768) L.pieces.push_back({Ui1024, 0xFFFC, 97 + 417, true, capY});
+    L.pieces.push_back({Ui1024, 0xFFFE, capY, false});
+  }
+  return L;
+}
+
+BottomBarLayout bottomBarLayout(int screenW) {
+  BottomBarLayout B;
+  auto R = [](int l, int t, int r, int b) { return Rect{l, t, r - l, b - t}; };
+  if (screenW <= 640) {
+    B.group = Ui640; B.variant = 0;
+    B.fieldA = R(8, 46, 340, 64); B.fieldB = R(8, 25, 116, 43); B.fieldC = R(120, 25, 270, 43); B.fieldD = R(264, 25, 350, 43);
+    B.textLine = R(8, 3, 340, 23);
+    B.p1x = 371; B.p1y = 14; B.p2x = 348; B.p2y = 14; B.p3x = 399; B.p3y = 14; B.p4x = 349; B.p4y = 34;
+  } else if (screenW <= 800) {
+    B.group = Ui800; B.variant = 1;
+    B.fieldA = R(8, 26, 144, 44); B.fieldB = R(146, 26, 258, 44); B.fieldC = R(260, 26, 408, 44); B.fieldD = R(396, 26, 500, 44);
+    B.textLine = R(8, 5, 481, 22);
+    B.p1x = 511; B.p1y = 9; B.p2x = 488; B.p2y = 9; B.p3x = 547; B.p3y = 11; B.p4x = 489; B.p4y = 29;
+  } else {
+    B.group = Ui1024; B.variant = 2;
+    B.fieldA = R(8, 26, 366, 44); B.fieldB = R(372, 26, 480, 44); B.fieldC = R(486, 26, 630, 44); B.fieldD = R(630, 26, 712, 44);
+    B.textLine = R(8, 6, 704, 23);
+    B.p1x = 735; B.p1y = 10; B.p2x = 712; B.p2y = 10; B.p3x = 773; B.p3y = 9; B.p4x = 713; B.p4y = 29;
+  }
+  return B;
+}
+
+// ---- blitting -------------------------------------------------------------------------------
+void skinBlitScaled(Ui& ui, const Image& im, Rect src, Rect dst, const Image* raw) {
+  if (!ui.pixels || im.empty() || src.w <= 0 || src.h <= 0 || dst.w <= 0 || dst.h <= 0) return;
+  for (int j = 0; j < dst.h; j++) {
+    int dy = dst.y + j; if (dy < 0 || dy >= ui.H) continue;
+    int sy = src.y + (src.h == dst.h ? j : j * src.h / dst.h);
+    if (sy < 0 || sy >= im.h) continue;
+    for (int i = 0; i < dst.w; i++) {
+      int dx = dst.x + i; if (dx < 0 || dx >= ui.W) continue;
+      int sx = src.x + (src.w == dst.w ? i : i * src.w / dst.w);
+      if (sx < 0 || sx >= im.w) continue;
+      uint32_t p = im.px[size_t(sy) * im.w + sx];
+      uint32_t a = p >> 24;
+      if (a == 255) { ui.at(dx, dy) = p; continue; }
+      if (raw && raw->w == im.w && raw->h == im.h && !ui.overlay) {   // on the baked plate colour the original's own pixel (plate x shadow, vignette) is drawn, opaque
+        uint32_t& dd = ui.at(dx, dy);
+        if (dd == rgb(0x7B, 0x92, 0xFF)) { dd = raw->px[size_t(sy) * im.w + sx] | 0xFF000000u; continue; }
+      }
+      if (!a) continue;
+      uint32_t& d = ui.at(dx, dy);   // partial alpha (button shadow): blend over what is there
+      if (ui.overlay && (d >> 24) != 255) { d = overlayOver(d, float(p & 255), float(p >> 8 & 255), float(p >> 16 & 255), float(a) / 255.f); continue; }
+      d = blendPlane5(d, p, a);
+    }
+  }
+}
+
+// GZBtn art is baked onto a solid blue plate (about 7B92FF, faint vignette) with the pill's drop shadow
+// multiplied into it. Remove the plate so the button sits on whatever the dialog draws: plate -> alpha 0,
+// shadow -> black at partial alpha, pill -> opaque. A shadow pixel is the plate colour scaled evenly on all
+// three channels; anything lighter than the plate, or scaled unevenly, belongs to the pill.
+static void keyButtonPlate(Image& im) {
+  const float plate[3] = {0x7B, 0x92, 0xFF};
+  for (uint32_t& p : im.px) {
+    if (!(p >> 24)) continue;
+    float r[3], lo = 9.f, hi = 0.f, sum = 0.f;
+    for (int c = 0; c < 3; c++) { r[c] = float((p >> (8 * c)) & 255) / plate[c]; lo = std::min(lo, r[c]); hi = std::max(hi, r[c]); sum += r[c]; }
+    if (hi > 1.02f || hi - lo > 0.1f) continue;   // pill pixel: keep
+    float a = 1.f - sum / 3.f;
+    p = a < 0.004f ? 0u : (uint32_t(std::lround(a * 255.f)) << 24);   // black + alpha; the faint plate vignette stays too (the original draws it: the soft ring 1-2 px outside the outline) [OBSERVED]
+  }
+}
+
+// ---- loading --------------------------------------------------------------------------------
+static uint64_t key64(uint32_t g, uint32_t i) { return (uint64_t(g) << 32) | i; }
+static std::string hex(uint32_t v, int digits) {
+  char b[16]; std::snprintf(b, sizeof b, "%0*X", digits, v); return b;
+}
+
+const Image* Skin::fetch(uint32_t group, uint32_t inst) const {
+  if (!db_) return nullptr;
+  uint64_t k = key64(group, inst);
+  auto it = cache_.find(k);
+  if (it != cache_.end()) return &it->second;
+  if (missing_.count(k)) return nullptr;
+  ResourceRef r = db_->find({T_UI_IMAGE, group, inst});
+  if (r) {
+    try {
+      Image im = decodeUiImage(r.data, r.available, true);
+      if (group == Sys && inst == 0xE2B66DB8) { buttonRaw_ = im; keyButtonPlate(im); }
+      if (!im.empty()) return &(cache_[k] = std::move(im));
+    } catch (const FormatError&) {}
+  }
+  missing_[k] = true;
+  return nullptr;
+}
+
+void Skin::bind(const std::string& name, uint32_t group, uint32_t inst) {
+  if (fetch(group, inst)) names_[name] = {group, inst};
+}
+
+const Image* Skin::get(const std::string& name) const {
+  auto ex = extras_.find(name);
+  if (ex != extras_.end()) return &ex->second;
+  auto it = names_.find(name);
+  return it == names_.end() ? nullptr : fetch(it->second.first, it->second.second);
+}
+
+// Paints an analytic gear (trapezoid teeth on a round body, hollow hub, 4x4 supersampling) into cell `cell` of a 4-cell strip: dark outline, yellow
+// body shaded top-left to bottom-right, a thin highlight on the upper rim; the disabled cell is the same gear in dull greys and the pressed cell moves
+// it one pixel down and right. (cx, cy) is the gear centre inside the cell, x0..x1 the cell's columns, (fr, fg, fb) the button face (hub hole).
+static void paintCog(Image& im, int cell, int x0, int x1, int cx, int cy, double kTip, double kRoot, double kHub, int fr, int fg, int fb) {
+  const int ch = im.h;
+  auto at = [&](int x, int y) -> uint32_t& { return im.px[size_t(y) * im.w + x]; };
+  const bool active = cell != CELL_DISABLED;
+  const bool pressed = cell == CELL_PRESSED;
+  const double gx = cx + (pressed ? 1 : 0) + 0.5, gy = cy + (pressed ? 1 : 0) + 0.5;
+  constexpr int kTeeth = 8, kSS = 4;
+  constexpr double kPi = 3.14159265358979323846;
+  // Gear radius at angle phi: flat tip over 34% of the tooth pitch, flanks over the next 20%, flat root between teeth.
+  auto gearR = [&](double phi) {
+    double u = std::fmod(phi / (2 * kPi) * kTeeth, 1.0);
+    if (u < 0) u += 1.0;
+    const double t = std::abs(u - 0.5);   // 0 at the tooth centre, 0.5 at the gap centre
+    if (t < 0.17) return kTip;
+    if (t < 0.31) return kTip + (kRoot - kTip) * (t - 0.17) / 0.14;
+    return kRoot;
+  };
+  // Coverage in [0,1] of the gear grown by `grow` pixels, over the pixel at (px, py).
+  auto cover = [&](int px, int py, double grow, bool hubHole) {
+    int hit = 0;
+    for (int sy = 0; sy < kSS; sy++)
+      for (int sx = 0; sx < kSS; sx++) {
+        const double dx = px + (sx + 0.5) / kSS - gx, dy = py + (sy + 0.5) / kSS - gy;
+        const double d = std::sqrt(dx * dx + dy * dy);
+        if (hubHole ? d < kHub + grow : d < gearR(std::atan2(dy, dx)) + grow) hit++;
+      }
+    return double(hit) / (kSS * kSS);
+  };
+  auto mixPx = [&](uint32_t& dst, int r, int g, int b, double w) {
+    if (w <= 0) return;
+    const int dr = int(dst & 255), dg = int((dst >> 8) & 255), db = int((dst >> 16) & 255);
+    const int nr = int(std::lround(dr + (r - dr) * w)), ng = int(std::lround(dg + (g - dg) * w)), nb = int(std::lround(db + (b - db) * w));
+    dst = (dst & 0xFF000000u) | uint32_t(nb) << 16 | uint32_t(ng) << 8 | uint32_t(nr);
+  };
+  const int reach = int(kTip) + 3;
+  for (int y = int(gy) - reach; y <= int(gy) + reach; y++)
+    for (int x = int(gx) - reach; x <= int(gx) + reach; x++) {
+      if (x < x0 || x >= x1 || y < 0 || y >= ch) continue;
+      uint32_t& px = at(x, y);
+      if ((px >> 24) < 128) continue;
+      const double covOut = cover(x, y, 1.0, false), covBody = cover(x, y, 0.0, false);
+      if (covOut <= 0) continue;
+      // Outline first (soft where the body does not reach), then the shaded body on top.
+      if (active) mixPx(px, 14, 14, 20, covOut); else mixPx(px, 20, 20, 26, covOut);
+      if (covBody > 0) {
+        const double dx = x + 0.5 - gx, dy = y + 0.5 - gy;
+        double shade = std::clamp((dx + dy) / (2.0 * kTip) + 0.5, 0.0, 1.0);   // 0 top-left .. 1 bottom-right
+        int r, g, b;
+        if (active) { r = int(255 - 30 * shade); g = int(236 - 78 * shade); b = int(96 - 84 * shade); }
+        else { r = int(92 - 28 * shade); g = int(92 - 28 * shade); b = int(100 - 28 * shade); }
+        // Thin highlight just inside the upper-left rim.
+        const double d = std::sqrt(dx * dx + dy * dy), rim = gearR(std::atan2(dy, dx));
+        if (active && d > rim - 1.6 && dx + dy < 0) { r = std::min(255, r + 18); g = std::min(255, g + 16); b = std::min(255, b + 40); }
+        mixPx(px, r, g, b, covBody);
+      }
+      // Hub: dark ring with the button face showing through the hole.
+      const double hubOut = cover(x, y, 1.0, true), hubIn = cover(x, y, 0.0, true);
+      if (hubOut > 0) { if (active) mixPx(px, 14, 14, 20, hubOut); else mixPx(px, 20, 20, 26, hubOut); }
+      if (hubIn > 0) mixPx(px, fr, fg, fb, hubIn);
+    }
+  
+}
+
+// Build a 4-cell "engine" (options) strip from the help "?" button: keep the chrome, replace the glyph with a cog.
+void Skin::buildEngineButton() {
+  const Image* help = get("help");
+  if (!help || help->w < 4 || help->h < 8) return;
+  Image im = *help;
+  // Recolour the green chrome to blue so the options button does not read as a twin of the help "?" next to it.
+  // Hue rotation on the green pixels only (shadows, highlights and the transparent corners keep their values).
+  for (uint32_t& px : im.px) {
+    const int al = int(px >> 24);
+    if (!al) continue;
+    const float r = float(px & 255) / 255.f, g = float((px >> 8) & 255) / 255.f, b = float((px >> 16) & 255) / 255.f;
+    const float mx = std::max(r, std::max(g, b)), mn = std::min(r, std::min(g, b)), d = mx - mn;
+    if (d < 0.12f || mx < 0.12f) continue;   // grey or nearly black
+    float h;
+    if (mx == r) h = std::fmod((g - b) / d, 6.f); else if (mx == g) h = (b - r) / d + 2.f; else h = (r - g) / d + 4.f;
+    h *= 60.f;
+    if (h < 0) h += 360.f;
+    if (h < 70.f || h > 170.f) continue;     // only the green range
+    h += 105.f;                               // green (~120) -> blue (~225)
+    if (h >= 360.f) h -= 360.f;
+    const float sat = d / mx, hh = h / 60.f, c = mx * sat, x = c * (1.f - std::fabs(std::fmod(hh, 2.f) - 1.f)), m = mx - c;
+    float nr, ng, nb;
+    switch (int(hh)) {
+      case 0: nr = c; ng = x; nb = 0; break;
+      case 1: nr = x; ng = c; nb = 0; break;
+      case 2: nr = 0; ng = c; nb = x; break;
+      case 3: nr = 0; ng = x; nb = c; break;
+      case 4: nr = x; ng = 0; nb = c; break;
+      default: nr = c; ng = 0; nb = x; break;
+    }
+    auto q = [&](float v) { return uint32_t(std::lround(std::clamp(v + m, 0.f, 1.f) * 255.f)); };
+    px = (px & 0xFF000000u) | q(nb) << 16 | q(ng) << 8 | q(nr);
+  }
+  const int cells = 4, cw = im.w / cells, ch = im.h;
+  auto at = [&](int x, int y) -> uint32_t& { return im.px[size_t(y) * im.w + x]; };
+  for (int cell = 0; cell < cells; cell++) {
+    const int x0 = cell * cw, x1 = x0 + cw;
+    const int cx = x0 + cw / 2 - 1, cy = ch / 2 - 1;
+    // Sample the button face on a ring around the glyph so we can paint out the "?".
+    std::vector<uint32_t> samples;
+    for (int a = 0; a < 360; a += 10)
+      for (int rad : {12, 13, 14}) {
+        const int x = int(std::lround(cx + rad * std::cos(a * 0.017453292519943295)));
+        const int y = int(std::lround(cy + rad * std::sin(a * 0.017453292519943295)));
+        if (x < x0 || x >= x1 || y < 0 || y >= ch) continue;
+        uint32_t p = at(x, y);
+        int r = int(p & 255), g = int((p >> 8) & 255), b = int((p >> 16) & 255), al = int(p >> 24);
+        if (al < 200) continue;
+        if (r > 180 && g > 140 && b < 120) continue;   // skip yellow glyph samples
+        samples.push_back(p);
+      }
+    if (samples.empty()) continue;
+    std::sort(samples.begin(), samples.end());
+    // Face colour: fixed blues (the sampled median picks up the grey rim highlights after the recolour).
+    uint32_t face = samples[samples.size() / 2];
+    switch (cell) {
+      case CELL_PRESSED: face = (face & 0xFF000000u) | uint32_t(rgba(30, 68, 150) & 0x00FFFFFFu); break;
+      case CELL_HOVER: face = (face & 0xFF000000u) | uint32_t(rgba(78, 128, 220) & 0x00FFFFFFu); break;
+      case CELL_DISABLED: break;
+      default: face = (face & 0xFF000000u) | uint32_t(rgba(44, 92, 196) & 0x00FFFFFFu); break;
+    }
+    const int fr = int(face & 255), fg = int((face >> 8) & 255), fb = int((face >> 16) & 255);
+    for (int y = cy - 13; y <= cy + 13; y++)
+      for (int x = cx - 13; x <= cx + 13; x++) {
+        if (x < x0 || x >= x1 || y < 0 || y >= ch) continue;
+        if ((x - cx) * (x - cx) + (y - cy) * (y - cy) > 12 * 12) continue;
+        uint32_t p = at(x, y);
+        int r = int(p & 255), g = int((p >> 8) & 255), b = int((p >> 16) & 255), al = int(p >> 24);
+        if (al < 128) continue;
+        const bool yellow = r > 160 && g > 120 && b < 130 && r + g > b * 3;
+        const bool dark = r + g + b < 140;
+        const int dist = std::abs(r - fr) + std::abs(g - fg) + std::abs(b - fb);
+        if (yellow || dark || dist > 55) at(x, y) = (p & 0xFF000000u) | (face & 0x00FFFFFFu);
+      }
+    paintCog(im, cell, x0, x1, cx, cy, 8.8, 6.5, 2.2, fr, fg, fb);
+  }
+  extras_["engine"] = std::move(im);
+}
+
+// Build the 4-cell "cog" strip for the slot of the original's online-service button (spec 09 4.3): the original's frame ring (3 px) of
+// strip 02F78C6D:52FB06F0 (four 33 x 30 cells) is kept, the glyph interior is painted with the tile's light blue and a slimmer gear is drawn on it.
+void Skin::buildCogButton() {
+  const Image* ex = get("exchange");
+  if (!ex || ex->w < 8 || ex->h < 12 || ex->w % 4 != 0) return;
+  Image im = *ex;
+  const int cells = 4, cw = im.w / cells, ch = im.h;
+  const Image src = *ex;   // the untouched strip: the tile references are read from it while `im` is repainted
+  auto sp = [&](int cell, int x, int y) -> uint32_t { return src.px[size_t(y) * src.w + size_t(cell * cw + x)]; };
+  // The glyph (globe, monitor, cable) sits on a nearly flat, almost white tile (observed: FFFAFF where x <= 12 and y <= 13 of the cell, F6F6FF over
+  // the rest of x 5..25, y 5..22); the shaded rim (x >= 26, y >= 23) is the cell's own pixels. The glyph area is repainted from two reference pixels of
+  // the tile in the reference cell: (5,5) and (15,5). The pressed cell keeps its own inset frame but takes the tile from the normal cell; hover reads
+  // its own (one step brighter) tile.
+  for (int cell = 0; cell < cells; cell++) {
+    const int ref = cell == CELL_PRESSED ? int(CELL_NORMAL) : cell;
+    // Hover (observed): FFFFFF only in the top-left block, FFFAFF (the normal cell's top-left colour) elsewhere; its own (15,5) is FFFFFF.
+    const uint32_t topLeft = sp(ref, 5, 5), rest = cell == CELL_HOVER ? sp(CELL_NORMAL, 5, 5) : sp(ref, 15, 5);
+    for (int y = 5; y <= 22 && y < ch; y++)
+      for (int x = 5; x <= 25 && x < cw; x++) {
+        const uint32_t c = (x <= 12 && y <= 13) ? topLeft : rest;
+        const size_t i = size_t(y) * im.w + size_t(cell * cw + x);
+        if ((im.px[i] >> 24) >= 128) im.px[i] = c | 0xFF000000u;
+      }
+    // The gear, centred in the tile; its hub shows the tile colour there.
+    const uint32_t hub = im.px[size_t(ch / 2) * im.w + size_t(cell * cw + cw / 2)];   // the repainted tile colour at the centre: the hub hole shows it
+    paintCog(im, cell, cell * cw, (cell + 1) * cw, cell * cw + cw / 2 - 1, ch / 2 - 1, 7.2, 5.3, 1.8, int(hub & 255), int((hub >> 8) & 255), int((hub >> 16) & 255));
+  }
+  extras_["cog"] = std::move(im);
+}
+
+// The round Show Toolbars button (02F78C6D:53244588) has black corners and no colour key: its opacity comes from the plane image 53244589 (same
+// 4 x 26 x 26 layout, white where opaque), so the button is a soft disc over the city (observed on the original).
+void Skin::buildShowButton() {
+  const Image* col = fetch(UiBig, 0x53244588);
+  const Image* pl = fetch(UiBig, 0x53244589);
+  if (!col || !pl || col->empty() || col->w != pl->w || col->h != pl->h) return;
+  Image im = *col;
+  for (size_t i = 0; i < im.px.size(); i++) {
+    const uint32_t g = pl->px[i] & 255;   // plane brightness = opacity
+    im.px[i] = (im.px[i] & 0x00FFFFFFu) | (g << 24);
+  }
+  extras_["show"] = std::move(im);
+}
+
+bool Skin::load(ResourceDb& db, int screenH, int screenW) {
+  db_ = &db; h_ = screenH;
+  w_ = screenW > 0 ? screenW : screenH <= 480 ? 640 : screenH <= 600 ? 800 : 1024;
+  cache_.clear(); missing_.clear(); names_.clear(); extras_.clear();
+  layout_ = toolMenuLayout(screenH);
+  bar_ = bottomBarLayout(w_);
+
+  // Tool menu column and root/sub-menu art.
+  bind("rootpanel", layout_.artGroup, 0xFFFF);
+  for (const auto& p : layout_.pieces) bind("piece." + hex(p.group, 8) + "." + hex(p.inst, 4), p.group, p.inst);
+  for (int n = 1; n <= 9; n++) {
+    uint32_t base = 0x10000000u | (uint32_t(n) << 16);
+    bind("root." + std::to_string(n) + ".hover", UiBig, base | 1);
+    bind("root." + std::to_string(n) + ".press", UiBig, base | 5);
+    bind("sub." + std::to_string(n), layout_.artGroup, base | 3);
+  }
+  for (int n = 0; n < 9; n++)
+    for (uint32_t id : layout_.subIds[n]) bind("tool." + hex(id, 4), layout_.artGroup, id);
+
+  // Bottom bar, speed, view, RCI.
+  bind("bottombar", bar_.group, 0x82790741);
+  bind("bottombar.cap", UiBig, 0x82790742);
+  bind("rci", UiBig, 0x42FB77F6);
+  for (uint32_t k = 0; k < 6; k++) bind("speed." + std::to_string(k), UiBig, 0x52FB06E4 + k);
+  bind("help", UiBig, 0x52FB06EA);
+  bind("exchange", UiBig, 0x52FB06F0);   // the original's online-service button strip (spec 09 4.3)
+  buildEngineButton();   // Metroplex3K options: same chrome as "help", cog instead of "?"
+  buildCogButton();      // the same options button in the exchange button's slot: its chrome, a slimmer cog
+  // Navigator panel pieces (bottom-right): top-left, top-right, bottom (160 wide), layers strip, 4 zoom/rotate strips.
+  bind("nav.tl", UiBig, 0x22F96E32); bind("nav.tr", UiBig, 0x22F96E33); bind("nav.bot", UiBig, 0x22F96E34);
+  bind("nav.layers", UiBig, 0x22F96E35);   // 22F96E31 is the lattice (grid) strip
+  for (uint32_t k = 0; k < 4; k++) bind("nav.btn." + std::to_string(k), UiBig, 0x22F96E2D + k);
+  bind("hide", UiBig, 0x53244586);   // Hide Toolbars: 4 cells 26x26 (disabled, normal, pressed, highlighted), spec 08 4.2
+  buildShowButton();   // the round "Show Toolbars" button that remains while the panels are hidden (53244588 + opacity plane 53244589)
+  // Pause / run buttons (spec 09 4.2): lit, hover (yellow) and unlit (grey) faces.
+  bind("pause", UiBig, 0x52FB06E0); bind("pause.hover", UiBig, 0x52FB06E1); bind("pause.off", UiBig, 0x52FB06EB);
+  bind("run", UiBig, 0x52FB06E2); bind("run.hover", UiBig, 0x52FB06E3); bind("run.off", UiBig, 0x52FB06EC);
+
+  // Generic controls.
+  bind("button", Sys, 0xE2B66DB8);
+  bind("check", Sys, 0xC2D6E93A);
+  bind("radio", Sys, 0x0000000A);
+  bind("combo", Sys, 0x62B99D31);
+  bind("field", Sys, 0x42B99D48);
+  bind("scrollbar", Sys, 0xE2B99E01);
+  bind("spinner", Sys, 0x82B99D9D);
+  bind("window", Sys, 0xE2B14588);
+  bind("sysbtns", Sys, 0x62B19CE9);
+  for (uint32_t i = 1; i <= 0x1C; i++) bind("gonzo." + hex(i, 2), Gonzo, i);
+
+  // Front end: pick the 800x600 set when the window can hold it and it exists, else 640x480.
+  bool big = w_ >= 800 && h_ >= 600;
+  if (big && fetch(Main, 0x22729921)) {   // observed: the skyline image is the original's 800x600 menu art
+    bind("menu.bg", Main, 0x22729921);
+    for (uint32_t k = 0; k < 9; k++) bind("menu.btn." + std::to_string(k), Main, 0x22729930 + k);
+  } else if (big && fetch(Main, 0x01140000)) {
+    bind("menu.bg", Main, 0x01140000);
+    for (uint32_t k = 0; k < 9; k++) bind("menu.btn." + std::to_string(k), Main, 0x01140001 + k);
+  }
+  if (!names_.count("menu.bg")) {
+    static const uint32_t bgs[] = {0x22721000, 0x22721001, 0x22721002, 0x22721003, 0x22721004, 0x22721006, 0x22729921};
+    for (uint32_t b : bgs) if (fetch(Main, b)) { bind("menu.bg", Main, b); break; }
+    for (uint32_t k = 0; k < 9; k++) bind("menu.btn." + std::to_string(k), Main, 0x22729930 + k);
+  }
+
+  loaded_ = !names_.empty();
+  return loaded_;
+}
+
+// ---- tool menu ------------------------------------------------------------------------------
+Rect Skin::columnRect(int winW, int winH) const {
+  const Image* p = get("rootpanel");
+  int h = winH;
+  if (p && layout_.heightClass == 480) h = p->h;
+  return {winW - layout_.width, 0, layout_.width, h};
+}
+Rect Skin::rootButtonRect(int n, int ox, int oy) const {
+  if (n < 1 || n > 9) return {};
+  const auto& r = layout_.root[n - 1];
+  return {ox + r.x, oy + r.y, 56, 32};
+}
+Rect Skin::subButtonRect(int n, int k, int ox, int oy) const {
+  if (n < 1 || n > 9 || k < 0 || size_t(k) >= layout_.subY[n - 1].size()) return {};
+  return {ox, oy + layout_.subY[n - 1][k], 36, 36};
+}
+Rect Skin::subPanelRect(int n, int ox, int oy) const {
+  if (n < 1 || n > 9 || !layout_.root[n - 1].hasSub) return {};
+  const Image* im = get("sub." + std::to_string(n));
+  if (!im) return {};
+  const auto& r = layout_.root[n - 1];
+  return {ox + r.dx, oy + r.dy, im->w, im->h};
+}
+
+bool Skin::drawRootPanel(Ui& ui, int ox, int oy, int hover, int selected) {
+  const Image* bg = get("rootpanel");
+  if (!bg) return false;
+  for (const auto& p : layout_.pieces) {
+    const Image* im = get("piece." + hex(p.group, 8) + "." + hex(p.inst, 4));
+    if (!im) continue;
+    if (p.tileDown) {
+      for (int y = oy + p.y; y < (p.until ? oy + p.until : ui.H); y += im->h) ui.blit(*im, ox, y);
+    } else {
+      ui.blit(*im, ox, oy + p.y);
+    }
+  }
+  for (int pass = 0; pass < 2; pass++) {
+    int n = pass == 0 ? hover : selected;
+    if (n < 1 || n > 9 || (pass == 0 && n == selected)) continue;
+    const Image* ov = get("root." + std::to_string(n) + (pass == 0 ? ".hover" : ".press"));
+    if (!ov) continue;
+    Rect r = rootButtonRect(n, ox, oy);
+    ui.blit(*ov, r.x, r.y);
+  }
+  return true;
+}
+
+bool Skin::drawSubPanel(Ui& ui, int ox, int oy, int n) {
+  Rect r = subPanelRect(n, ox, oy);
+  const Image* im = r.w ? get("sub." + std::to_string(n)) : nullptr;
+  if (!im) return false;
+  ui.blit(*im, r.x, r.y);
+  return true;
+}
+
+// ---- bottom bar -----------------------------------------------------------------------------
+bool Skin::bottomBarPlace(BottomBarPlace& o) const {
+  const Image* bg = get("bottombar");
+  if (!bg) return false;
+  int x = 0, y = h_ - bg->h;
+  o.bar = {x, y, bg->w, bg->h};
+  auto mv = [&](Rect r) { return Rect{r.x + x, r.y + y, r.w, r.h}; };
+  o.fieldA = mv(bar_.fieldA); o.fieldB = mv(bar_.fieldB); o.fieldC = mv(bar_.fieldC); o.fieldD = mv(bar_.fieldD);
+  o.textLine = mv(bar_.textLine);
+  o.p1x = x + bar_.p1x; o.p1y = y + bar_.p1y; o.p2x = x + bar_.p2x; o.p2y = y + bar_.p2y;
+  o.p3x = x + bar_.p3x; o.p3y = y + bar_.p3y; o.p4x = x + bar_.p4x; o.p4y = y + bar_.p4y;
+  o.rightEnd = w_;
+  return true;
+}
+
+bool Skin::drawBottomBar(Ui& ui, BottomBarPlace* out) {
+  BottomBarPlace pl;
+  if (!bottomBarPlace(pl)) return false;
+  pl.rightEnd = ui.W;
+  pl.bar.y = ui.H - pl.bar.h;
+  // re-anchor to the Ui's actual height
+  int dy = pl.bar.y - (h_ - pl.bar.h);
+  if (dy) {
+    for (Rect* r : {&pl.fieldA, &pl.fieldB, &pl.fieldC, &pl.fieldD, &pl.textLine}) r->y += dy;
+    pl.p1y += dy; pl.p2y += dy; pl.p3y += dy; pl.p4y += dy;
+  }
+  ui.blit(*get("bottombar"), pl.bar.x, pl.bar.y);
+  if (const Image* cap = get("bottombar.cap"))
+    for (int x = pl.bar.x + pl.bar.w; x < ui.W; x += cap->w) ui.blit(*cap, x, ui.H - cap->h);
+  if (out) *out = pl;
+  return true;
+}
+
+// ---- RCI ------------------------------------------------------------------------------------
+bool Skin::drawRciIndicator(Ui& ui, int x, int y, double r, double c, double i) {
+  const Image* bg = get("rci");
+  if (!bg) return false;
+  ui.blit(*bg, x, y);
+  double v[3] = {r, c, i};
+  for (int k = 0; k < 3; k++) {
+    Rect b = RciGeometry::bar(k, v[k]);
+    if (b.h > 0) ui.fill({x + b.x, y + b.y, b.w, b.h}, kRciColors[k]);
+  }
+  return true;
+}
+
+// ---- generic controls -----------------------------------------------------------------------
+bool Skin::sliceCell(const Image& s, int cells, int cell, Image& out) {
+  if (s.empty() || cells <= 0 || cell < 0 || cell >= cells || s.w % cells) return false;
+  int cw = s.w / cells;
+  out.w = cw; out.h = s.h; out.px.resize(size_t(cw) * s.h);
+  for (int j = 0; j < s.h; j++)
+    for (int i = 0; i < cw; i++) out.px[size_t(j) * cw + i] = s.px[size_t(j) * s.w + cell * cw + i];
+  return true;
+}
+
+bool Skin::drawCell(Ui& ui, const Image* s, int cells, int cell, int x, int y) {
+  if (!s || s->empty() || cells <= 0 || cell < 0 || cell >= cells) return false;
+  int cw = s->w / cells;
+  ui.blit(*s, x, y, cell * cw, cw);
+  return true;
+}
+
+bool Skin::imageButtonCells(Ui& ui, const Image* s, int cells, Rect r, const std::string& tip, bool toggled,
+                            bool enabled, bool& clicked, int tipPlace) const {
+  clicked = false;
+  if (!s || s->empty() || cells <= 0) return false;
+  int cw = s->w / cells;
+  bool hot = enabled && ui.hover(r), down = hot && ui.in.down;
+  int cell = cell4For(enabled, down, toggled, hot);
+  if (cell >= cells) cell = std::min(1, cells - 1);
+  ui.blit(*s, r.x + (r.w - cw) / 2, r.y + (r.h - s->h) / 2, cell * cw, cw);
+  if (hot && !tip.empty()) ui.setTip(tip, r, tipPlace);
+  clicked = enabled && ui.clicked(r);
+  return true;
+}
+
+bool Skin::drawButton3(Ui& ui, const Image* s, int cells, int cell, Rect r, const std::string& label,
+                       uint32_t textCol, const char* font) const {
+  if (!s || s->empty() || cells <= 0 || cell < 0 || cell >= cells) return false;
+  int cw = s->w / cells, third = cw / 3;
+  if (third <= 0) return false;
+  int sx = cell * cw;
+  int lw = std::min(third, r.w / 2), rw = lw;
+  const Image* rawArt = (s == get("button") && !buttonRaw_.empty()) ? &buttonRaw_ : nullptr;
+  skinBlitScaled(ui, *s, {sx, 0, lw, s->h}, {r.x, r.y, lw, r.h}, rawArt);
+  skinBlitScaled(ui, *s, {sx + cw - rw, 0, rw, s->h}, {r.x + r.w - rw, r.y, rw, r.h}, rawArt);
+  if (r.w > lw + rw) {   // the middle slice is tiled, not stretched [OBSERVED: seam columns every 18 px on the pill buttons]
+    const int mw = cw - 2 * third;
+    for (int off = 0; off < r.w - lw - rw; off += mw)
+      skinBlitScaled(ui, *s, {sx + third, 0, mw, s->h}, {r.x + lw + off, r.y, std::min(mw, r.w - lw - rw - off), r.h}, rawArt);
+  }
+  if (!label.empty() && ui.fonts) {
+    int off = cell == CELL_PRESSED ? 1 : 0;
+    // Centre on the pill, not the whole cell: the art carries a drop shadow on the right and bottom (measured on the
+    // original's prompt buttons: caption sits 2 px left and 1 px up of the cell centre).
+    const Font& fnt = ui.fonts->get(font);
+    // TITLE9 captions on the skin's pill buttons follow one fixed 15-level palette (r, g, b in 565; blue = 15 + level) [OBSERVED on New City Select, Layers
+    // Apply / Default View: all levels identical]; other text colours (disabled, red) keep the computed ramp.
+    static const uint16_t kPillRamp[15] = {
+        uint16_t(6 << 11 | 13 << 5 | 15), uint16_t(7 << 11 | 15 << 5 | 16), uint16_t(8 << 11 | 18 << 5 | 17), uint16_t(10 << 11 | 20 << 5 | 18), uint16_t(11 << 11 | 23 << 5 | 19),
+        uint16_t(12 << 11 | 26 << 5 | 20), uint16_t(14 << 11 | 28 << 5 | 21), uint16_t(15 << 11 | 31 << 5 | 22), uint16_t(16 << 11 | 34 << 5 | 23), uint16_t(18 << 11 | 36 << 5 | 24),
+        uint16_t(19 << 11 | 39 << 5 | 25), uint16_t(20 << 11 | 42 << 5 | 26), uint16_t(22 << 11 | 44 << 5 | 27), uint16_t(23 << 11 | 47 << 5 | 28), uint16_t(25 << 11 | 50 << 5 | 29)};
+    const bool pillInk = cell != CELL_DISABLED && (textCol ? textCol : ui.textCol) == ui.textCol && std::string(font) == "title9";
+    if (ui.buttonLabelRamp) fnt.setRampOverride(ui.buttonLabelRamp);
+    else if (pillInk) fnt.setRampOverride(kPillRamp);
+    ui.textCentered({r.x + off, r.y + off + ui.buttonLabelDy, r.w - 4, r.h - 2}, label, font,
+                    cell == CELL_DISABLED ? rgb(0x90, 0x94, 0xA0) : textCol ? textCol : ui.textCol);
+    fnt.setRampOverride(nullptr);
+  }
+  return true;
+}
+
+bool Skin::button3(Ui& ui, const Image* s, Rect r, const std::string& label, bool enabled, bool toggled,
+                   bool& clicked, uint32_t textCol, const char* font) const {
+  clicked = false;
+  if (!s || s->empty()) return false;
+  bool hot = enabled && ui.hover(r), down = hot && ui.in.down;
+  if (!drawButton3(ui, s, 4, cell4For(enabled, down, toggled, hot), r, label, textCol, font)) return false;
+  clicked = enabled && ui.clicked(r);
+  return true;
+}
+
+bool Skin::drawDialogFrame(Ui& ui, Rect r, const std::string& title) const {
+  const Image* cloud = get("window");
+  if (!cloud || cloud->empty() || r.w < 16 || r.h < 40) return false;
+  // Cloud body, tiled from the dialog's top-left.
+  for (int y = 0; y < r.h; y += cloud->h)
+    for (int x = 0; x < r.w; x += cloud->w)
+      ui.blitRect(*cloud, r.x + x, r.y + y, 0, 0, std::min(cloud->w, r.w - x), std::min(cloud->h, r.h - y));
+  const uint32_t white = rgb(255, 255, 255), black = rgb(0, 0, 0);
+  ui.fill({r.x, r.y, r.w, 1}, white); ui.fill({r.x, r.y, 1, r.h}, white);
+  ui.fill({r.x, r.y + r.h - 1, r.w, 1}, black); ui.fill({r.x + r.w - 1, r.y, 1, r.h}, black);
+  // Title bar: 1 px lighter ring around a flat blue fill, inset 4 px; 31 px tall.
+  Rect bar{r.x + 4, r.y + 4, r.w - 8, 31};   // right edge line at r.x + r.w - 5 [OBSERVED: Preferences, Loans, Business Deals, Budget]
+  ui.fill(bar, rgb(173, 182, 255));
+  ui.fill({bar.x + 1, bar.y + 1, bar.w - 2, bar.h - 2}, rgb(123, 146, 255));
+  ui.text(r.x + 8, r.y + 8, title, "title12", ui.titleRecolour ? rgb(222, 222, 255) : rgb(222, 223, 255));   // (222,222,255) takes the recolour path (scenario dialogs)
+  return true;
+}
+
+bool Skin::dialogCloseBox(Ui& ui, Rect d, Rect& hit, bool& clicked) const {
+  const Image* sb = get("sysbtns");
+  clicked = false;
+  if (!sb || sb->w < 96 || sb->h < 100) return false;
+  const int cw = sb->w / 4, ch = sb->h / 4;   // 4 columns (states) x 4 rows (close, back, minimise, maximise)
+  hit = {d.x + d.w - 32, d.y + 7, cw, ch};
+  bool hot = ui.hover(hit), down = hot && ui.in.down;
+  int col = down ? 2 : hot ? 3 : 1;
+  ui.blitRect(*sb, hit.x, hit.y, col * cw, 0, cw, ch);
+  clicked = ui.clicked(hit);
+  return true;
+}
+
+int Skin::drawCheck(Ui& ui, const Image* s, int x, int y, bool checked, bool enabled, bool hover, bool pressed) const {
+  if (!s || s->empty() || s->w % 8) return 0;
+  if (!drawCell(ui, s, 8, cell8For(enabled, pressed, checked, hover), x, y)) return 0;
+  return s->w / 8;
+}
+
+}  // namespace m3k

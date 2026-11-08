@@ -1,0 +1,256 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "core/ui.h"
+
+#include <algorithm>
+#include "core/skin.h"
+
+namespace m3k {
+
+// One source pixel onto the frame: alpha 0 skips, 255 overwrites, anything between blends over what is there (soft edges of
+// art that ships with a separate opacity plane, e.g. the Show Toolbars button).
+uint32_t blendPlane5(uint32_t dst, uint32_t src, uint32_t a8) {
+  const int a5 = int((a8 * 31 + 127) / 255);
+  int out[3];
+  for (int k = 0; k < 3; k++) {
+    const int sh = k * 8;
+    const int s5 = int((src >> sh) & 255) >> 3, d5 = int((dst >> sh) & 255) >> 3;
+    out[k] = std::max(0, std::min(31, (32 * d5 + a5 * (s5 - d5)) >> 5));
+  }
+  const int g6 = out[1] << 1;
+  return 0xFF000000u | uint32_t((out[2] << 3) | (out[2] >> 2)) << 16 | uint32_t((g6 << 2) | (g6 >> 4)) << 8 | uint32_t((out[0] << 3) | (out[0] >> 2));
+}
+
+static inline void putPixel(Ui& ui, uint32_t& d, uint32_t p) {
+  const uint32_t a = p >> 24;
+  if (!a) return;
+  if (a == 255) { d = p; return; }
+  const float f = float(a) / 255.f;
+  if (ui.overlay && (d >> 24) != 255) { d = overlayOver(d, float(p & 255), float((p >> 8) & 255), float((p >> 16) & 255), f); return; }
+  d = blendPlane5(d, p, a);
+}
+
+
+
+Rect tooltipBox(int place, Rect a, int textWidth, int clientW, int px, int py) {
+  const int bw = textWidth + 5, bh = 16;   // our font's advance width includes one blank column the original's box does not count
+  Rect r{0, 0, bw, bh};
+  switch (place) {
+    case Ui::kTipLeft: r.x = a.x - 2 - bw; r.y = a.y + (a.h - bh) / 2; break;
+    case Ui::kTipAbove: r.x = a.x + (a.w - bw) / 2; r.y = a.y - 2 - bh; break;   // C division (truncating) matches the measurements
+    case Ui::kTipBelow: r.x = a.x + (a.w - bw) / 2; r.y = a.y + a.h + 2; break;
+    default: r.x = px + 12; r.y = py + 18; break;
+  }
+  if (r.x + r.w > clientW - 2) r.x = clientW - 2 - r.w;
+  r.x = std::max(0, r.x); r.y = std::max(0, r.y);
+  return r;
+}
+
+void Ui::begin(uint32_t* px, int w, int h, const Input& i, int pitchPx) {
+  fb = nullptr; pixels = px; W = w; H = h; pitch = pitchPx > 0 ? pitchPx : w; in = i;
+  tooltip.clear(); tooltipPlace = 0; idCounter_ = 0; windowRects.clear();
+  // Windows not drawn last frame were closed: forget their offsets so they reopen at home.
+  for (auto it = winOffsets_.begin(); it != winOffsets_.end();) {
+    if (!it->second.seen) it = winOffsets_.erase(it);
+    else { it->second.seen = false; ++it; }
+  }
+  // Last frame's press landed on a title bar not covered by a later window: that window follows the pointer now.
+  if (pressKey_) { dragKey_ = pressKey_; pressKey_ = 0; }
+  if (!in.down) dragKey_ = 0;
+}
+
+void Ui::begin(std::vector<uint32_t>* f, int w, int h, const Input& i) {
+  begin(f && !f->empty() ? f->data() : nullptr, w, h, i, w);
+  fb = f;
+}
+
+void Ui::setTarget(uint32_t* px, int w, int h, int pitchPx) {
+  fb = nullptr; pixels = px; W = w; H = h; pitch = pitchPx > 0 ? pitchPx : w;
+}
+
+void Ui::setTarget(std::vector<uint32_t>* f, int w, int h) {
+  setTarget(f && !f->empty() ? f->data() : nullptr, w, h, w);
+  fb = f;
+}
+
+uint64_t Ui::windowKey(const char* name) {
+  uint64_t h = 1469598103934665603ull;   // FNV-1a; the top bit keeps it apart from size keys
+  for (const char* p = name; *p; p++) { h ^= uint8_t(*p); h *= 1099511628211ull; }
+  return h | (1ull << 63);
+}
+
+Rect Ui::movable(Rect home, uint64_t key, int barH) {
+  if (!key) key = (uint64_t(uint32_t(home.w)) << 32) | uint32_t(home.h);
+  if (barH <= 0) barH = skin ? 35 : 26;
+  WinOffset& o = winOffsets_[key];
+  o.seen = true;
+  if (key == dragKey_ && in.down) { o.dx = dragDx_ + in.mx - dragMx_; o.dy = dragDy_ + in.my - dragMy_; }
+  // Keep the title bar reachable: fully on screen vertically, at least 40 px of it horizontally.
+  const int grip = std::min(40, home.w);
+  o.dx = std::max(grip - home.w - home.x, std::min(W - grip - home.x, o.dx));
+  o.dy = std::max(-home.y, std::min(H - barH - home.y, o.dy));
+  Rect r{home.x + o.dx, home.y + o.dy, home.w, home.h};
+  if (in.pressed && r.contains(in.mx, in.my)) {
+    const bool title = in.my < r.y + barH && in.mx < r.x + r.w - 36;   // the close box sits in the last 36 px
+    pressKey_ = title ? key : 0;
+    if (title) { dragMx_ = in.mx; dragMy_ = in.my; dragDx_ = o.dx; dragDy_ = o.dy; }
+  }
+  return r;
+}
+
+void Ui::fill(Rect r, uint32_t c) {
+  int x0 = std::max(0, r.x), y0 = std::max(0, r.y), x1 = std::min(W, r.x + r.w), y1 = std::min(H, r.y + r.h);
+  for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) at(x, y) = c;
+}
+
+void Ui::fillAlpha(Rect r, uint32_t c, float a) {
+  int x0 = std::max(0, r.x), y0 = std::max(0, r.y), x1 = std::min(W, r.x + r.w), y1 = std::min(H, r.y + r.h);
+  uint32_t cr = c & 255, cg = (c >> 8) & 255, cb = (c >> 16) & 255;
+  for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) {
+    uint32_t& d = at(x, y);
+    if (overlay && (d >> 24) != 255) { d = overlayOver(d, float(cr), float(cg), float(cb), a); continue; }
+    uint32_t dr = d & 255, dg = (d >> 8) & 255, db = (d >> 16) & 255;
+    d = 0xFF000000u | (uint32_t(db + (float(cb) - db) * a) << 16) | (uint32_t(dg + (float(cg) - dg) * a) << 8) | uint32_t(dr + (float(cr) - dr) * a);
+  }
+}
+
+void Ui::frame(Rect r, bool raised) {
+  uint32_t hi = raised ? panelLight : panelDark, lo = raised ? panelDark : panelLight;
+  fill({r.x, r.y, r.w, 1}, hi); fill({r.x, r.y, 1, r.h}, hi);
+  fill({r.x, r.y + r.h - 1, r.w, 1}, lo); fill({r.x + r.w - 1, r.y, 1, r.h}, lo);
+}
+
+void Ui::blitRect(const Image& im, int dx, int dy, int sx, int sy, int sw, int sh) {
+  for (int j = 0; j < sh; j++) {
+    int y = dy + j; if (y < 0 || y >= H || sy + j >= im.h) continue;
+    for (int i = 0; i < sw; i++) {
+      int x = dx + i; if (x < 0 || x >= W || sx + i >= im.w) continue;
+      uint32_t p = im.px[size_t(sy + j) * im.w + sx + i];
+      putPixel(*this, at(x, y), p);
+    }
+  }
+}
+
+void Ui::panel(Rect r, const std::string& title) {
+  if (!title.empty() && skin && skin->drawDialogFrame(*this, r, title)) return;
+  fill(r, panelCol);
+  frame(r, true);
+  if (!title.empty()) {
+    fill({r.x + 2, r.y + 2, r.w - 4, 22}, panelDark);
+    text(r.x + 8, r.y + 4, title, "title12", rgb(255, 255, 255));
+  }
+}
+
+void Ui::text(int x, int y, const std::string& s, const char* font, uint32_t col) {
+  fonts->get(font).draw(pixels, W, H, x, y, s, col ? col : textCol, pitch, overlay);
+}
+int Ui::textWidth(const std::string& s, const char* font) const { return fonts->get(font).measure(s); }
+void Ui::textCentered(Rect r, const std::string& s, const char* font, uint32_t col) {
+  const Font& f = fonts->get(font);
+  text(r.x + (r.w - f.measure(s)) / 2, r.y + (r.h - f.height()) / 2, s, font, col);
+}
+
+void Ui::blit(const Image& im, int x, int y, int sx, int sw) {
+  if (sw < 0) sw = im.w - sx;
+  for (int j = 0; j < im.h; j++) {
+    int dy = y + j; if (dy < 0 || dy >= H) continue;
+    for (int i = 0; i < sw; i++) {
+      int dx = x + i; if (dx < 0 || dx >= W) continue;
+      uint32_t p = im.px[size_t(j) * im.w + sx + i];
+      putPixel(*this, at(dx, dy), p);
+    }
+  }
+}
+
+bool Ui::button(Rect r, const std::string& label, bool enabled, bool toggled, const char* font) {
+  if (skin && skin->get("button")) {
+    bool c = false;
+    if (skin->button3(*this, skin->get("button"), r, label, enabled, toggled, c, enabled ? textCol : rgb(0x90, 0x94, 0xA0), font)) return c;
+  }
+  bool hot = enabled && hover(r), down = hot && in.down;
+  fill(r, toggled ? panelDark : hot ? rgb(0xDC, 0xE4, 0xF0) : panelCol);
+  frame(r, !(down || toggled));
+  textCentered({r.x + (down ? 1 : 0), r.y + (down ? 1 : 0), r.w, r.h}, label, font, enabled ? (toggled ? rgb(255, 255, 255) : 0) : rgb(0x90, 0x94, 0xA0));
+  return enabled && clicked(r);
+}
+
+bool Ui::imageButton(Rect r, const Image& strip, int cells, const std::string& tip, bool toggled) {
+  int cw = strip.w / cells;
+  bool hot = hover(r), down = hot && in.down;
+  int cell = toggled ? 2 : down ? 2 : hot ? 3 : 1;
+  if (cell >= cells) cell = 1;
+  fill(r, panelCol);
+  blit(strip, r.x + (r.w - cw) / 2, r.y + (r.h - strip.h) / 2, cell * cw, cw);
+  if (hot) tooltip = tip;
+  return clicked(r);
+}
+
+bool Ui::checkbox(Rect r, const std::string& label, bool& v) {
+  if (skin && skin->get("check")) {
+    const Image* cs = skin->get("check");
+    int cw = cs->w / 8, ch = cs->h;
+    Rect box{r.x, r.y + (r.h - ch) / 2, cw, ch};
+    bool hot = hover(r);
+    skin->drawCheck(*this, cs, box.x, box.y, v, true, hot, hot && in.down);
+    text(r.x + cw + 6, r.y + (r.h - fonts->ui().height()) / 2, label);
+    if (clicked(r)) { v = !v; return true; }
+    return false;
+  }
+  Rect box{r.x, r.y + (r.h - 14) / 2, 14, 14};
+  fill(box, rgb(255, 255, 255)); frame(box, false);
+  if (v) { fill({box.x + 3, box.y + 3, 8, 8}, textCol); }
+  text(r.x + 20, r.y + (r.h - fonts->ui().height()) / 2, label);
+  if (clicked(r)) { v = !v; return true; }
+  return false;
+}
+
+bool Ui::slider(Rect r, int& v, int lo, int hi) {
+  int id = nextId();
+  fill({r.x, r.y + r.h / 2 - 2, r.w, 4}, panelDark);
+  if (in.pressed && r.contains(in.mx, in.my)) activeId = id;
+  if (activeId == id) {
+    if (in.down) { int nv = lo + (in.mx - r.x) * (hi - lo) / std::max(1, r.w); nv = std::max(lo, std::min(hi, nv)); if (nv != v) { v = nv; return true; } }
+    else activeId = 0;
+  }
+  int kx = r.x + (v - lo) * (r.w - 10) / std::max(1, hi - lo);
+  Rect k{kx, r.y, 10, r.h};
+  fill(k, panelCol); frame(k, true);
+  return false;
+}
+
+bool Ui::list(Rect r, const std::vector<std::string>& rows, int& sel, int& scroll) {
+  fill(r, rgb(255, 255, 255)); frame(r, false);
+  int rh = fonts->ui().height() + 4;
+  int vis = std::max(1, (r.h - 4) / rh);
+  if (hover(r) && in.wheel) scroll -= in.wheel;
+  scroll = std::max(0, std::min(scroll, std::max(0, int(rows.size()) - vis)));
+  bool changed = false;
+  for (int i = 0; i < vis && scroll + i < int(rows.size()); i++) {
+    Rect rr{r.x + 2, r.y + 2 + i * rh, r.w - 4, rh};
+    int idx = scroll + i;
+    if (idx == sel) fill(rr, rgb(0x90, 0xA8, 0xE0));
+    text(rr.x + 3, rr.y + 2, rows[idx]);
+    if (clicked(rr) && sel != idx) { sel = idx; changed = true; }
+  }
+  if (focusId == 0) {
+    if (in.key[K_DOWN] && sel + 1 < int(rows.size())) { sel++; changed = true; if (sel >= scroll + vis) scroll++; }
+    if (in.key[K_UP] && sel > 0) { sel--; changed = true; if (sel < scroll) scroll--; }
+  }
+  return changed;
+}
+
+bool Ui::textBox(Rect r, std::string& s, size_t maxLen) {
+  int id = nextId();
+  if (in.pressed) { if (r.contains(in.mx, in.my)) focusId = id; else if (focusId == id) focusId = 0; }
+  fill(r, rgb(255, 255, 255)); frame(r, false);
+  bool edited = false;
+  if (focusId == id) {
+    for (char c : in.text) if (c >= 32 && s.size() < maxLen) { s.push_back(c); edited = true; }
+    if (in.key[K_BACKSPACE] && !s.empty()) { s.pop_back(); edited = true; }
+  }
+  text(r.x + 4, r.y + (r.h - fonts->ui().height()) / 2, s + (focusId == id ? "|" : ""));
+  return edited;
+}
+
+}  // namespace m3k

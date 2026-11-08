@@ -1,0 +1,70 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// FBF bitmap fonts and text drawing. See spec/05-text-and-fonts.md section 4.
+#pragma once
+#include <map>
+#include <string>
+#include <vector>
+#include "core/fsutil.h"
+#include "core/image.h"
+
+namespace m3k {
+
+struct Glyph { int l = 0, t = 0, r = 0, b = 0, adv = 0; };
+
+class Font {
+ public:
+  bool load(const uint8_t* p, size_t n);
+  bool loaded() const { return w_ > 0; }
+  // Build the built-in fallback font at integer scale (1 = 5x7 in a 6x8 cell).
+  void makeBuiltin(int scale);
+  int height() const { return glyphH_; }
+  int inkTop(unsigned char c) const;   // first row of glyph c that has ink, relative to the glyph's top (0 when unknown)
+  int measure(const std::string& s) const;
+  // Draw text with top-left at (x,y) into an RGBA framebuffer. Mono/AA fonts use `colour`.
+  // `pitch` is pixels per row (0 = fbW).
+  void draw(uint32_t* fb, int fbW, int fbH, int x, int y, const std::string& s, uint32_t colour, int pitch = 0, bool overlay = false) const;
+  void draw(std::vector<uint32_t>& fb, int fbW, int fbH, int x, int y, const std::string& s, uint32_t colour) const {
+    draw(fb.data(), fbW, fbH, x, y, s, colour, fbW);
+  }
+  bool multicolour() const { return multi_; }
+  uint16_t keyEntry() const { return atlas_.empty() ? uint16_t(0) : pal_[atlas_[0]]; }   // the 565 palette entry of the colour key (background)
+  void setRecolourBackground(uint16_t p565) { recBgSet_ = true; recBg_ = p565; }
+  // One-shot explicit 565 palette for the 15 ramp levels (entry 1..15) of the next recoloured draws, nullptr = the computed ramp. Const: set around a single caption.
+  void setRampOverride(const uint16_t* t15) const { rampOverride_ = t15; }
+ private:
+  int w_ = 0, h_ = 0, glyphH_ = 0;
+  bool multi_ = false;
+  bool recBgSet_ = false; uint16_t recBg_ = 0;   // recolour background override (565)
+  mutable const uint16_t* rampOverride_ = nullptr;
+  bool ramp_ = false;     // the atlas uses indices 2..15 (a pre-mixed anti-aliasing ramp: the title fonts)
+  std::vector<uint8_t> atlas_;
+  uint16_t pal_[256] = {};
+  Glyph g_[256];
+};
+
+// Strings: Windows-1252 bytes, converted to UTF-8 for hosting if needed. Token expansion per
+// spec 05 section 3.3 and printf-lite.
+struct TextContext {
+  std::string mayor = "Mayor", city = "City";
+  int population = 0, year = 2000;
+  std::string neighbour = "Neighbour";            // %NEIGHBOR%: the neighbour the message concerns (a deal's neighbour, or the topic's slot)
+  std::string neighbours[4];                      // names of neighbour slots 0..3 (%ANYNEIGHBOR% draws one of them at random)
+};
+std::string expandTokens(const std::string& s, const TextContext& c);
+std::string groupDigits(long long v);  // 1,234,567
+
+// Font registry: loads the FBF files of the current language folder from Res/Text/<lang>/.
+class Fonts {
+ public:
+  void load(const fs::path& textDir);
+  const Font& get(const std::string& name) const;  // "system9","main9","main10","title9","title12","serif17"
+  const Font& ui() const { return get("main10"); }
+  bool has(const std::string& name) const { return f_.count(name) != 0; }
+ private:
+  std::map<std::string, Font> f_;
+  mutable Font builtin_[2];
+};
+
+}  // namespace m3k

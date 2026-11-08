@@ -1,0 +1,9 @@
+build/
+*.png
+.cache/
+build-release/
+shots/
+dialog-shots/
+build-debug/
+metroplex3k-clean-side-seed.md
+build-gate/

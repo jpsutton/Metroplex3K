@@ -1,0 +1,135 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Immediate-mode UI toolkit drawing into an RGBA framebuffer. Platform independent: the host feeds
+// mouse/keyboard state each frame. Used for all menus, dialogs and the in-city HUD.
+#pragma once
+#include <algorithm>
+#include <cstdint>
+#include <functional>
+#include <map>
+#include <string>
+#include <vector>
+#include "core/font.h"
+#include "core/image.h"
+
+namespace m3k {
+
+class Skin;
+
+struct Rect {
+  int x = 0, y = 0, w = 0, h = 0;
+  bool contains(int px, int py) const { return px >= x && py >= y && px < x + w && py < y + h; }
+};
+
+inline uint32_t rgb(int r, int g, int b) { return rgba(uint8_t(r), uint8_t(g), uint8_t(b)); }
+
+struct KeyEvent { int vk = 0; int mods = 0; };  // Windows virtual-key code, HotkeyMod mask (no auto-repeat)
+
+struct Input {
+  int mx = 0, my = 0;
+  bool down = false;       // left button currently held
+  bool pressed = false;    // went down this frame
+  bool released = false;   // went up this frame
+  bool rightPressed = false;
+  bool rightDown = false;  // right button currently held
+  bool modCtrl = false;    // Ctrl key currently held (map: temporary query tool)
+  bool modAlt = false;     // Alt key currently held (map: temporary bulldozer tool)
+  int wheel = 0;
+  std::string text;        // typed characters this frame
+  bool key[16] = {};
+  bool held[4] = {};
+  std::vector<KeyEvent> keyDowns;   // key-down events this frame       // arrows held: left, right, up, down       // see Key enum
+};
+enum Key { K_ENTER, K_ESC, K_BACKSPACE, K_UP, K_DOWN, K_PAGEUP, K_PAGEDOWN, K_TAB, K_LEFT, K_RIGHT };
+
+// Tooltip box (spec 08 3.3a [OBSERVED]): 16 px high, 5 more than our advance-width text measure (the original's ink width + 6), 2 px from the anchor button; left = vertically centred, above / below =
+// horizontally centred; a box crossing the right client edge is shifted left to end 2 px inside it. `pointer` is used only for kTipPointer.
+Rect tooltipBox(int place, Rect anchor, int textWidth, int clientW, int pointerX, int pointerY);
+
+// Alpha blend of a source pixel over a destination the way the original blends opacity planes: 5 bits per channel (green g8 >> 3), floor((32 d + a5 (s - d)) / 32),
+// written back as 565-expanded values; a8 is the 0..255 alpha of the decoded image (a5 = a8 * 31 / 255 rounded).
+uint32_t blendPlane5(uint32_t dst, uint32_t src, uint32_t a8);
+
+class Ui {
+ public:
+  std::vector<uint32_t>* fb = nullptr;   // optional owning vector (packed); pixels aliases its data when set
+  uint32_t* pixels = nullptr;            // row-major framebuffer (may have pitch > W)
+  int pitch = 0;                         // pixels per row
+  const uint16_t* buttonLabelRamp = nullptr;   // explicit 15-level 565 palette for the next pill caption (cleared by the caller)
+  int radioLabelDx = 0;                  // extra horizontal offset of the next radio() label (cleared by the caller)
+  int buttonLabelDy = 0;                 // extra vertical offset of the next pill button's caption (cleared by the button)
+  bool titleRecolour = false;            // dialog frame titles use the recolour palette instead of the stored one (scenario dialogs, observed)
+  bool overlay = false;                  // drawing over a GPU-composited city (alpha 0 = city, see overlayOver)
+  int W = 0, H = 0;
+  const Fonts* fonts = nullptr;
+  Input in;
+  uint32_t textCol = rgb(0x31, 0x36, 0x7C);
+  uint32_t panelCol = rgb(0xC8, 0xD0, 0xDC);
+  uint32_t panelDark = rgb(0x6C, 0x74, 0x90);
+  uint32_t panelLight = rgb(0xF0, 0xF4, 0xFA);
+  const Skin* skin = nullptr;   // original UI art for dialogs and controls; null = flat fallback look
+  std::string tooltip;
+  // Where the tooltip goes (spec 08 3.3a, observed): anchored to the button rect `tooltipRect`, 2 px away: kTipLeft = left of it, vertically
+  // centred (tool column, layer views, grid); kTipAbove = above it, horizontally centred (bottom bar, zoom and rotate buttons); kTipBelow = below
+  // it, horizontally centred (View Data mode strip). kTipPointer (default) = below and right of the pointer where it entered, for controls the
+  // original's measurements do not cover. Cleared every frame with the text.
+  enum { kTipPointer = 0, kTipLeft = 1, kTipAbove = 2, kTipBelow = 3 };
+  int tooltipPlace = kTipPointer;
+  Rect tooltipRect;
+  void setTip(const std::string& text, Rect anchor, int place) { tooltip = text; tooltipRect = anchor; tooltipPlace = place; }
+  int focusId = 0;       // text box with keyboard focus
+  int activeId = 0;      // widget being dragged
+
+  // Packed vector target (pitch = w). Prefer begin(pixels, ...) when the host supplies a pitched buffer.
+  void begin(std::vector<uint32_t>* f, int w, int h, const Input& i);
+  // Raw framebuffer; pitchPx 0 means tightly packed (pitch = w).
+  void begin(uint32_t* px, int w, int h, const Input& i, int pitchPx = 0);
+  // Retarget drawing without resetting input / window-drag state (sub-buffer clip helpers).
+  void setTarget(std::vector<uint32_t>* f, int w, int h);
+  void setTarget(uint32_t* px, int w, int h, int pitchPx = 0);
+  uint32_t& at(int x, int y) { return pixels[size_t(y) * pitch + x]; }
+  const uint32_t& at(int x, int y) const { return pixels[size_t(y) * pitch + x]; }
+  // Frames of the windows drawn this frame (windows register theirs through wui::centered), so the host can tell
+  // whether the pointer is over a window instead of guessing sizes.
+  mutable std::vector<Rect> windowRects;
+  int nextId() { return ++idCounter_; }
+
+  // Movable dialogs: returns `home` shifted by the distance the user dragged the window by its title bar (the top
+  // `barH` pixels, 0 = the skin's title-bar height, minus the close box at the right end). Windows drawn later are on
+  // top: a press only starts a drag when no later window covers the point. The offset lasts while the window is drawn
+  // every frame, so a closed window reopens at its home position. `key` identifies the window (0 = its size).
+  Rect movable(Rect home, uint64_t key = 0, int barH = 0);
+  static uint64_t windowKey(const char* name);   // explicit key for windows whose size changes while open
+  bool draggingWindow() const { return dragKey_ != 0; }
+
+  void fill(Rect r, uint32_t c);
+  void fillAlpha(Rect r, uint32_t c, float a);
+  void frame(Rect r, bool raised = true);
+  void panel(Rect r, const std::string& title = "");
+  void text(int x, int y, const std::string& s, const char* font = "main10", uint32_t col = 0);
+  void textCentered(Rect r, const std::string& s, const char* font = "main10", uint32_t col = 0);
+  int textWidth(const std::string& s, const char* font = "main10") const;
+  void blit(const Image& im, int x, int y, int sx = 0, int sw = -1);  // optionally a horizontal slice
+  void blitRect(const Image& im, int dx, int dy, int sx, int sy, int sw, int sh);   // source sub-rectangle
+  bool button(Rect r, const std::string& label, bool enabled = true, bool toggled = false, const char* font = "main10");
+  // Button width that fits `label` (text plus side padding), at least `minW`.
+  int buttonWidth(const std::string& label, int minW = 0) const { return std::max(minW, textWidth(label) + 28); }
+  bool imageButton(Rect r, const Image& strip, int cells, const std::string& tip, bool toggled = false);
+  bool checkbox(Rect r, const std::string& label, bool& v);
+  bool slider(Rect r, int& v, int lo, int hi);
+  // Returns true if selection changed. `scroll` is the first visible row.
+  bool list(Rect r, const std::vector<std::string>& rows, int& sel, int& scroll);
+  bool textBox(Rect r, std::string& s, size_t maxLen = 31);
+  bool hover(Rect r) const { return r.contains(in.mx, in.my); }
+  bool clicked(Rect r) const { return in.released && r.contains(in.mx, in.my); }
+
+ private:
+  int idCounter_ = 0;
+  struct WinOffset { int dx = 0, dy = 0; bool seen = false; };
+  std::map<uint64_t, WinOffset> winOffsets_;
+  uint64_t dragKey_ = 0, pressKey_ = 0;   // window being dragged; window whose title bar got this frame's press
+  int dragMx_ = 0, dragMy_ = 0, dragDx_ = 0, dragDy_ = 0;   // press position and the offset at the press
+};
+
+}  // namespace m3k

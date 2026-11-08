@@ -1,0 +1,168 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Population, demographics, EQ, health, life expectancy, strikes, workforce.
+// See spec/20-sim-population.md and spec/10-save-format.md section 6.11.
+#pragma once
+#include <cstdint>
+#include <functional>
+#include <vector>
+#include "core/bytes.h"
+#include "core/chart.h"
+#include "core/clock.h"
+#include "core/ini.h"
+
+namespace m3k {
+
+constexpr int kAges = 90;
+
+// SC3ResLayer.ini [TuningParameters], already scaled to their working units.
+// Defaults are best guesses where the spec does not give a shipped value (marked "guess").
+struct PopulationConfig {
+  // Defaults are the shipped SC3ResLayer.ini values (used when a pack omits a key).
+  int externalFunSupply = 25000;
+  float newbornPopPct = 0.0136f;          // shipped 136
+  float minNewbornPopPct = 0.0076f;       // shipped 76
+  float maxNewbornPopPct = 0.0196f;       // shipped 196
+  float ageCohortDecay = 0.9970f;         // shipped 9970
+  float babyTrendChangeProb = 0.20f;      // shipped 2000
+  float eqDecay = 0.9809f;                // shipped 9809
+  float hqDecay = 0.9870f;                // shipped 9870
+  float optimalYearlyHQ = 1.44f;          // shipped 144 (x0.01)
+  float optimalYearlySchoolEQ = 1.26f;    // shipped 126 (x0.01)
+  float optimalYearlyCollegeEQ = 3.0f;    // shipped 300 (x0.01)
+  float hospitalizationRate = 0.05f;      // shipped 500
+  double pollutionFactor = 999e-8;        // shipped 999 (x1e-8)
+  uint8_t ageOfRebellion = 15;            // shipped 15
+  float monthlyYouthCurfewOrdEffect = 0.001f;
+  float monthlyReadingOrdEffectAdult = 0.01f, monthlyReadingOrdEffectChild = 0.02f;
+  float monthlyJrSportsOrdEffect = 0.004f;
+  float monthlyCrossingGuardsOrdEffect = 0.02f, monthlyFreeClinicsOrdEffect = 0.05f,
+        monthlyCPRTrainingOrdEffect = 0.02f, monthlySmokingBanOrdEffect = 0.02f;
+  int youthCurfewMinAge = 1, youthCurfewMaxAge = 21;
+  int readingMinChildAge = 4, readingMaxChildAge = 16;
+  int jrSportsMinAge = 8, jrSportsMaxAge = 16;
+  uint8_t minAcceptableEducationFunding = 70, minAcceptableHealthFunding = 70;
+  uint8_t minAcceptableEducationRating = 2, minAcceptableHealthRating = 2;
+  uint8_t educationStrikeEfficiency = 20, healthStrikeEfficiency = 20;   // raw byte, used UNSCALED (defect)
+  uint32_t maxEducationStrikeDuration = 26, maxHealthStrikeDuration = 20;
+
+  static PopulationConfig fromIni(const IniFile& resLayer);
+};
+
+enum class EduKind { School = 0, College = 1, Library = 2, Museum = 3 };
+
+// Spec 17 §6.2 / Q-BP [STATIC]: education funding pass keeps three lists by kind —
+// 0 = school, 1 = college, anything else (library 2 / museum 3) = third shared list.
+// EQ distribution still uses four separate kind groups (spec 20 §4.2).
+inline int educationFundingList(EduKind k) {
+  const int i = int(k);
+  return i <= 1 ? i : 2;
+}
+
+struct EduFacility {
+  EduKind kind = EduKind::School;
+  float capacity = 0;     // OptimalDeskCount (school/college) or PopServed (library/museum)
+  float effect = 0;       // EQ points per person per month (funded)
+  int minAge = 0, maxAge = 89;
+  uint32_t staff = 0;     // funded teachers/professors (recorded only)
+};
+
+struct Hospital {
+  uint32_t beds = 0;      // OptimalBedCount
+  float effect = 0;       // funded HQ effect
+  uint32_t doctors = 0;
+};
+
+struct PopulationInput {
+  uint32_t population = 0;          // N (recommended: N_R of the economy)
+  int month = 1, year = 1900;       // date of this monthly run
+  uint32_t pollution1 = 0, pollution2 = 0;   // city-wide totals (air, water)
+  int educationFunding = 100, healthFunding = 100;   // percent
+  std::function<bool(uint32_t ordinanceId)> ordinanceEnacted;
+  std::vector<EduFacility> education;
+  std::vector<Hospital> hospitals;
+  uint32_t museumCapacity = 0, libraryCapacity = 0;  // recorded sums (optional; derived if 0)
+};
+
+enum StrikeKind { StrikeHealth = 0, StrikeSchool = 1, StrikeCollege = 2 };
+
+struct PopulationResult {
+  bool strikeStarted[3] = {};
+  bool strikeEnded[3] = {};
+  bool yearlyAgeing = false;
+};
+
+class Population {
+ public:
+  explicit Population(PopulationConfig c = PopulationConfig(), uint32_t seed = 1);
+
+  PopulationConfig cfg;
+  SimRng rng;
+
+  // Persisted state (residential-layer state block, 1900 bytes).
+  Chart popChart, eqChart, leChart;
+  bool schoolStrike = false, healthStrike = false, collegeStrike = false;
+  uint32_t schoolStrikeMonths = 0, healthStrikeMonths = 0, collegeStrikeMonths = 0;
+  uint8_t schoolRating = 0, healthRating = 0, collegeRating = 0;
+  uint32_t patients = 0, schoolAgePop = 0, collegeAgePop = 0;
+  uint32_t schoolDesks = 0, collegeDesks = 0, hospitalBeds = 0, museumCapacity = 0, libraryCapacity = 0;
+  uint8_t unknown1BE = 0;
+  uint8_t birthTrend = 0;   // 0 rising, 1 falling, 2 steady
+  float eq[kAges] = {}, hq[kAges] = {}, share[kAges] = {}, le[kAges] = {};
+  uint32_t teachers = 0, professors = 0, doctors = 0;
+  // Not persisted.
+  int oldestAge = 64;       // A*
+  float healthGain = 0;     // x of the last run
+
+  // New-city initial distribution (spec 20 s3.1) and empty charts.
+  void newCity();
+
+  // Monthly step (spec 20 s3.2).
+  PopulationResult monthly(const PopulationInput& in);
+  // Strike risk r (0..10000) of spec 20 s5.4 for service 0 health, 1 schools, 2 colleges, evaluated now from the current
+  // rating, the given department funding and whether a facility exists (the advisors read W = r / 100, spec 22 s3.12).
+  uint32_t strikeRisk(int service, int fundingPct, bool facilityExists) const {
+    const bool on = service == 0 ? healthStrike : service == 1 ? schoolStrike : collegeStrike;
+    if (on) return 10000;
+    const uint8_t rating = service == 0 ? healthRating : service == 1 ? schoolRating : collegeRating;
+    const uint8_t minR = service == 0 ? cfg.minAcceptableHealthRating : cfg.minAcceptableEducationRating;
+    const int minF = service == 0 ? cfg.minAcceptableHealthFunding : cfg.minAcceptableEducationFunding;
+    if (rating < minR && fundingPct < minF && facilityExists) { int d = minF - fundingPct; return uint32_t(d * d); }
+    return 0;
+  }
+
+  // Statistics.
+  uint8_t qEQ(int lo, int hi) const;          // spec 4.5: unweighted mean over ages with share > 0
+  uint8_t cityEQ() const { return qEQ(0, 89); }
+  uint8_t cityLifeExpectancy() const;
+  // Unweighted mean life expectancy over ages lo..hi with share > 0 (the advisors read ages 20-65, spec 22 s3.12).
+  uint8_t qLE(int lo, int hi) const;
+  // Workforce fraction w = p[20] + ... + p[65] (spec 20 s6) [STATIC]: no normalisation or weighting.
+  float workforceFraction() const;
+  int32_t workers(int32_t residents) const;   // round(n * w)
+  static constexpr int kWorkAgeMin = 20, kWorkAgeMax = 65;
+  // Industrial developer EQ input: working-age EQ Q(20, 65) (spec 20 s4.5, spec 15 s4.5) [STATIC].
+  uint8_t workingAgeEQ() const { return qEQ(kWorkAgeMin, kWorkAgeMax); }
+  float shareSum() const;
+  // Number of people of an age for a given city population.
+  double peopleAt(int age, uint32_t population) const { return double(population) * share[age]; }
+
+  // Records. State block only (1900 bytes).
+  static constexpr size_t kStateBytes = 0x76C;
+  void parseState(const uint8_t* p, size_t n);
+  Bytes serializeState() const;
+  // Full record 206C6E7C:C106C4F5:0 = header + n + valve blocks + state (+ markers when present).
+  static constexpr uint32_t kType = 0x206C6E7C, kGroup = 0xC106C4F5, kInstance = 0;
+  uint16_t recordVersion = 3;
+  std::vector<Bytes> valveBlocks;   // raw 41-byte blocks (3000, 3001); kept verbatim
+  void parseRecord(const uint8_t* p, size_t n);
+  Bytes serializeRecord() const;
+
+ private:
+  void configureCharts();
+  void finishLoadDerived();
+  float yearlyEQShiftFactor() const { return cfg.eqDecay; }
+};
+
+}  // namespace m3k

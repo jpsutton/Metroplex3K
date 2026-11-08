@@ -1,0 +1,897 @@
+// SPDX-FileCopyrightText: 2025-2026 Metroplex3K contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Game shell: in-city windows. Builds the window environment, opens/draws every window and applies the
+// events the windows report (spec 09 sections 4.2, 6, 7).
+#include <algorithm>
+#include <cstdio>
+#include <memory>
+
+#include "core/game.h"
+#include "core/game_scenario.h"
+#include "core/overview.h"
+
+namespace m3k {
+
+namespace {
+std::string schemeLabel(uint32_t id, const char* kind) {
+  if (!id) return std::string("Default ") + kind;
+  char b[48]; std::snprintf(b, sizeof b, "%s %08X", kind, id); return b;
+}
+size_t indexOfId(const std::vector<uint32_t>& v, uint32_t id) {
+  auto it = std::find(v.begin(), v.end(), id);
+  return it == v.end() ? 0 : size_t(it - v.begin());
+}
+AgentHierarchy hierarchyOf(const City& c) {
+  AgentHierarchy h;
+  for (const auto& kv : c.config().parent) h.setParent(kv.first, kv.second);
+  return h;
+}
+}  // namespace
+
+// ---------------------------------------------------------------- environment
+
+WinEnv Game::env() {
+  WinEnv E;
+  E.data = haveData_ ? &data_ : nullptr;
+  E.image = [this](uint32_t g, uint32_t i) { return icon(g, i); };
+  E.tc.mayor = world_.info.mayorName.empty() ? nc_mayor_ : world_.info.mayorName;
+  E.tc.city = world_.info.cityName.empty() ? nc_name_ : world_.info.cityName;
+  const HudSnap& hs = hudNow();   // not the live city: it may be mid-tick on the worker
+  E.tc.population = simReady_ || scr_ == Screen::InCity ? hs.pop : 0;
+  E.tc.year = scr_ == Screen::InCity ? hs.clockYear : nc_year_;
+  if (!hs.neighbourName.empty()) E.tc.neighbour = hs.neighbourName;
+  for (int i = 0; i < 4; i++) E.tc.neighbours[i] = hs.neighbourNames[size_t(i)];   // %ANYNEIGHBOR% draws one of the four slots
+  E.currency = "$";
+  E.spots = spotSink_;
+  return E;
+}
+
+// ---------------------------------------------------------------- modal handling (spec 09 4.2)
+
+void Game::modalOpened() {
+  if (modalDepth_++ == 0) {
+    wasPausedBeforeModal_ = paused_;
+    paused_ = true;  // UI freeze only — does not raise city pause count
+    // Spec 14 §2.3 / Q-AZ: pending/modal count (not player pause); raises city hold.
+    if (simReady_) sim_.city().raisePending();
+  }
+}
+
+void Game::modalClosed() {
+  if (modalDepth_ > 0 && --modalDepth_ == 0) {
+    paused_ = wasPausedBeforeModal_;
+    if (simReady_) sim_.city().clearPending();
+  }
+}
+
+void Game::syncScreenPending() {
+  // Blocking screens while a city is loaded: save/load, new-city, terrain editor, scenario end, …
+  const bool want = simReady_ && scr_ != Screen::InCity;
+  if (want == screenPending_) return;
+  if (want) sim_.city().raisePending();
+  else sim_.city().clearPending();
+  screenPending_ = want;
+}
+
+bool Game::anyBlockingWindow() const {
+  // Spec 14 §2.3 / 09 §4.2 (Q-AZ): these raise pending/modal, not the player pause count.
+  return showBudget_ || showOrd_ || showDeals_ || showAdv_ || showProps_ || showPicker_ || showTip_ || showPrefs_ || showEngine_ ||
+         showQuery_ || showGoals_ || !scenPopups_.empty() || showLayers_ || showBrm_ || showBle_ || msgBox_.active || petView_ != nullptr;
+}
+
+void Game::closeAllWindows() {
+  closeModelessWindows();
+  showBudget_ = showOrd_ = showDeals_ = showAdv_ = showProps_ = showPicker_ = showTip_ = showPrefs_ = showEngine_ = false;
+  showBrm_ = showBle_ = false;
+  msgBox_.active = false;
+}
+
+void Game::closeModelessWindows() {
+  showMap_ = showGoals_ = showNeigh_ = showQuery_ = showLayers_ = false;
+}
+
+// ---------------------------------------------------------------- opening
+
+void Game::openPicker(uint32_t param) {
+  PickerCategory pc;
+  if (!pickerCategoryFromParam(param, pc)) return;
+  picker_.category = pc; picker_.sel = -1; picker_.scroll = 0;
+  buildPickerEntries(pc);
+  for (const auto& e : pickerEntries_) if (e.available) { picker_.sel = 0; break; }   // first entry starts selected (observed)
+  showPicker_ = true;
+}
+
+void Game::openWindow(const std::string& name) {
+  if (name == "budget") { budgetWin_.openMain(); showBudget_ = true; }
+  else if (name == "budget.income") { budgetWin_.openMain(); budgetWin_.incomeTab = true; showBudget_ = true; }
+  else if (name == "budget.loans") { budgetWin_.openMain(); budgetWin_.incomeTab = false; budgetWin_.page = BudgetWindow::Page::Loans; showBudget_ = true; }
+  else if (name == "ordinances") { showOrd_ = true; ordWin_.scroll = 0; }
+  else if (name == "neighbours" || name == "neighbors") {
+    showNeigh_ = true;
+    neighWin_.selected = 1;   // the original opens on area 0, which maps to neighbour (0 + 1) & 3 = the upper-left cell at rotation 0 [STATIC]
+    // Region image (spec 11 section 9): the city's heights in the middle, deterministic invented terrain around it,
+    // coloured with row 3 of the map ramp 000005E5:21.
+    std::array<uint32_t, 12> ramp = neighbourRegionDefaultRamp();
+    if (haveData_)
+      if (ResourceRef rr = data_.db().find({T_UI_IMAGE, 0x5E5, 0x21})) {
+        try {
+          Image im = decodeUiImage(rr.data, rr.available, false);
+          if (im.w >= 12 && im.h >= 4) for (int k = 0; k < 12; k++) ramp[size_t(k)] = im.px[size_t(3) * im.w + k] | 0xFF000000u;
+        } catch (const FormatError&) {}
+      }
+    const City& cc = sim_.city();
+    auto edges = neighbourSeaEdges(world_, [&cc](int x, int z) { return cc.pollution.seaWaterAt(x, z); });
+    neighRegion_ = neighbourRegionImage(world_, edges, ramp);
+  }
+  else if (name == "deals") showDeals_ = true;
+  else if (name == "advisors") { advWin_.open(0); advWin_.ordinances = &sim_.city().ordinances; showAdv_ = true; }
+  else if (name == "engine") showEngine_ = true;
+  else if (name == "prefs") { prefsState_ = prefsFromSettings(general_, prefs_); applySettingsToAudio(); showPrefs_ = true; }
+  else if (name == "props") {
+    if (!schemesLoaded_) loadSchemes();
+    CityPropsState& s = propsState_;
+    s = CityPropsState();
+    s.name = world_.info.cityName; s.mayor = world_.info.mayorName;
+    for (uint32_t id : schemeIdsL_) s.landscapes.push_back(schemeLabel(id, "Landscape"));
+    for (uint32_t id : schemeIdsF_) s.floraSets.push_back(schemeLabel(id, "Flora"));
+    for (uint32_t id : schemeIdsB_) s.buildingSets.push_back(schemeLabel(id, "Buildings"));
+    s.landscape = int(indexOfId(schemeIdsL_, world_.scheme.landscape));
+    s.flora = int(indexOfId(schemeIdsF_, world_.scheme.floraSet));
+    s.buildings = int(indexOfId(schemeIdsB_, world_.scheme.buildingSet));
+    s.landscapeIcons = schemeIconL_; s.floraIcons = schemeIconF_; s.buildingIcons = schemeIconB_;
+    s.landscapePreview = schemePrevL_; s.floraPreview = schemePrevF_; s.buildingPreview = schemePrevB_;
+    s.disasters = disastersOn_; s.autoBudget = autoBudget_;
+    s.editable = true;
+    showProps_ = true;
+  }
+  else if (name == "goals") showGoals_ = true;
+  else if (name == "map" || name == "graphs" || name == "charts") {   // one View Data window (spec 09 7.1)
+    MapSource src; buildMapSource(src);
+    if (name == "graphs") viewData_.setMode(ViewDataWindow::ModeGraphs, src);
+    else if (name == "charts") viewData_.setMode(ViewDataWindow::ModeCharts, src);
+    else if (!showMap_) viewData_.setMode(viewData_.mode, src);
+    showMap_ = true;
+  }
+  else if (name == "layers") { layersDlg_.edit = layers_; showLayers_ = true; }
+  else if (name == "tip") showTip_ = true;
+  else if (name == "userbuildings") openUserBuildings();
+  else if (name == "buildinglist") { openUserBuildings(); openBuildingList(); }
+}
+
+// ---------------------------------------------------------------- view builders
+
+void Game::buildBudgetView(BudgetView& v) {
+  City& c = sim_.city();
+  MonthEndInput& in = v.in;
+  cal::Date d = c.clock.date();
+  in.month = d.month; in.year = d.year;
+  in.population = uint32_t(std::max(0, c.population()));
+  in.avgLV = c.config().synthetic ? 128 : c.landValue.cityAverage();
+  in.zoneTotals[0] = int32_t(c.valves.resUnits); in.zoneTotals[1] = int32_t(c.valves.comUnits); in.zoneTotals[2] = int32_t(c.valves.indUnits);
+  OrdinanceMoneyInput om = c.ordinanceMoneyInput(); om.population = in.population;
+  Ordinances::Money m = c.ordinances.monthlyMoney(om);
+  in.ordIncome = m.income; in.ordCost = m.cost;
+  NeighbourDeals::Money dm = c.neighbours.monthlyMoney();
+  in.dealIncome = dm.income; in.dealCost = dm.cost;
+  in.bizIncome = c.business.monthlyIncome();
+  in.fares = c.traffic ? double(c.traffic->rec().faresLastMonth) : 0.0;
+  IndicatorData& ind = v.ind;
+  // Newest samples of the Graphs-window series (spec 09 s6.1, 10 s6.13). Before the first world cycle of a new city the
+  // charts are empty: fall back to population and the city plus its neighbours.
+  const auto& wc = c.valves.world.charts;
+  ind.citySize = wc[0].w[0] ? wc[0].w[0] : uint32_t(std::max(0, c.population())); ind.citySizeMax = wc[0].w[32];
+  ind.commerce = wc[1].w[0]; ind.commerceMax = wc[1].w[32];
+  ind.industry = wc[2].w[0]; ind.industryMax = wc[2].w[32];
+  ind.unemployment = wc[3].w[0] || wc[3].w[32] ? int(wc[3].w[0]) : std::max(0, std::min(100, c.valves.unemploymentPct()));
+  uint64_t np = wc[4].w[0];
+  if (np == 0) {
+    np = uint64_t(std::max(0, c.population()));
+    for (const auto& n : c.neighbours.neighbours) np += n.population;
+  }
+  ind.nationalPop = uint32_t(std::min<uint64_t>(np, 0xFFFFFFFFu));
+  ind.pollution = c.pollution.chart.monthly[0]; ind.pollutionMax = c.pollution.chart.max;
+  // Tax-page 1D2 = aura history chart (spec 09 §6.1 Q-AP / 47dc8f9): copy from aura record; do not
+  // invent a tax→% mapping. Slider drags do not recompute — month-end aura push advances samples.
+  {
+    const us::Chart& u = c.aura.chart;
+    std::copy(u.monthly, u.monthly + 12, v.auraChart.monthly);
+    std::copy(u.yearly, u.yearly + 10, v.auraChart.yearly);
+    std::copy(u.decade, u.decade + 10, v.auraChart.decade);
+    v.auraChart.max = u.max;
+    v.showAuraChart = true;
+  }
+}
+
+void Game::buildPickerEntries(PickerCategory c) {
+  City& city = sim_.city();
+  AgentHierarchy hier = hierarchyOf(city);
+  pickerEntries_.clear();
+  if (c == PickerCategory::Rewards) {
+    pickerEntries_ = rewardPickerEntries(advisors_.rewards, &city.budget, &hier, cheatAllRewards_);
+  } else if (haveData_) {
+    std::function<bool(uint32_t, const OccAttr&)> placed;
+    if (c == PickerCategory::Landmarks)
+      placed = [this](uint32_t occ, const OccAttr&) {
+        for (const auto& o : world_.occupants) if (o.occId == occ) return true;
+        return false;
+      };
+    // Power, water and garbage menus list unlocked types only (spec 22 "Building availability", 09 s6.11); nuclear is hidden while
+    // Nuclear Free Zone is enacted. `power to the masses` / `water in the desert` skip the unlock flag.
+    std::function<bool(uint32_t, const OccAttr&)> avail;
+    if (c == PickerCategory::Landmarks)
+      avail = [hier](uint32_t, const OccAttr& a) { return hier.isA(a.agentType, 18000); };
+    if (c == PickerCategory::PowerPlants || c == PickerCategory::Water || c == PickerCategory::Garbage) {
+      const bool all = c == PickerCategory::PowerPlants ? cheats_.active("power to the masses")
+                       : c == PickerCategory::Water ? cheats_.active("water in the desert") : cheats_.active("garbage in, garbage out");
+      const bool nfz = city.ordinances.enacted(0xE0D0722E);
+      avail = [this, all, nfz](uint32_t, const OccAttr& a) {
+        if (nfz && a.agentType == 12115) return false;
+        return all || advisors_.buildingUnlocked(int(a.agentType));
+      };
+    }
+    pickerEntries_ = collectPickerEntries(data_, PickerFilter::defaults(c), &city.budget, &hier, avail, placed);
+  }
+  // Second info column (observed: "Power: 6000 MW-h", plain number) from the utility tunables.
+  for (auto& e : pickerEntries_) {
+    if (c == PickerCategory::PowerPlants) {
+      auto it = city.power.params().plants.find(e.agentType);
+      if (it != city.power.params().plants.end() && it->second.capacity > 0)
+        e.capacity = subst(str(kTblCatalog, 3).empty() ? std::string("Power: %s MW-h") : str(kTblCatalog, 3), {std::to_string(it->second.capacity)});
+    } else if (c == PickerCategory::Water) {
+      const us::WaterParams& wp = city.water.params();
+      int cap = e.agentType == 12840 ? wp.towerCapa : e.agentType == 12810 ? wp.pumpCapa : e.agentType == 12830 ? wp.desaltCapa : 0;
+      if (cap > 0) e.capacity = subst(str(kTblCatalog, 4).empty() ? std::string("Capacity: %s m\xB3/Month") : str(kTblCatalog, 4), {std::to_string(cap)});
+    }
+  }
+}
+
+std::vector<uint8_t> Game::dataMapValues(DataLayer l) {
+  MapSource src;
+  buildMapSource(src);
+  const std::vector<uint8_t>* v = src.values ? src.values(l) : nullptr;
+  return v ? *v : std::vector<uint8_t>();
+}
+
+void Game::buildMapSource(MapSource& src, int pollutionKind) {
+  src.W = world_.W; src.H = world_.H;
+  src.circles = [this](bool police) {
+    std::vector<std::array<float, 3>> v;
+    for (const auto& c : (police ? sim_.city().police : sim_.city().fire).stationCircles()) v.push_back({c.x, c.z, c.radius});
+    return v;
+  };
+  auto buf = std::make_shared<std::vector<uint8_t>>();
+  src.values = [this, buf, pollutionKind](DataLayer l) -> const std::vector<uint8_t>* {
+    City& c = sim_.city();
+    const int W = world_.W, H = world_.H;
+    if (!W) return nullptr;
+    buf->assign(size_t(W) * H, 0);
+    auto at = [&](int x, int z) -> uint8_t& { return (*buf)[size_t(x) * H + z]; };
+    auto clampB = [](int v) { return uint8_t(std::max(0, std::min(255, v))); };
+    switch (l) {
+      case DataLayer::Zones:   // value = category << 2 | density level (0 light .. 2 dense), 0xFF = nothing; categories as dataMapDefs() lists them
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
+          const int zt = world_.zone[size_t(x) * H + z];
+          int cat = -1, lvl = 0;
+          if (zt >= 1 && zt <= 4) { cat = 0; lvl = std::min(2, zt - 1); }
+          else if (zt >= 5 && zt <= 8) { cat = 1; lvl = std::min(2, zt - 5); }
+          else if (zt >= 9 && zt <= 13) { cat = 2; lvl = std::min(2, zt - 9); }
+          else if (zt == 14) cat = 5;      // airport
+          else if (zt == 15) cat = 4;      // seaport
+          else if (zt == 17) cat = 6;      // landfill
+          else if (zt == 0 && c.occupantAt(x, z) >= 0) cat = 3;   // government / civic buildings
+          at(x, z) = cat < 0 ? 0xFF : uint8_t(cat << 2 | lvl);
+        }
+        break;
+      case DataLayer::Aura:
+        // The original tints developed tiles only (blue for good, red-brown for bad aura) and leaves the rest as terrain: 0 = no tint.
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) at(x, z) = c.occupantAt(x, z) >= 0 ? uint8_t(std::max(1, std::min(254, c.aura.aura(x, z) + 128))) : 0xFF;
+        break;
+      case DataLayer::Crime:
+        // buildings and zoned land only; 0xFF = not tinted
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++)
+          {   // a crime value of 0 is not tinted either (it shows the base)
+            const int cr = (c.occupantAt(x, z) >= 0 || world_.zone[size_t(x) * H + z] != 0) ? int(clampB(c.crime.crimeAt(x, z))) : 0;
+            at(x, z) = cr > 0 ? uint8_t(std::min(254, cr)) : 0xFF;
+          }
+        break;
+      case DataLayer::Fire:
+        // The Flammability map shows the flammability layer (not the fire-station coverage), on building tiles only; 0xFF = not tinted
+        if (c.flammability.grid.size() != size_t(W) * H) return nullptr;
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++)
+          {   // a flammability value of 0 shows the base
+            const int fl = c.occupantAt(x, z) >= 0 ? int(c.flammability.grid[size_t(x) * H + z]) : 0;
+            at(x, z) = fl > 0 ? uint8_t(std::min(254, fl)) : 0xFF;
+          }
+        break;
+      case DataLayer::LandValue:
+        if (c.landValue.lv.empty()) return nullptr;
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++)   // developed tiles only; 0xFF = not tinted
+          at(x, z) = c.occupantAt(x, z) >= 0 ? uint8_t(std::min(254, int(clampB(c.landValue.landValueAtTile(x, z))))) : 0xFF;
+        break;
+      case DataLayer::Power:
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
+          // Only what consumes power is tinted: landfill zones and landfills do not, nor does an occupant whose record says 0 consumption.
+          const int zt = world_.zone[size_t(x) * H + z], oi = c.occupantAt(x, z);
+          bool consumer = zt != 0 && zt != 17;
+          if (oi >= 0 && size_t(oi) < world_.occupants.size()) {
+            const Occupant& o = world_.occupants[size_t(oi)];
+            consumer = o.agentType != 12850;
+            if (consumer && haveData_) if (const OccAttr* a = data_.occupant(o.occId)) if (a->powerAttr == 0) consumer = false;
+          }
+          const bool any = c.isPowerLine(x, z) || consumer;
+          at(x, z) = !any ? 0xFF : c.powered(x, z) ? 0 : 1;
+        }
+        break;
+      case DataLayer::Water:
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
+          bool any = c.isPipe(x, z) || world_.zone[size_t(x) * H + z] != 0 || c.occupantAt(x, z) >= 0;
+          at(x, z) = !any ? 0xFF : c.watered(x, z) ? 0 : 1;
+        }
+        break;
+      case DataLayer::Pollution: {
+        int kind = pollutionKind >= 0 ? pollutionKind : viewData_.map.pollutionKind;
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
+          int v = kind == 0 ? c.pollution.airAt(x, z) : kind == 1 ? c.pollution.waterAt(x, z) : c.pollution.standingGarbageAt(x, z);
+          // Air / water: the cell amount against MaxAir/WaterPolluteForUI (11000), byte = min(255, v * 256 / 11000) (spec 25 9.2
+          // recommendation, [OPEN] in the original); garbage keeps its own scale.
+          at(x, z) = kind <= 1 ? clampB(v * 256 / 11000) : clampB(v / 128);
+        }
+        break;
+      }
+      case DataLayer::Density: {
+        // The original colours each building by its type's density class, not by a simulation layer (observed on Berlin: the most frequent
+        // palette-row-2 column per agent type, 53-95 % of the buildings of a type). Residential 3100/3300 low, 3700-4100 medium, 4300-4700 high;
+        // commercial 5100/5500 low, 5700/6100 medium, 6300/6700 high; industrial 8100/8700 low, 8300/8900 medium; everything else lightest.
+        static const std::pair<int, int> kCol[] = {{3100, 27}, {3300, 28}, {3700, 17}, {3900, 17}, {4100, 18}, {4300, 0}, {4500, 1}, {4700, 2},
+                                                   {5100, 25}, {5500, 25}, {5700, 7}, {6100, 8}, {6300, 0}, {6700, 0},
+                                                   {8100, 24}, {8300, 6}, {8700, 25}, {8900, 8}};
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
+          const int oi = c.occupantAt(x, z);
+          if (oi < 0 || size_t(oi) >= world_.occupants.size()) { at(x, z) = 0; continue; }   // bare land shows the base
+          const int t = int(world_.occupants[size_t(oi)].agentType);
+          if (t == 1000 || t == 12850) { at(x, z) = 0; continue; }   // agent 1000 (mostly) and landfills are not tinted on the Density map
+          int col = 31;
+          if ((t >= 3000 && t < 5000) || (t >= 5000 && t < 8000) || (t >= 8000 && t < 9300)) {   // zoned family: the nearest listed type of the same group
+            const int lo = t < 5000 ? 3000 : t < 8000 ? 5000 : 8000, hi = t < 5000 ? 5000 : t < 8000 ? 8000 : 9300;
+            int best = 1 << 30;
+            for (const auto& e : kCol) if (e.first >= lo && e.first < hi && std::abs(e.first - t) < best) { best = std::abs(e.first - t); col = e.second; }
+          }
+          at(x, z) = uint8_t(std::max(1, 255 - col * 8));   // column = (255 - value) >> 3
+        }
+        break;
+      }
+      case DataLayer::Traffic:   // spec 18 s7.1: the snapshot tile value over road, rail, station and highway (no subway);
+                                 // tiles without a requested network keep their terrain colour
+        if (!c.traffic) return nullptr;
+        for (int x = 0; x < W; x++) for (int z = 0; z < H; z++) {
+          bool net = (c.traffic->flags(x, z) & (TF_ROAD | TF_HIGHWAY | TF_RAIL | TF_STATION | TF_XFER)) != 0;
+          at(x, z) = net ? uint8_t(std::min<int>(254, c.traffic->tileValue(x, z, 0x01 | 0x02 | 0x04 | 0x10 | 0x20))) : 0xFF;
+        }
+        break;
+      default: return nullptr;
+    }
+    return buf.get();
+  };
+  src.baseColour = [this](int x, int z) -> uint32_t {
+    // Land and water come from row 4 of the data-map palette 000005E5:21 (spec 09 7.1.1: the lighter copy of row 3), column 0 water, columns by height.
+    if (!world_.inTiles(x, z)) return 0;
+    if (!mapRampLoaded_) {
+      mapRampLoaded_ = true;
+      mapRamp_ = neighbourRegionDefaultRamp();
+      if (haveData_)
+        if (ResourceRef rr = data_.db().find({T_UI_IMAGE, 0x5E5, 0x21})) {
+          try {
+            Image im = decodeUiImage(rr.data, rr.available, false);
+            if (im.w >= 12 && im.h >= 5) for (int k = 0; k < 12; k++) mapRamp_[size_t(k)] = im.px[size_t(4) * im.w + k] | 0xFF000000u;
+          } catch (const FormatError&) {}
+        }
+    }
+    const int d = int(world_.altAt(x, z)) - int(world_.waterAt(x, z));
+    return mapRamp_[size_t(d <= 0 ? 0 : neighbourRegionColourIndex(d))];
+  };
+}
+
+// ---------------------------------------------------------------- View City Layers (spec 09 7.2)
+
+void Game::applyLayers() {
+  const CityLayers& L = layers_;
+  ++ropt_.filterEpoch;   // showNet / showOccupant below may change meaning (item list cache key)
+  const bool above = L.mode == CityLayers::AboveGround, view = L.mode == CityLayers::LayerView;
+  const size_t li = size_t(std::max(0, std::min(int(cityLayerViews().size()) - 1, L.layer)));
+  ropt_.underground = L.mode == CityLayers::Underground;
+  ropt_.subways = L.underground == 0;
+  ropt_.pipes = L.underground == 1;
+  // Data layers hide buildings, flora and automata; networks stay (spec 25 9.2). Traffic keeps the zone tint.
+  ropt_.flora = above ? L.flora : view && (cityLayerViews()[li].layer == DataLayer::Crime || cityLayerViews()[li].layer == DataLayer::Fire);
+  ropt_.automata = above && L.transport;
+  // The Zones layer is a flat palBasic overlay (buildZoneOverlay); the translucent road tint stays only for the Traffic layer.
+  ropt_.zonePaint = false;   // the Traffic view's zone tint is part of the layer overlay
+  if (above && (!L.transport || !L.powerLines)) {
+    const bool t = L.transport, p = L.powerLines;
+    ropt_.showNet = [this, t, p](const NetPiece& np) { return sim_.city().kindOf(np) == uint32_t(NetworkKind::Power) ? p : t; };
+  } else if (view && (cityLayerViews()[li].layer == DataLayer::Crime || cityLayerViews()[li].layer == DataLayer::Fire)) {
+    ropt_.showNet = nullptr;   // the 0x4800 filter passes roads and street trees (only the buildings are hidden) [OBSERVED]
+  } else if (view && cityLayerViews()[li].layer == DataLayer::Power) {
+    ropt_.showNet = [this](const NetPiece& np) { return sim_.city().kindOf(np) == uint32_t(NetworkKind::Power); };   // only power lines and plants (flag 0x400000)
+  } else if (view && (cityLayerViews()[li].layer == DataLayer::Aura || cityLayerViews()[li].layer == DataLayer::LandValue ||
+                      cityLayerViews()[li].layer == DataLayer::Density)) {
+    ropt_.showNet = nullptr;   // filter group A1C085DB:1, contents not decoded: networks stay
+  } else if (view) {
+    ropt_.showNet = [](const NetPiece&) { return false; };   // Pollution, Traffic (road tiles carry the colour), Crime, Flammability: no network pieces [STATIC]
+  } else ropt_.showNet = nullptr;
+  if (above && (!L.zonedBuildings || !L.otherBuildings)) {
+    const bool zb = L.zonedBuildings, ob = L.otherBuildings;
+    ropt_.showOccupant = [zb, ob](const Occupant& o) { uint32_t k = o.agentType / 1000; return k >= 3 && k <= 9 ? zb : ob; };   // zoned = agent types 3000-9999
+  } else if (view) {
+    const DataLayer dl = cityLayerViews()[li].layer;
+    // Occupants drawn per view [STATIC]: Crime the police stations, Flammability the fire stations, Electric Power the plants [INFERRED], Pollution and
+    // Traffic none; the other views are undecoded and show none.
+    ropt_.showOccupant = [dl](const Occupant& o) {
+      switch (dl) {
+        case DataLayer::Crime: return o.agentType == 13130;
+        case DataLayer::Fire: return o.agentType == 13002;
+        case DataLayer::Power: return us::powerCategory(o.agentType) >= 0;
+        default: return false;
+      }
+    };
+  }
+  else ropt_.showOccupant = nullptr;
+  layerOverlay_ = DataOverlay();
+  if (view) refreshLayerOverlay();
+}
+
+// City Layer Views tile handler [STATIC]: tinted tile colour = data palette [row][shade / 2], row = trunc((255 - v) * 31/255) with
+// the single-float constant (v = 0 -> the grey bottom row). Water and shore tiles are never tinted; "zoned only" views tint tiles whose zone byte is not 0,
+// the rest show terrain (the grass in the original).
+void Game::refreshLayerOverlay() {
+  layerOverlayAge_ = 0;
+  bumpCityVisual();
+  if (layers_.mode != CityLayers::LayerView || !world_.W) { layerOverlay_ = DataOverlay(); return; }
+  const auto& views = cityLayerViews();
+  const DataLayer dl = views[size_t(std::max(0, std::min(int(views.size()) - 1, layers_.layer)))].layer;
+  City& c = sim_.city();
+  const int W = world_.W, H = world_.H;
+  DataOverlay o;
+  o.slot = 2;
+  o.row.assign(size_t(W) * H, 0xFF);
+  o.slots.assign(size_t(W) * H, 2);
+  const float k31 = 31.0f / 255.0f;
+  auto stdRow = [&](int v) { return int(float(255 - std::max(0, std::min(255, v))) * k31); };
+  auto wet = [&](int x, int z) {   // any corner with water >= terrain
+    for (int dx = 0; dx <= 1; dx++) for (int dz = 0; dz <= 1; dz++) if (world_.waterAt(x + dx, z + dz) >= world_.altAt(x + dx, z + dz)) return true;
+    return false;
+  };
+  const std::vector<uint8_t>* flam = dl == DataLayer::Fire && c.flammability.grid.size() == size_t(W) * H ? &c.flammability.grid : nullptr;
+  for (int x = 0; x < W; x++)
+    for (int z = 0; z < H; z++) {
+      const size_t ti = world_.tIdx(x, z), vi = size_t(x) * H + z;
+      if (wet(x, z)) continue;
+      const bool zoned = world_.zone[ti] != 0;
+      int row = -1, slot = 2;
+      switch (dl) {
+        case DataLayer::Aura: {   // all dry land: s > 0 on data1, s <= 0 on data2
+          const int s = c.aura.aura(x, z);
+          if (s > 0) { slot = 1; row = int(float(127 - s) * (31.0f / 127.0f)); }
+          else row = std::max(0, int(float(s + 126) * (31.0f / 127.0f)));
+          break;
+        }
+        case DataLayer::Crime: if (zoned) row = stdRow(c.crime.crimeAt(x, z)); break;
+        case DataLayer::Power: if (zoned) { slot = 1; row = stdRow(c.powered(x, z) ? 255 : 0); } break;   // power layer byte: powered = 255 [INFERRED]
+        case DataLayer::Fire: if (flam && (*flam)[vi] >= 25) row = stdRow((*flam)[vi]); break;
+        case DataLayer::LandValue: if (zoned) { slot = 1; row = stdRow(c.landValue.landValueAtTile(x, z)); } break;
+        case DataLayer::Density: if (zoned) { slot = 1; row = stdRow(vi < c.valves.effectMap.size() ? int(c.valves.effectMap[vi]) : 0); } break;
+        case DataLayer::Pollution: {   // every dry tile with v > 1; v clamped to max, row = trunc((max - v) * 31 / (max - 1))
+          const int mx = 11000, v = std::min(mx, c.pollution.airAt(x, z));
+          if (v > 1) row = int(float(mx - v) * (31.0f / float(mx - 1)));
+          break;
+        }
+        case DataLayer::Traffic: {
+          if (!c.traffic) break;
+          if (c.traffic->flags(x, z) & (TF_ROAD | TF_HIGHWAY | TF_RAIL | TF_STATION | TF_XFER))
+            row = stdRow(c.traffic->tileValue(x, z, 0x01 | 0x02 | 0x04 | 0x10 | 0x20));
+          else if (zoned && world_.zone[ti] != 0x16) {   // zoned tiles carry the Zones display tint
+            if (zoneOverlay_.row.size() != size_t(W) * H) buildZoneOverlay();
+            const int zr = zoneOverlay_.row[ti];
+            if (zr != 0xFF) { slot = 0; row = zr; }
+          }
+          break;
+        }
+        default: break;
+      }
+      if (row < 0) continue;
+      o.row[ti] = uint8_t(slot == 0 ? row : std::min(31, row));
+      o.slots[ti] = uint8_t(slot);
+    }
+  layerOverlay_ = std::move(o);
+}
+
+// ---------------------------------------------------------------- query popup
+
+void Game::drawQueryPopup() {
+  if (!showQuery_) return;
+  WinEnv E = env();
+  queryInfo_.showCoords = engineOpts_.showTileCoords;
+  WindowResult r = queryWin_.draw(ui_, E, queryInfo_);
+  Rect qr = queryWin_.rect; if (qr.w <= 0) qr = {0, 0, 330, 280};
+  uiHit_ = true;   // the query panel is modal: map clicks are ignored until it is closed (spec 09 7a.4)
+  (void)qr;
+  handleWindowResult(r);
+  if (r.close || r.has(Act::Close)) {
+    showQuery_ = false;
+    if (!r.has(Act::QueryOk) && !r.has(Act::QueryReplace)) sound(56);   // the close box plays CloseWindow (spec 09 6.12.2)
+  }
+}
+
+// ---------------------------------------------------------------- drawing
+
+void Game::drawWindows(uint32_t dtMs) {
+  (void)dtMs;
+  WinEnv E = env();
+  City& city = sim_.city();
+  auto finish = [&](const WindowResult& r, bool& flag) {
+    handleWindowResult(r);
+    if (r.close || r.has(Act::Close) || r.has(Act::Done)) flag = false;
+  };
+
+  // Modeless.
+  if (showMap_) {
+    MapSource src; buildMapSource(src);
+    std::vector<GraphSeries> series;
+    ChartsData cd;
+    // The charts the series point at must outlive viewData_.draw below, so they live at this scope, not inside the graphs branch.
+    Chart conv[4], wc[5], trafficChart, lvChart, auraC;
+    if (viewData_.mode == int(ViewDataWindow::ModeGraphs)) {
+      series = graphSeriesTemplate();
+      auto cv = [](const us::Chart& u, Chart& c) {
+        std::copy(u.monthly, u.monthly + 12, c.monthly); std::copy(u.yearly, u.yearly + 10, c.yearly);
+        std::copy(u.decade, u.decade + 10, c.decade); c.max = u.max;
+      };
+      cv(city.pollution.chart, conv[0]); cv(city.crime.chart, conv[1]); cv(city.power.chart, conv[2]); cv(city.water.chart, conv[3]);
+      // World layer charts (spec 10 6.13): city size, commerce, industry, unemployment, national population.
+      for (int k = 0; k < 5; k++) {
+        const auto& w = city.valves.world.charts[k].w;
+        for (int i = 0; i < 12; i++) wc[k].monthly[i] = w[size_t(i)];
+        for (int i = 0; i < 10; i++) { wc[k].yearly[i] = w[size_t(12 + i)]; wc[k].decade[i] = w[size_t(22 + i)]; }
+        wc[k].max = w[32];
+      }
+      // Traffic (0x166) = the traffic record's road-traffic history with its graph scale; land value (0x16F) = the land-value
+      // record's final 132 bytes (spec 10 s6.12/s6.13): 12 monthly, 10 yearly, 10 decade samples, then the scale.
+      auto fill32 = [](Chart& ch, const uint32_t* h, uint32_t mx) {
+        for (int i = 0; i < 12; i++) ch.monthly[i] = h[i];
+        for (int i = 0; i < 10; i++) { ch.yearly[i] = h[12 + i]; ch.decade[i] = h[22 + i]; }
+        ch.max = mx;
+      };
+      if (city.traffic) fill32(trafficChart, city.traffic->rec().history, city.traffic->rec().graphMax);
+      fill32(lvChart, city.landValue.history.data(), city.landValue.tail);
+      cv(city.aura.chart, auraC);
+      if (series.size() >= 16) {   // order of graphSeriesTemplate()
+        series[0].chart = &auraC;               // Approval Rating
+        series[1].chart = &city.pop.popChart;   // Residents
+        series[2].chart = &lvChart;             // Land Value
+        series[3].chart = &wc[0];               // City Size
+        series[4].chart = &wc[3];               // Unemployment
+        series[5].chart = &conv[0];             // Pollution
+        series[6].chart = &city.pop.eqChart;    // Education
+        series[7].chart = &trafficChart;        // Traffic
+        series[8].chart = &wc[1];               // Commerce
+        series[9].chart = &wc[4];               // Nat'l Pop
+        series[10].chart = &conv[3];            // Water %
+        series[11].chart = &conv[1];            // Crime
+        series[12].chart = &city.pop.leChart;   // Health
+        series[13].chart = &city.budget.treasuryChart;   // Funds
+        series[14].chart = &wc[2];              // Industry
+        series[15].chart = &conv[2];            // Power %
+        // The plot is the 12 stored monthly samples (oldest first) with no live point; each label is the newest stored sample [STATIC].
+        // An earlier 'live 12th point' came from reference captures taken one sim month after the save.
+      }
+
+    } else if (viewData_.mode == int(ViewDataWindow::ModeCharts)) {
+      cd = chartsFromPopulation(city.pop, uint32_t(std::max(0, city.population())));
+      // Electricity: the annual production by plant type (the power record's annual totals); garbage: the 12-month disposal totals (spec 16 4.5).
+      // annualTotal is indexed by powerPlantTypes() (coal, oil, gas, microwave, nuclear, fusion, solar, wind, waste-to-energy, neighbour deals); the chart
+      // lists coal, oil, gas, wind, solar, nuclear, microwave, fusion, waste-to-energy, deals.
+      static const int kSrc[10] = {0, 1, 2, 7, 6, 4, 3, 5, 8, 9};
+      for (int i = 0; i < 10; i++) cd.electricity[i] = double(std::max<int32_t>(0, city.power.annualTotal[kSrc[i]]));
+      const auto& gt = city.pollution.disp.totals;
+      cd.garbage[0] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Landfilled]));
+      cd.garbage[1] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Exported]));
+      cd.garbage[2] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Incinerated] + gt[us::GarbageDisposal::Wte]));
+      cd.garbage[3] = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Recycled]));
+      cd.garbageProduced = double(std::max<int64_t>(0, gt[us::GarbageDisposal::Produced]));
+      {  // "collecting in the streets" = the current stock of uncollected street garbage (a point-in-time value, not a 12-month flow) [STATIC]
+        double stock = 0;
+        for (int x = 0; x < world_.W; x++) for (int z = 0; z < world_.H; z++)
+          if (!city.pollution.landfillRegistered(x, z)) stock += double(city.pollution.standingGarbageAt(x, z));
+        cd.garbage[4] = stock;
+      }
+    }
+    viewData_.map.viewRotation = cam_.rot;
+    viewData_.graphs.year = city.clock.date().year; viewData_.graphs.month = city.clock.date().month;
+    finish(viewData_.draw(ui_, E, src, series, cd), showMap_);
+  }
+  if (showLayers_) finish(layersDlg_.draw(ui_, E, ropt_.grid), showLayers_);
+  // The Neighbors Map opened from the Budget window is drawn on top of it (observed): with the Budget open it is drawn after the Budget block below.
+  auto drawNeighbours = [&] {
+    neighWin_.cityName = world_.info.cityName; neighWin_.cityPop = city.population();
+    // The SimNation population is the newest sample of the world layer's fifth chart (Berlin: 41,000,660 = the original's value).
+    uint64_t np = city.valves.world.charts[4].w[0];
+    if (np == 0) {
+      np = uint64_t(std::max(0, city.population()));
+      for (const auto& nb : city.neighbours.neighbours) np += nb.population;
+    }
+    neighWin_.nationalPop = np;
+    neighWin_.regionMap = neighRegion_.empty() ? nullptr : &neighRegion_;
+    neighWin_.viewRotation = cam_.rot;
+    finish(neighWin_.draw(ui_, E, city.neighbours), showNeigh_);
+  };
+  const bool budgetOpen = showBudget_;
+  if (showNeigh_ && !budgetOpen) drawNeighbours();
+  if (showGoals_) {
+    ScenarioGoalsView v;
+    if (scen_) v = scen_->goalsView(); else v.inScenario = false;
+    v.startMode = scenStartDialog_;
+    finish(goalsWin_.draw(ui_, E, v), showGoals_);
+    if (!showGoals_) scenStartDialog_ = false;
+  }
+  drawQueryPopup();
+  if (!scenPopups_.empty()) {   // scenario pop-ups: one at a time in the same place, until OK or the close box
+    WindowResult pr = scenPopupWin_.draw(ui_, E, scenPopups_.front());
+    if (pr.close) {
+      scenPopups_.pop_front(); scenPopupWin_.scroll = 0;
+      if (scen_ && scenPopups_.empty()) scen_->popupClosed();   // the script was suspended inside the command: it continues now
+    }
+  }
+
+  // Modal.
+  if (showBudget_) {
+    BudgetView v; buildBudgetView(v);
+    finish(budgetWin_.draw(ui_, E, city.budget, v), showBudget_);
+  }
+  if (showNeigh_ && budgetOpen) drawNeighbours();
+  if (showOrd_) {
+    OrdinanceMoneyInput money = city.ordinanceMoneyInput();
+    finish(ordWin_.draw(ui_, E, city.ordinances, money), showOrd_);
+  }
+  if (showDeals_) {
+    if (haveData_ && dealsWin_.names.empty()) {
+      // Display names (2026960B:A1096A4F:<occupant id>) of the reward buildings the deals place, found by agent type.
+      for (const auto& def : city.business.defs) {
+        if (dealsWin_.names.count(def.buildingType)) continue;
+        for (const ResKey& k : data_.db().keysOfType(T_OCC_ATTR)) {
+          if (k.group != 0x57E) continue;
+          const OccAttr* a = data_.occupant(k.instance);
+          if (!a || !a->valid || a->agentType != def.buildingType) continue;
+          std::string nm = data_.string(0xA1096A4F, k.instance);
+          if (nm.empty() && a->nameKey.instance) nm = data_.string(a->nameKey.group, a->nameKey.instance);
+          if (!nm.empty()) { dealsWin_.names[def.buildingType] = nm; break; }
+        }
+      }
+    }
+    finish(dealsWin_.draw(ui_, E, city.business, lastBriefing_), showDeals_);
+  }
+  if (showAdv_) {
+    advWin_.ordinances = &city.ordinances;
+    advWin_.money.population = uint32_t(std::max(0, city.population())); advWin_.money.world = city.footprintTiles();
+    finish(advWin_.draw(ui_, E, advisors_, petitioners_), showAdv_);
+  }
+  if (showProps_) {
+    finish(propsDlg_.draw(ui_, E, propsState_), showProps_);
+  }
+  if (showPrefs_) {
+    finish(prefsDlg_.draw(ui_, E, prefsState_), showPrefs_);
+    if (!showPrefs_) { saveSettings(); applySettingsToAudio(); }
+  }
+  if (showEngine_) {
+    finish(engineDlg_.draw(ui_, E, engineOpts_), showEngine_);
+    if (!showEngine_) saveSettings();
+  }
+  if (showPicker_) {
+    finish(picker_.draw(ui_, E, pickerEntries_), showPicker_);
+  }
+  if (petView_) {
+    WindowResult r = petDlg_.draw(ui_, E, *petView_);
+    handleWindowResult(r);
+    if ((r.close || r.has(Act::Close)) && petView_) petView_.reset();
+  }
+  if (showTip_) {
+    WindowResult r = tipWin_.draw(ui_, E);
+    handleWindowResult(r);
+    if (r.close || r.has(Act::Done) || r.has(Act::Close)) showTip_ = false;
+  }
+  if (msgBox_.active) {
+    uiHit_ = true;
+    msgBox_.centreInView = scr_ == Screen::InCity;
+    handleWindowResult(msgBox_.draw(ui_, E));
+  }
+
+  // Pause the sim while a modal window is open; restore the previous state when the last one closes.
+  bool modal = anyBlockingWindow();
+  if (modal && modalDepth_ == 0) modalOpened();
+  else if (!modal && modalDepth_ > 0) { modalDepth_ = 1; modalClosed(); }
+  if (modal) uiHit_ = true;
+  for (const Rect& wr : ui_.windowRects) if (ui_.hover(wr)) uiHit_ = true;   // windows register their frames while drawing
+  if (ui_.draggingWindow()) uiHit_ = true;   // a window being dragged by its title bar owns the pointer
+}
+
+// ---------------------------------------------------------------- results
+
+void Game::handleWindowResult(const WindowResult& r) {
+  City& city = sim_.city();
+  for (const WindowEvent& e : r.events) {
+    switch (e.act) {
+      case Act::Close: case Act::Done: case Act::DismissTopic: case Act::SelectAdvisor:
+      case Act::SetTimeRange:
+      case Act::OpenBuildingList: case Act::BatRemove: case Act::BatAdd: case Act::BatSelectFile: case Act::BatOpenFolder:   // user-building dialogs (game_userbldg.cpp)
+        break;
+      case Act::OpenBudget: openWindow("budget"); break;
+      case Act::OpenOrdinances: openWindow("ordinances"); break;
+      case Act::OpenNeighbours: openWindow("neighbours"); break;
+      case Act::OpenBusinessDeals: openWindow("deals"); break;
+      case Act::OpenMapWindow: openWindow("map"); break;
+      case Act::ApplyLayers: layers_ = layersDlg_.edit; applyLayers(); break;
+      case Act::ToggleGrid: ropt_.grid = !ropt_.grid; break;
+      case Act::OpenAdvisor: openWindow("advisors"); advWin_.open(e.id); break;
+      case Act::OpenPetitioner: {
+        const PendingPetition* p = petitioners_.find(e.id);
+        if (p) {
+          WinEnv E = env();
+          const TextContext ptc = petitionContext(p->id);
+          petView_ = std::make_unique<PetitionerView>(makePetitionerView(E, petitioners_.config, *p, &ptc));
+          petViewId_ = e.id; petDlg_.impact = false; petDlg_.inMeet = true;   // from the Meet list: shown inside that frame
+        }
+        break;
+      }
+      case Act::SetFunding:
+        city.budget.setFunding(e.id, int(e.a));
+        if (e.id == dept::Police) city.police.setFunding(int(e.a));
+        else if (e.id == dept::Fire) city.fire.setFunding(int(e.a));
+        break;
+      case Act::SetTax:
+        if (e.id < uint32_t(kTaxGroups)) city.budget.setTaxRate(int(e.id), int(e.a));
+        break;
+      case Act::IssueBond:
+        sound(e.b ? 15 : 32);
+        break;
+      case Act::SetOrdinance:
+        dirty_ = true;   // no advisor announcement here: it is sent when an ordinance becomes available (spec 22 3.6)
+        break;
+      case Act::AcceptDeal: case Act::DeclineDeal:
+        if (petView_ && petView_->isDeal) {
+          size_t i = size_t(e.id);
+          if (e.act == Act::AcceptDeal) city.neighbours.accept(i);
+          else if (i < city.neighbours.pending.size()) {
+            const int dt = city.neighbours.pending[i].dealType;
+            city.neighbours.pending.erase(city.neighbours.pending.begin() + long(i));
+            city.neighbours.removeType(dt);   // declining runs the remove operation (spec 19 10.5)
+          }
+          petView_.reset();
+          dirty_ = true;
+        }
+        sound(e.act == Act::AcceptDeal ? 15 : 24);
+        break;
+      case Act::CancelDeal:
+        if (e.text != "business") city.budget.dealPenaltyAccumulator += e.a;
+        dirty_ = true;
+        break;
+      case Act::DiscussDeal: {
+        auto& pend = city.neighbours.pending;
+        for (size_t i = 0; i < pend.size(); i++)
+          if (pend[i].neighbourIndex == e.id) {
+            petView_ = std::make_unique<PetitionerView>(makeDealOfferView(env(), pend[i], i));
+            petDlg_.impact = false; petDlg_.inMeet = false;
+            break;
+          }
+        break;
+      }
+      case Act::AnswerPetition: {
+        PetitionEffect eff = petitioners_.answer(e.id, e.a != 0);
+        petView_.reset();
+        applyPetitionEffect(eff);
+        presentPetitions();
+        dirty_ = true;
+        break;
+      }
+      case Act::DismissPetitioner:
+        petView_.reset();
+        break;
+      case Act::PrefsChanged:
+        prefsToSettings(prefsState_, general_, prefs_);
+        applySettingsToAudio();
+        break;
+      case Act::PreviewMusic:
+        if (audio_ && e.a < 0) audio_->stopMusic();   // preview stop button
+        else if (audio_) {
+          int i = 0;
+          for (const auto& m : audio_->ini().music)
+            if (m.inSongList) { if (i++ == int(e.a)) { audio_->playSong(m.id); break; } }
+        }
+        break;
+      case Act::PlaySound: sound(int(e.a)); break;
+      case Act::RestartPrompt: {
+        WinEnv E = env();
+        msgBox_.open(E.app(0x6F, "Preferences"), E.text(kTblMessage, 18, "Some changes take effect after restarting the game."), 0);
+        msgBoxPurpose_ = 1;
+        break;
+      }
+      case Act::ScenarioMayor:   // the start dialog's mayor-name field
+        if (!e.text.empty()) { world_.info.mayorName = e.text; if (scen_) scen_->setMayor(e.text); dirty_ = true; }
+        break;
+      case Act::ApplyCityProps: {
+        const CityPropsState& s = propsState_;
+        world_.info.cityName = s.name; world_.info.mayorName = s.mayor;
+        setDisastersOn(s.disasters); autoBudget_ = s.autoBudget;
+        world_.info.flagA = disastersOn_ ? 1 : 0; world_.info.flagB = autoBudget_ ? 1 : 0;
+        uint32_t L = size_t(s.landscape) < schemeIdsL_.size() ? schemeIdsL_[size_t(s.landscape)] : world_.scheme.landscape;
+        uint32_t F = size_t(s.flora) < schemeIdsF_.size() ? schemeIdsF_[size_t(s.flora)] : world_.scheme.floraSet;
+        uint32_t B = size_t(s.buildings) < schemeIdsB_.size() ? schemeIdsB_[size_t(s.buildings)] : world_.scheme.buildingSet;
+        bool changed = L != world_.scheme.landscape || F != world_.scheme.floraSet || B != world_.scheme.buildingSet;
+        world_.scheme.landscape = L; world_.scheme.floraSet = F; world_.scheme.buildingSet = B;
+        if (changed && haveData_) {
+          data_.unmountSets();
+          if (B) data_.mountBuildingSet(B);
+          if (F) data_.mountFloraSet(F);
+          invalidateCityView();
+        }
+        dirty_ = true;
+        break;
+      }
+      case Act::PickBuilding:
+        if (e.id) {
+          setTool(ToolKind::Plop, 0, e.id);
+          for (const auto& pe : pickerEntries_) if (pe.occupantId == e.id) { toolName_ = pe.name; break; }
+          showPicker_ = false;
+        } else message("That building is not available.");
+        break;
+      case Act::SelectDataMap: {
+        MapSource src; buildMapSource(src);
+        (void)src;   // MapWindow already rebuilt its overlay from the same source
+        break;
+      }
+      case Act::DataMapOptionChanged: {
+        MapSource src; buildMapSource(src);
+        viewData_.map.select(viewData_.map.selected, src);
+        break;
+      }
+      case Act::CenterView: case Act::TickerClick:
+        centreOn(int(e.a), int(e.b));
+        break;
+      case Act::OpenUserBuildings:
+        openUserBuildings();
+        break;
+      case Act::MessageResult:
+        msgBox_.active = false;
+        onMessageResult(MsgButton(e.a));
+        break;
+      case Act::TipChanged: break;
+      case Act::ShowTipsChanged:
+        prefsState_.showTips = e.b != 0 || e.a != 0;
+        prefsToSettings(prefsState_, general_, prefs_);
+        saveSettings();
+        break;
+      case Act::ToggleHistorical:
+        queryInfo_.historical = !queryInfo_.historical;   // only the box changes; OK writes it, the close box discards it
+        sound(13);
+        break;
+      case Act::QueryOk: {
+        sound(12);
+        const int oi = sim_.occupantAt(e.a, e.b);
+        if (oi >= 0 && size_t(oi) < world_.occupants.size() && queryInfo_.growable) {
+          Occupant& oc = world_.occupants[size_t(oi)];
+          const bool stored = (oc.state & 0x200u) != 0;
+          if (stored != queryInfo_.historical) { oc.state ^= 0x200u; dirty_ = true; }   // protected flag [INFERRED], spec 13 3
+        }
+        break;
+      }
+      case Act::QueryReplace:
+        sound(12);
+        // Replace closes the panel and opens the Building Replacement dialog on the queried building's footprint (spec 09 6.12.1).
+        showQuery_ = false;
+        openUserBuildings();
+        brmState_.sizeFilter = std::max(0, std::min(4, queryInfo_.footprint - 1));
+        break;
+    }
+  }
+}
+
+}  // namespace m3k
