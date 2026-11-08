@@ -228,9 +228,11 @@ bool GlPresenter::beginFrame(int w, int h, FrameBuffer& out) {
 
 void GlPresenter::endFrame() {
   if (!ok_ || tw_ <= 0) return;
+  const auto t0 = std::chrono::steady_clock::now();
   glBindTexture(GL_TEXTURE_2D, overlayTex_);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tw_, th_, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, stage_.data());
+  stats_.overlayMs = msSince(t0);
 }
 
 void GlPresenter::draw(unsigned fbo, int w, int h) {
@@ -339,7 +341,9 @@ bool GlPresenter::ensureAtlas(const std::vector<GpuSpriteItem>& items, std::vect
 bool GlPresenter::submitCity(const GpuCityFrame& f) {
   if (!ok_ || !compute_ || !cityEnabled_ || !f.base || !f.items || f.w != tw_ || f.h != th_) return false;
   SDL_GL_MakeCurrent(win_, static_cast<SDL_GLContext>(ctx_));
+  const double overlayMs = stats_.overlayMs;   // belongs to the previous endFrame
   stats_ = Stats();
+  stats_.overlayMs = overlayMs;
   const std::vector<GpuSpriteItem>& items = *f.items;
   const size_t n = items.size();
 
@@ -349,10 +353,12 @@ bool GlPresenter::submitCity(const GpuCityFrame& f) {
   stats_.atlasMs = msSince(t0);
 
   if (!baseValid_ || baseGen_ != f.baseGen) {
+    t0 = std::chrono::steady_clock::now();
     glBindTexture(GL_TEXTURE_2D, baseTex_);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tw_, th_, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, f.base);
     baseGen_ = f.baseGen; baseValid_ = true;
+    stats_.baseMs = msSince(t0);
   }
 
   // Tile lists: counting sort keeps draw order inside every tile. Rows of tiles are independent.
@@ -368,12 +374,28 @@ bool GlPresenter::submitCity(const GpuCityFrame& f) {
     return true;
   };
   WorkerPool& pool = WorkerPool::shared();
+  // Each item's tile range is computed once and the item is listed under every tile row it touches (in draw order), so a
+  // row only visits its own items instead of scanning the whole list.
+  struct TileRange { int tx0, tx1, ty0, ty1; };
+  std::vector<TileRange> ranges(n);
+  std::vector<uint32_t> rowStart(size_t(tilesY) + 1, 0);
+  for (size_t i = 0; i < n; i++) {
+    TileRange& r = ranges[i];
+    if (!range(items[i], r.tx0, r.tx1, r.ty0, r.ty1)) { r.ty0 = 1; r.ty1 = 0; continue; }   // off screen: empty row span
+    for (int ty = r.ty0; ty <= r.ty1; ty++) rowStart[size_t(ty) + 1]++;
+  }
+  for (int ty = 0; ty < tilesY; ty++) rowStart[size_t(ty) + 1] += rowStart[size_t(ty)];
+  std::vector<uint32_t> rowItems(rowStart[size_t(tilesY)]);
+  {
+    std::vector<uint32_t> cur(rowStart.begin(), rowStart.end() - 1);
+    for (size_t i = 0; i < n; i++)
+      for (int ty = ranges[i].ty0; ty <= ranges[i].ty1; ty++) rowItems[cur[size_t(ty)]++] = uint32_t(i);
+  }
   pool.run(tilesY, [&](int ty) {
     uint32_t* cnt = &tileStart[size_t(ty) * tilesX + 1];   // counts live at tile index + 1, ready for the prefix sum
-    for (size_t i = 0; i < n; i++) {
-      int tx0, tx1, ty0, ty1;
-      if (!range(items[i], tx0, tx1, ty0, ty1) || ty < ty0 || ty > ty1) continue;
-      for (int tx = tx0; tx <= tx1; tx++) cnt[tx]++;
+    for (uint32_t k = rowStart[size_t(ty)]; k < rowStart[size_t(ty) + 1]; k++) {
+      const TileRange& r = ranges[rowItems[k]];
+      for (int tx = r.tx0; tx <= r.tx1; tx++) cnt[tx]++;
     }
   });
   for (size_t t = 0; t < tiles; t++) tileStart[t + 1] += tileStart[t];
@@ -381,10 +403,10 @@ bool GlPresenter::submitCity(const GpuCityFrame& f) {
   pool.run(tilesY, [&](int ty) {
     std::vector<uint32_t> cur; cur.resize(size_t(tilesX));
     for (int tx = 0; tx < tilesX; tx++) cur[size_t(tx)] = tileStart[size_t(ty) * tilesX + tx];
-    for (size_t i = 0; i < n; i++) {
-      int tx0, tx1, ty0, ty1;
-      if (!range(items[i], tx0, tx1, ty0, ty1) || ty < ty0 || ty > ty1) continue;
-      for (int tx = tx0; tx <= tx1; tx++) tileIdx[cur[size_t(tx)]++] = uint32_t(i);
+    for (uint32_t k = rowStart[size_t(ty)]; k < rowStart[size_t(ty) + 1]; k++) {
+      const uint32_t i = rowItems[k];
+      const TileRange& r = ranges[i];
+      for (int tx = r.tx0; tx <= r.tx1; tx++) tileIdx[cur[size_t(tx)]++] = i;
     }
   });
   stats_.binMs = msSince(t0);
@@ -425,8 +447,10 @@ bool GlPresenter::submitCity(const GpuCityFrame& f) {
   glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, planeTex_);
   glActiveTexture(GL_TEXTURE0);
   glBindImageTexture(3, cityTex_, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8UI);
+  t0 = std::chrono::steady_clock::now();
   glDispatchCompute(GLuint(tilesX), GLuint(tilesY), 1);
   glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
+  stats_.dispatchMs = msSince(t0);
   return true;
 }
 

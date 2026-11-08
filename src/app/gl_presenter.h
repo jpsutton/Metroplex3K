@@ -38,7 +38,8 @@ class GlPresenter : public FrameBackend, public CityGpuSink {
   bool readback(std::vector<uint32_t>& out);
 
   // Stats for the last submitCity (ms): atlas upload, tile binning, dispatch (includes GPU wait only in tests).
-  struct Stats { double atlasMs = 0, binMs = 0, uploadMs = 0; int items = 0, tileEntries = 0, blendItems = 0, planeItems = 0; };
+  // baseMs: base layer upload (only when the layer changed); overlayMs: UI overlay upload (endFrame), kept from the last frame.
+  struct Stats { double atlasMs = 0, binMs = 0, uploadMs = 0, baseMs = 0, overlayMs = 0, dispatchMs = 0; int items = 0, tileEntries = 0, blendItems = 0, planeItems = 0; };
   const Stats& stats() const { return stats_; }
 
  private:

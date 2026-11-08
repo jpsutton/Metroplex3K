@@ -13,6 +13,14 @@ version in `CMakeLists.txt` as the release notes, so every release needs a `## [
   Wayland application id are now `metroplex3k`, so desktops match the running window to its icon.
 
 ### Changed
+- Faster rendering on integrated GPUs and older CPUs, most of all at the farthest zoom. On a Core i5-5200U (HD 5500) at the
+  farthest zoom with the simulation running and the view panning, the mean frame rate went from 44 to 61 FPS and the 99th
+  percentile frame time from 70 ms to 40 ms. The GPU city pass bins its sprites into tiles in one pass instead of scanning the
+  whole list per tile row. The draw list is sorted by (key, index) pairs and cached in three parts (surface pieces,
+  buildings, flora), so a simulation day rebuilds only what changed. A panned frame redraws the exposed terrain strips
+  without scanning every tile in view. The output is pixel-identical.
+- The frame log (`--frame-log`) has seven more columns at the end with the GPU city timings: atlas, tile binning, buffer
+  upload, base layer upload, overlay upload, dispatch and the number of sprites.
 - The repository is public. The Arch packages are published in the `jpsutton` pacman repository, and the macOS install
   script works without credentials.
 
