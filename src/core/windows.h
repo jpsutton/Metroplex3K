@@ -700,7 +700,9 @@ class TickerWidget {
   void push(const NewsItem& n, int width);     // append at the right edge / after the last item (glyph-count width estimate)
   void push(const NewsItem& n, int width, const Ui& ui);   // same with measured text width
   // Draws the strip inside r. Click on an item with a map location -> TickerClick (and PlaySound 47).
-  WindowResult draw(Ui& ui, const WinEnv& E, Rect r);
+  // `strip` (optional) is the rect of the strip's fill: its top row, then black rows (strip.h rows in all), plus one column left of strip.x;
+  // empty = the text line's top row and 16 black rows over r's width.
+  WindowResult draw(Ui& ui, const WinEnv& E, Rect r, Rect strip = {});
 };
 
 // ---- 9.1 message box ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

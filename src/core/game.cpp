@@ -1211,8 +1211,8 @@ void Game::drawHud() {
     if (ec) openWindow("engine");
   }
   // News ticker: the bar's text line when the skin gives one, else a strip above the bar.
-  if (skinBar) drawTicker(place.textLine);
-  else drawTicker({122, H_ - bh - 24, W_ - 126, 22});
+  if (skinBar) drawTicker(place.textLine, place.tickerStrip);
+  else drawTicker({122, H_ - bh - 24, std::min(W_ - 126, 474), 22});   // no art: the strip fills its rect, kept at the original's 475 px
   const int tipY = H_ - bh - 18;
   (void)tipY;   // the original draws no tool-name or coordinate overlay above the bar [OBSERVED]
   if (costShow_ && !costText_.empty()) {

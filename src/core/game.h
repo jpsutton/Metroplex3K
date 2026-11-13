@@ -266,7 +266,7 @@ class Game {
   void closeModelessWindows();
   void enterCity();
   void runTarget(uint32_t target, uint32_t arg1 = 0, const std::string& name = std::string());
-  void drawTicker(Rect r);
+  void drawTicker(Rect r, Rect strip = {});
   void drawCheatBox();
   void drawFrontCommon();
   void drawQueryPopup();
