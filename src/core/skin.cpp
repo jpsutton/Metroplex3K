@@ -97,16 +97,19 @@ BottomBarLayout bottomBarLayout(int screenW) {
     B.group = Ui640; B.variant = 0;
     B.fieldA = R(8, 46, 340, 64); B.fieldB = R(8, 25, 116, 43); B.fieldC = R(120, 25, 270, 43); B.fieldD = R(264, 25, 350, 43);
     B.textLine = R(8, 3, 340, 23);
+    B.tickerStrip = R(8, 5, 341, 23);   // art: top row y5, black y6..22, x7..340
     B.p1x = 371; B.p1y = 14; B.p2x = 348; B.p2y = 14; B.p3x = 399; B.p3y = 14; B.p4x = 349; B.p4y = 34;
   } else if (screenW <= 800) {
     B.group = Ui800; B.variant = 1;
     B.fieldA = R(8, 26, 144, 44); B.fieldB = R(146, 26, 258, 44); B.fieldC = R(260, 26, 408, 44); B.fieldD = R(396, 26, 500, 44);
     B.textLine = R(8, 5, 481, 22);
+    B.tickerStrip = R(8, 5, 482, 23);   // art: top row y5, black y6..22, x7..481
     B.p1x = 511; B.p1y = 9; B.p2x = 488; B.p2y = 9; B.p3x = 547; B.p3y = 11; B.p4x = 489; B.p4y = 29;
   } else {
     B.group = Ui1024; B.variant = 2;
     B.fieldA = R(8, 26, 366, 44); B.fieldB = R(372, 26, 480, 44); B.fieldC = R(486, 26, 630, 44); B.fieldD = R(630, 26, 712, 44);
     B.textLine = R(8, 6, 704, 23);
+    B.tickerStrip = R(8, 4, 706, 22);   // art: top row y4, black y5..21, x7..705
     B.p1x = 735; B.p1y = 10; B.p2x = 712; B.p2y = 10; B.p3x = 773; B.p3y = 9; B.p4x = 713; B.p4y = 29;
   }
   return B;
@@ -511,6 +514,7 @@ bool Skin::bottomBarPlace(BottomBarPlace& o) const {
   auto mv = [&](Rect r) { return Rect{r.x + x, r.y + y, r.w, r.h}; };
   o.fieldA = mv(bar_.fieldA); o.fieldB = mv(bar_.fieldB); o.fieldC = mv(bar_.fieldC); o.fieldD = mv(bar_.fieldD);
   o.textLine = mv(bar_.textLine);
+  o.tickerStrip = mv(bar_.tickerStrip);
   o.p1x = x + bar_.p1x; o.p1y = y + bar_.p1y; o.p2x = x + bar_.p2x; o.p2y = y + bar_.p2y;
   o.p3x = x + bar_.p3x; o.p3y = y + bar_.p3y; o.p4x = x + bar_.p4x; o.p4y = y + bar_.p4y;
   o.rightEnd = w_;

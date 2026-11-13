@@ -688,7 +688,7 @@ void Game::stopAmbience() {
 }
 
 // ================================================================================== ticker (spec 09 4.4)
-void Game::drawTicker(Rect r) {
+void Game::drawTicker(Rect r, Rect strip) {
   const HudSnap& hs = hudNow();
   int32_t today = tickerStamp(hs.month, hs.day, hs.clockYear);
   // Pause fillers use the same ticker-data colour as the real 0x2F9 news item.
@@ -697,7 +697,7 @@ void Game::drawTicker(Rect r) {
   // Paused indicator flashes 750 ms on / 750 ms off, starting lit.
   pauseFlashMs_ = paused_ ? (pauseFlashMs_ + frameDt_) % 1500 : 0;
   WinEnv E = env();
-  WindowResult R = ticker_.draw(ui_, E, r);
+  WindowResult R = ticker_.draw(ui_, E, r, strip);
   for (const auto& e : R.events) {
     if (e.act == Act::PlaySound) sound(int(e.a));
     else if (e.act == Act::TickerClick) { centreOn(int(e.a), int(e.b)); uiHit_ = true; }

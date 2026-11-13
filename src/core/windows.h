@@ -702,7 +702,9 @@ class TickerWidget {
   void push(const NewsItem& n, int width, const Ui& ui);   // same with measured text width
   // Draws the strip inside r. Click on an item with a map location -> TickerClick; on an item with only a link (a petition or advisor topic) -> TickerLink
   // (both with PlaySound 47). Both kinds of item are underlined.
-  WindowResult draw(Ui& ui, const WinEnv& E, Rect r);
+  // `strip` (optional) is the rect of the strip's fill: its top row, then black rows (strip.h rows in all), plus one column left of strip.x;
+  // empty = the text line's top row and 16 black rows over r's width.
+  WindowResult draw(Ui& ui, const WinEnv& E, Rect r, Rect strip = {});
 };
 
 // ---- 9.1 message box ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
