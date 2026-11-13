@@ -4,6 +4,35 @@ All notable changes to Metroplex3K are recorded here. The format follows [Keep a
 and the project uses [Semantic Versioning](https://semver.org/). The release workflow publishes the section for the
 version in `CMakeLists.txt` as the release notes, so every release needs a `## [x.y.z]` section.
 
+## [1.0.3] - 2026-11-13
+
+### Added
+- Petition and advisor lines in the news ticker are links, as in the original. Clicking a petition line (a neighbour's deal
+  offer, a business deal, an ordinance request) opens that petition's dialog, so a petition whose dialog was closed can be
+  reopened. Clicking an advisor line opens the Advisors window on that topic. These items are underlined, and the pointer
+  turns into the hand with the pointing finger over any ticker item a click acts on. An item with a map location still centres
+  the view.
+- The Impact Analysis button ("?") on an offer petition opens a separate modal popup on top of the petition, as in the
+  original: the responsible advisor's name and portrait and the petition's advice text. OK closes it without answering the
+  petition, and the petition underneath does not react while it is open.
+- `M3K_SEED=N` pins the seed of the simulation, ticker, disaster and neighbour-deal generators for reproducible runs.
+
+### Fixed
+- The M3K Options button did not line up with the stock button art under it at 1024 x 768 and larger: the RCI indicator,
+  whose background carries that art, sat 8 px too low.
+- The news ticker strip did not line up with the bar art at 640 x 480 and 1024 x 768 (2 px off, and it stopped at the same
+  width as at 800 x 600). The strip is now placed from the art at every resolution.
+- The paused indicator flashed for 0.75 s; it now flashes for 0.5 s on and 0.5 s off, and it flashes as soon as a city is
+  loaded or started, not only after the player pauses.
+- Every random generator of the simulation, ticker, disasters and neighbour deals had a fixed seed, so loading a city always
+  produced the same first ticker message ("Clocks Stopped All Over ..., Electro-Magnetic Pulse Blamed") and the same random
+  events. They are now seeded from the clock and each loaded city gets its own streams, as the original does.
+
+### Changed
+- Information petitions (those without choice buttons) no longer show the old OK and Impact buttons; they have the round
+  Dismiss Petitioner button only, as in the original. The inline "Advisor's response" and "City council's response" page
+  is gone; those strings are not used by the original.
+
 ## [1.0.2] - 2026-11-08
 
 ### Added

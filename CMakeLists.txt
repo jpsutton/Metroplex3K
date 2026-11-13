@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Metroplex3K VERSION 1.0.2 LANGUAGES CXX)
+project(Metroplex3K VERSION 1.0.3 LANGUAGES CXX)
 
 # Release builds pass -DM3K_VERSION_SUFFIX="" (the release workflow does). Development builds are "<version>-dev".
 set(M3K_VERSION_SUFFIX "-dev" CACHE STRING "Suffix appended to the version string; empty for a release build")
