@@ -267,6 +267,7 @@ class Game {
   void enterCity();
   void runTarget(uint32_t target, uint32_t arg1 = 0, const std::string& name = std::string());
   void drawTicker(Rect r);
+  void openTickerLink(uint8_t kind, uint32_t id);   // click on a ticker item without a location: open the petition's dialog / the advisor window at the topic
   void drawCheatBox();
   void drawFrontCommon();
   void drawQueryPopup();

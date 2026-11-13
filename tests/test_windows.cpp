@@ -1026,6 +1026,20 @@ void testTicker() {
   WindowResult r = h.click("ticker.1");
   CHECK(r.has(Act::TickerClick) && r.find(Act::TickerClick)->a == 12 && r.find(Act::TickerClick)->b == 34);
   CHECK(r.has(Act::PlaySound) && r.find(Act::PlaySound)->a == 47);
+  {  // an item with a link but no location (a petition / advisor topic) is clickable too and reports the link, not a location
+    NewsItem c; c.number = 5; c.text = "Trash deal offer"; c.link = LinkPetition; c.linkId = 0xBF;
+    NewsItem d; d.number = 6; d.text = "Topic"; d.link = LinkAdvisorTopic; d.linkId = 0x2A; d.hasLoc = true; d.locX = 7; d.locZ = 8;
+    t.items.clear(); t.push(c, strip.w); t.push(d, strip.w);
+    t.items[0].x = 20; t.items[1].x = 300;
+    h.drawFn = [&] { return t.draw(h.ui, h.E, strip); };
+    h.frame();
+    CHECK(h.has("ticker.5") && h.has("ticker.6"));
+    WindowResult lr = h.click("ticker.5");
+    CHECK(lr.has(Act::TickerLink) && lr.find(Act::TickerLink)->id == 0xBF && lr.find(Act::TickerLink)->a == LinkPetition && !lr.has(Act::TickerClick));
+    CHECK(lr.has(Act::PlaySound) && lr.find(Act::PlaySound)->a == 47);
+    WindowResult cr = h.click("ticker.6");   // a located item still centres the view
+    CHECK(cr.has(Act::TickerClick) && cr.find(Act::TickerClick)->a == 7 && cr.find(Act::TickerClick)->b == 8 && !cr.has(Act::TickerLink));
+  }
   // Item scrolled off the left edge is removed.
   t.items.clear(); t.push(b, strip.w);
   t.items[0].x = -h.ui.textWidth(b.text) - 5;

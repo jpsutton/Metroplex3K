@@ -784,11 +784,12 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
     if (it.x > r.w || it.x + w < 0) continue;
     uint32_t col = rgb(it.n.r, it.n.g, it.n.b);
     sub.text(it.x, ty + 1, it.n.text, "main9", col);   // main9 (9-row capitals) [OBSERVED]
-    if (it.n.hasLoc) {
+    if (it.n.hasLoc || it.n.link != LinkNone) {   // a map location centres the view; else a link opens the petition / advisor topic
       if (14 < r.h) for (int x = std::max(0, it.x); x < std::min(r.w, it.x + w + 1); x++) buf[size_t(14) * r.w + x] = col;   // underline row y563 (rel 14), 1 px past the glyphs [OBSERVED]
       Rect ir{r.x + it.x, r.y, w, r.h};
       if (ui.clicked(ir) && r.contains(ui.in.mx, ui.in.my)) {
-        R.add(Act::TickerClick, it.n.number, it.n.locX, it.n.locZ);
+        if (it.n.hasLoc) R.add(Act::TickerClick, it.n.number, it.n.locX, it.n.locZ);
+        else R.add(Act::TickerLink, it.n.linkId, it.n.link);
         R.add(Act::PlaySound, 0, 47);
       }
       E.spot("ticker." + std::to_string(it.n.number), {std::max(ir.x, r.x), r.y, std::min(w, r.w), r.h});

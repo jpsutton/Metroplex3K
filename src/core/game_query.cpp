@@ -701,6 +701,28 @@ void Game::drawTicker(Rect r) {
   for (const auto& e : R.events) {
     if (e.act == Act::PlaySound) sound(int(e.a));
     else if (e.act == Act::TickerClick) { centreOn(int(e.a), int(e.b)); uiHit_ = true; }
+    else if (e.act == Act::TickerLink) { openTickerLink(uint8_t(e.a), e.id); uiHit_ = true; }
+  }
+}
+
+void Game::openTickerLink(uint8_t kind, uint32_t id) {
+  if (kind == LinkPetition) {
+    if (petView_) return;   // another petition dialog is already open
+    const PendingPetition* p = petitioners_.find(id);
+    if (!p || p->hidden()) return;
+    WinEnv E = env();
+    const TextContext ptc = petitionContext(p->id);
+    petView_ = std::make_unique<PetitionerView>(makePetitionerView(E, petitioners_.config, *p, &ptc));
+    petViewId_ = p->id; petDlg_.impact = false; petDlg_.inMeet = false;   // a dialog of its own, as when the petitioner arrives
+  } else if (kind == LinkAdvisorTopic) {
+    for (uint32_t adv : allAdvisorIds()) {
+      if (!advisors_.list(adv).visible(id)) continue;
+      openWindow("advisors");
+      advWin_.open(adv);
+      advWin_.topicSel = int(id);   // the topic's page, as after a double click on its row
+      advisors_.list(adv).dismiss(id);   // reading a news topic hides it (and withdraws its ticker item) when it has a limit, is persistent or expiring [STATIC]
+      return;
+    }
   }
 }
 

@@ -126,7 +126,10 @@ std::vector<const PendingPetition*> PetitionerManager::presentable() const {
 void PetitionerManager::postTicker(PendingPetition& p, bool hasLoc, int x, int z) {
   if (!sink_) return;
   uint32_t t = config.tableFor(PetitionText::Ticker, p.id, [&](uint32_t tb, uint32_t i) { return sink_->hasString(tb, i); });
-  if (t) p.tickerItem = sink_->post(t, p.id, hasLoc, x, z);
+  if (t) {
+    p.tickerItem = sink_->post(t, p.id, hasLoc, x, z);
+    if (p.tickerItem) sink_->link(p.tickerItem, LinkPetition, p.id);   // opens the petition's dialog (no location) [data: every petitioner ticker line is underlined]
+  }
 }
 void PetitionerManager::dropTicker(PendingPetition& p) {
   if (sink_ && p.tickerItem) sink_->withdraw(p.tickerItem);
