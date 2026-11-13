@@ -625,9 +625,9 @@ bool Skin::button3(Ui& ui, const Image* s, Rect r, const std::string& label, boo
   return true;
 }
 
-bool Skin::drawDialogFrame(Ui& ui, Rect r, const std::string& title) const {
+bool Skin::drawDialogBody(Ui& ui, Rect r) const {
   const Image* cloud = get("window");
-  if (!cloud || cloud->empty() || r.w < 16 || r.h < 40) return false;
+  if (!cloud || cloud->empty() || r.w < 16 || r.h < 16) return false;
   // Cloud body, tiled from the dialog's top-left.
   for (int y = 0; y < r.h; y += cloud->h)
     for (int x = 0; x < r.w; x += cloud->w)
@@ -635,6 +635,11 @@ bool Skin::drawDialogFrame(Ui& ui, Rect r, const std::string& title) const {
   const uint32_t white = rgb(255, 255, 255), black = rgb(0, 0, 0);
   ui.fill({r.x, r.y, r.w, 1}, white); ui.fill({r.x, r.y, 1, r.h}, white);
   ui.fill({r.x, r.y + r.h - 1, r.w, 1}, black); ui.fill({r.x + r.w - 1, r.y, 1, r.h}, black);
+  return true;
+}
+
+bool Skin::drawDialogFrame(Ui& ui, Rect r, const std::string& title) const {
+  if (r.h < 40 || !drawDialogBody(ui, r)) return false;
   // Title bar: 1 px lighter ring around a flat blue fill, inset 4 px; 31 px tall.
   Rect bar{r.x + 4, r.y + 4, r.w - 8, 31};   // right edge line at r.x + r.w - 5 [OBSERVED: Preferences, Loans, Business Deals, Budget]
   ui.fill(bar, rgb(173, 182, 255));

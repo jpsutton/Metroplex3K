@@ -891,11 +891,16 @@ discussion page: header `75`, tabs "news topics" (`258`), "briefings" (`1BF`) an
 Shown when a petitioner arrives (`22-advisors-news-petitioners.md`). Portrait `52DB60A0:FF01`–`FF15`,
 name, heading and message from the petitioner string tables; two choice buttons (the
 petitioner's *Button1*/*Button2* strings); "take action" (`029541F4:78`), "impact analysis"
-(`79`) which shows the responsible advisor's response (`80`) and the city council's response (`81`)
-with "return to petitioner" (`82`), "done" (`83`), "back" (`84`), "OK" (`85`); and "dismiss
-petitioner" (`2DE`). Choosing a button applies the petition (enact ordinance, accept deal, …) and
-plays a crowd reaction (sounds 70–73: boo, disappointment, neutral, cheer — chosen by the
-petitioner's reaction field). [STATIC; reaction choice rule in `22`]
+(`79`) with a round "?" button that opens the Impact Analysis popup (§6.6.1); and "dismiss
+petitioner" (`2DE`). Choosing a button applies the petition (enact ordinance, accept deal, …),
+opens the reaction popup (§6.6.2) and plays a crowd reaction (sounds 70–73: boo, disappointment,
+neutral, cheer — chosen by the petitioner's reaction field). [STATIC; reaction choice rule in `22`]
+
+Correction: the previous revision said the impact analysis shows an advisor's response (`80`)
+and a city council's response (`81`) with buttons `82`–`85`. Strings `029541F4:80` ("… Advisor's
+Response:"), `81` ("City Council's Response:"), `82` ("Return to Petitioner"), `83` ("Done"),
+`84` ("Back") and `85` ("Ok") are present in the string table but are **not used** by the
+program. There is no city-council text anywhere. [STATIC]
 
 `[OBSERVED, build 2.0.949, London]` Two page layouts, window at (8, 8), coordinates relative to
 the window:
@@ -923,6 +928,96 @@ the window:
   tokens. [DATA, saved London petitions 0x10, 0xBF; OBSERVED rendering]
 * Neighbour-deal petitions (portrait index 18 in the extra-info files) show portrait
   `52DB60A0:FF10`. [OBSERVED, one neighbour]
+* The "Impact Analysis:" plate and its "?" button exist on every offer page (every petition with
+  a *Button1* string) and never on information pages. The button is never disabled or hidden,
+  whatever data the petition has. [STATIC]
+
+#### 6.6.1 Impact Analysis popup [STATIC; OBSERVED, London, petition `0x64`]
+
+Clicking the "?" button opens a **separate modal popup** on top of the petition dialog. The
+petition page underneath is not changed.
+
+**Content.** All the data comes from the petition's own records (`22-advisors-news-petitioners.md` §5.2):
+
+| Part | Source |
+|---|---|
+| Title | Name of the responsible advisor: string table `0xC29A6083`, ID by advisor number (see below) |
+| Text | The petition's ADVICE string (tables `0xE26DD125` / `0x549B17B2`, ID = petition ID). Token and argument substitution is the same as for the petition message (§6.6 above). |
+| Portrait | The responsible advisor's portrait at **mood 3** (neutral), whatever the advisor's current mood is |
+| Button | One OK button (check mark), no caption |
+
+The responsible advisor is field `b` of the petition's `[PetitionerExtraInfo]` line (`22` §5.2):
+
+| `b` | Advisor | Title string `0xC29A6083:` | Portrait instance (mood 3) |
+|---|---|---|---|
+| 1 | Utilities | `51` | `0x0103` |
+| 2 | Budget (financial) | `52` | `0x0203` |
+| 3 | City planning | `57` | `0x0303` |
+| 4 | Environment | `54` | `0x0403` |
+| 5 | Public safety | `55` | `0x0503` |
+| 6 | Transportation | `56` | `0x0603` |
+| 7 | Health & education | `53` | `0x0703` |
+
+The portrait instance gets the same variant prefix as the advisor portraits in
+the Meet window (§6.5, `0x1AAMM`/`0x2AAMM`). If the variant image is missing, the plain
+`0x0AMM` image is used, then `0x0A03`. The rule that picks the variant is [OPEN] (it is the same
+rule as in §6.5). In the observed run the plain image `0x0503` was shown.
+`[PETITIONER_ADVICE_MAPPING]` is never read by the program (`22` §5.1). [STATIC; OBSERVED for
+`b` = 5: title "Public Safety Advisor", police-advisor portrait, ADVICE text of `0x64`]
+
+All shipped offer petitions have an ADVICE string and a non-zero `b`. The one exception is
+Holidays petition `0x131`, which has no extra-info line at all [DATA]. If there is no extra-info
+line or `b` = 0, the popup still opens: the title is empty, there is no portrait image, and the
+text is the ADVICE string (empty if there is none). [STATIC; not observed]
+
+**Geometry** [OBSERVED at 800 × 600; matches STATIC]. Coordinates are relative to the popup's
+top-left outer pixel.
+
+* Size 337 × 254. There is no title bar and no close box. The frame is a 1 px white line on the
+  top and left edges (row 0 / column 0) and a black line on the bottom and right edges (row 253 /
+  column 336).
+* The popup is centred over the petition dialog. With the dialog at client (8, 8) the popup's
+  top-left is at client (31, 59).
+* Four plate bands in the plate colour (123, 146, 255), each 10 px wide, with a 1 px
+  (173, 182, 255) ring on the inner side: left x 1..10 (ring x = 11), top y 1..10 (ring y = 11),
+  right x 326..335 (ring x = 325), bottom y 243..252 (ring y = 242). The interior uses the normal
+  dialog background.
+* Title: ink starts at about (19, 18), in the same small bold dark-navy font as the petitioner
+  name line of the petition page. Long titles are cut to 290 px.
+* Portrait: a 92 × 115 cell with its top-left at (227, 37), i.e. at x = 319 − 92.
+* OK plate: (227, 187)–(319, 236), plate colour, with a 1 px ring on all four sides. The OK
+  button sits centred in the plate. Its art is `SYS.IXF` `0xA2DEFD9A` (GZBtnDone family,
+  `08-ui-framework.md` §2.3). If that art is missing, a 42 × 24 button is used.
+* Text box: (17, 37)–(221, 236), i.e. its right edge is at 313 − 92. It is an inset box like the
+  petition message box: same font, 12 px left margin (ink from x ≈ 29), first line ink top
+  y ≈ 46. Text wraps to the box width, and a vertical scrollbar appears inside the right edge when
+  the text overflows.
+
+**Behaviour.**
+
+* The popup is modal. While it is open, clicks on the petition dialog (choice buttons, back,
+  close) do nothing. [OBSERVED: a click on a choice button was ignored]
+* OK closes the popup **only**. The petition is not answered, and the petition page is shown
+  again unchanged. [OBSERVED]
+* Opening the popup plays the normal button click. It does not answer, dismiss or delay the
+  petition. [STATIC]
+* Keyboard (Enter/Esc) closing was not tested. [OPEN]
+
+#### 6.6.2 Reaction popup (after a choice) [STATIC; OBSERVED, London, `0x64` accept]
+
+Choosing *Button1* or *Button2* records the answer and opens the **same kind of popup**,
+mirrored left to right:
+
+* Title: the petitioner's NAME string (the line shown above the message on the petition page).
+* Text: REACTION1 after *Button1*, REACTION2 after *Button2* (`22` §2 tables). The text is empty
+  if the string is missing.
+* Portrait: the petitioner's portrait (`52DB60A0:<a>`, `22` §5.2), at (17, 37).
+* OK plate (17, 187)–(109, 236), with the OK button centred in it. Text box (115, 37)–(319, 236),
+  i.e. its left edge is at 92 + 23.
+* Size, frame, bands, placement and modality are the same as in §6.6.1.
+
+When opened from the Meet window: the petition page stays visible under the popup. After OK, the
+Meet window shows the petitioner list again, without the answered petition. [OBSERVED]
 
 ### 6.7 Neighbours window and neighbour deals [STATIC]
 

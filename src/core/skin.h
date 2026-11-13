@@ -151,6 +151,8 @@ class Skin {
   // the title in it (measured on the original). Returns false when the art is missing. The close box is drawn by
   // dialogCloseBox().
   bool drawDialogFrame(Ui& ui, Rect r, const std::string& title) const;
+  // Just the dialog body of drawDialogFrame (cloud texture, white top/left and black bottom/right edge lines): popups with no title bar.
+  bool drawDialogBody(Ui& ui, Rect r) const;
   // Close box (system-button sheet, row 0) at the title bar's right end; returns its hit rect via `hit`.
   bool dialogCloseBox(Ui& ui, Rect dialog, Rect& hit, bool& clicked) const;
 
