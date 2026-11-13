@@ -16,7 +16,7 @@ namespace {
 // Neighbour-deal hook of the utilities advisor (spec 22 s3.13.1): offer terms come from NeighbourDeals::makeOffer.
 class UtilityDeals : public DealHandler {
  public:
-  explicit UtilityDeals(Game& g) : g_(g) {}
+  UtilityDeals(Game& g, uint32_t seed) : g_(g), rng_(seed) {}
   bool dealActive(int type) override { return g_.city().neighbours.dealOfType(type); }
   int dealAgeMonths(int type) override {
     for (const auto& d : g_.city().neighbours.active) if (d.dealType == type && !d.terminated()) return d.monthCounter;
@@ -62,7 +62,7 @@ class UtilityDeals : public DealHandler {
     return x;
   }
   Game& g_;
-  SimRng rng_{7};
+  SimRng rng_;
 };
 
 // DisasterWorld adapter over World / City.
@@ -168,7 +168,7 @@ void Game::setDisastersOn(bool on) {
 }
 
 void Game::initManagers() {
-  disasters_.seed(uint32_t(world_.W) * 2654435761u + 7u);
+  disasters_.seed(randomSeed_ ? streamSeed(4) : uint32_t(world_.W) * 2654435761u + 7u);
   managersReady_ = true;
   lastMonth_ = city().clock.date().month;
   lastWeekDay_ = -1;
@@ -253,7 +253,7 @@ void Game::initManagers() {
   sink_->text = textFn;
   advisors_.setSink(sink_.get());
   advisors_.petitioners = &petitioners_;
-  dealHandler_ = std::make_unique<UtilityDeals>(*this);
+  dealHandler_ = std::make_unique<UtilityDeals>(*this, randomSeed_ ? streamSeed(5) : 7u);
   advisors_.deals = dealHandler_.get();
   advisors_.clear();
   petitioners_.setSink(sink_.get());

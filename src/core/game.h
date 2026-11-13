@@ -113,6 +113,10 @@ class Game {
   // Seed of the audio random generator (song order, ambient variation). Call before init(); the default keeps tools and tests
   // deterministic, the desktop host seeds it from the clock (spec 06 7.3: the seed is not persisted and need not match).
   void seedAudio(uint32_t seed) { audioSeed_ = seed; }
+  // Seed of every random generator the shell owns: the ticker (filler, city-start item, building-news variants), the city simulation, the disasters and
+  // the neighbour deals. Spec 14 8: none is saved and each is reseeded from the clock when a city is loaded. The default 0 keeps the fixed seeds, so
+  // tools and tests are reproducible; the desktop host passes a clock value, and each new, loaded or scenario city then derives its own streams from it.
+  void seedRandom(uint32_t seed) { randomSeed_ = seed; }
   void setLanguage(const std::string& name) { languageRequest_ = name; }   // before init(); empty = from the OS locale
   void setPersistence(bool on) { persist_ = on; }        // settings / prefs file (default on)
   void setIntroEnabled(bool on) { introEnabled_ = on; }  // default on
@@ -258,6 +262,8 @@ class Game {
   void ensureFonts();
   void initAudio();
   uint32_t audioSeed_ = 1;
+  uint32_t randomSeed_ = 0, cityLoads_ = 0;   // seedRandom(); cities entered so far (every one reseeds)
+  uint32_t streamSeed(uint32_t stream) const;  // a seed for generator `stream` of the current city, mixed from randomSeed_ and cityLoads_
   void openPicker(uint32_t category);
   void sound(int id) { if (audio_) audio_->request(id); }
   // Looping disaster sounds (fire, riot): start on the first call, SetLevel to `pct`, stop when `on` is false (SoundLoop command).

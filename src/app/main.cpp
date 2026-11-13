@@ -91,6 +91,7 @@ int main(int argc, char** argv) {
                    "Terrain noise: seeded from the clock like the original; $M3K_NOISE_SEED=N pins it (reproducible captures).\n"
                    "Fullscreen: --fullscreen (or -f) starts in a borderless full-screen window; F11 toggles it while running.\n"
                    "Audio: the song order is seeded from the clock; $M3K_AUDIO_SEED=N pins it (reproducible runs).\n"
+                   "Simulation, ticker, disasters and deals: seeded from the clock; $M3K_SEED=N pins them (reproducible runs).\n"
                    "Frame log: --frame-log FILE or $M3K_FRAMELOG=FILE writes a per-frame timing CSV and prints a summary on exit.\n";
       return 0;
     }
@@ -145,6 +146,11 @@ int main(int argc, char** argv) {
   {   // time-seeded audio like terrain noise: a fixed seed made every launch start the same song; $M3K_AUDIO_SEED pins it
     const char* as = std::getenv("M3K_AUDIO_SEED");
     game.seedAudio(as && *as ? uint32_t(std::strtoul(as, nullptr, 0)) : uint32_t(std::chrono::steady_clock::now().time_since_epoch().count()));
+  }
+  {   // time-seeded simulation, ticker, disaster and deal generators (spec 14 8: reseeded from the clock on every load); $M3K_SEED pins them
+    const char* rs = std::getenv("M3K_SEED");
+    uint32_t seed = rs && *rs ? uint32_t(std::strtoul(rs, nullptr, 0)) : uint32_t(std::chrono::steady_clock::now().time_since_epoch().count());
+    game.seedRandom(seed ? seed : 1u);
   }
   if (!langArg.empty()) game.setLanguage(langArg);
   fs::path root = gameArg.empty() ? detectGameRoot(exeDirOf(argv[0])) : findGameRoot(gameArg);
