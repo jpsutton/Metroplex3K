@@ -694,8 +694,8 @@ void Game::drawTicker(Rect r) {
   // Pause fillers use the same ticker-data colour as the real 0x2F9 news item.
   TickerStyle pauseStyle = tickerDb_.style(kTblNewsTriggered, 0x2F9);
   ticker_.update(frameDt_, r.w, ui_, &news_, today, &rng_, paused_, pauseStyle.r, pauseStyle.g, pauseStyle.b);
-  // Paused indicator flashes 750 ms on / 750 ms off, starting lit.
-  pauseFlashMs_ = paused_ ? (pauseFlashMs_ + frameDt_) % 1500 : 0;
+  // Paused indicator flashes kPauseFlashMs (500 ms) on / 500 ms off, starting lit.
+  pauseFlashMs_ = paused_ ? (pauseFlashMs_ + frameDt_) % (2 * kPauseFlashMs) : 0;
   WinEnv E = env();
   WindowResult R = ticker_.draw(ui_, E, r);
   for (const auto& e : R.events) {
