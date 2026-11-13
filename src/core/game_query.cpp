@@ -688,7 +688,7 @@ void Game::stopAmbience() {
 }
 
 // ================================================================================== ticker (spec 09 4.4)
-void Game::drawTicker(Rect r) {
+void Game::drawTicker(Rect r, Rect strip) {
   const HudSnap& hs = hudNow();
   int32_t today = tickerStamp(hs.month, hs.day, hs.clockYear);
   // Pause fillers use the same ticker-data colour as the real 0x2F9 news item.
@@ -697,10 +697,33 @@ void Game::drawTicker(Rect r) {
   // Paused indicator flashes 750 ms on / 750 ms off, starting lit.
   pauseFlashMs_ = paused_ ? (pauseFlashMs_ + frameDt_) % 1500 : 0;
   WinEnv E = env();
-  WindowResult R = ticker_.draw(ui_, E, r);
+  WindowResult R = ticker_.draw(ui_, E, r, strip);
+  tickerHand_ = ticker_.overLink;
   for (const auto& e : R.events) {
     if (e.act == Act::PlaySound) sound(int(e.a));
     else if (e.act == Act::TickerClick) { centreOn(int(e.a), int(e.b)); uiHit_ = true; }
+    else if (e.act == Act::TickerLink) { openTickerLink(uint8_t(e.a), e.id); uiHit_ = true; }
+  }
+}
+
+void Game::openTickerLink(uint8_t kind, uint32_t id) {
+  if (kind == LinkPetition) {
+    if (petView_) return;   // another petition dialog is already open
+    const PendingPetition* p = petitioners_.find(id);
+    if (!p || p->hidden()) return;
+    WinEnv E = env();
+    const TextContext ptc = petitionContext(p->id);
+    petView_ = std::make_unique<PetitionerView>(makePetitionerView(E, petitioners_.config, *p, &ptc));
+    petViewId_ = p->id; petDlg_.impact = false; petDlg_.inMeet = false;   // a dialog of its own, as when the petitioner arrives
+  } else if (kind == LinkAdvisorTopic) {
+    for (uint32_t adv : allAdvisorIds()) {
+      if (!advisors_.list(adv).visible(id)) continue;
+      openWindow("advisors");
+      advWin_.open(adv);
+      advWin_.topicSel = int(id);   // the topic's page, as after a double click on its row
+      advisors_.list(adv).dismiss(id);   // reading a news topic hides it (and withdraws its ticker item) when it has a limit, is persistent or expiring [STATIC]
+      return;
+    }
   }
 }
 
