@@ -20,8 +20,10 @@ struct FakeSink : TickerSink {
     if (!hasString(t, id)) return 0;
     live[next] = {t, id}; return next++;
   }
-  void withdraw(uint32_t item) override { live.erase(item); }
+  void withdraw(uint32_t item) override { live.erase(item); links.erase(item); }
   bool hasString(uint32_t t, uint32_t id) override { return all || strings.count({t, id}); }
+  std::map<uint32_t, std::pair<uint8_t, uint32_t>> links;   // item -> (NewsLink, id)
+  void link(uint32_t item, uint8_t kind, uint32_t id) override { links[item] = {kind, id}; }
 };
 
 struct FakeDeals : DealHandler {
@@ -44,6 +46,7 @@ static void testTopicList() {
   // plain condition topic: stays while raised each cycle, deleted when not
   L.raise(0x38, 0x82A493A5);
   CHECK(L.listed(0x38) && sink.live.size() == 1);
+  CHECK(sink.links.size() == 1 && sink.links.begin()->second == std::make_pair(uint8_t(LinkAdvisorTopic), uint32_t(0x38)));   // the ticker line opens the topic
   L.update();
   CHECK(L.listed(0x38));
   L.update();                       // not raised this cycle -> deleted, ticker withdrawn
@@ -200,6 +203,9 @@ static void testTicker() {
   t7.setTextFn(adapter.text);
   uint32_t item = adapter.post(1, 5, false, 0, 0);
   CHECK(item != 0 && t7.queueSize(6) == 1);
+  CHECK(t7.queue(6).front().link == LinkNone);
+  adapter.link(item, LinkPetition, 0xBF);
+  CHECK(t7.queue(6).front().link == LinkPetition && t7.queue(6).front().linkId == 0xBF && t7.queue(6).front().underline);
   adapter.withdraw(item);
   CHECK(t7.queueSize(6) == 0);
 }
@@ -249,6 +255,7 @@ static void testPetitioners() {
 
   pm.request(0x14, 0, 48);
   CHECK(pm.pending(0x14) && sink.live.size() == 1);
+  CHECK(sink.links.size() == 1 && sink.links.begin()->second == std::make_pair(uint8_t(LinkPetition), uint32_t(0x14)));   // the ticker line opens the petition
   pm.update();
   CHECK(pm.pending(0x14));           // raised once -> survives this update
   pm.update();

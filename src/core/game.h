@@ -266,7 +266,8 @@ class Game {
   void closeModelessWindows();
   void enterCity();
   void runTarget(uint32_t target, uint32_t arg1 = 0, const std::string& name = std::string());
-  void drawTicker(Rect r);
+  void drawTicker(Rect r, Rect strip = {});
+  void openTickerLink(uint8_t kind, uint32_t id);   // click on a ticker item without a location: open the petition's dialog / the advisor window at the topic
   void drawCheatBox();
   void drawFrontCommon();
   void drawQueryPopup();
@@ -542,6 +543,7 @@ class Game {
   int panAnchorX_ = 0, panAnchorY_ = 0;
   double scrollAcc_ = 0;
   std::string cursorName_;
+  bool tickerHand_ = false;   // this frame the pointer is over a clickable ticker item: the hand cursor (spec 08 8.1: over clickable hot spots)
   std::string tipKey_;   // identity of the tooltip placed for the current hover (text, kind, button)
   Rect tipRect_;         // where it was placed
   std::string tipSuppressKey_;   // a tip a click removed stays away until the pointer leaves its button

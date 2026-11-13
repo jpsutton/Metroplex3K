@@ -746,6 +746,8 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
   }
   // Over any HUD element, window or dialog the cursor is the normal desktop arrow; tool cursors only apply on the map.
   if ((uiHit_ && !panning_) || scr_ != Screen::InCity) cursorName_.clear();
+  if (tickerHand_ && !panning_ && scr_ == Screen::InCity) cursorName_ = "hand cursor";   // the hand with the pointing finger over a ticker item a click acts on
+  tickerHand_ = false;   // set again by drawTicker() next frame (not while the panels are hidden)
   if (ui_.tooltip.empty()) {
     tipKey_.clear(); tipSuppressKey_.clear();   // the pointer left the button: the next hover shows a tip again
   } else {
@@ -1211,8 +1213,8 @@ void Game::drawHud() {
     if (ec) openWindow("engine");
   }
   // News ticker: the bar's text line when the skin gives one, else a strip above the bar.
-  if (skinBar) drawTicker(place.textLine);
-  else drawTicker({122, H_ - bh - 24, W_ - 126, 22});
+  if (skinBar) drawTicker(place.textLine, place.tickerStrip);
+  else drawTicker({122, H_ - bh - 24, std::min(W_ - 126, 474), 22});   // no art: the strip fills its rect, kept at the original's 475 px
   const int tipY = H_ - bh - 18;
   (void)tipY;   // the original draws no tool-name or coordinate overlay above the bar [OBSERVED]
   if (costShow_ && !costText_.empty()) {

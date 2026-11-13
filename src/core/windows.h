@@ -100,6 +100,7 @@ enum class Act {
   OpenUserBuildings,  // City Options / New City "Select": open the user-made buildings dialog
   TipChanged, ShowTipsChanged,
   TickerClick,        // a = x, b = z (also PlaySound 47; urgent items PlaySound 54)
+  TickerLink,         // click on a ticker item that has no location but a link: id = the petition / topic id, a = NewsLink (also PlaySound 47)
   ToggleHistorical,   // a = x, b = z
   QueryOk,            // query panel OK: a = x, b = z (commits Make Historical; the close box discards it)
   QueryReplace,       // query panel Replace button: a = x, b = z (opens the Building Replacement dialog)
@@ -325,7 +326,11 @@ class AdvisorWindow {
 struct PetitionerView {
   uint32_t petition = 0;
   const Image* portrait = nullptr;
-  std::string name, heading, message, button1, button2, advisorResponse, councilResponse;
+  std::string name, heading, message, button1, button2;
+  // Impact Analysis popup (spec 09 6.6.1): the responsible advisor's name, the petition's ADVICE string and the advisor's portrait at mood 3.
+  // Empty / null when the petition has no responsible advisor or no advice string; the popup still opens.
+  std::string impactTitle, impactText;
+  const Image* impactPortrait = nullptr;
   std::string tag;            // test spot prefix
   bool isDeal = false;
   size_t pendingIndex = 0;
@@ -335,12 +340,17 @@ PetitionerView makePetitionerView(const WinEnv& E, const PetitionerConfig& cfg, 
 
 class PetitionerDialog {
  public:
-  bool impact = false;        // impact-analysis page showing the advisor/council responses
+  bool impact = false;        // the Impact Analysis popup (spec 09 6.6.1) is open on top of the page; the page underneath ignores the mouse
   int scroll = 0;             // first visible line of an offer petition's text
+  int impactScroll = 0;       // first visible line of the popup's text
   bool inMeet = false;        // opened from the Meet window's list: the page replaces the list inside that frame, at (8, 8) (spec 09 6.5)
   // Events: AnswerPetition(id, accepted) / DismissPetitioner(id); for deal offers: AcceptDeal /
   // DeclineDeal(id = pending index).
   WindowResult draw(Ui& ui, const WinEnv& E, const PetitionerView& v);
+ private:
+  WindowResult page(Ui& ui, const WinEnv& E, const PetitionerView& v);
+  void impactPopup(Ui& ui, const WinEnv& E, const PetitionerView& v);
+  Rect pageRect_;             // where page() last drew the dialog: the popup is centred on it
 };
 
 // ---- 6.8 Preferences ------------------------------------------------------------------------------------------------------------------------
@@ -690,6 +700,7 @@ class TickerWidget {
   std::vector<Item> items;
   int accumMs = 0;
   bool alarm = false;                          // an urgent (class 1) item entered: draw() emits PlaySound(54) once
+  bool overLink = false;                       // set by draw(): the pointer is over an item that a click acts on (a map location or a link)
   // Advance by dtMs: step 2 px each time more than 50 ms elapsed, and pull the next item from `t`
   // when the strip has room (items separated by 20 px). `width` = strip width.
   // `paused`: keep scrolling, but fill the strip with repeated "Simulation Paused" copies (gap of ~4
@@ -699,8 +710,11 @@ class TickerWidget {
               uint8_t pauseR = 255, uint8_t pauseG = 255, uint8_t pauseB = 255);
   void push(const NewsItem& n, int width);     // append at the right edge / after the last item (glyph-count width estimate)
   void push(const NewsItem& n, int width, const Ui& ui);   // same with measured text width
-  // Draws the strip inside r. Click on an item with a map location -> TickerClick (and PlaySound 47).
-  WindowResult draw(Ui& ui, const WinEnv& E, Rect r);
+  // Draws the strip inside r. Click on an item with a map location -> TickerClick; on an item with only a link (a petition or advisor topic) -> TickerLink
+  // (both with PlaySound 47). Both kinds of item are underlined.
+  // `strip` (optional) is the rect of the strip's fill: its top row, then black rows (strip.h rows in all), plus one column left of strip.x;
+  // empty = the text line's top row and 16 black rows over r's width.
+  WindowResult draw(Ui& ui, const WinEnv& E, Rect r, Rect strip = {});
 };
 
 // ---- 9.1 message box ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
