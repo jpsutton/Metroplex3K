@@ -98,7 +98,9 @@ const TopicInstance* TopicList::find(uint32_t topic) const {
 uint32_t TopicList::postTicker(const TopicInstance& t) {
   if (!sink_ || !sink_->hasString(kTblAdvisorTicker, t.topicId)) return 0;
   bool loc = t.args.size() >= 2;
-  return sink_->post(kTblAdvisorTicker, t.topicId, loc, loc ? int(t.args[0].value) : 0, loc ? int(t.args[1].value) : 0);
+  const uint32_t item = sink_->post(kTblAdvisorTicker, t.topicId, loc, loc ? int(t.args[0].value) : 0, loc ? int(t.args[1].value) : 0);
+  if (item) sink_->link(item, LinkAdvisorTopic, t.topicId);   // opens the advisor window at the topic (no location) [data: every advisor ticker line is underlined]
+  return item;
 }
 void TopicList::drop(TopicInstance& t) {
   if (sink_ && t.tickerItem) sink_->withdraw(t.tickerItem);

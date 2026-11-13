@@ -77,8 +77,10 @@ int main(int argc, char** argv) {
   { AdvisorWindow w; w.ordinances = &ords; w.open(kAdvBudget); w.tab = 2; shot(dir, "advisor_ord", [&](Ui& ui, WinEnv& E) { w.draw(ui, E, am, pm); }); }
   { PetitionerView v; v.petition = 1; v.name = "Alice Anderson"; v.heading = "Library funding";
     v.message = "Mayor, the children of this city need more books. Please build a library in our neighbourhood and fund it properly.";
-    v.button1 = "Accept"; v.button2 = "Decline"; v.advisorResponse = "I recommend accepting."; v.tag = "pet";
-    PetitionerDialog d; shot(dir, "petitioner", [&](Ui& ui, WinEnv& E) { d.draw(ui, E, v); }); }
+    v.button1 = "Accept"; v.button2 = "Decline"; v.tag = "pet";
+    v.impactTitle = "Public Safety Advisor"; v.impactText = "I recommend accepting. A library gives the neighbourhood a place to study and meet, and it costs little to run.";
+    PetitionerDialog d; shot(dir, "petitioner", [&](Ui& ui, WinEnv& E) { d.draw(ui, E, v); });
+    d.impact = true; shot(dir, "petitioner-impact", [&](Ui& ui, WinEnv& E) { d.draw(ui, E, v); }); }
 
   // ---- prefs / city props / goals
   PrefsState ps; ps.tracks = {{"Track A", true}, {"Track B", true}, {"Track C", false}, {"Track D", true}};

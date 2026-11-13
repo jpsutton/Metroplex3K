@@ -746,6 +746,8 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
   }
   // Over any HUD element, window or dialog the cursor is the normal desktop arrow; tool cursors only apply on the map.
   if ((uiHit_ && !panning_) || scr_ != Screen::InCity) cursorName_.clear();
+  if (tickerHand_ && !panning_ && scr_ == Screen::InCity) cursorName_ = "hand cursor";   // the hand with the pointing finger over a ticker item a click acts on
+  tickerHand_ = false;   // set again by drawTicker() next frame (not while the panels are hidden)
   if (ui_.tooltip.empty()) {
     tipKey_.clear(); tipSuppressKey_.clear();   // the pointer left the button: the next hover shows a tip again
   } else {
@@ -1113,7 +1115,7 @@ void Game::drawHud() {
     // Lit (red / green) for the current state, grey otherwise; hover shows the yellow variant.
     // The inactive face is no image: the bar art carries the dark red / dark green faces (spec 09 4.2 [OBSERVED]). pause.off / run.off (grey) are
     // the bar's disabled faces and are never drawn in play.
-    const bool pauseLit = paused_ && userPaused_ && pauseFlashMs_ < 750;
+    const bool pauseLit = paused_ && userPaused_ && pauseFlashMs_ < kPauseFlashMs;
     const Image* pa = ui_.hover(pr) ? skin_.get("pause.hover") : pauseLit ? imPause : nullptr;
     const Image* ra = ui_.hover(rr) ? skin_.get("run.hover") : !paused_ ? skin_.get("run") : nullptr;
     if (pa) ui_.blit(*pa, pr.x, pr.y);
@@ -1173,7 +1175,9 @@ void Game::drawHud() {
   drawNavigator(bh);
 
   // RCI bars: bottom-anchored, just left of the navigator.
-  int rx = navX - RciGeometry::imgW, ry = H_ - RciGeometry::imgH + RciGeometry::bottomClip;   // the art's last 8 rows fall below the screen [OBSERVED]
+  // The art is drawn at (client width - 201, bar top - 24) (spec 09 4.3); with the 56 px bar of 800 x 600 that puts its last 8 rows below the
+  // screen [OBSERVED], with the 64 px bar of 1024 x 768 and up it is 8 px higher. The M3K Options button below sits on the same anchor.
+  int rx = navX - RciGeometry::imgW, ry = skinBar ? H_ - bh - 24 : H_ - RciGeometry::imgH + RciGeometry::bottomClip;
   const Valve* v[3] = {&hud.valveR, &hud.valveC, &hud.valveI};
   uint32_t cols[3] = {rgb(0, 192, 0), rgb(0, 0, 192), rgb(192, 192, 0)};
   const char* nm[3] = {"R", "C", "I"};
@@ -1209,8 +1213,8 @@ void Game::drawHud() {
     if (ec) openWindow("engine");
   }
   // News ticker: the bar's text line when the skin gives one, else a strip above the bar.
-  if (skinBar) drawTicker(place.textLine);
-  else drawTicker({122, H_ - bh - 24, W_ - 126, 22});
+  if (skinBar) drawTicker(place.textLine, place.tickerStrip);
+  else drawTicker({122, H_ - bh - 24, std::min(W_ - 126, 474), 22});   // no art: the strip fills its rect, kept at the original's 475 px
   const int tipY = H_ - bh - 18;
   (void)tipY;   // the original draws no tool-name or coordinate overlay above the bar [OBSERVED]
   if (costShow_ && !costText_.empty()) {
