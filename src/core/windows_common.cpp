@@ -763,19 +763,23 @@ void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t,
   }
 }
 
-WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
+WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r, Rect strip) {
   WindowResult R;
+  overLink = false;
   if (alarm) { alarm = false; R.add(Act::PlaySound, 0, 54); }
+  // The strip, drawn first so the text window below copies it: a (99,109,198) top row and pure black rows under it, from one column left of
+  // strip.x for strip.w + 1 columns. At 800 x 600 that is the top row at the HUD's text line (y549) and 16 black rows (y550..565), x7..481 [OBSERVED].
+  // The bar art carries the same strip, whose rows and right end differ per resolution (the text line rect does not follow them), so the HUD passes
+  // the art's own rect; the default is the text line's top row and 16 black rows.
+  if (strip.w <= 0) strip = {r.x, r.y, r.w, 17};
+  for (int x = strip.x - 1; x < strip.x + strip.w; x++)
+    for (int y = 0; y < strip.h; y++) {
+      const int dy = strip.y + y;
+      if (x >= 0 && dy >= 0 && x < ui.W && dy < ui.H) ui.at(x, dy) = y == 0 ? rgb(99, 109, 198) : rgb(0, 0, 0);
+    }
   std::vector<uint32_t> buf(size_t(r.w) * r.h);
   for (int y = 0; y < r.h; y++)   // the bar art around the strip stays: copy what is there
     for (int x = 0; x < r.w; x++) { const int dx = r.x + x, dy = r.y + y; buf[size_t(y) * r.w + x] = (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) ? ui.at(dx, dy) : 0u; }
-  // The strip, relative to the HUD's text line (y549 on the original at 800 x 600): a (99,109,198) top row at rel 0 and 16 pure black rows (y550..565) below it,
-  // x7..481, i.e. one column left of the rect and 475 wide [OBSERVED].
-  const int sw = std::min(r.w, 474);
-  for (int x = 0; x < sw; x++) {
-    buf[size_t(x)] = rgb(99, 109, 198);
-    for (int y = 1; y <= 16 && y < r.h; y++) buf[size_t(y) * r.w + x] = rgb(0, 0, 0);
-  }
   Ui sub = ui; sub.setTarget(&buf, r.w, r.h);
   int fh = ui.fonts->ui().height();
   int ty = (r.h - fh) / 2;
@@ -784,11 +788,13 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
     if (it.x > r.w || it.x + w < 0) continue;
     uint32_t col = rgb(it.n.r, it.n.g, it.n.b);
     sub.text(it.x, ty + 1, it.n.text, "main9", col);   // main9 (9-row capitals) [OBSERVED]
-    if (it.n.hasLoc) {
+    if (it.n.hasLoc || it.n.link != LinkNone) {   // a map location centres the view; else a link opens the petition / advisor topic
       if (14 < r.h) for (int x = std::max(0, it.x); x < std::min(r.w, it.x + w + 1); x++) buf[size_t(14) * r.w + x] = col;   // underline row y563 (rel 14), 1 px past the glyphs [OBSERVED]
       Rect ir{r.x + it.x, r.y, w, r.h};
+      if (ir.contains(ui.in.mx, ui.in.my) && r.contains(ui.in.mx, ui.in.my)) overLink = true;
       if (ui.clicked(ir) && r.contains(ui.in.mx, ui.in.my)) {
-        R.add(Act::TickerClick, it.n.number, it.n.locX, it.n.locZ);
+        if (it.n.hasLoc) R.add(Act::TickerClick, it.n.number, it.n.locX, it.n.locZ);
+        else R.add(Act::TickerLink, it.n.linkId, it.n.link);
         R.add(Act::PlaySound, 0, 47);
       }
       E.spot("ticker." + std::to_string(it.n.number), {std::max(ir.x, r.x), r.y, std::min(w, r.w), r.h});
@@ -799,10 +805,6 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r) {
       int dx = r.x + x, dy = r.y + y;
       if (dx >= 0 && dy >= 0 && dx < ui.W && dy < ui.H) ui.at(dx, dy) = buf[size_t(y) * r.w + x];
     }
-  if (r.x >= 1) {   // the strip's extra left column (x7)
-    ui.at(r.x - 1, r.y) = rgb(99, 109, 198);
-    for (int y = 1; y <= 16; y++) ui.at(r.x - 1, r.y + y) = rgb(0, 0, 0);
-  }
   return R;
 }
 

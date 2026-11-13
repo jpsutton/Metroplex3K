@@ -331,8 +331,12 @@ PetitionerView makePetitionerView(const WinEnv& E, const PetitionerConfig& cfg, 
   v.message = get(PetitionText::Message, "");
   v.button1 = get(PetitionText::Button1, "");
   v.button2 = get(PetitionText::Button2, "");
-  v.advisorResponse = get(PetitionText::Advice, "");
+  v.impactText = get(PetitionText::Advice, "");   // the Impact Analysis popup (spec 09 6.6.1)
   auto ex = cfg.extraInfo(p.id);
+  if (ex.found && ex.second >= 1 && ex.second <= 7) {   // field b of the extra-info line = the responsible advisor 1..7, in kAdvisorOrder's order (spec 22 5.2)
+    v.impactTitle = AdvisorWindow::advisorName(E, kAdvisorOrder[ex.second - 1]);
+    v.impactPortrait = E.img(0x52DB60A0, AdvisorWindow::portraitInstance(int(ex.second), 3));   // mood 3 whatever the advisor's mood; the variant prefix rule is OPEN (plain 0x0AMM)
+  }
   if (ex.found && ex.portrait) { const uint32_t pic = petitionerPortraitImage(ex.portrait); v.portrait = E.img(0x52DB60A0, pic ? pic : ex.portrait); }
   return v;
 }
@@ -342,8 +346,62 @@ PetitionerView makePetitionerView(const WinEnv& E, const PetitionerConfig& cfg, 
 // 42DEC7D2:02), the petitioner's name and portrait, and the message in black main9 in a sunken lavender box. Answer /
 // impact buttons (no reference screenshot) sit at the bottom of the message box when the petition has them.
 WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerView& v) {
+  if (!impact) return page(ui, E, v);
+  // The Impact Analysis popup is modal: the page underneath is drawn but ignores the mouse and keys (spec 09 6.6.1).
+  WindowResult R;
+  {
+    const Input saved = ui.in;
+    ui.in = Input();
+    ui.in.mx = ui.in.my = -100000;
+    page(ui, E, v);
+    ui.in = saved;
+  }
+  impactPopup(ui, E, v);   // its OK closes it only; Enter / Esc were not tested in the original (spec 09 6.6.1 [OPEN]), so no key closes it
+  return R;
+}
+
+// Impact Analysis popup (spec 09 6.6.1 [STATIC; OBSERVED at 800 x 600, petition 0x64]): 337 x 254, no title bar or close box, centred over the petition
+// page (client (31, 59) when the page is at (8, 8)). The page underneath is not changed and answers nothing.
+void PetitionerDialog::impactPopup(Ui& ui, const WinEnv& E, const PetitionerView& v) {
+  const Rect p{pageRect_.x + 23, pageRect_.y + 51, 337, 254};
+  const std::string t = v.tag.empty() ? "pet" : v.tag;
+  if (!(ui.skin && ui.skin->drawDialogBody(ui, p))) ui.panel(p, "");
+  const uint32_t plate = rgb(123, 146, 255), ring = rgb(173, 182, 255);
+  ui.fill({p.x + 1, p.y + 1, 10, 252}, plate); ui.fill({p.x + 1, p.y + 1, 335, 10}, plate);       // four 10 px plate bands: left, top,
+  ui.fill({p.x + 326, p.y + 1, 10, 252}, plate); ui.fill({p.x + 1, p.y + 243, 335, 10}, plate);    // right, bottom
+  ui.fill({p.x + 11, p.y + 11, 315, 1}, ring); ui.fill({p.x + 11, p.y + 242, 315, 1}, ring);       // 1 px ring on their inner side
+  ui.fill({p.x + 11, p.y + 11, 1, 232}, ring); ui.fill({p.x + 325, p.y + 11, 1, 232}, ring);
+  std::string title = v.impactTitle;
+  while (!title.empty() && ui.textWidth(title, "main9") > 290) title.pop_back();   // long titles are cut to 290 px
+  ui.text(p.x + 19, p.y + 15, title, "main9", kInk);   // ink starts at (19, 18) [OBSERVED, about]; main9 puts the first ink row 3 below the origin
+  if (v.impactPortrait) ui.blitRect(*v.impactPortrait, p.x + 227, p.y + 37, 0, 0, std::min(92, v.impactPortrait->w), std::min(115, v.impactPortrait->h));
+  // Text box (17, 37)-(221, 236): inset like the petition's message box, wrapped like it (box width - 41), scrollbar inside the right edge when needed.
+  const Rect tb{p.x + 17, p.y + 37, 204, 199};
+  ui.fill(tb, kLav); sunkenLines(ui, tb);
+  const auto lines = wrap(ui, v.impactText, tb.w - 41, "main9");
+  const int visible = (tb.h - 8) / 14;
+  if (int(lines.size()) > visible) {
+    const Rect sb{tb.x + tb.w - 16, tb.y, 16, tb.h};
+    ui.fill(sb, plate);
+    scenarioScrollBar(ui, E, sb, tb, int(lines.size()), visible, impactScroll);
+  } else impactScroll = 0;
+  for (int i = 0; i < visible && impactScroll + i < int(lines.size()); i++) ui.text(tb.x + 12, tb.y + 6 + 14 * i, lines[size_t(impactScroll + i)], "main9", rgb(0, 0, 0));   // ink from x 29, first line ink top y 46 [OBSERVED, about]
+  // OK plate (227, 187)-(319, 236) with a 1 px ring on all four sides, the check-mark button (GZBtnDone art) centred in it.
+  const Rect okp{p.x + 227, p.y + 187, 92, 49};
+  blueBand(ui, okp);
+  const Image* art = ui.skin ? ui.skin->image(skin_group::Sys, 0xA2DEFD9A) : nullptr;
+  const int cw = art && art->w >= 4 ? art->w / 4 : 42, ch = art && !art->empty() ? art->h : 24;
+  const Rect ob{okp.x + (okp.w - cw) / 2, okp.y + (okp.h - ch) / 2, cw, ch};
+  E.spot(t + ".impact.ok", ob);
+  bool c = false;
+  if (!(art && ui.skin->imageButtonCells(ui, art, 4, ob, "", false, true, c))) c = ui.button(ob, "OK");
+  if (c) { impact = false; impactScroll = 0; }
+}
+
+WindowResult PetitionerDialog::page(Ui& ui, const WinEnv& E, const PetitionerView& v) {
   WindowResult R;
   Rect r = inMeet ? placedAt(ui, 8, 8, 384, 354) : centered(ui, 384, 354);
+  pageRect_ = r;
   if (frame(ui, E, r, v.heading.empty() ? E.win(0x2DD, "Petitioner") : v.heading)) { R.close = true; R.add(Act::Close); }
   std::string t = v.tag.empty() ? "pet" : v.tag;
   if (sysButton(ui, E, t + ".back", 1, r.x + 328, r.y + 7)) { R.close = true; R.add(Act::Close); }
@@ -352,7 +410,7 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
     else R.add(Act::AnswerPetition, v.petition, accepted);
     R.close = true;
   };
-  const bool offer = (!v.button1.empty() || !v.button2.empty()) && !impact;   // offers use their own layout [OBSERVED: business, reward, neighbour deal, complaints]
+  const bool offer = !v.button1.empty() || !v.button2.empty();   // offers use their own layout [OBSERVED: business, reward, neighbour deal, complaints]
   blueBand(ui, {r.x + 4, r.y + 34, 8, 316});
   if (!offer) {
     blueBand(ui, {r.x + 4, r.y + 310, 47, 40});
@@ -366,8 +424,7 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
   Rect mb{r.x + 121, r.y + 58, 258, offer ? 202 : 291};
   ui.fill(mb, kLav); sunkenLines(ui, mb);
   const bool hasAnswers = !v.button1.empty() || !v.button2.empty();
-  const bool hasImpact = !v.advisorResponse.empty() || !v.councilResponse.empty();
-  const int textH = mb.h - 8 - ((hasAnswers || hasImpact || impact) ? 40 : 0);
+  const int textH = mb.h - 8 - (hasAnswers ? 40 : 0);
   // Body text: lines of up to ~232 px on a 14 px pitch [OBSERVED]; returns the height used.
   auto body = [&](Rect br, const std::string& text) {
     int y = 0;
@@ -412,23 +469,9 @@ WindowResult PetitionerDialog::draw(Ui& ui, const WinEnv& E, const PetitionerVie
       else c = ui.button(q, "?");
       if (c) impact = true;
     }
-  } else if (!impact) {
-    body({r.x + 133, r.y + 63, 232, textH}, v.message);
-    int bx = mb.x + 6, by = mb.y + mb.h - 38, bw = 80;
-    if (hasAnswers) {   // (not reached for offers: they use the radio layout above)
-      if (!v.button1.empty() && button(ui, E, t + ".button1", {bx, by, bw, 33}, v.button1)) answer(true);
-      if (!v.button2.empty() && button(ui, E, t + ".button2", {bx + bw + 4, by, bw, 33}, v.button2)) answer(false);
-    } else if (hasImpact && button(ui, E, t + ".ok", {bx, by, bw, 33}, E.win(0x85, "OK"))) {
-      if (v.isDeal) answer(false); else { R.add(Act::DismissPetitioner, v.petition); R.close = true; }
-    }
-    if (hasImpact && button(ui, E, t + ".impact", {mb.x + mb.w - bw - 6, by, bw, 33}, E.win(0x79, "Impact"))) impact = true;
   } else {
-    int y = r.y + 62;
-    ui.text(r.x + 133, y, E.win(0x80, "Advisor's response"), "main9", kInk);
-    y += body({r.x + 133, y + 16, 232, 100}, v.advisorResponse.empty() ? "-" : v.advisorResponse) + 24;
-    ui.text(r.x + 133, y, E.win(0x81, "City council's response"), "main9", kInk);
-    body({r.x + 133, y + 16, 232, 100}, v.councilResponse.empty() ? "-" : v.councilResponse);
-    if (button(ui, E, t + ".return", {mb.x + 6, mb.y + mb.h - 38, 112, 33}, "<<")) impact = false;
+    // An information petition (no choice buttons): just the text; the round Dismiss button below closes it. It has no Impact Analysis plate (spec 09 6.6).
+    body({r.x + 133, r.y + 63, 232, textH}, v.message);
   }
   // Round Dismiss button on the plate with its two-line label (info petitions only).
   if (!offer) {

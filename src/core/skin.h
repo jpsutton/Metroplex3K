@@ -56,6 +56,7 @@ struct BottomBarLayout {
   int variant = 2;                      // 0 = 640, 1 = 800, 2 = >=1024
   Rect fieldA, fieldB, fieldC, fieldD;  // city name, population, funds, date
   Rect textLine;                        // news ticker line
+  Rect tickerStrip;                     // the ticker strip's fill as the bar art has it (top row + black rows; one more column left of x)
   int p1x = 0, p1y = 0, p2x = 0, p2y = 0, p3x = 0, p3y = 0, p4x = 0, p4y = 0;
 };
 BottomBarLayout bottomBarLayout(int screenW);
@@ -63,7 +64,7 @@ BottomBarLayout bottomBarLayout(int screenW);
 // Absolute placement (window coordinates) of a drawn bottom bar.
 struct BottomBarPlace {
   Rect bar;                             // background image rect
-  Rect fieldA, fieldB, fieldC, fieldD, textLine;
+  Rect fieldA, fieldB, fieldC, fieldD, textLine, tickerStrip;
   int p1x = 0, p1y = 0, p2x = 0, p2y = 0, p3x = 0, p3y = 0, p4x = 0, p4y = 0;
   int rightEnd = 0;                     // x where the bar art ends (window width)
 };
@@ -151,6 +152,8 @@ class Skin {
   // the title in it (measured on the original). Returns false when the art is missing. The close box is drawn by
   // dialogCloseBox().
   bool drawDialogFrame(Ui& ui, Rect r, const std::string& title) const;
+  // Just the dialog body of drawDialogFrame (cloud texture, white top/left and black bottom/right edge lines): popups with no title bar.
+  bool drawDialogBody(Ui& ui, Rect r) const;
   // Close box (system-button sheet, row 0) at the title bar's right end; returns its hit rect via `hit`.
   bool dialogCloseBox(Ui& ui, Rect dialog, Rect& hit, bool& clicked) const;
 

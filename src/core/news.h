@@ -50,6 +50,9 @@ class TickerDb {
   std::vector<NewsKey> pool_;
 };
 
+// What a clickable ticker item without a map location opens: the petitioner dialog of a petition, or the advisor window at a topic.
+enum NewsLink : uint8_t { LinkNone = 0, LinkPetition = 1, LinkAdvisorTopic = 2 };
+
 struct NewsItem {
   uint32_t number = 0, table = 0, id = 0;
   std::string text;
@@ -59,6 +62,7 @@ struct NewsItem {
   int32_t postDate = 0;
   int cls = 6;
   bool hasLoc = false; int locX = 0, locZ = 0;
+  uint8_t link = LinkNone; uint32_t linkId = 0;   // NewsLink and the petition / topic id it opens
   bool filler = false;
 };
 
@@ -79,6 +83,7 @@ class NewsTicker {
                 const std::string* textOverride = nullptr);
   uint32_t post(NewsKey k, int32_t today, bool hasLoc = false, int x = 0, int z = 0) { return post(k.table, k.id, today, hasLoc, x, z); }
   bool withdraw(uint32_t number);   // searches all six queues
+  void setLink(uint32_t number, uint8_t link, uint32_t linkId);   // marks a queued item as a link to a petition / advisor topic (all six queues)
   // Selection of the next message (section 4.3). Always yields an item (random filler as last resort).
   NewsItem next(int32_t today, GameRng& rng);
   size_t queueSize(int cls) const { return cls >= 1 && cls <= 6 ? q_[cls - 1].size() : 0; }
@@ -121,6 +126,8 @@ class TickerSink {
   virtual uint32_t post(uint32_t table, uint32_t id, bool hasLoc, int x, int z) = 0;
   virtual void withdraw(uint32_t item) = 0;
   virtual bool hasString(uint32_t table, uint32_t id) = 0;
+  // Make a posted item a link (NewsLink) to the petition / advisor topic `id`; sinks that only record posts ignore it.
+  virtual void link(uint32_t item, uint8_t kind, uint32_t id) { (void)item; (void)kind; (void)id; }
 };
 class NewsTickerSink : public TickerSink {
  public:
@@ -129,6 +136,7 @@ class NewsTickerSink : public TickerSink {
     return t_.post(table, id, today_(), hasLoc, x, z);
   }
   void withdraw(uint32_t item) override { if (item) t_.withdraw(item); }
+  void link(uint32_t item, uint8_t kind, uint32_t id) override { if (item) t_.setLink(item, kind, id); }
   bool hasString(uint32_t table, uint32_t id) override { return !textOf(table, id).empty(); }
   NewsTicker::TextFn text;
  private:

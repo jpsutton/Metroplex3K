@@ -272,7 +272,8 @@ class Game {
   void closeModelessWindows();
   void enterCity();
   void runTarget(uint32_t target, uint32_t arg1 = 0, const std::string& name = std::string());
-  void drawTicker(Rect r);
+  void drawTicker(Rect r, Rect strip = {});
+  void openTickerLink(uint8_t kind, uint32_t id);   // click on a ticker item without a location: open the petition's dialog / the advisor window at the topic
   void drawCheatBox();
   void drawFrontCommon();
   void drawQueryPopup();
@@ -469,8 +470,9 @@ class Game {
   int snapSize_ = 0;
   double viewAcc_ = 0; int viewUpdates_ = 0;   // view updates due this frame at kViewUpdateHz (keyboard / drag scroll)
   uint32_t frameDt_ = 0;   // dt of the current frame (ticker scrolling)
-  bool userPaused_ = false;     // the player pressed Pause (lights the pause button); a load pauses without it [spec 09 4.2]
-  uint32_t pauseFlashMs_ = 0;   // position in the 1500 ms paused-indicator flash cycle (0 when running)
+  bool userPaused_ = false;     // the city is paused by a pause count (the player pressed Pause, or a new / loaded city starts paused): the pause button flashes. A modal dialog's freeze does not
+  static constexpr uint32_t kPauseFlashMs = 500;   // the paused indicator is lit this long, then dark this long (compared with the original: 0.5 s)
+  uint32_t pauseFlashMs_ = 0;   // position in the 2 * kPauseFlashMs paused-indicator flash cycle (0 when running)
   bool disastersOn_ = true, autoBudget_ = false;
   // Transport tools greyed until the transportation advisor's tech flag is set (spec 22 s3.10, Q-AK).
   bool transportToolEnabled(uint32_t menuItemId) const;
@@ -547,6 +549,7 @@ class Game {
   int panAnchorX_ = 0, panAnchorY_ = 0;
   double scrollAcc_ = 0;
   std::string cursorName_;
+  bool tickerHand_ = false;   // this frame the pointer is over a clickable ticker item: the hand cursor (spec 08 8.1: over clickable hot spots)
   std::string tipKey_;   // identity of the tooltip placed for the current hover (text, kind, button)
   Rect tipRect_;         // where it was placed
   std::string tipSuppressKey_;   // a tip a click removed stays away until the pointer leaves its button
