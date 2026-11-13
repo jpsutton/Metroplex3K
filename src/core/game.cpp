@@ -1173,7 +1173,9 @@ void Game::drawHud() {
   drawNavigator(bh);
 
   // RCI bars: bottom-anchored, just left of the navigator.
-  int rx = navX - RciGeometry::imgW, ry = H_ - RciGeometry::imgH + RciGeometry::bottomClip;   // the art's last 8 rows fall below the screen [OBSERVED]
+  // The art is drawn at (client width - 201, bar top - 24) (spec 09 4.3); with the 56 px bar of 800 x 600 that puts its last 8 rows below the
+  // screen [OBSERVED], with the 64 px bar of 1024 x 768 and up it is 8 px higher. The M3K Options button below sits on the same anchor.
+  int rx = navX - RciGeometry::imgW, ry = skinBar ? H_ - bh - 24 : H_ - RciGeometry::imgH + RciGeometry::bottomClip;
   const Valve* v[3] = {&hud.valveR, &hud.valveC, &hud.valveI};
   uint32_t cols[3] = {rgb(0, 192, 0), rgb(0, 0, 192), rgb(192, 192, 0)};
   const char* nm[3] = {"R", "C", "I"};
