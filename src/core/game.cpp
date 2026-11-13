@@ -1115,7 +1115,7 @@ void Game::drawHud() {
     // Lit (red / green) for the current state, grey otherwise; hover shows the yellow variant.
     // The inactive face is no image: the bar art carries the dark red / dark green faces (spec 09 4.2 [OBSERVED]). pause.off / run.off (grey) are
     // the bar's disabled faces and are never drawn in play.
-    const bool pauseLit = paused_ && userPaused_ && pauseFlashMs_ < 750;
+    const bool pauseLit = paused_ && userPaused_ && pauseFlashMs_ < kPauseFlashMs;
     const Image* pa = ui_.hover(pr) ? skin_.get("pause.hover") : pauseLit ? imPause : nullptr;
     const Image* ra = ui_.hover(rr) ? skin_.get("run.hover") : !paused_ ? skin_.get("run") : nullptr;
     if (pa) ui_.blit(*pa, pr.x, pr.y);
