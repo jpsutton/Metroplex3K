@@ -106,7 +106,7 @@ program's debug cheats (for identification only). [STATIC]
 
 The *advisor ID* identifies the advisor in messages and in data: after each evaluation cycle an
 advisor broadcasts an "advisor updated" notification carrying its advisor ID (UI refresh), and
-`PetitionerManager.ini` `[PETITIONER_ADVICE_MAPPING]` uses these IDs (section 5.1). [STATIC]
+`PetitionerManager.ini` `[PETITIONER_ADVICE_MAPPING]` contains these IDs (section 5.1), but the program never reads that section. [STATIC]
 
 All INI files are read from the loose file `\Sys\<name>` if present, otherwise from the packed
 `Sys\SYS.PAK` (see `02-containers.md`). Each has an `[Admin]` section with `Enabled=ON`.
@@ -1199,8 +1199,8 @@ button); others have accept/decline buttons (those with entries in the Button1/B
 | Section | Content |
 |---|---|
 | `[PETITIONER_ORDINANCE_TRIGGER_MAPPINGS]` | Thresholds for ordinance petitions (table in 5.4). `*_YEAR` keys are calendar years; `*_AURA` keys are city-aura values; `*_POP`/`*_POPULATION` keys are populations; `LE_LEVEL_FOR_CLINIC` is life expectancy in years. |
-| `[PETITIONER_ADVICE_SIZE] NumberOfPetitionerMessages` | Size of the advice mapping (shipped 210). |
-| `[PETITIONER_ADVICE_MAPPING]` | `n=<advisorId>;` for n = 1…NumberOfPetitionerMessages: which advisor's portrait/voice delivers the advisor comment on petition n (0 = none). Shipped non-zero: 16 → Environment, 24 and 26 → Utilities, 149 → Public safety, 206 and 210 → City planning. |
+| `[PETITIONER_ADVICE_SIZE] NumberOfPetitionerMessages` | Present in the shipped file (210) but **not read** by the program. [STATIC] |
+| `[PETITIONER_ADVICE_MAPPING]` | `n=<advisorId>;` for n = 1…210 (shipped non-zero: 16 → Environment, 24 and 26 → Utilities, 149 → Public safety, 206 and 210 → City planning). **Not read** by the program: neither section name occurs in it. The advisor shown with a petition's advice is field `b` of the extra-info line (5.2). Correction: the previous revision said this mapping picks the advisor who delivers the comment. [STATIC; DATA] |
 | `[PETITIONER_STRINGS_<CAT>]` (11 sections) | Each lists one or more `NAME=0xTABLE` lines: the string tables for that category, searched in file order. CAT ∈ ADVICE, BUTTON1, BUTTON2, HEADING, MESSAGE, NAME, REACTION1, REACTION2, TICKER, TICKER_X, TICKER_Y. |
 | `[PetitionerExtraInfo Filenames]` | `entry=<file>` list (shipped `PetitionerExtraInfo.INI`, `HolidaysPetitionerExtraInfo.INI`). |
 
@@ -1212,14 +1212,25 @@ petitioner ID** (so base and Holidays IDs can share categories without colliding
 Section `[PetitionerExtraInfo]`, lines `0x%08X=<a>,<b>` keyed by petitioner ID [STATIC, DATA:
 182 + 3 shipped lines]:
 
-* `a` — portrait image: resource (Type `0x62B9DA24`, Group `0x52DB60A0`, Instance `a`) in
-  `Res/UI/Shared/52DB60A0_Advisors.ixf`. It also selects the petitioner's *character type*, which
-  chooses the voice sound played on accept/decline (sound IDs `0x9B`–`0xA6`, see
-  `06-audio.md`; table in 5.5) [STATIC].
-* `b` — optional second image (same Type/Group, Instance `b`); 0 = none.
+* `a`: the petitioner's portrait, given as a presenter number rather than an image instance.
+  The image is `62B9DA24:52DB60A0:<pic>` with pic from the presenter table in
+  `23-scenarios.md` §4.7.0: 2 → `FF01`, 3 → `FF02`, …, `0x13` → `FF04`. `a` = 18 (`0x12`)
+  depends on the neighbour: it uses the neighbour slot *s* (0–3) of the petition's neighbour
+  argument (`TopicArg` format kind 4) and gives `FF03`, `FF05`, `FF10` or `FF14` for *s* = 0–3. If
+  there is no such argument it gives `FF03`. [STATIC] `a` also selects the petitioner's
+  *character type*, which chooses the voice sound played on accept/decline (sound IDs
+  `0x9B`–`0xA6`, see `06-audio.md`; table in 5.5) [STATIC]. Correction: the previous revision
+  said the image instance is `a` itself.
+* `b`: the **responsible advisor** number, 1–7. It is used for the petition's Impact Analysis
+  popup (`09-ui-screens.md` §6.6.1). The numbers are: 1 Utilities, 2 Budget, 3 City planning,
+  4 Environment, 5 Public safety, 6 Transportation, 7 Health & education. These are the advisor
+  digit A of the portrait instances `0x0AMM`. 0 = no advisor. [STATIC; OBSERVED for 5; DATA: every
+  shipped offer petition has 1 ≤ `b` ≤ 7, and the only lines with `b` = 0 are information
+  petitions] Correction: the previous revision called `b` an "optional second image (Instance
+  `b`)". It is not an image instance.
 
 Files are searched in `[PetitionerExtraInfo Filenames]` order; the first file containing the key
-wins. Missing key → no images.
+wins. Missing key → no petitioner portrait and no responsible advisor. [STATIC]
 
 ### 5.3 Requests, pending list and cool-down
 

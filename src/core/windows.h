@@ -326,7 +326,11 @@ class AdvisorWindow {
 struct PetitionerView {
   uint32_t petition = 0;
   const Image* portrait = nullptr;
-  std::string name, heading, message, button1, button2, advisorResponse, councilResponse;
+  std::string name, heading, message, button1, button2;
+  // Impact Analysis popup (spec 09 6.6.1): the responsible advisor's name, the petition's ADVICE string and the advisor's portrait at mood 3.
+  // Empty / null when the petition has no responsible advisor or no advice string; the popup still opens.
+  std::string impactTitle, impactText;
+  const Image* impactPortrait = nullptr;
   std::string tag;            // test spot prefix
   bool isDeal = false;
   size_t pendingIndex = 0;
@@ -336,12 +340,17 @@ PetitionerView makePetitionerView(const WinEnv& E, const PetitionerConfig& cfg, 
 
 class PetitionerDialog {
  public:
-  bool impact = false;        // impact-analysis page showing the advisor/council responses
+  bool impact = false;        // the Impact Analysis popup (spec 09 6.6.1) is open on top of the page; the page underneath ignores the mouse
   int scroll = 0;             // first visible line of an offer petition's text
+  int impactScroll = 0;       // first visible line of the popup's text
   bool inMeet = false;        // opened from the Meet window's list: the page replaces the list inside that frame, at (8, 8) (spec 09 6.5)
   // Events: AnswerPetition(id, accepted) / DismissPetitioner(id); for deal offers: AcceptDeal /
   // DeclineDeal(id = pending index).
   WindowResult draw(Ui& ui, const WinEnv& E, const PetitionerView& v);
+ private:
+  WindowResult page(Ui& ui, const WinEnv& E, const PetitionerView& v);
+  void impactPopup(Ui& ui, const WinEnv& E, const PetitionerView& v);
+  Rect pageRect_;             // where page() last drew the dialog: the popup is centred on it
 };
 
 // ---- 6.8 Preferences ------------------------------------------------------------------------------------------------------------------------

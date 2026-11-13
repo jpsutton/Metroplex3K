@@ -425,10 +425,13 @@ void testPetitioner() {
   cfg.setTables(PetitionText::Button1, {0xAAAA0004});
   cfg.setTables(PetitionText::Button2, {0xAAAA0005});
   cfg.setTables(PetitionText::Advice, {0xAAAA0006});
+  cfg.addExtraInfo(IniFile::fromText("[PetitionerExtraInfo]\n0x00000055=2,5\n"));   // b = 5: the responsible advisor is Public Safety (spec 22 5.2)
   PendingPetition p; p.id = 0x55;
   PetitionerView v = makePetitionerView(h.E, cfg, p);
   CHECK(v.name == "Alice" && v.heading == "Fund the library" && v.button1 == "Yes" && v.button2 == "No");
-  CHECK(v.advisorResponse == "Advice text");
+  CHECK(v.impactText == "Advice text" && v.impactTitle == "Public Safety Advisor");
+  PetitionerView noAdv = makePetitionerView(h.E, cfg, PendingPetition{});   // no extra-info line: no advisor, empty title and portrait
+  CHECK(noAdv.impactTitle.empty() && noAdv.impactPortrait == nullptr);
   PetitionerDialog d;
   h.drawFn = [&] { return d.draw(h.ui, h.E, v); };
   h.frame(); CHECK(h.inked() > 1000);
@@ -436,15 +439,22 @@ void testPetitioner() {
   CHECK(r.has(Act::AnswerPetition) && r.find(Act::AnswerPetition)->id == 0x55 && r.find(Act::AnswerPetition)->a == 1 && r.close);
   r = h.click("pet.button2");
   CHECK(r.has(Act::AnswerPetition) && r.find(Act::AnswerPetition)->a == 0 && r.close);
-  h.click("pet.impact");
-  CHECK(d.impact);
+  // Impact Analysis: a modal popup on top of the unchanged page (spec 09 6.6.1).
+  r = h.click("pet.impact");
+  CHECK(d.impact && !r.close && !r.has(Act::AnswerPetition));
   h.frame(); CHECK(h.inked() > 1000);
-  h.click("pet.return");
-  CHECK(!d.impact);
-  // No buttons: single OK dismisses.
+  r = h.click("pet.button1");   // the page underneath ignores the mouse while the popup is open
+  CHECK(d.impact && !r.has(Act::AnswerPetition) && !r.close);
+  r = h.click("close"); CHECK(!r.close && d.impact);
+  r = h.click("pet.impact.ok");   // OK closes the popup only: nothing is answered
+  CHECK(!d.impact && !r.close && !r.has(Act::AnswerPetition) && !r.has(Act::DismissPetitioner));
+  r = h.click("pet.button2");     // the page works again
+  CHECK(r.has(Act::AnswerPetition) && r.close);
+  // No buttons (an information petition): no Impact Analysis plate; the round Dismiss button closes it.
   PetitionerView v2 = v; v2.button1.clear(); v2.button2.clear();
   h.drawFn = [&] { return d.draw(h.ui, h.E, v2); };
-  r = h.click("pet.ok");
+  h.frame(); CHECK(!h.has("pet.impact") && !h.has("pet.ok"));
+  r = h.click("pet.dismiss");
   CHECK(r.has(Act::DismissPetitioner) && r.close);
   r = h.click("close"); CHECK(r.close);
 }
