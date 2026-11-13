@@ -765,6 +765,7 @@ void TickerWidget::update(uint32_t dtMs, int width, const Ui& ui, NewsTicker* t,
 
 WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r, Rect strip) {
   WindowResult R;
+  overLink = false;
   if (alarm) { alarm = false; R.add(Act::PlaySound, 0, 54); }
   // The strip, drawn first so the text window below copies it: a (99,109,198) top row and pure black rows under it, from one column left of
   // strip.x for strip.w + 1 columns. At 800 x 600 that is the top row at the HUD's text line (y549) and 16 black rows (y550..565), x7..481 [OBSERVED].
@@ -790,6 +791,7 @@ WindowResult TickerWidget::draw(Ui& ui, const WinEnv& E, Rect r, Rect strip) {
     if (it.n.hasLoc || it.n.link != LinkNone) {   // a map location centres the view; else a link opens the petition / advisor topic
       if (14 < r.h) for (int x = std::max(0, it.x); x < std::min(r.w, it.x + w + 1); x++) buf[size_t(14) * r.w + x] = col;   // underline row y563 (rel 14), 1 px past the glyphs [OBSERVED]
       Rect ir{r.x + it.x, r.y, w, r.h};
+      if (ir.contains(ui.in.mx, ui.in.my) && r.contains(ui.in.mx, ui.in.my)) overLink = true;
       if (ui.clicked(ir) && r.contains(ui.in.mx, ui.in.my)) {
         if (it.n.hasLoc) R.add(Act::TickerClick, it.n.number, it.n.locX, it.n.locZ);
         else R.add(Act::TickerLink, it.n.linkId, it.n.link);

@@ -542,6 +542,7 @@ class Game {
   int panAnchorX_ = 0, panAnchorY_ = 0;
   double scrollAcc_ = 0;
   std::string cursorName_;
+  bool tickerHand_ = false;   // this frame the pointer is over a clickable ticker item: the hand cursor (spec 08 8.1: over clickable hot spots)
   std::string tipKey_;   // identity of the tooltip placed for the current hover (text, kind, button)
   Rect tipRect_;         // where it was placed
   std::string tipSuppressKey_;   // a tip a click removed stays away until the pointer leaves its button

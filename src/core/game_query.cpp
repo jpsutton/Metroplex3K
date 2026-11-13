@@ -698,6 +698,7 @@ void Game::drawTicker(Rect r, Rect strip) {
   pauseFlashMs_ = paused_ ? (pauseFlashMs_ + frameDt_) % 1500 : 0;
   WinEnv E = env();
   WindowResult R = ticker_.draw(ui_, E, r, strip);
+  tickerHand_ = ticker_.overLink;
   for (const auto& e : R.events) {
     if (e.act == Act::PlaySound) sound(int(e.a));
     else if (e.act == Act::TickerClick) { centreOn(int(e.a), int(e.b)); uiHit_ = true; }

@@ -1037,6 +1037,15 @@ void testTicker() {
     WindowResult lr = h.click("ticker.5");
     CHECK(lr.has(Act::TickerLink) && lr.find(Act::TickerLink)->id == 0xBF && lr.find(Act::TickerLink)->a == LinkPetition && !lr.has(Act::TickerClick));
     CHECK(lr.has(Act::PlaySound) && lr.find(Act::PlaySound)->a == 47);
+    {  // the pointer over a clickable item (location or link) sets overLink; over plain text or off the strip it does not
+      Rect ra, rb; h.find("ticker.5", ra); h.find("ticker.6", rb);
+      Input hov; hov.mx = ra.x + ra.w / 2; hov.my = ra.y + ra.h / 2;
+      h.frame(hov); CHECK(t.overLink);
+      hov.mx = rb.x + rb.w / 2; h.frame(hov); CHECK(t.overLink);
+      hov.mx = strip.x + strip.w + 50; h.frame(hov); CHECK(!t.overLink);
+      hov.mx = ra.x + ra.w / 2; hov.my = strip.y + strip.h + 30; h.frame(hov); CHECK(!t.overLink);
+      h.frame();
+    }
     WindowResult cr = h.click("ticker.6");   // a located item still centres the view
     CHECK(cr.has(Act::TickerClick) && cr.find(Act::TickerClick)->a == 7 && cr.find(Act::TickerClick)->b == 8 && !cr.has(Act::TickerLink));
   }

@@ -691,6 +691,7 @@ class TickerWidget {
   std::vector<Item> items;
   int accumMs = 0;
   bool alarm = false;                          // an urgent (class 1) item entered: draw() emits PlaySound(54) once
+  bool overLink = false;                       // set by draw(): the pointer is over an item that a click acts on (a map location or a link)
   // Advance by dtMs: step 2 px each time more than 50 ms elapsed, and pull the next item from `t`
   // when the strip has room (items separated by 20 px). `width` = strip width.
   // `paused`: keep scrolling, but fill the strip with repeated "Simulation Paused" copies (gap of ~4
