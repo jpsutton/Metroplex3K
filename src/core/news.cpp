@@ -84,6 +84,12 @@ bool NewsTicker::withdraw(uint32_t number) {
   return any;
 }
 
+void NewsTicker::setLink(uint32_t number, uint8_t link, uint32_t linkId) {
+  for (auto& q : q_)
+    for (auto& it : q)
+      if (it.number == number) { it.link = link; it.linkId = linkId; it.underline = it.underline || link != LinkNone; }
+}
+
 void NewsTicker::purge(int cls, int32_t today) {
   auto& q = q_[cls - 1];
   int lim = expiryDays(cls);

@@ -462,6 +462,16 @@ item scrolls the view to the location and plays sound 47 `UiClickOnNewsticker`. 
 54 `NewsTickerAlarm`. Item selection, queues, colours and expiry are specified in
 `22-advisors-news-petitioners.md`.
 
+**Linked items without a location** [DATA; the click action is INFERRED]. The ticker data files
+mark every petitioner appearance line (`0x026DD322`, `0x649B17DB`) and every advisor topic line
+(`0xC25B11C3`) with the underline attribute, while the petition outcome lines (`0xE27EBF4D`,
+`0xE27EBF70`, `0x549B17DF`) and the random filler (`0xC2498F0E`) have none. Metroplex3K treats
+the underlined petition and advisor lines as links: clicking a petition line opens that petition's
+dialog (a neighbour's deal offer, for example), and clicking an advisor topic line opens the
+Advisors window on that topic's page. Such items are underlined and play sound 47 like located
+items. An item that has a map location keeps the documented behaviour (centre the view) even when
+it is also a petition or advisor line.
+
 ### 4.5 RCI demand indicator [STATIC]
 
 Background image `02F78C6D:42FB77F6` (41×88 px). Three vertical bars labelled R/C/I

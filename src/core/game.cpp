@@ -746,6 +746,8 @@ void Game::frame(const Input& in, int w, int h, uint32_t dtMs, uint32_t* outPixe
   }
   // Over any HUD element, window or dialog the cursor is the normal desktop arrow; tool cursors only apply on the map.
   if ((uiHit_ && !panning_) || scr_ != Screen::InCity) cursorName_.clear();
+  if (tickerHand_ && !panning_ && scr_ == Screen::InCity) cursorName_ = "hand cursor";   // the hand with the pointing finger over a ticker item a click acts on
+  tickerHand_ = false;   // set again by drawTicker() next frame (not while the panels are hidden)
   if (ui_.tooltip.empty()) {
     tipKey_.clear(); tipSuppressKey_.clear();   // the pointer left the button: the next hover shows a tip again
   } else {
