@@ -147,14 +147,24 @@ void Game::attachWorld() {
   hoverValid_ = false;
 }
 
+// A well-mixed non-zero seed for generator `stream` (1 = ticker, 2 = building news, 3 = simulation, 4 = disasters, 5 = neighbour deals) of the city entered
+// as number cityLoads_: the same launch seed gives every city and every generator its own stream.
+uint32_t Game::streamSeed(uint32_t stream) const {
+  uint32_t x = randomSeed_ ^ (cityLoads_ * 0x9E3779B1u) ^ (stream * 0x85EBCA6Bu);
+  x ^= x >> 16; x *= 0x7FEB352Du; x ^= x >> 15; x *= 0x846CA68Bu; x ^= x >> 16;
+  return x ? x : 1u;
+}
+
 void Game::enterCity() {
   syncSim();
+  ++cityLoads_;
+  if (randomSeed_) { rng_.seed(streamSeed(1)); newsRng_.seed(streamSeed(2)); }   // the ticker's draws, e.g. which city-start message comes first
   // Sim.init rebuilds the City; windows referencing it are closed first.
   closeModelessWindows();
   ticker_ = TickerWidget();   // every new, loaded or scenario city starts with an empty strip
   pauseNewsItem_ = 0;
   streetHost_.reset(); street_.reset();
-  sim_.init(&world_, haveData_ ? &data_ : nullptr, &cityCfg_, 12345u + uint32_t(world_.W));
+  sim_.init(&world_, haveData_ ? &data_ : nullptr, &cityCfg_, randomSeed_ ? streamSeed(3) : 12345u + uint32_t(world_.W));
   // These fire inside the sim tick, which may be on the worker thread: hand the UI work to the owner thread.
   sim_.city().onSound = [this](int id) { simWorker_.postToOwner([this, id] { sound(id); }); };
   sim_.city().onMessage = [this](const std::string& m) { simWorker_.postToOwner([this, m] { message(m); }); };
